@@ -95,3 +95,47 @@ eastmoney_curl 直接调用东财 push2his 接口（研究用途），已加入�
 
 ## License
 MIT, see LICENSE
+
+## 端到端：LLM 荐股 → 回溯调参 → 盘前执行
+
+1) 环境与密钥
+- 设置 DeepSeek API Key：PowerShell `setx DEEPSEEK_API_KEY "sk-xxxx"`（或当次会话 `$env:DEEPSEEK_API_KEY="sk-xxxx"`）
+- 配置：`configs/llm.yaml`（provider/base_url/model/超参）
+
+2) 准备数据与候选池
+```bash
+python gpbt.py init
+python gpbt.py fetch --start 20260103 --end 20260124 --max-codes 20 --no-minutes --codes 600000.SH,...
+python gpbt.py build-candidates-range --start 20260103 --end 20260124
+# 为分钟策略准备5min（按区间自动为每天候选池抓20只）
+python gpbt.py fetch-min5-range --start 20260106 --end 20260110 --min-provider eastmoney_curl --retries 2
+```
+
+3) 盘前 LLM 荐股（缓存）
+```bash
+# 只对某天做rank，默认缓存：
+python gpbt.py llm-rank --date 20260106 --template momentum_v1
+```
+
+4) 回溯调参并落盘 current_policy
+```bash
+python gpbt.py tune --end 20260110 --lookback-weeks 4 --eval-weeks 2 \
+  --templates momentum_v1,pullback_v1,defensive_v1 --entries baseline --exits next_day_time_exit --topk 3
+# 产物：
+# data/policies/current_policy.json
+# data/policies/scores.csv
+```
+
+5) 盘前执行（读取 current_policy、调用 LLM、按策略执行）
+```bash
+python gpbt.py llm-run --start 20260106 --end 20260110 --run-id llm_live_20260110
+# 产物：results/run_llm_live_20260110/
+#  - trades.csv / weekly_summary.csv / metrics.json
+#  - policy_used.json（本次使用的策略）
+#  - llm_used/（调用的输出索引）
+```
+
+Fail-fast 原则（无兜底）：
+- LLM 缺失/失败、JSON 不合法、越界/不足 TopK → 命令立即失败（非0退出）
+- 分钟线缺失超过阈值 → 直接失败，列出“缺失日期+代码”
+- T+1 严格：不允许同日买卖同一标的

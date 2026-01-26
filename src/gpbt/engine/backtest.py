@@ -80,7 +80,7 @@ class BacktestEngine:
         pre_close = float(row.iloc[0]['close'])
         return pre_close * 1.1, pre_close * 0.9
 
-    def run_weekly(self, start: str, end: str, strategies: Dict[str, object], min_missing_threshold: float = 0.1) -> Path:
+    def run_weekly(self, start: str, end: str, strategies: Dict[str, object], min_missing_threshold: float = 0.1, ranked_map: Optional[Dict[str, List[str]]] = None) -> Path:
         results_root = self.cfg.paths.results_root / f"run_{self.cfg.experiment.run_id}"
         results_root.mkdir(parents=True, exist_ok=True)
 
@@ -128,6 +128,9 @@ class BacktestEngine:
                     continue
                 cands_df = pd.read_csv(cand_path)
                 candidates = cands_df['ts_code'].astype(str).tolist()
+                if ranked_map and date in ranked_map:
+                    # Override order to use LLM picks (only these)
+                    candidates = ranked_map[date]
 
                 is_daily = hasattr(strat, 'requires_minutes') and getattr(strat, 'requires_minutes') is False
 

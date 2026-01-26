@@ -10,3 +10,4 @@ requests>=2.31
 tushare>=1.2
 akshare>=1.12
 curl_cffi>=0.6
+jsonschema>=4.20

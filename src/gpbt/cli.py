@@ -20,6 +20,9 @@ from .storage import save_parquet, load_parquet, raw_path, daily_bar_path, min5_
 from .universe import build_universe, select_top_k
 from .engine.backtest import BacktestEngine
 from .doctor import run_doctor
+from .rankers.llm_ranker import rank as llm_rank
+from .policy.policy_store import PolicyStore
+from .tuner.policy_tuner import tune as tune_policy
 
 
 def get_provider(name: str) -> DataProvider:
@@ -333,6 +336,32 @@ def main() -> None:
     p_doc.add_argument('--start', required=True, help='YYYYMMDD')
     p_doc.add_argument('--end', required=True, help='YYYYMMDD')
 
+    p_llm = sub.add_parser('llm-rank', help='盘前 LLM 荐股排序（严格JSON，无fallback）')
+    p_llm.add_argument('--date', required=True, help='YYYYMMDD')
+    p_llm.add_argument('--template', required=True, help='模板ID，如 momentum_v1')
+    p_llm.add_argument('--force', action='store_true', help='强制重跑并覆盖缓存')
+
+    p_tune = sub.add_parser('tune', help='回溯选择最优组合策略并落盘 current_policy')
+    p_tune.add_argument('--end', required=True, help='YYYYMMDD')
+    p_tune.add_argument('--lookback-weeks', type=int, default=12)
+    p_tune.add_argument('--eval-weeks', type=int, default=4)
+    p_tune.add_argument('--templates', type=str, required=True, help='逗号分隔模板ID列表')
+    p_tune.add_argument('--entries', type=str, default='baseline', help='逗号分隔entry策略ID列表，首期可用 baseline')
+    p_tune.add_argument('--exits', type=str, default='next_day_time_exit', help='逗号分隔exit模板ID列表，首期使用固定时间卖出')
+    p_tune.add_argument('--min-trades', type=int, default=10)
+    p_tune.add_argument('--topk', type=int, default=3)
+
+    p_llmrun = sub.add_parser('llm-run', help='按 current_policy 盘前LLM荐股并执行')
+    p_llmrun.add_argument('--start', required=True)
+    p_llmrun.add_argument('--end', required=True)
+    p_llmrun.add_argument('--run-id', required=True)
+
+    p_minr = sub.add_parser('fetch-min5-range', help='按区间为每天候选池20支抓取5分钟线')
+    p_minr.add_argument('--start', required=True)
+    p_minr.add_argument('--end', required=True)
+    p_minr.add_argument('--min-provider', choices=['eastmoney_curl','akshare','tushare','local_files'], default='eastmoney_curl')
+    p_minr.add_argument('--retries', type=int, default=2)
+
     args = parser.parse_args()
     cfg = AppConfig.load(args.config)
 
@@ -352,6 +381,56 @@ def main() -> None:
             cmd_build_candidates(cfg, d)
     elif args.cmd == 'doctor':
         run_doctor(cfg, args.start, args.end)
+    elif args.cmd == 'llm-rank':
+        llm_rank(cfg, args.date, args.template, force=args.force)
+    elif args.cmd == 'tune':
+        templates = [t.strip() for t in args.templates.split(',') if t.strip()]
+        entries = [t.strip() for t in args.entries.split(',') if t.strip()]
+        exits = [t.strip() for t in args.exits.split(',') if t.strip()]
+        tune_policy(cfg, args.end, args.lookback_weeks, args.eval_weeks, templates, entries, exits, min_trades=args.min_trades, topk=args.topk)
+    elif args.cmd == 'llm-run':
+        store = PolicyStore(cfg)
+        pol = store.load_current()
+        start, end = args.start, args.end
+        days = load_parquet(raw_path(cfg.paths.data_root, 'trade_cal.parquet'))
+        days = days[(days['trade_date'] >= start) & (days['trade_date'] <= end)]['trade_date'].astype(str).tolist()
+        ranked_map = {}
+        for d in days:
+            df = llm_rank(cfg, d, pol['ranker_template_id'], force=False, topk=int(pol.get('topk', 3)))
+            ranked_map[d] = df['ts_code'].astype(str).tolist()
+        # Map policy to strategy
+        from .cli import _load_strategy as load_strat  # self-import safe
+        strat_name = 'time_entry_min5'  # 首期用固定时间入场
+        strat = load_strat(strat_name)
+        if hasattr(strat, 'params') and hasattr(strat.params, 'exit_time'):
+            strat.params.exit_time = '10:00:00'
+        if hasattr(strat, 'params') and hasattr(strat.params, 'top_k'):
+            strat.params.top_k = int(pol.get('topk', 3))
+        # Run
+        engine = BacktestEngine(cfg)
+        prev_run_id = cfg.experiment.run_id
+        cfg.experiment.run_id = args.run_id
+        res = engine.run_weekly(start, end, strategies={strat_name: strat}, ranked_map=ranked_map)  # type: ignore
+        cfg.experiment.run_id = prev_run_id
+        # Save used policy
+        (res / 'policy_used.json').write_text(json.dumps(pol, ensure_ascii=False, indent=2), encoding='utf-8')
+        # Save llm outputs index
+        (res / 'llm_used').mkdir(parents=True, exist_ok=True)
+        (res / 'llm_used' / 'dates.txt').write_text('\n'.join(days), encoding='utf-8')
+    elif args.cmd == 'fetch-min5-range':
+        # For each day in range, read candidate pool and fetch 5min for its 20 codes
+        cal = load_parquet(raw_path(cfg.paths.data_root, 'trade_cal.parquet'))
+        if cal.empty:
+            raise RuntimeError('缺少交易日历 trade_cal.parquet')
+        days = cal[(cal['trade_date'] >= args.start) & (cal['trade_date'] <= args.end)]['trade_date'].astype(str).tolist()
+        for d in days:
+            f = cfg.paths.universe_root / f"candidate_pool_{d}.csv"
+            if not f.exists():
+                raise RuntimeError(f'缺少候选池 {f}')
+            import pandas as pd
+            codes = pd.read_csv(f)['ts_code'].astype(str).tolist()
+            # strict: any failure raises
+            cmd_fetch(cfg, d, d, max_codes=len(codes), no_minutes=False, max_days=1, retries=args.retries, min_provider=args.min_provider, codes=codes)
     elif args.cmd == 'fetch-min5-for-pool':
         import pandas as pd
         d = args.date
