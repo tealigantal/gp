@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Data/outputs
+data/
+universe/
+results/
+
+# IDE
+.vscode/
+.idea/
+
+# Local secrets (do not commit)
+local_secrets.py

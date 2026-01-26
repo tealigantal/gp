@@ -1,0 +1,33 @@
+provider: akshare  # tushare | akshare
+data_root: data
+universe_root: universe
+results_root: results
+
+universe:
+  min_list_days: 60
+  exclude_st: true
+  min_amount: 1.0e7
+  min_vol: 1
+
+bars:
+  daily_adj: qfq  # none | qfq
+  min_freq: 5min
+
+fees:
+  commission_rate: 0.0003
+  commission_cap: 0.0013
+  transfer_fee_rate: 0.00001
+  stamp_duty_rate: 0.0005
+  slippage_bps: 3
+  min_commission: 0
+
+experiment:
+  candidate_size: 20
+  initial_cash: 1000000
+  run_id: default
+
+integrations:
+  deepseek:
+    enabled: false
+    base_url: https://api.deepseek.com
+    model: deepseek-chat

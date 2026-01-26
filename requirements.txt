@@ -1,0 +1,12 @@
+pandas>=2.0
+numpy>=1.24
+pyarrow>=14.0
+pyyaml>=6.0
+tqdm>=4.65
+loguru>=0.7
+requests>=2.31
+
+# Data providers
+tushare>=1.2
+akshare>=1.12
+curl_cffi>=0.6

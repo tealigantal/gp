@@ -1,0 +1,374 @@
+项目计划：A股主板短线回测实验系统（候选池20 + 5min执行 + 周度对比）
+0. 项目目标（必须实现）
+
+仅交易沪深主板（不含创业/科创/北交所），默认**剔除 ST/ST*，默认剔除上市不足 min_list_days 的新股（可配置）。
+
+每个交易日盘前生成候选池 20 支（选股层：日K/周K/月K + 可选“公告/新闻”因子）。
+
+盘中执行层使用5分钟K线，每 5min 评估一次是否入场/是否触发“次日可执行的出场计划”。
+
+严格 T+1：当日买入不得当日卖出；最早次日开始执行卖出信号。
+
+以“周”为一个实验回合：周一开盘开始、周五收盘强制清仓，比较多套执行策略在历史多周样本上的表现，输出排名。
+
+输出必须包含：每策略的**胜率、单笔期望、盈亏比、最大回撤、交易次数、不可成交次数（涨停买不到/跌停卖不出）**等。
+
+1. 技术栈与约束
+
+语言：Python 3.10+
+
+依赖：pandas numpy pyarrow pyyaml tqdm loguru requests
+
+数据源优先级：
+
+优先：Tushare Pro（分钟线/交易日历/公告/基础信息更完整，适合历史回测）
+
+备用：AkShare（仅当拿不到 Tushare 分钟权限时使用，但要在系统里做 Provider 抽象，避免改业务代码）
+
+2. 交易规则与回测硬约束（写进引擎）
+2.1 交易时间（用于过滤 5min bar）
+
+集合竞价：09:15–09:25；收盘集合竞价：14:57–15:00
+
+连续竞价：09:30–11:30，13:00–14:57
+回测用 5min bar 时，只允许在连续竞价与收盘集合竞价对应的 bar 上交易（由数据源bar时间戳决定）。
+
+2.2 交易单位
+
+买入必须按 100股整数倍（卖出允许卖出持仓整数股，仍以100为主，按A股规则处理）。
+
+2.3 T+1（最关键）
+
+同一交易日内，凡是 buy_date == today 的仓位禁止卖出。
+
+卖出信号若在买入当日出现，只能记录为“次日计划”，不得成交。
+
+2.4 涨跌幅与不可成交处理（必须保守）
+
+主板默认涨跌幅：±10%（ST为±5%，若剔除ST则无需实现5%分支；如保留ST必须实现）。
+
+分钟级回测无法获得排队队列，采用保守成交模型：
+
+计划买入：若“下一根bar”为一字涨停形态（建议判定：open==high==low==close==limit_up 且 vol==0 或 极小），则判为买入失败，订单挂起直到出现第一根可成交bar（价格未封死且vol>0）再按规则成交；若周内都未成交则取消。
+
+计划卖出：若下一根bar为一字跌停形态，判为卖出失败，订单挂起直到可成交bar再卖出。
+
+需要在日志里统计：买入失败次数、卖出失败次数、挂起bar数量。
+
+2.5 手续费模型（参数化）
+
+佣金（双向）：commission_rate（默认给一个常用值，如 0.0003；并允许设置上限 0.0013）
+
+过户费（双向）：transfer_fee_rate（默认 0.00001）
+
+印花税（仅卖出）：stamp_duty_rate（默认 0.0005）
+
+滑点：slippage_bps（默认 2~5 bps，可配置）
+
+最低佣金（有些券商有5元最低）：min_commission（默认0，用户可改）
+
+3. 数据获取方案（必须可重复、可增量更新）
+3.1 Provider 抽象（避免换源重写）
+
+实现接口 DataProvider（抽象基类）：
+
+get_stock_basic() → 主板股票清单（ts_code、symbol、name、list_date、delist_date、exchange、market）
+
+get_trade_calendar(start, end) → 交易日历（SSE+SZSE 合并）
+
+get_daily_bar(ts_code, start, end) → 日线OHLCV（不复权/前复权可配置）
+
+get_min_bar(ts_code, start_dt, end_dt, freq='5min') → 5min OHLCV（必须含 amount）
+
+get_namechange(ts_code or None) → 用于构建 ST 区间（或直接提供 ST 标记）
+
+get_announcements(start, end, ts_code=None) → 公告（用于“新闻/事件”因子，可选）
+
+3.2 Tushare Provider（推荐，写清调用）
+
+环境变量：TUSHARE_TOKEN
+
+初始化：
+
+import tushare as ts
+ts.set_token(os.getenv("TUSHARE_TOKEN"))
+pro = ts.pro_api()
+
+
+主板列表：
+
+pro.stock_basic(market='主板', list_status='L', fields='ts_code,symbol,name,exchange,market,list_date,delist_date')
+
+交易日历：
+
+pro.trade_cal(exchange='SSE', start_date='YYYYMMDD', end_date='YYYYMMDD', is_open='1')
+
+pro.trade_cal(exchange='SZSE', ...) 然后合并去重
+
+日/周/月线：
+
+用 ts.pro_bar(ts_code=..., asset='E', freq='D/W/M', start_date='YYYYMMDD', end_date='YYYYMMDD', adj=None 或 'qfq')
+
+历史分钟（5min）：
+
+pro.stk_mins(ts_code='600000.SH', freq='5min', start_date='YYYY-MM-DD 09:00:00', end_date='YYYY-MM-DD 15:30:00')
+
+曾用名（用于ST区间构建）：
+
+pro.namechange(ts_code='xxxxxx.SH', fields='ts_code,name,start_date,end_date,ann_date,change_reason')
+
+上市公司公告（用于“新闻/事件”因子，先做简单规则打分）：
+
+pro.anns_d(start_date='YYYYMMDD', end_date='YYYYMMDD', ts_code=None) 或按 ann_date 循环拉取保存
+
+说明：上述接口若因权限/积分不足报错，系统要捕获异常并给出明确提示（缺哪个权限、哪个接口失败、如何在config里切换到AkShare）。
+
+3.3 AkShare Provider（备用）
+
+分钟线常用接口示例：ak.stock_zh_a_hist_min_em(symbol='600519', period='5', adjust='')
+
+必须在README里提示：该源可能遇到验证码/频控/仅近期数据，回测长历史不一定可用；但代码结构要支持替换。
+
+3.4 本地存储格式（必须定义清楚）
+
+建议目录：
+
+data/
+  raw/
+    stock_basic.parquet
+    trade_cal.parquet
+    namechange.parquet
+    anns_d/ann_date=YYYYMMDD.parquet
+  bars/
+    daily/ts_code=xxxxxx.SH.parquet
+    min5/ts_code=xxxxxx.SH/date=YYYYMMDD.parquet   # 强烈建议按日分区，便于增量与快速读取
+universe/
+  candidate_pool_YYYYMMDD.csv
+results/
+  run_{run_id}/
+    trades.csv
+    daily_equity.csv
+    weekly_summary.csv
+    metrics.json
+configs/
+  config.yaml
+  strategies/*.yaml
+
+
+强制字段规范（统一列名，避免后面反复修）：
+
+日线：trade_date, open, high, low, close, vol, amount, pre_close(optional)
+
+5min：trade_time, open, high, low, close, vol, amount
+
+所有表都要额外加：ts_code
+
+4. 候选池（选股层）模块：每天20支（统一，不能因策略不同而变）
+4.1 Universe过滤（固定规则）
+
+仅在主板股票集合内筛：
+
+剔除退市/暂停上市（按 stock_basic + 日线缺失判断）
+
+剔除 ST/*ST（通过 namechange 构建“ST区间表”；若做不到，至少先用 name 中是否包含 ST 作为弱替代，并在日志提示“ST过滤不完备”）
+
+剔除上市不足 min_list_days（默认 60 交易日）
+
+剔除停牌/流动性极差：vol==0 或 amount 低于阈值（可配置）
+
+4.2 打分选择（先做可解释的 V1）
+
+用日K/周K/月K生成一个分数（越简单越好，避免过拟合），例如：
+
+趋势分：周线收盘在周均线之上、月线不破关键均线
+
+动量分：近20/60日收益
+
+流动性分：近20日平均成交额
+
+波动惩罚：近20日波动率过高扣分
+
+事件因子（可选）：近N日公告标题包含“停牌/风险提示/退市/问询/立案”等关键词扣分；包含“回购/增持/业绩预增”等加分（先做规则匹配，不做复杂NLP）
+
+每天盘前（以“上一交易日收盘数据 + 当日盘前公告”为准）输出Top20到：
+universe/candidate_pool_YYYYMMDD.csv（列：trade_date, rank, ts_code, name(optional), score, tags）
+
+5. 执行层（5min入场/出场）策略插件体系
+5.1 策略接口（统一）
+
+每个策略实现：
+
+on_day_start(date, candidate_list, context)
+
+on_bar(bar, context)：bar为5min数据（含当前时间戳）
+
+on_day_end(date, context)
+返回对象：OrderIntent（买/卖、ts_code、目标仓位/股数、原因标签）
+
+5.2 成交规则（统一，不得策略私自改）
+
+信号在某根5min bar收盘确认后，下一根5min bar开盘价成交（+滑点），这是保守且易实现的统一口径。
+
+卖出最早从次日开始执行（T+1强制）。
+
+周五收盘强制平仓（用最后一根可用bar成交；若跌停无法成交则记录为“强平失败”，并延后到可成交时刻，且在报告中单独提示）。
+
+5.3 第一轮内置对照策略（建议至少4个）
+
+Breakout：开盘后N根bar的区间突破买入；次日跌破关键位卖出
+
+Pullback：强势股回踩VWAP/均线企稳买入；次日冲高分批卖出
+
+OpenRange：开盘区间策略（10:00前形成区间，突破/回落入场）
+
+Baseline（无择时）：每天固定时间买入候选池Top1/Top3，固定次日某时间卖出（用作“择时是否真的创造增益”的基准）
+
+策略参数全部放到 configs/strategies/*.yaml，策略代码只读参数，不写死。
+
+6. 实验运行器：按周滚动对比（核心输出）
+6.1 运行模式
+
+输入：回测起止日期（覆盖多周）、候选池大小=20、策略列表
+
+对每个自然周（按交易日历切分）：
+
+周一：初始资金 initial_cash
+
+每日盘前生成候选池（统一）
+
+盘中用5min执行策略入场
+
+次日起允许出场
+
+周五：强制清仓并结算周收益
+
+输出每周每策略的摘要：胜率、收益、回撤、不可成交、交易次数等
+
+汇总跨周统计并排名
+
+6.2 样本外防过拟合（必须预留）
+
+实现 walk_forward：
+
+训练窗口：例如过去12周用于选择少量参数（可选）
+
+测试窗口：后续4周固定参数跑
+
+滚动推进，最终以所有测试窗口的综合表现排名
+
+7. 命令行调用（写死，避免反复问）
+
+提供可执行脚本（或 python -m 入口）：
+
+初始化/拉基础信息
+
+python -m scripts.fetch_basics --provider tushare --start 20180101 --end 20251231
+
+
+输出：data/raw/stock_basic.parquet, data/raw/trade_cal.parquet, data/raw/namechange.parquet
+
+拉日线（全主板，按trade_date批量或按ts_code增量）
+
+python -m scripts.fetch_daily --provider tushare --start 20180101 --end 20251231
+
+
+生成候选池（按日增量）
+
+python -m scripts.build_candidate_pool --date 20250106 --pool_size 20
+
+
+拉分钟线（仅拉当日候选池 + 可能持仓股，按天分区存储）
+
+python -m scripts.fetch_min5_for_pool --date 20250106
+
+
+跑回测对比（多策略一次性跑完）
+
+python -m backtest.run_weekly_experiment \
+  --config configs/config.yaml \
+  --strategies configs/strategies/breakout.yaml configs/strategies/pullback.yaml configs/strategies/baseline.yaml \
+  --start 20200101 --end 20251231 \
+  --run_id demo_001
+
+
+输出目录：results/run_demo_001/
+
+8. 校验与测试（防止“回测看起来很美”）
+
+必须写单元测试/断言：
+
+无未来函数：策略只能访问当前bar及以前的数据；候选池生成只能用前一日收盘及盘前数据。
+
+T+1强制：买入当日任何卖出intent都不得成交。
+
+5min bar数量：正常交易日应接近48根（不同数据源可能略有差异，但必须有合理解释并记录）。
+
+涨跌停不可成交：构造一字板样例，确认订单挂起逻辑生效。
+
+费用一致性：对一笔已知交易手工算费用，程序结果必须一致。
+
+9. 交付物清单（Codex 完成定义）
+
+ providers/：tushare_provider.py、akshare_provider.py（抽象接口一致）
+
+ scripts/：fetch_basics.py、fetch_daily.py、fetch_min5_for_pool.py、build_candidate_pool.py
+
+ selector/：selector_v1.py（可解释打分 + 输出候选池CSV）
+
+ backtest/：engine.py（账户/订单/成交/费用/T+1/涨跌停挂起）、runner_weekly.py、walk_forward.py
+
+ strategies/：breakout.py、pullback.py、openrange.py、baseline.py + YAML参数
+
+ results/：统一输出 trades.csv、equity曲线、weekly_summary、metrics.json
+
+ README.md：从0到跑通一轮的完整命令；以及“无Tushare分钟权限时如何降级到AkShare”的说明
+
+10. 明确的默认参数（写入 configs/config.yaml）
+
+market: mainboard
+
+pool_size: 20
+
+min_list_days: 60
+
+exclude_st: true
+
+initial_cash: 1000000
+
+max_positions: 5（可配置）
+
+max_pos_pct_per_stock: 0.3
+
+费用：
+
+commission_rate: 0.0003
+
+commission_rate_cap: 0.0013
+
+transfer_fee_rate: 0.00001
+
+stamp_duty_rate: 0.0005
+
+slippage_bps: 3
+
+min_commission: 0
+
+强制清仓：force_flat_on_friday_close: true
+
+关键资料点（供Codex核对的“接口名与字段”）
+
+Tushare 历史分钟接口 stk_mins：输出含 ts_code, trade_time, open, close, high, low, vol, amount，支持 5min。
+
+Tushare 通用行情 pro_bar：支持 freq='D/W/M'，且分钟用法有特定时间格式；股票基础列表 stock_basic 可按 market='主板' 过滤；交易日历 trade_cal。
+
+Tushare 公告接口 anns_d 可按日期/区间拉取公告标题与URL（用于新闻/事件因子V1）。
+
+AkShare 分钟接口 stock_zh_a_hist_min_em 可用作备用，但可能有频控/仅近期限制。
+
+如果你把上面整段发给 gptcodex，它应该能够一次性搭出完整工程骨架并跑通“至少一个历史周”的端到端流程。你后续真正要精进的部分，会集中在两处：
+
+候选池打分（选股层 V2/V3）
+
+执行策略参数与市场环境过滤（执行层 V2/V3）
+
+（下面是来源核对用的参考：Tushare stk_mins 输出字段与调用方式、pro_bar 参数、stock_basic/trade_cal/namechange/anns_d 官方文档；以及 AkShare 分钟接口说明。）

@@ -1,0 +1,5 @@
+name: baseline_daily
+description: 纯日线版本，TopK开盘买入、次日开盘卖出、周五收盘强平
+params:
+  buy_top_k: 1
+  per_stock_cash: 0.25
