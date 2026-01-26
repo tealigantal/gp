@@ -1,0 +1,11 @@
+name: vwap_reclaim_pullback
+description: 跌破VWAP后收复的企稳买入；次日固定时刻出场，可选止损
+params:
+  start_time: "10:00:00"
+  dip_bps: 0
+  exit_time: "10:00:00"
+  pick_rank: 1
+  top_k: 1
+  max_positions: 1
+  stop_loss_pct: 0.0
+  per_stock_cash: 0.25

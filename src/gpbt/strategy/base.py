@@ -13,6 +13,9 @@ class OrderIntent:
 
 
 class Strategy:
+    # Override in subclasses
+    requires_minutes: bool = True
+
     def on_day_start(self, date: str, candidate_list: list[str], context: dict) -> None:
         pass
 
@@ -21,4 +24,3 @@ class Strategy:
 
     def on_day_end(self, date: str, context: dict) -> None:
         pass
-

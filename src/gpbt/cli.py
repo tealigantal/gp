@@ -221,13 +221,74 @@ def _load_strategy(name: str):
                 per_stock_cash=p.get('per_stock_cash', params.per_stock_cash),
             )
         return BaselineDaily(params)
+    if name == 'time_entry_min5':
+        from .strategy.time_entry_min5 import TimeEntryMin5, TimeEntryParams
+        import yaml
+        yml = Path('configs/strategies/time_entry_min5.yaml')
+        params = TimeEntryParams()
+        if yml.exists():
+            cfg = yaml.safe_load(yml.read_text(encoding='utf-8')) or {}
+            p = (cfg.get('params') or {})
+            params = TimeEntryParams(
+                entry_time=p.get('entry_time', params.entry_time),
+                exit_time=p.get('exit_time', params.exit_time),
+                pick_rank=p.get('pick_rank', params.pick_rank),
+                top_k=p.get('top_k', params.top_k),
+                max_positions=p.get('max_positions', params.max_positions),
+                stop_loss_pct=p.get('stop_loss_pct', params.stop_loss_pct),
+                take_profit_pct=p.get('take_profit_pct', params.take_profit_pct),
+                per_stock_cash=p.get('per_stock_cash', params.per_stock_cash),
+            )
+        return TimeEntryMin5(params)
+    if name == 'open_range_breakout':
+        from .strategy.open_range_breakout import OpenRangeBreakout, ORBParams
+        import yaml
+        yml = Path('configs/strategies/open_range_breakout.yaml')
+        params = ORBParams()
+        if yml.exists():
+            cfg = yaml.safe_load(yml.read_text(encoding='utf-8')) or {}
+            p = (cfg.get('params') or {})
+            params = ORBParams(
+                range_end_time=p.get('range_end_time', params.range_end_time),
+                breakout_bps=p.get('breakout_bps', params.breakout_bps),
+                vol_mult=p.get('vol_mult', params.vol_mult),
+                exit_time=p.get('exit_time', params.exit_time),
+                pick_rank=p.get('pick_rank', params.pick_rank),
+                top_k=p.get('top_k', params.top_k),
+                max_positions=p.get('max_positions', params.max_positions),
+                stop_loss_pct=p.get('stop_loss_pct', params.stop_loss_pct),
+                per_stock_cash=p.get('per_stock_cash', params.per_stock_cash),
+            )
+        return OpenRangeBreakout(params)
+    if name == 'vwap_reclaim_pullback':
+        from .strategy.vwap_reclaim_pullback import VWAPReclaimPullback, VWAPParams
+        import yaml
+        yml = Path('configs/strategies/vwap_reclaim_pullback.yaml')
+        params = VWAPParams()
+        if yml.exists():
+            cfg = yaml.safe_load(yml.read_text(encoding='utf-8')) or {}
+            p = (cfg.get('params') or {})
+            params = VWAPParams(
+                start_time=p.get('start_time', params.start_time),
+                dip_bps=p.get('dip_bps', params.dip_bps),
+                exit_time=p.get('exit_time', params.exit_time),
+                pick_rank=p.get('pick_rank', params.pick_rank),
+                top_k=p.get('top_k', params.top_k),
+                max_positions=p.get('max_positions', params.max_positions),
+                stop_loss_pct=p.get('stop_loss_pct', params.stop_loss_pct),
+                per_stock_cash=p.get('per_stock_cash', params.per_stock_cash),
+            )
+        return VWAPReclaimPullback(params)
     raise ValueError(f"Unknown strategy: {name}")
 
 
 def cmd_backtest(cfg: AppConfig, start: str, end: str, strategy_names: list[str]) -> None:
     engine = BacktestEngine(cfg)
     strategies: Dict[str, object] = {}
+    expanded: list[str] = []
     for n in strategy_names:
+        expanded.extend([x.strip() for x in n.split(',') if x.strip()])
+    for n in expanded:
         strategies[n] = _load_strategy(n)
     res_dir = engine.run_weekly(start, end, strategies=strategies)  # type: ignore
     logger.success("Backtest finished. Results at {}", res_dir)

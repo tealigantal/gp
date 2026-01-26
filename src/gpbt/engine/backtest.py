@@ -81,20 +81,10 @@ class BacktestEngine:
         return pre_close * 1.1, pre_close * 0.9
 
     def run_weekly(self, start: str, end: str, strategies: Dict[str, object], min_missing_threshold: float = 0.1) -> Path:
-        results_dir = self.cfg.paths.results_root / f"run_{self.cfg.experiment.run_id}"
-        results_dir.mkdir(parents=True, exist_ok=True)
+        results_root = self.cfg.paths.results_root / f"run_{self.cfg.experiment.run_id}"
+        results_root.mkdir(parents=True, exist_ok=True)
 
-        trades_rows: List[str] = ["id,date,ts_code,side,price,shares,strategy"]
-        equity_rows: List[str] = ["date,nav"]
-        summary_rows: List[str] = ["week_start,week_end,strategy,win_rate,ret,drawdown,trades,not_filled"]
-
-        cash = self.cfg.experiment.initial_cash
-        positions: Dict[str, Position] = {}
-        not_filled_count = 0
-        missing_min5_days: Dict[str, List[str]] = {}
-
-        # Build trading days from available candidate files (fallback to daily bars dates is possible, but we keep simple)
-        # We scan daily bar files for dates in range
+        # Build trading days once
         all_dates: List[str] = []
         for p in (self.cfg.paths.data_root / 'bars' / 'daily').glob('ts_code=*.parquet'):
             df = load_parquet(p)
@@ -106,222 +96,245 @@ class BacktestEngine:
         if not all_dates:
             raise RuntimeError("未找到回测区间内的日线数据，无法开始回测")
 
-        # naive weekly segmentation by calendar week (every Mon-Fri in sequence)
         def week_of(d: str) -> str:
-            return d[:6] + "W"  # coarse id
+            return d[:6] + "W"
 
-        trade_id = 0
-        last_nav = cash
-        week_first = all_dates[0]
-        week_trades: List[Tuple[str, float]] = []  # (strategy, pnl)
+        compare_rows: List[str] = ["strategy,n_trades,win_rate,avg_pnl,avg_win,avg_loss,payoff_ratio,total_return,max_drawdown,no_fill_buy,no_fill_sell,forced_flat_delayed,status"]
 
-        # Only one strategy key for now if provided
-        strat_name = list(strategies.keys())[0] if strategies else 'baseline'
-        strat = strategies.get(strat_name)
+        for strat_name, strat in strategies.items():
+            strat_dir = results_root / strat_name
+            strat_dir.mkdir(parents=True, exist_ok=True)
 
-        for date in all_dates:
-            # Load candidate list; if not present, skip trading that day
-            cand_path = self.cfg.paths.universe_root / f"candidate_pool_{date}.csv"
-            if not cand_path.exists():
-                # no candidates -> mark equity and continue
-                equity_rows.append(f"{date},{last_nav:.2f}")
-                continue
-            cands_df = pd.read_csv(cand_path)
-            candidates = cands_df['ts_code'].astype(str).tolist()
+            trades_rows: List[str] = ["id,date,ts_code,side,price,shares,strategy,reason"]
+            equity_rows: List[str] = ["date,nav"]
+            summary_rows: List[str] = ["week_start,week_end,strategy,win_rate,ret,drawdown,trades,not_filled"]
 
-            # Branch by strategy type
-            is_daily = hasattr(strat, 'requires_minutes') and getattr(strat, 'requires_minutes') is False if strat else False
+            cash = self.cfg.experiment.initial_cash
+            positions: Dict[str, Position] = {}
+            not_filled_buy = 0
+            not_filled_sell = 0
+            forced_flat_delayed = 0
+            missing_min5_days: Dict[str, List[str]] = {}
+            buy_intent_count = 0
 
-            if is_daily:
-                # Daily-only: buy at today's open for topK; sell yesterday's holdings at today's open (T+1)
-                # First, execute sells for positions that can be sold (T+1)
-                sell_syms = [k for k, p in positions.items() if date > p.buy_date]
-                for ts in sell_syms:
-                    # price: today's open from daily bar
-                    ddf = self._load_daily(ts)
-                    row = ddf[ddf['trade_date'] == date]
-                    if row.empty:
-                        continue  # strict but keep day going; doctor会事先检查
-                    price = float(row.iloc[0]['open'])
-                    shares = positions[ts].shares
-                    amount = price * shares
-                    fees = txn_fees(amount, self.cfg.fees) + amount * self.cfg.fees.stamp_duty_rate
-                    cash += amount - fees
-                    pnl = (price - positions[ts].cost) * shares - fees
-                    week_trades.append((strat_name, pnl))
-                    trade_id += 1
-                    trades_rows.append(f"{trade_id},{date},{ts},sell,{price:.4f},{shares},{strat_name}")
-                    positions.pop(ts, None)
+            last_nav = cash
+            week_first = all_dates[0]
+            week_trades: List[float] = []
 
-                # Then buys for topK candidates at today's open
-                k = getattr(strat, 'params').buy_top_k if hasattr(strat, 'params') else 1
-                for ts in candidates[:k]:
-                    ddf = self._load_daily(ts)
-                    row = ddf[ddf['trade_date'] == date]
-                    if row.empty:
-                        continue
-                    price = float(row.iloc[0]['open'])
-                    per_cash = cash * (getattr(strat, 'params').per_stock_cash if hasattr(strat, 'params') else 0.25)
-                    shares = int(math.floor(per_cash / price / 100.0) * 100)
-                    if shares <= 0:
-                        continue
-                    amount = price * shares
-                    fees = txn_fees(amount, self.cfg.fees)
-                    cash -= amount + fees
-                    positions[ts] = Position(ts, shares, price, buy_date=date)
-                    trade_id += 1
-                    trades_rows.append(f"{trade_id},{date},{ts},buy,{price:.4f},{shares},{strat_name}")
+            for date in all_dates:
+                cand_path = self.cfg.paths.universe_root / f"candidate_pool_{date}.csv"
+                if not cand_path.exists():
+                    equity_rows.append(f"{date},{last_nav:.2f}")
+                    continue
+                cands_df = pd.read_csv(cand_path)
+                candidates = cands_df['ts_code'].astype(str).tolist()
 
-                # Force close on rough Friday boundary: if next day belongs to another week or it's the last day
-                # We approximate Friday by checking next date week id
-                idx = all_dates.index(date)
-                is_last = (idx == len(all_dates) - 1)
-                next_week = None if is_last else week_of(all_dates[idx + 1])
-                if is_last or next_week != week_of(date):
-                    for ts, pos in list(positions.items()):
+                is_daily = hasattr(strat, 'requires_minutes') and getattr(strat, 'requires_minutes') is False
+
+                def open_count() -> int:
+                    return sum(1 for _ in positions.values())
+
+                if is_daily:
+                    sell_syms = [k for k, p in positions.items() if date > p.buy_date]
+                    for ts in sell_syms:
                         ddf = self._load_daily(ts)
                         row = ddf[ddf['trade_date'] == date]
                         if row.empty:
                             continue
-                        price = float(row.iloc[0]['close'])
-                        shares = pos.shares
+                        price = float(row.iloc[0]['open'])
+                        shares = positions[ts].shares
                         amount = price * shares
                         fees = txn_fees(amount, self.cfg.fees) + amount * self.cfg.fees.stamp_duty_rate
                         cash += amount - fees
-                        pnl = (price - pos.cost) * shares - fees
-                        week_trades.append((strat_name, pnl))
-                        trade_id += 1
-                        trades_rows.append(f"{trade_id},{date},{ts},sell,{price:.4f},{shares},{strat_name}")
+                        pnl = (price - positions[ts].cost) * shares - fees
+                        week_trades.append(pnl)
+                        trades_rows.append(f"{len(trades_rows)},{date},{ts},sell,{price:.4f},{shares},{strat_name},DAILY_EXIT")
                         positions.pop(ts, None)
 
-                # Mark NAV
+                    k = getattr(getattr(strat, 'params', None), 'buy_top_k', 1)
+                    per_stock_cash = getattr(getattr(strat, 'params', None), 'per_stock_cash', 0.25)
+                    for ts in candidates[:k]:
+                        if open_count() >= k:
+                            break
+                        ddf = self._load_daily(ts)
+                        row = ddf[ddf['trade_date'] == date]
+                        if row.empty:
+                            continue
+                        price = float(row.iloc[0]['open'])
+                        shares = int(math.floor((cash * per_stock_cash) / price / 100.0) * 100)
+                        if shares <= 0:
+                            continue
+                        amount = price * shares
+                        fees = txn_fees(amount, self.cfg.fees)
+                        cash -= amount + fees
+                        positions[ts] = Position(ts, shares, price, buy_date=date)
+                        buy_intent_count += 1
+                        trades_rows.append(f"{len(trades_rows)},{date},{ts},buy,{price:.4f},{shares},{strat_name},DAILY_ENTRY")
+
+                    idx = all_dates.index(date)
+                    is_last = (idx == len(all_dates) - 1)
+                    next_week = None if is_last else week_of(all_dates[idx + 1])
+                    if is_last or next_week != week_of(date):
+                        for ts, pos in list(positions.items()):
+                            ddf = self._load_daily(ts)
+                            row = ddf[ddf['trade_date'] == date]
+                            if row.empty:
+                                continue
+                            price = float(row.iloc[0]['close'])
+                            shares = pos.shares
+                            amount = price * shares
+                            fees = txn_fees(amount, self.cfg.fees) + amount * self.cfg.fees.stamp_duty_rate
+                            cash += amount - fees
+                            pnl = (price - pos.cost) * shares - fees
+                            week_trades.append(pnl)
+                            trades_rows.append(f"{len(trades_rows)},{date},{ts},sell,{price:.4f},{shares},{strat_name},FORCE_FRIDAY")
+                            positions.pop(ts, None)
+
+                    mtm = 0.0
+                    for ts, pos in positions.items():
+                        ddf = self._load_daily(ts)
+                        row = ddf[ddf['trade_date'] == date]
+                        if not row.empty:
+                            last_close = float(row.iloc[0]['close'])
+                            mtm += last_close * pos.shares
+                    last_nav = cash + mtm
+                    equity_rows.append(f"{date},{last_nav:.2f}")
+                    continue
+
+                if strat:
+                    strat.on_day_start(date, candidates, context={})
+                exit_time = getattr(getattr(strat, 'params', None), 'exit_time', None)
+                stop_loss_pct = getattr(getattr(strat, 'params', None), 'stop_loss_pct', 0.0) or 0.0
+                take_profit_pct = getattr(getattr(strat, 'params', None), 'take_profit_pct', 0.0) or 0.0
+                per_stock_cash = getattr(getattr(strat, 'params', None), 'per_stock_cash', 0.25)
+                max_positions = getattr(getattr(strat, 'params', None), 'max_positions', 1)
+
+                for ts in candidates:
+                    mb = self._load_minute_bars(ts, date)
+                    if mb.empty:
+                        missing_min5_days.setdefault(date, []).append(ts)
+                        continue
+                    pending_side: Optional[str] = None
+                    pending_reason: str = ''
+                    for i in range(len(mb)):
+                        bar = mb.iloc[i]
+                        t = str(bar['trade_time'])
+                        hhmmss = t.split(' ')[1] if ' ' in t else t[-8:]
+                        if not in_trading_window(hhmmss):
+                            continue
+
+                        if pending_side:
+                            if one_word_bar(bar):
+                                if pending_side == 'buy':
+                                    not_filled_buy += 1
+                                else:
+                                    not_filled_sell += 1
+                                continue
+                            if pending_side == 'sell':
+                                pos = positions.get(ts)
+                                if not pos or date <= pos.buy_date:
+                                    continue
+                            price = next_bar_open_price(bar, pending_side, self.cfg.fees.slippage_bps)
+                            if pending_side == 'buy':
+                                if open_count() >= max_positions:
+                                    pending_side = None
+                                    continue
+                                shares = int(math.floor((cash * per_stock_cash) / price / 100.0) * 100)
+                                if shares <= 0:
+                                    pending_side = None
+                                    continue
+                                amount = price * shares
+                                fees = txn_fees(amount, self.cfg.fees)
+                                cash -= amount + fees
+                                positions[ts] = Position(ts, shares, price, buy_date=date)
+                                buy_intent_count += 1
+                                trades_rows.append(f"{len(trades_rows)},{date},{ts},buy,{price:.4f},{shares},{strat_name},{pending_reason}")
+                            else:
+                                pos = positions.get(ts)
+                                if pos and pos.shares > 0:
+                                    shares = pos.shares
+                                    amount = price * shares
+                                    fees = txn_fees(amount, self.cfg.fees) + amount * self.cfg.fees.stamp_duty_rate
+                                    cash += amount - fees
+                                    pnl = (price - pos.cost) * shares - fees
+                                    week_trades.append(pnl)
+                                    trades_rows.append(f"{len(trades_rows)},{date},{ts},sell,{price:.4f},{shares},{strat_name},{pending_reason}")
+                                    positions.pop(ts, None)
+                            pending_side = None
+
+                        if strat:
+                            intent = strat.on_bar({'trade_time': t, 'ts_code': ts, 'open': bar['open'], 'high': bar['high'], 'low': bar['low'], 'close': bar['close'], 'vol': bar.get('vol', 0)}, context={'candidates': candidates, 'today': date})
+                            if intent and open_count() < max_positions:
+                                pending_side = intent.side
+                                pending_reason = intent.reason
+
+                        pos = positions.get(ts)
+                        if pos and date > pos.buy_date:
+                            if exit_time and hhmmss == exit_time:
+                                pending_side = 'sell'
+                                pending_reason = 'FIXED_EXIT'
+                            close_px = float(bar['close'])
+                            if stop_loss_pct > 0 and close_px <= pos.cost * (1 - stop_loss_pct):
+                                pending_side = 'sell'
+                                pending_reason = 'STOP_LOSS'
+                            if take_profit_pct > 0 and close_px >= pos.cost * (1 + take_profit_pct):
+                                pending_side = 'sell'
+                                pending_reason = 'TAKE_PROFIT'
+
                 mtm = 0.0
                 for ts, pos in positions.items():
-                    ddf = self._load_daily(ts)
-                    row = ddf[ddf['trade_date'] == date]
-                    if not row.empty:
-                        last_close = float(row.iloc[0]['close'])
+                    mb = self._load_minute_bars(ts, date)
+                    if not mb.empty:
+                        last_close = float(mb['close'].iloc[-1])
                         mtm += last_close * pos.shares
                 last_nav = cash + mtm
                 equity_rows.append(f"{date},{last_nav:.2f}")
-                # Continue to next date
-                continue
 
-            # Strategy day start (minute-based)
-            if strat:
-                strat.on_day_start(date, candidates, context={})
+                if week_of(date) != week_of(week_first):
+                    if week_trades:
+                        wins = sum(1 for pnl in week_trades if pnl > 0)
+                        total = len(week_trades)
+                        win_rate = wins / total if total else 0.0
+                        ret = (last_nav / self.cfg.experiment.initial_cash - 1.0)
+                        drawdown = 0.0
+                        summary_rows.append(f"{week_first},{date},{strat_name},{win_rate:.3f},{ret:.3f},{drawdown:.3f},{total},{not_filled_buy+not_filled_sell}")
+                    week_first = date
+                    week_trades.clear()
 
-            # Iterate per candidate symbol minute bars
-            for ts in candidates:
-                mb = self._load_minute_bars(ts, date)
-                if mb.empty:
-                    not_filled_count += 1
-                    missing_min5_days.setdefault(date, []).append(ts)
-                    continue
-                # schedule map for next-bar execution
-                pending_side: Optional[str] = None
-                for i in range(len(mb)):
-                    bar = mb.iloc[i]
-                    t = str(bar['trade_time'])
-                    hhmmss = t.split(' ')[1] if ' ' in t else t[-8:]
-                    if not in_trading_window(hhmmss):
-                        continue
+                if getattr(strat, 'requires_minutes', True) and candidates:
+                    miss = len(missing_min5_days.get(date, []))
+                    ratio = miss / max(1, len(candidates))
+                    if ratio > min_missing_threshold:
+                        missing_list = ','.join(missing_min5_days.get(date, []))
+                        raise RuntimeError(f"分钟线缺失比例 {ratio:.1%} 超过阈值 {min_missing_threshold:.0%} 于 {date}; 缺失代码: {missing_list}. 请先运行 fetch 抓取min5 或切换 --min-provider eastmoney_curl")
 
-                    # Execute pending order at this bar's open
-                    if pending_side:
-                        # limit-up/down check
-                        if one_word_bar(bar):
-                            not_filled_count += 1
-                            # keep pending until first tradable bar
-                            continue
-                        # T+1 check for sells
-                        if pending_side == 'sell':
-                            pos = positions.get(ts)
-                            if not pos:
-                                pending_side = None
-                            else:
-                                # T+1: only if today > buy_date
-                                if date <= pos.buy_date:
-                                    # cannot sell today
-                                    continue
-                        price = next_bar_open_price(bar, pending_side, self.cfg.fees.slippage_bps)
-                        if pending_side == 'buy':
-                            # position size by per_stock_cash fraction
-                            per_cash = cash * 0.25  # default fraction if strategy doesn't expose
-                            shares = int(math.floor(per_cash / price / 100.0) * 100)
-                            if shares <= 0:
-                                pending_side = None
-                                continue
-                            amount = price * shares
-                            fees = txn_fees(amount, self.cfg.fees)
-                            cash -= amount + fees
-                            positions[ts] = Position(ts, shares, price, buy_date=date)
-                            trade_id += 1
-                            trades_rows.append(f"{trade_id},{date},{ts},buy,{price:.4f},{shares},{strat_name}")
-                        else:
-                            pos = positions.get(ts)
-                            if pos and pos.shares > 0:
-                                shares = pos.shares
-                                amount = price * shares
-                                fees = txn_fees(amount, self.cfg.fees) + amount * self.cfg.fees.stamp_duty_rate
-                                cash += amount - fees
-                                pnl = (price - pos.cost) * shares - fees
-                                week_trades.append((strat_name, pnl))
-                                trade_id += 1
-                                trades_rows.append(f"{trade_id},{date},{ts},sell,{price:.4f},{shares},{strat_name}")
-                                positions.pop(ts, None)
-                        pending_side = None
+            if week_trades:
+                wins = sum(1 for pnl in week_trades if pnl > 0)
+                total = len(week_trades)
+                win_rate = wins / total if total else 0.0
+                ret = (last_nav / self.cfg.experiment.initial_cash - 1.0)
+                drawdown = 0.0
+                summary_rows.append(f"{week_first},{all_dates[-1]},{strat_name},{win_rate:.3f},{ret:.3f},{drawdown:.3f},{total},{not_filled_buy+not_filled_sell}")
 
-                    # Generate signal on current bar close, execute next bar open
-                    if strat:
-                        intent = strat.on_bar({'trade_time': t, 'ts_code': ts, 'open': bar['open'], 'high': bar['high'], 'low': bar['low'], 'close': bar['close']}, context={'candidates': candidates, 'today': date})
-                        if intent:
-                            pending_side = intent.side
+            n_tr = len(week_trades)
+            if n_tr > 0:
+                avg_pnl = sum(week_trades)/n_tr
+                wins_list = [p for p in week_trades if p>0]
+                losses_list = [p for p in week_trades if p<0]
+                avg_win = sum(wins_list)/max(1,len(wins_list))
+                avg_loss = sum(losses_list)/max(1,len(losses_list))
+                payoff = (avg_win/abs(avg_loss)) if avg_loss<0 else 0.0
+                win_rate = len(wins_list)/n_tr
+            else:
+                avg_pnl=0.0; avg_win=0.0; avg_loss=0.0; payoff=0.0; win_rate=0.0
+            status = 'OK' if buy_intent_count>0 else 'NO_SIGNAL'
+            (results_root / 'compare_strategies.csv').touch()
+            compare_rows.append(f"{strat_name},{n_tr},{win_rate:.3f},{avg_pnl:.2f},{avg_win:.2f},{avg_loss:.2f},{payoff:.2f},{(last_nav/self.cfg.experiment.initial_cash -1):.3f},0.000,{not_filled_buy},{not_filled_sell},{forced_flat_delayed},{status}")
 
-                # End of symbol minute series
+            (strat_dir / 'trades.csv').write_text("\n".join(trades_rows), encoding='utf-8')
+            (strat_dir / 'daily_equity.csv').write_text("\n".join(equity_rows), encoding='utf-8')
+            (strat_dir / 'weekly_summary.csv').write_text("\n".join(summary_rows), encoding='utf-8')
+            (strat_dir / 'metrics.json').write_text("{}", encoding='utf-8')
 
-            # End of day: mark NAV (positions MTM at last close if available)
-            mtm = 0.0
-            for ts, pos in positions.items():
-                mb = self._load_minute_bars(ts, date)
-                if not mb.empty:
-                    last_close = float(mb['close'].iloc[-1])
-                    mtm += last_close * pos.shares
-            last_nav = cash + mtm
-            equity_rows.append(f"{date},{last_nav:.2f}")
-
-            # Week boundary: if Friday (approx by week id change) then force close
-            if week_of(date) != week_of(week_first):
-                # summarize week
-                if week_trades:
-                    wins = sum(1 for _, pnl in week_trades if pnl > 0)
-                    total = len(week_trades)
-                    win_rate = wins / total if total else 0.0
-                    ret = (last_nav / self.cfg.experiment.initial_cash - 1.0)
-                    drawdown = 0.0  # placeholder
-                    summary_rows.append(f"{week_first},{date},{strat_name},{win_rate:.3f},{ret:.3f},{drawdown:.3f},{total},{not_filled_count}")
-                week_first = date
-                week_trades.clear()
-
-            # After finishing day for minute-based strategy, enforce missing threshold
-            if not is_daily and candidates:
-                miss = len(missing_min5_days.get(date, []))
-                ratio = miss / max(1, len(candidates))
-                if ratio > min_missing_threshold:
-                    missing_list = ','.join(missing_min5_days.get(date, []))
-                    raise RuntimeError(f"分钟线缺失比例 {ratio:.1%} 超过阈值 {min_missing_threshold:.0%} 于 {date}; 缺失代码: {missing_list}. 请先运行 fetch 抓取min5 或切换 --min-provider eastmoney_curl")
-
-        # Write outputs
-        # Append final week summary if any
-        if week_trades:
-            wins = sum(1 for _, pnl in week_trades if pnl > 0)
-            total = len(week_trades)
-            win_rate = wins / total if total else 0.0
-            ret = (last_nav / self.cfg.experiment.initial_cash - 1.0)
-            drawdown = 0.0
-            summary_rows.append(f"{week_first},{all_dates[-1]},{strat_name},{win_rate:.3f},{ret:.3f},{drawdown:.3f},{total},{not_filled_count}")
-        (results_dir / 'trades.csv').write_text("\n".join(trades_rows), encoding='utf-8')
-        (results_dir / 'daily_equity.csv').write_text("\n".join(equity_rows), encoding='utf-8')
-        (results_dir / 'weekly_summary.csv').write_text("\n".join(summary_rows), encoding='utf-8')
-        (results_dir / 'metrics.json').write_text("{}", encoding='utf-8')
-        return results_dir
+        (results_root / 'compare_strategies.csv').write_text("\n".join(compare_rows), encoding='utf-8')
+        return results_root

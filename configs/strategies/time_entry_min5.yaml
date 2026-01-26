@@ -1,0 +1,11 @@
+name: time_entry_min5
+description: 固定时间点入场/次日固定时间出场；可选止损/止盈（次日起生效）
+params:
+  entry_time: "10:00:00"
+  exit_time: "10:00:00"
+  pick_rank: 1
+  top_k: 1
+  max_positions: 1
+  stop_loss_pct: 0.0
+  take_profit_pct: 0.0
+  per_stock_cash: 0.25
