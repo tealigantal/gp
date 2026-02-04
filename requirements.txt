@@ -11,3 +11,6 @@ tushare>=1.2
 akshare>=1.12
 curl_cffi>=0.6
 jsonschema>=4.20
+duckdb>=0.10
+fastapi>=0.110
+uvicorn>=0.24

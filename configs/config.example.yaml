@@ -1,0 +1,23 @@
+paths:
+  root: .
+  store: store
+  cache: cache
+  results: results
+  universe: universe
+  schemas: schema
+
+datapool:
+  engine: duckdb+parquet
+  parquet_compression: zstd
+
+fetch:
+  rate_limit_per_host_per_sec: 2
+  retries: 2
+  timeout_sec: 15
+  user_agent: gp/0.1 (+https://local)
+
+report:
+  disclaimer: |
+    本报告仅供研究与教育用途，不构成任何投资建议。
+    策略执行严格遵守：两段盯盘、Gap/压力带禁买、时间止损、禁摊平、Q0–Q3 噪声约束。
+

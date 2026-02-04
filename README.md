@@ -139,3 +139,23 @@ Fail-fast åŽŸåˆ™ï¼ˆæ— å…œåº•ï¼‰ï¼š
 - LLM ç¼ºå¤±/å¤±è´¥ã€JSON ä¸åˆæ³•ã€è¶Šç•Œ/ä¸è¶³ TopK â†’ å‘½ä»¤ç«‹å³å¤±è´¥ï¼ˆéž0é€€å‡ºï¼‰
 - åˆ†é’Ÿçº¿ç¼ºå¤±è¶…è¿‡é˜ˆå€¼ â†’ ç›´æŽ¥å¤±è´¥ï¼Œåˆ—å‡ºâ€œç¼ºå¤±æ—¥æœŸ+ä»£ç â€
 - T+1 ä¸¥æ ¼ï¼šä¸å…è®¸åŒæ—¥ä¹°å–åŒä¸€æ ‡çš„
+
+## ÐÂÖ÷Á´Â·£¨gp£©
+
+ÏîÄ¿¼¶¹Ç¼ÜÓëÍ³Ò» CLI£¬Âú×ã¡°DataPool ÓÅÏÈ¡¢ÔöÁ¿¸üÐÂ¡¢¹Ì¶¨Êä³ö schema¡±£º
+
+`ash
+# 1) ÔöÁ¿¸üÐÂÊý¾Ý³Ø£¨Ö¸Êý±Ø¸ü£»Èç´æÔÚµ±ÈÕºòÑ¡³Ø£¬Ôò°´ºòÑ¡³Ø²¹ÈÕÏßÓëÌØÕ÷£©
+python gp.py update --until 2026-02-04
+
+# 2) Éú³Éµ±ÈÕ±¨¸æ£¨JSON+Markdown£¬¹Ì¶¨ schema£¬±£´æµ½ results/£©
+python gp.py run --date 2026-02-04 --tier mid
+
+# 3) µ¥²ßÂÔ»Ø²â£¨S1 RSI2 Pullback£¬Õ¼Î»°æ£©
+python gp.py backtest --strategy S1 --start 2023-01-01 --end 2026-02-01
+
+# 4) FastAPI ·þÎñ
+python gp.py serve --host 127.0.0.1 --port 8000
+`
+
+×¢Òâ£ºÈÎºÎ×¥È¡¾ùÏÈ²é DataPool£¬È±¿Ú²Å×¥£¬×¥µ½Âä¿â£»²ßÂÔ/»Ø²â²ã½ûÖ¹ÁªÍø¡£

@@ -19,3 +19,4 @@ results/
 
 # Local secrets (do not commit)
 local_secrets.py
+configs/config.yaml
