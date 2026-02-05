@@ -101,6 +101,31 @@ def run_doctor(cfg: AppConfig, start: str, end: str) -> Path:
         'missing_pairs': missing_min5,
     }
 
+    # Candidate metadata anti-lookahead check
+    cand_meta_missing: List[str] = []
+    cand_asof_after_open: List[str] = []
+    for d in days:
+        cand_path = cfg.paths.universe_root / f"candidate_pool_{d}.csv"
+        if not cand_path.exists():
+            continue
+        meta_path = cand_path.with_suffix('.meta.json')
+        if not meta_path.exists():
+            cand_meta_missing.append(d)
+            continue
+        try:
+            meta = json.loads(meta_path.read_text(encoding='utf-8'))
+            asof = str(meta.get('asof_timestamp', ''))
+            # Compare to D 09:30:00 local string
+            open_ts = f"{d[:4]}-{d[4:6]}-{d[6:]} 09:30:00"
+            if asof and asof > open_ts:
+                cand_asof_after_open.append(d)
+        except Exception:
+            cand_meta_missing.append(d)
+    report['checks']['candidates_meta'] = {
+        'missing_meta': cand_meta_missing,
+        'asof_after_open': cand_asof_after_open,
+    }
+
     # fetch失败清单
     failures = cfg.paths.data_root / 'logs' / 'fetch_failures.csv'
     if failures.exists():
@@ -122,4 +147,3 @@ def run_doctor(cfg: AppConfig, start: str, end: str) -> Path:
     logger.info("Doctor 报告:")
     logger.info(json.dumps(report, ensure_ascii=False, indent=2))
     return out_path
-

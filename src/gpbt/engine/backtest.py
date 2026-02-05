@@ -100,6 +100,7 @@ class BacktestEngine:
             return d[:6] + "W"
 
         compare_rows: List[str] = ["strategy,n_trades,win_rate,avg_pnl,avg_win,avg_loss,payoff_ratio,total_return,max_drawdown,no_fill_buy,no_fill_sell,forced_flat_delayed,status"]
+        costs_rows: List[str] = ["strategy,gross_return,net_return,turnover,fees_paid"]
 
         for strat_name, strat in strategies.items():
             strat_dir = results_root / strat_name
@@ -116,6 +117,10 @@ class BacktestEngine:
             forced_flat_delayed = 0
             missing_min5_days: Dict[str, List[str]] = {}
             buy_intent_count = 0
+
+            total_fees = 0.0
+            total_buy_amt = 0.0
+            total_sell_amt = 0.0
 
             last_nav = cash
             week_first = all_dates[0]
@@ -148,6 +153,8 @@ class BacktestEngine:
                         shares = positions[ts].shares
                         amount = price * shares
                         fees = txn_fees(amount, self.cfg.fees) + amount * self.cfg.fees.stamp_duty_rate
+                        total_fees += fees
+                        total_sell_amt += amount
                         cash += amount - fees
                         pnl = (price - positions[ts].cost) * shares - fees
                         week_trades.append(pnl)
@@ -169,6 +176,8 @@ class BacktestEngine:
                             continue
                         amount = price * shares
                         fees = txn_fees(amount, self.cfg.fees)
+                        total_fees += fees
+                        total_buy_amt += amount
                         cash -= amount + fees
                         positions[ts] = Position(ts, shares, price, buy_date=date)
                         buy_intent_count += 1
@@ -187,6 +196,8 @@ class BacktestEngine:
                             shares = pos.shares
                             amount = price * shares
                             fees = txn_fees(amount, self.cfg.fees) + amount * self.cfg.fees.stamp_duty_rate
+                            total_fees += fees
+                            total_sell_amt += amount
                             cash += amount - fees
                             pnl = (price - pos.cost) * shares - fees
                             week_trades.append(pnl)
@@ -248,6 +259,8 @@ class BacktestEngine:
                                     continue
                                 amount = price * shares
                                 fees = txn_fees(amount, self.cfg.fees)
+                                total_fees += fees
+                                total_buy_amt += amount
                                 cash -= amount + fees
                                 positions[ts] = Position(ts, shares, price, buy_date=date)
                                 buy_intent_count += 1
@@ -258,6 +271,8 @@ class BacktestEngine:
                                     shares = pos.shares
                                     amount = price * shares
                                     fees = txn_fees(amount, self.cfg.fees) + amount * self.cfg.fees.stamp_duty_rate
+                                    total_fees += fees
+                                    total_sell_amt += amount
                                     cash += amount - fees
                                     pnl = (price - pos.cost) * shares - fees
                                     week_trades.append(pnl)
@@ -337,7 +352,19 @@ class BacktestEngine:
             (strat_dir / 'trades.csv').write_text("\n".join(trades_rows), encoding='utf-8')
             (strat_dir / 'daily_equity.csv').write_text("\n".join(equity_rows), encoding='utf-8')
             (strat_dir / 'weekly_summary.csv').write_text("\n".join(summary_rows), encoding='utf-8')
-            (strat_dir / 'metrics.json').write_text("{}", encoding='utf-8')
+            # Per-strategy metrics with costs
+            import json as _json
+            net_ret = (last_nav / self.cfg.experiment.initial_cash - 1.0)
+            gross_ret = net_ret + (total_fees / self.cfg.experiment.initial_cash)
+            turnover = (total_buy_amt + total_sell_amt) / max(1.0, self.cfg.experiment.initial_cash)
+            (strat_dir / 'metrics.json').write_text(_json.dumps({
+                'gross_return': gross_ret,
+                'net_return': net_ret,
+                'turnover': turnover,
+                'fees_paid': total_fees,
+            }, ensure_ascii=False, indent=2), encoding='utf-8')
+            costs_rows.append(f"{strat_name},{gross_ret:.6f},{net_ret:.6f},{turnover:.6f},{total_fees:.2f}")
 
         (results_root / 'compare_strategies.csv').write_text("\n".join(compare_rows), encoding='utf-8')
+        (results_root / 'costs.csv').write_text("\n".join(costs_rows), encoding='utf-8')
         return results_root

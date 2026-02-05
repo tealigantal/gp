@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import argparse
 import json
@@ -56,7 +56,7 @@ def cmd_fetch(cfg: AppConfig, start: str, end: str, *, max_codes: int | None = N
     else:
         # persist as a minimal stock_basic for downstream
         import pandas as pd
-        sb = pd.DataFrame({'ts_code': codes, 'symbol': [c.split('.')[0] for c in codes], 'name': ['']*len(codes), 'exchange': ['']*len(codes), 'market': ['主板']*len(codes), 'list_date': ['']*len(codes), 'delist_date': ['']*len(codes)})
+        sb = pd.DataFrame({'ts_code': codes, 'symbol': [c.split('.')[0] for c in codes], 'name': ['']*len(codes), 'exchange': ['']*len(codes), 'market': ['涓绘澘']*len(codes), 'list_date': ['']*len(codes), 'delist_date': ['']*len(codes)})
         save_parquet(sb, raw_path(cfg.paths.data_root, 'stock_basic.parquet'))
 
     # Name change
@@ -69,7 +69,7 @@ def cmd_fetch(cfg: AppConfig, start: str, end: str, *, max_codes: int | None = N
     save_parquet(cal, raw_path(cfg.paths.data_root, 'trade_cal.parquet'))
     logger.info("Saved trade_cal: {} rows", len(cal))
 
-    # Daily bars snapshot for流动性与打分
+    # Daily bars snapshot for娴佸姩鎬т笌鎵撳垎
     codes = codes or []
     if max_codes is not None:
         codes = codes[:max_codes]
@@ -85,7 +85,7 @@ def cmd_fetch(cfg: AppConfig, start: str, end: str, *, max_codes: int | None = N
         logger.info("Skip minute bars by --no-minutes")
         return
 
-    # Minute bars per date partition（严格模式：失败即报错，可配置重试次数）
+    # Minute bars per date partition锛堜弗鏍兼ā寮忥細澶辫触鍗虫姤閿欙紝鍙厤缃噸璇曟鏁帮級
     cal = load_parquet(raw_path(cfg.paths.data_root, 'trade_cal.parquet'))
     if cal.empty:
         # derive trade dates from daily bars when calendar is missing
@@ -121,7 +121,7 @@ def cmd_fetch(cfg: AppConfig, start: str, end: str, *, max_codes: int | None = N
                 try:
                     df = min_prov.get_min_bar(ts_code, start_dt, end_dt, freq=cfg.bars.min_freq)
                     if df is None or df.empty:
-                        raise RuntimeError(f"分钟线为空: {ts_code} {d}")
+                        raise RuntimeError(f"鍒嗛挓绾夸负绌? {ts_code} {d}")
                     save_parquet(df, min5_bar_path(cfg.paths.data_root, ts_code, d))
                     break
                 except Exception as e:
@@ -129,10 +129,10 @@ def cmd_fetch(cfg: AppConfig, start: str, end: str, *, max_codes: int | None = N
                     if attempt >= retries:
                         with open(failures_csv, 'a', encoding='utf-8') as f:
                             f.write(f"min5,{min_provider or cfg.provider},{ts_code},{d},\"{str(e).replace(',', ';')}\"\n")
-                        # 不中断日线成果，记录失败继续其他标的/日期
+                        # 涓嶄腑鏂棩绾挎垚鏋滐紝璁板綍澶辫触缁х画鍏朵粬鏍囩殑/鏃ユ湡
                         break
                     attempt += 1
-                    logger.warning("min_bar重试 {}/{} {} {}: {}", attempt, retries, ts_code, d, e)
+                    logger.warning("min_bar閲嶈瘯 {}/{} {} {}: {}", attempt, retries, ts_code, d, e)
     logger.info("Saved minute bars with failures logged to {}", failures_csv)
 
 
@@ -192,6 +192,20 @@ def cmd_build_candidates(cfg: AppConfig, date: str) -> None:
     out_path.parent.mkdir(parents=True, exist_ok=True)
     dfout.to_csv(out_path, index=False, encoding='utf-8')
     logger.success("Candidate pool saved: {} ({} rows)", out_path, len(dfout))
+    # Sidecar metadata: as-of timestamp and generation hints to prevent lookahead
+    try:
+        cal = load_parquet(raw_path(cfg.paths.data_root, 'trade_cal.parquet'))
+        prev_days = cal[cal['trade_date'] < int(date)]['trade_date'].astype(str).tolist()
+        asof_day = prev_days[-1] if prev_days else date
+    except Exception:
+        asof_day = date
+    meta = {
+        'asof_timestamp': f"{asof_day[:4]}-{asof_day[4:6]}-{asof_day[6:]} 15:00:00",
+        'used_features_window': 'lookback=20d, exclude current day',
+        'generation_method': 'select_top_k(score_simple, daily<=asof_day)'
+    }
+    meta_path = out_path.with_suffix('.meta.json')
+    meta_path.write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding='utf-8')
 
 
 def _load_strategy(name: str):
@@ -285,7 +299,7 @@ def _load_strategy(name: str):
     raise ValueError(f"Unknown strategy: {name}")
 
 
-def cmd_backtest(cfg: AppConfig, start: str, end: str, strategy_names: list[str]) -> None:
+def cmd_backtest(cfg: AppConfig, start: str, end: str, strategy_names: list[str], require_trades: bool = False) -> None:
     engine = BacktestEngine(cfg)
     strategies: Dict[str, object] = {}
     expanded: list[str] = []
@@ -295,68 +309,81 @@ def cmd_backtest(cfg: AppConfig, start: str, end: str, strategy_names: list[str]
         strategies[n] = _load_strategy(n)
     res_dir = engine.run_weekly(start, end, strategies=strategies)  # type: ignore
     logger.success("Backtest finished. Results at {}", res_dir)
+    if require_trades:
+        import pandas as pd
+        cmp = pd.read_csv(res_dir / 'compare_strategies.csv') if (res_dir / 'compare_strategies.csv').exists() else None
+        if cmp is None or cmp.empty:
+            raise RuntimeError('compare_strategies.csv missing; cannot validate trades')
+        zero = cmp[cmp['n_trades'] == 0]
+        if not zero.empty:
+            names = ','.join(zero['strategy'].astype(str).tolist())
+            raise RuntimeError(f"No trades for: {names}; --require-trades enforced")
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description='A股主板短线回测系统 CLI')
-    parser.add_argument('--config', default='configs/config.yaml', help='配置文件路径')
+    parser = argparse.ArgumentParser(description='A鑲′富鏉跨煭绾垮洖娴嬬郴缁?CLI')
+    parser.add_argument('--config', default='configs/config.yaml', help='閰嶇疆鏂囦欢璺緞')
 
     sub = parser.add_subparsers(dest='cmd', required=True)
 
-    p_init = sub.add_parser('init', help='初始化目录结构')
+    p_init = sub.add_parser('init', help='鍒濆鍖栫洰褰曠粨鏋?)
 
-    p_fetch = sub.add_parser('fetch', help='抓取基础数据、日线与分钟线（分钟线可单独指定provider）')
+    p_fetch = sub.add_parser('fetch', help='鎶撳彇鍩虹鏁版嵁銆佹棩绾夸笌鍒嗛挓绾匡紙鍒嗛挓绾垮彲鍗曠嫭鎸囧畾provider锛?)
     p_fetch.add_argument('--start', required=True, help='YYYYMMDD')
     p_fetch.add_argument('--end', required=True, help='YYYYMMDD')
-    p_fetch.add_argument('--max-codes', type=int, default=None, help='限制抓取的股票数量（从头部截取）')
-    p_fetch.add_argument('--no-minutes', action='store_true', help='仅抓取基础与日线，跳过分钟线')
-    p_fetch.add_argument('--max-days', type=int, default=None, help='限制分钟线抓取的交易日数量（从区间起始截取）')
-    p_fetch.add_argument('--retries', type=int, default=0, help='分钟线抓取失败重试次数，默认0（严格）')
-    p_fetch.add_argument('--min-provider', choices=['eastmoney_curl','akshare','tushare','local_files'], default=None, help='仅供抓分钟线的provider覆盖')
-    p_fetch.add_argument('--codes', type=str, default=None, help='逗号分隔的ts_code列表（在provider无法提供stock_basic时使用）')
+    p_fetch.add_argument('--max-codes', type=int, default=None, help='闄愬埗鎶撳彇鐨勮偂绁ㄦ暟閲忥紙浠庡ご閮ㄦ埅鍙栵級')
+    p_fetch.add_argument('--no-minutes', action='store_true', help='浠呮姄鍙栧熀纭€涓庢棩绾匡紝璺宠繃鍒嗛挓绾?)
+    p_fetch.add_argument('--max-days', type=int, default=None, help='闄愬埗鍒嗛挓绾挎姄鍙栫殑浜ゆ槗鏃ユ暟閲忥紙浠庡尯闂磋捣濮嬫埅鍙栵級')
+    p_fetch.add_argument('--retries', type=int, default=0, help='鍒嗛挓绾挎姄鍙栧け璐ラ噸璇曟鏁帮紝榛樿0锛堜弗鏍硷級')
+    p_fetch.add_argument('--min-provider', choices=['eastmoney_curl','akshare','tushare','local_files'], default=None, help='浠呬緵鎶撳垎閽熺嚎鐨刾rovider瑕嗙洊')
+    p_fetch.add_argument('--codes', type=str, default=None, help='閫楀彿鍒嗛殧鐨則s_code鍒楄〃锛堝湪provider鏃犳硶鎻愪緵stock_basic鏃朵娇鐢級')
 
-    p_cand = sub.add_parser('build-candidates', help='构建指定交易日的候选池Top20')
+    p_cand = sub.add_parser('build-candidates', help='鏋勫缓鎸囧畾浜ゆ槗鏃ョ殑鍊欓€夋睜Top20')
     p_cand.add_argument('--date', required=True, help='YYYYMMDD')
 
-    p_cand_r = sub.add_parser('build-candidates-range', help='按区间批量生成候选池')
+    p_cand_r = sub.add_parser('build-candidates-range', help='鎸夊尯闂存壒閲忕敓鎴愬€欓€夋睜')
     p_cand_r.add_argument('--start', required=True, help='YYYYMMDD')
     p_cand_r.add_argument('--end', required=True, help='YYYYMMDD')
 
-    p_minp = sub.add_parser('fetch-min5-for-pool', help='仅为指定交易日的候选池20支抓取5分钟线')
+    p_minp = sub.add_parser('fetch-min5-for-pool', help='浠呬负鎸囧畾浜ゆ槗鏃ョ殑鍊欓€夋睜20鏀姄鍙?鍒嗛挓绾?)
     p_minp.add_argument('--date', required=True, help='YYYYMMDD')
     p_minp.add_argument('--retries', type=int, default=1)
     p_minp.add_argument('--min-provider', choices=['eastmoney_curl','akshare','tushare','local_files'], default='eastmoney_curl')
 
-    p_bt = sub.add_parser('backtest', help='按周滚动回测')
+    p_bt = sub.add_parser('backtest', help='鎸夊懆婊氬姩鍥炴祴')
     p_bt.add_argument('--start', required=True, help='YYYYMMDD')
     p_bt.add_argument('--end', required=True, help='YYYYMMDD')
     p_bt.add_argument('--strategies', nargs='+', default=['baseline'])
+    p_bt.add_argument('--require-trades', action='store_true', help='鑻ョ瓥鐣ユ棤浜ゆ槗鍒欐姤閿欓€€鍑猴紙soft-fail->hard-fail锛?)
 
-    p_doc = sub.add_parser('doctor', help='数据与配置诊断')
+    p_doc = sub.add_parser('doctor', help='鏁版嵁涓庨厤缃瘖鏂?)
     p_doc.add_argument('--start', required=True, help='YYYYMMDD')
     p_doc.add_argument('--end', required=True, help='YYYYMMDD')
 
-    p_llm = sub.add_parser('llm-rank', help='盘前 LLM 荐股排序（严格JSON，无fallback）')
+    p_llm = sub.add_parser('llm-rank', help='鐩樺墠 LLM 鑽愯偂鎺掑簭锛堜弗鏍糐SON锛屾棤fallback锛?)
     p_llm.add_argument('--date', required=True, help='YYYYMMDD')
-    p_llm.add_argument('--template', required=True, help='模板ID，如 momentum_v1')
-    p_llm.add_argument('--force', action='store_true', help='强制重跑并覆盖缓存')
+    p_llm.add_argument('--template', required=True, help='妯℃澘ID锛屽 momentum_v1')
+    p_llm.add_argument('--force', action='store_true', help='寮哄埗閲嶈窇骞惰鐩栫紦瀛?)
 
-    p_tune = sub.add_parser('tune', help='回溯选择最优组合策略并落盘 current_policy')
+    p_tune = sub.add_parser('tune', help='鍥炴函閫夋嫨鏈€浼樼粍鍚堢瓥鐣ュ苟钀界洏 current_policy')
     p_tune.add_argument('--end', required=True, help='YYYYMMDD')
     p_tune.add_argument('--lookback-weeks', type=int, default=12)
     p_tune.add_argument('--eval-weeks', type=int, default=4)
-    p_tune.add_argument('--templates', type=str, required=True, help='逗号分隔模板ID列表')
-    p_tune.add_argument('--entries', type=str, default='baseline', help='逗号分隔entry策略ID列表，首期可用 baseline')
-    p_tune.add_argument('--exits', type=str, default='next_day_time_exit', help='逗号分隔exit模板ID列表，首期使用固定时间卖出')
+    p_tune.add_argument('--templates', type=str, required=True, help='閫楀彿鍒嗛殧妯℃澘ID鍒楄〃')
+    p_tune.add_argument('--entries', type=str, default='baseline', help='閫楀彿鍒嗛殧entry绛栫暐ID鍒楄〃锛岄鏈熷彲鐢?baseline')
+    p_tune.add_argument('--exits', type=str, default='next_day_time_exit', help='閫楀彿鍒嗛殧exit妯℃澘ID鍒楄〃锛岄鏈熶娇鐢ㄥ浐瀹氭椂闂村崠鍑?)
     p_tune.add_argument('--min-trades', type=int, default=10)
     p_tune.add_argument('--topk', type=int, default=3)
+    p_tune.add_argument('--wf-train-weeks', type=int, default=0, help='Walk-forward 训练周数（0则关闭WF评估）')
+    p_tune.add_argument('--wf-test-weeks', type=int, default=0, help='Walk-forward 测试周数')
+    p_tune.add_argument('--wf-steps', type=int, default=0, help='Walk-forward 步数')
 
-    p_llmrun = sub.add_parser('llm-run', help='按 current_policy 盘前LLM荐股并执行')
+    p_llmrun = sub.add_parser('llm-run', help='鎸?current_policy 鐩樺墠LLM鑽愯偂骞舵墽琛?)
     p_llmrun.add_argument('--start', required=True)
     p_llmrun.add_argument('--end', required=True)
     p_llmrun.add_argument('--run-id', required=True)
 
-    p_minr = sub.add_parser('fetch-min5-range', help='按区间为每天候选池20支抓取5分钟线')
+    p_minr = sub.add_parser('fetch-min5-range', help='鎸夊尯闂翠负姣忓ぉ鍊欓€夋睜20鏀姄鍙?鍒嗛挓绾?)
     p_minr.add_argument('--start', required=True)
     p_minr.add_argument('--end', required=True)
     p_minr.add_argument('--min-provider', choices=['eastmoney_curl','akshare','tushare','local_files'], default='eastmoney_curl')
@@ -375,7 +402,7 @@ def main() -> None:
     elif args.cmd == 'build-candidates-range':
         cal = load_parquet(raw_path(cfg.paths.data_root, 'trade_cal.parquet'))
         if cal.empty:
-            raise RuntimeError('缺少交易日历 trade_cal.parquet，无法生成候选池')
+            raise RuntimeError('缂哄皯浜ゆ槗鏃ュ巻 trade_cal.parquet锛屾棤娉曠敓鎴愬€欓€夋睜')
         days = cal[(cal['trade_date'] >= args.start) & (cal['trade_date'] <= args.end)]['trade_date'].astype(str).tolist()
         for d in days:
             cmd_build_candidates(cfg, d)
@@ -387,7 +414,11 @@ def main() -> None:
         templates = [t.strip() for t in args.templates.split(',') if t.strip()]
         entries = [t.strip() for t in args.entries.split(',') if t.strip()]
         exits = [t.strip() for t in args.exits.split(',') if t.strip()]
-        tune_policy(cfg, args.end, args.lookback_weeks, args.eval_weeks, templates, entries, exits, min_trades=args.min_trades, topk=args.topk)
+        # Optional walk-forward arguments if present
+        wf_train = getattr(args, 'wf_train_weeks', 0)
+        wf_test = getattr(args, 'wf_test_weeks', 0)
+        wf_steps = getattr(args, 'wf_steps', 0)
+        tune_policy(cfg, args.end, args.lookback_weeks, args.eval_weeks, templates, entries, exits, min_trades=args.min_trades, topk=args.topk, wf_train_weeks=wf_train, wf_test_weeks=wf_test, wf_steps=wf_steps)
     elif args.cmd == 'llm-run':
         store = PolicyStore(cfg)
         pol = store.load_current()
@@ -400,8 +431,7 @@ def main() -> None:
             ranked_map[d] = df['ts_code'].astype(str).tolist()
         # Map policy to strategy
         from .cli import _load_strategy as load_strat  # self-import safe
-        strat_name = 'time_entry_min5'  # 首期用固定时间入场
-        strat = load_strat(strat_name)
+        strat_name = 'time_entry_min5'  # 棣栨湡鐢ㄥ浐瀹氭椂闂村叆鍦?        strat = load_strat(strat_name)
         if hasattr(strat, 'params') and hasattr(strat.params, 'exit_time'):
             strat.params.exit_time = '10:00:00'
         if hasattr(strat, 'params') and hasattr(strat.params, 'top_k'):
@@ -421,12 +451,12 @@ def main() -> None:
         # For each day in range, read candidate pool and fetch 5min for its 20 codes
         cal = load_parquet(raw_path(cfg.paths.data_root, 'trade_cal.parquet'))
         if cal.empty:
-            raise RuntimeError('缺少交易日历 trade_cal.parquet')
+            raise RuntimeError('缂哄皯浜ゆ槗鏃ュ巻 trade_cal.parquet')
         days = cal[(cal['trade_date'] >= args.start) & (cal['trade_date'] <= args.end)]['trade_date'].astype(str).tolist()
         for d in days:
             f = cfg.paths.universe_root / f"candidate_pool_{d}.csv"
             if not f.exists():
-                raise RuntimeError(f'缺少候选池 {f}')
+                raise RuntimeError(f'缂哄皯鍊欓€夋睜 {f}')
             import pandas as pd
             codes = pd.read_csv(f)['ts_code'].astype(str).tolist()
             # strict: any failure raises
@@ -436,12 +466,13 @@ def main() -> None:
         d = args.date
         f = cfg.paths.universe_root / f"candidate_pool_{d}.csv"
         if not f.exists():
-            raise RuntimeError(f"缺少候选池: {f}")
+            raise RuntimeError(f"缂哄皯鍊欓€夋睜: {f}")
         cands = pd.read_csv(f)['ts_code'].astype(str).tolist()
         # call cmd_fetch minute stage only for these codes
         cmd_fetch(cfg, d, d, max_codes=len(cands), no_minutes=False, max_days=1, retries=args.retries, min_provider=args.min_provider, codes=cands)
     elif args.cmd == 'backtest':
-        cmd_backtest(cfg, args.start, args.end, args.strategies)
+        req = getattr(args, 'require_trades', False)
+        cmd_backtest(cfg, args.start, args.end, args.strategies, require_trades=req)
 
 
 if __name__ == '__main__':

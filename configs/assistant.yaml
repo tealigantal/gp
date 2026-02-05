@@ -1,0 +1,26 @@
+workspace_root: "."
+llm:
+  llm_config_file: "configs/llm.yaml"
+  temperature: 0
+  max_tokens: 1200
+  timeout: 60
+  stream: false
+rag:
+  index_db: "store/assistant/index.sqlite"
+  include_globs:
+    - "README.md"
+    - "configs/**/*.yaml"
+    - "src/**/*.py"
+    - "项目计划.txt"
+  exclude_globs:
+    - "data/**"
+    - "results/**"
+    - "EMQuantAPI_Python/**"
+    - "cache/**"
+tools:
+  enable_gpbt_runner: true
+  gpbt_allow_subcommands: ["init","fetch","build-candidates","build-candidates-range","doctor","backtest","llm-rank","tune","llm-run","fetch-min5-range","fetch-min5-for-pool"]
+  enable_gp_runner: true
+  gp_allow_subcommands: ["run","backtest","serve","update"]
+  enable_shell: false
+
