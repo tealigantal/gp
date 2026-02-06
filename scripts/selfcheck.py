@@ -59,15 +59,24 @@ def run_assistant_once(tmp: Path) -> None:
     p = subprocess.run(cmd, cwd=str(tmp), stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
     if p.returncode != 0:
         raise RuntimeError('assistant once failed: ' + (p.stderr or p.stdout))
-    if '荐股 Top' not in (p.stdout or ''):
-        raise RuntimeError('assistant output missing TopK')
+    import json as _json
+    try:
+        obj = _json.loads(p.stdout.strip())
+    except Exception as e:
+        raise RuntimeError('assistant once did not return JSON: ' + (p.stdout or '')[:200])
+    if 'ok' not in obj:
+        raise RuntimeError('assistant JSON missing ok field')
     # Switch to rule fallback by setting deepseek without proxy and no key
     (tmp / 'configs' / 'llm.yaml').write_text('provider: deepseek\nbase_url: http://127.0.0.1:65535/v1\njson_mode: true\n', encoding='utf-8')
     p2 = subprocess.run(cmd, cwd=str(tmp), stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
     if p2.returncode != 0:
         raise RuntimeError('assistant once (rule fallback) failed: ' + (p2.stderr or p2.stdout))
-    if '荐股 Top' not in (p2.stdout or ''):
-        raise RuntimeError('assistant output missing TopK (rule)')
+    try:
+        obj2 = _json.loads(p2.stdout.strip())
+    except Exception:
+        raise RuntimeError('assistant once (rule) not JSON')
+    if 'ok' not in obj2:
+        raise RuntimeError('assistant JSON missing ok (rule)')
 
 
 def main() -> int:

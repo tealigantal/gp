@@ -11,7 +11,7 @@ class SessionState:
     cash_available: Optional[float] = None
     positions: Dict[str, int] = field(default_factory=dict)  # code or ts_code -> shares
     risk_pref: Optional[str] = None
-    default_topk: int = 5
+    default_topk: int = 3
     default_template: str = 'momentum_v1'
     default_mode: str = 'auto'
     exclusions: List[str] = field(default_factory=list)
@@ -115,10 +115,17 @@ def update_state_from_text(state: SessionState, text: str) -> Dict[str, object]:
     if r:
         state.risk_pref = r
         delta['risk_pref'] = r
-    # topk variants: top5 / Top 5 / 前5
+    # topk variants: top5 / Top 5 / 前5 / 5只 / 两支 / 二只 等
     tk = None
     m = re.search(r"(?:top\s*|Top\s*|TOP\s*|前\s*)(\d+)", text)
-    if m:
+    if not m:
+        m = re.search(r"(\d+)\s*(?:只|支)", text)
+    if not m:
+        # Chinese numerals
+        m2 = re.search(r"([一二三四五六七八九十两]+)\s*(?:只|支)", text)
+        if m2:
+            tk = _cn_to_int(m2.group(1))
+    if m and tk is None:
         try:
             tk = int(m.group(1))
         except Exception:
@@ -127,6 +134,22 @@ def update_state_from_text(state: SessionState, text: str) -> Dict[str, object]:
         state.default_topk = tk
         delta['default_topk'] = tk
     return delta
+
+
+def _cn_to_int(s: str) -> int:
+    m = {'零':0,'一':1,'二':2,'两':2,'三':3,'四':4,'五':5,'六':6,'七':7,'八':8,'九':9}
+    if s == '十':
+        return 10
+    if '十' in s:
+        hi, *rest = s.split('十')
+        tens = m.get(hi, 1) if hi != '' else 1
+        ones = m.get(rest[0], 0) if rest and rest[0] != '' else 0
+        return tens*10 + ones
+    v = 0
+    for ch in s:
+        if ch in m:
+            v = v*10 + m[ch]
+    return v
 
 
 def apply_defaults(date: Optional[str], topk: Optional[int], template: Optional[str], mode: Optional[str], state: SessionState) -> Tuple[str, int, str, str]:

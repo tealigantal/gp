@@ -18,6 +18,8 @@ def main() -> None:
     p_chat.add_argument("--print-state", action="store_true", help="Print state summary after actions")
     p_chat.add_argument("--reset-state", action="store_true", help="Reset state before starting chat")
     p_chat.add_argument("--verbose-tools", action="store_true", help="Print tool/exec/warn messages to terminal")
+    p_chat.add_argument("--print-text", action="store_true", help="Print only the natural-language text field")
+    p_chat.add_argument("--no-debug", action="store_true", help="Omit debug field in JSON output")
 
     p_index = sub.add_parser("index", help="Build or refresh local index")
     p_index.add_argument("--force", action="store_true")
@@ -60,34 +62,14 @@ def main() -> None:
                 pass
         if args.once:
             q = args.once
-            # Natural language triggers are handled inside repl; emulate here
-            if any(k in q for k in ['荐股', '推荐', '选股', 'topk', 'TopK', 'TOPK']) or q.startswith('/pick'):
-                # Route to pick action by parsing minimal options if present
-                from .actions.pick import pick_once
-                from .actions.pick import parse_pick_text
-                date = None
-                topk = 3
-                template = 'momentum_v1'
-                mode = 'auto'
-                d, k, tpl = parse_pick_text(q)
-                if d:
-                    date = d
-                if k:
-                    topk = k
-                if tpl:
-                    template = tpl
-                try:
-                    res = pick_once(Path(cfg.workspace_root), agent.session, date=date, topk=topk, template=template, mode=mode)
-                    print(agent._format_pick_result(res))
-                    raise SystemExit(0)
-                except Exception as e:
-                    print('Pick failed:', e)
-                    raise SystemExit(1)
+            resp = agent.respond_json(q, include_debug=(not args.no_debug))
+            if args.print_text:
+                print(resp.get('text', ''))
             else:
-                out = agent._chat_once(q)
-                print(out)
-                raise SystemExit(0)
-        agent.repl()
+                import json as _json
+                print(_json.dumps(resp, ensure_ascii=False))
+            raise SystemExit(0)
+        agent.repl(print_text_only=bool(args.print_text), include_debug=(not args.no_debug))
         
 
 if __name__ == "__main__":

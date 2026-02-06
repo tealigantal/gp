@@ -1,7 +1,6 @@
 services:
   gp:
     build: .
-    env_file: .env
     volumes:
       - ./data:/app/data
       - ./results:/app/results
@@ -12,9 +11,20 @@ services:
     tty: true
     stdin_open: true
     command: ["python","-m","gp_assistant.cli","chat"]
+    environment:
+      - DEEPSEEK_API_KEY
+      - UPSTREAM_API_KEY
+      - UPSTREAM_BASE_URL
+      - PROXY_REQUIRE_AUTH
+      - PROXY_CLIENT_TOKENS
+      - TZ
 
   llm-proxy:
     build: ./services/llm_proxy
-    env_file: .env
+    environment:
+      - UPSTREAM_API_KEY
+      - UPSTREAM_BASE_URL
+      - PROXY_REQUIRE_AUTH
+      - PROXY_CLIENT_TOKENS
     ports:
       - "8080:8080"

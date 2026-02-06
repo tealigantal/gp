@@ -31,6 +31,24 @@
       "confidence": 0.45,
       "reasons": "Non-zero ret_5 and ret_20, consistent with momentum",
       "risk_flags": "Moderate amt20 may indicate volatility"
+    },
+    {
+      "trade_date": "20260127",
+      "rank": 4,
+      "ts_code": "601318.SH",
+      "score": 0.0,
+      "confidence": 0.3,
+      "reasons": "mock: pool order fill",
+      "risk_flags": ""
+    },
+    {
+      "trade_date": "20260127",
+      "rank": 5,
+      "ts_code": "600036.SH",
+      "score": 0.0,
+      "confidence": 0.3,
+      "reasons": "mock: pool order fill",
+      "risk_flags": ""
     }
   ],
   "raw_llm_output_digest": {
@@ -41,10 +59,12 @@
   "data_status_summary": {
     "pool_ready": true,
     "min5_missing": {},
-    "daily_missing": [
-      "000568.SZ",
-      "000001.SZ"
-    ]
+    "daily_missing": [],
+    "pool_count": 20,
+    "requested_date": "20260127",
+    "effective_date": "20260127",
+    "fallback_reason": null,
+    "data_degraded": false
   },
   "tool_trace_digest": [
     {
@@ -53,7 +73,7 @@
         "init"
       ],
       "code": 0,
-      "seconds": 0.6568493843078613
+      "seconds": 0.7257404327392578
     },
     {
       "tool": "gpbt",
@@ -65,22 +85,7 @@
         "20260127"
       ],
       "code": 0,
-      "seconds": 0.9463365077972412
-    },
-    {
-      "tool": "gpbt",
-      "cmd": [
-        "fetch",
-        "--start",
-        "20260127",
-        "--end",
-        "20260127",
-        "--no-minutes",
-        "--codes",
-        "000568.SZ,000001.SZ"
-      ],
-      "code": 0,
-      "seconds": 23.136842966079712
+      "seconds": 0.9018945693969727
     },
     {
       "tool": "gpbt",
@@ -94,7 +99,7 @@
         "5"
       ],
       "code": 0,
-      "seconds": 0.6502573490142822
+      "seconds": 0.6596262454986572
     }
   ]
 }

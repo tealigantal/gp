@@ -317,104 +317,38 @@ def pick_once(repo_root: Path, session, *, date: Optional[str], topk: int, templ
     min_missing_map: Dict[str, List[str]] = {}
     if mincov and 'missing_pairs' in mincov:
         min_missing_map = {k: list(v) for k, v in (mincov.get('missing_pairs') or {}).items()}
-    # Daily gaps by direct check
+    # Daily gaps by direct check (不再自动补齐，仅记录并在评论中说明)
     daily_missing = _detect_daily_gaps(repo, d, pool_codes)
-    # Try safe backfill
-    if daily_missing:
-        try:
-            if session is not None:
-                session.append('assistant', f"缺少日线数据 {len(daily_missing)} 支，将补齐当日快照。")
-        except Exception:
-            pass
-        _fetch_daily_for_codes(repo, session, d, daily_missing, trace)
-    # For minutes: prefer pool-only fetch
-    if min_missing_map.get(d):
-        try:
-            if session is not None:
-                session.append('assistant', f"分钟线缺口 {len(min_missing_map[d])} 支，尝试为候选池补齐5min。")
-        except Exception:
-            pass
-        # Optional provider override from configs/config.yaml
-        min_provider = None
-        try:
-            import yaml
-            cfg = yaml.safe_load((repo / 'configs' / 'config.yaml').read_text(encoding='utf-8')) or {}
-            min_provider = cfg.get('min_provider') or None
-        except Exception:
-            min_provider = None
-        _fetch_min5_for_pool(repo, session, d, trace, min_provider=min_provider)
-    # 5) decide provider/mode based on data quality
-    provider = 'rule'
+    # 分钟线缺口仅记录（不自动抓取）
+    # 5) decide provider/mode based on data quality（无规则兜底；仅 LLM 或 mock）
+    provider = 'llm'
     ranked: List[Dict[str, Any]]
     raw = ''
     mode_param = mode if mode in ('auto','llm','rule') else 'auto'
-    # If daily still missing after attempted fetch, degrade to rule
-    data_degraded = False
-    if daily_missing:
-        data_degraded = True
-    if mode_param in ('llm','auto') and not data_degraded:
-        try:
-            provider, ranked, raw = _rank_llm(repo, session, d, template, topk, trace)
-        except Exception:
-            provider = 'fallback_rule'
-            ranked = []
-            raw = ''
-    if provider in ('fallback_rule',) or mode_param == 'rule':
-        # Deterministic rule-ranking (same as fallback)
-        feats_rows = []
-        prev_d = _last_trade_date_from_calendar(repo / 'data', d)
-        for ts in pool_codes:
-            df = _load_parquet(_daily_bar_path(repo / 'data', ts))
-            df = df[df['trade_date'].astype(str) <= (prev_d or d)].sort_values('trade_date')
-            if df.empty:
-                continue
-            close = df['close']
-            row = {
-                'ts_code': ts,
-                'ret_5': float((close.iloc[-1] / close.iloc[-6]) - 1) if len(close) >= 6 else 0.0,
-                'ret_20': float((close.iloc[-1] / close.iloc[-21]) - 1) if len(close) >= 21 else 0.0,
-                'amt20': float(df['amount'].tail(20).mean() if 'amount' in df.columns else 0.0),
-            }
-            feats_rows.append(row)
-        fdf = pd.DataFrame(feats_rows)
-        sc = []
-        for _, r in fdf.iterrows():
-            s = float(r.get('ret_5', 0.0)) + 0.5 * float(r.get('ret_20', 0.0)) + 1e-12 * float(r.get('amt20', 0.0))
-            sc.append((str(r['ts_code']), s))
-        sc.sort(key=lambda x: x[1], reverse=True)
-        ranked = [{'trade_date': d, 'rank': i+1, 'ts_code': ts, 'score': s, 'confidence': 0.4, 'reasons': f'rule: ret5={float(r.get("ret_5",0.0)):.3f}, ret20={float(r.get("ret_20",0.0)):.3f}, amt20={float(r.get("amt20",0.0)):.1f}', 'risk_flags': ''} for i,(ts,s) in enumerate(sc[:topk])]
-        provider = 'fallback_rule'
+    # Always attempt LLM; on failure fall back to mock（非规则）
+    try:
+        provider, ranked, raw = _rank_llm(repo, session, d, template, topk, trace)
+        provider = 'llm'
+    except Exception:
+        provider = 'mock'
+        ranked = []
+        raw = ''
+    # Enforce pool membership strictly；不足位用池内剩余补齐
     # Enforce pool membership strictly
     pool_norm = { _norm_code(c) for c in pool_codes }
     ranked_norm = [ (_norm_code(r.get('ts_code','')), r) for r in ranked ]
     in_pool = [ r for code,r in ranked_norm if code in pool_norm ]
     if len(in_pool) < len(ranked):
-        # If provider was llm, degrade and rebuild via rule
-        if provider == 'llm':
-            provider = 'fallback_rule'
-            feats_rows = []
-            prev_d = _last_trade_date_from_calendar(repo / 'data', d)
-            for ts in pool_codes:
-                df = _load_parquet(_daily_bar_path(repo / 'data', ts))
-                df = df[df['trade_date'].astype(str) <= (prev_d or d)].sort_values('trade_date')
-                if df.empty:
-                    continue
-                close = df['close']
-                feats_rows.append({
-                    'ts_code': ts,
-                    'ret_5': float((close.iloc[-1] / close.iloc[-6]) - 1) if len(close) >= 6 else 0.0,
-                    'ret_20': float((close.iloc[-1] / close.iloc[-21]) - 1) if len(close) >= 21 else 0.0,
-                    'amt20': float(df['amount'].tail(20).mean() if 'amount' in df.columns else 0.0),
-                })
-            fdf = pd.DataFrame(feats_rows)
-            sc = []
-            for _, r in fdf.iterrows():
-                s = float(r.get('ret_5', 0.0)) + 0.5 * float(r.get('ret_20', 0.0)) + 1e-12 * float(r.get('amt20', 0.0))
-                sc.append((str(r['ts_code']), s))
-            sc.sort(key=lambda x: x[1], reverse=True)
-            ranked = [{'trade_date': d, 'rank': i+1, 'ts_code': ts, 'score': s, 'confidence': 0.4, 'reasons': f'rule: ret5={float(r.get("ret_5",0.0)):.3f}, ret20={float(r.get("ret_20",0.0)):.3f}', 'risk_flags': ''} for i,(ts,s) in enumerate(sc[:topk])]
-        else:
-            ranked = [r for _,r in ranked_norm if _norm_code(r.get('ts_code','')) in pool_norm]
+        #裁剪掉池外
+        ranked = in_pool
+    # 补齐不足位（按池内剩余顺序）
+    if len(ranked) < topk:
+        have = { _norm_code(r.get('ts_code','')) for r in ranked }
+        for ts in pool_codes:
+            if _norm_code(ts) not in have:
+                ranked.append({'trade_date': d, 'rank': len(ranked)+1, 'ts_code': ts, 'score': 0.0, 'confidence': 0.3, 'reasons': 'mock: pool order fill', 'risk_flags': ''})
+            if len(ranked) >= topk:
+                break
     # Re-trim to topk
     ranked = ranked[:topk]
     # Filter by exclusions / holdings if requested
@@ -434,7 +368,7 @@ def pick_once(repo_root: Path, session, *, date: Optional[str], topk: int, templ
         'requested_date': requested,
         'effective_date': d,
         'fallback_reason': fallback_reason,
-        'data_degraded': data_degraded,
+        'data_degraded': bool(daily_missing) or bool(min_missing_map.get(d)),
     }
     # redact keys just in case
     safe_raw = re.sub(r"sk-[A-Za-z0-9]{4,}", "sk-***", raw or '')

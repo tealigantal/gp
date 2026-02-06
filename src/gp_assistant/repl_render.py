@@ -1,4 +1,5 @@
 from __future__ import annotations
+import sys
 
 VERBOSE = False
 
@@ -23,14 +24,14 @@ def print_agent(text: str) -> None:
 
 def print_tool(text: str) -> None:
     if VERBOSE:
-        print(_prefix_lines('tool>', text))
+        sys.stderr.write(_prefix_lines('tool>', text) + "\n")
 
 
 def print_exec(text: str) -> None:
     if VERBOSE:
-        print(_prefix_lines('exec>', text))
+        sys.stderr.write(_prefix_lines('exec>', text) + "\n")
 
 
 def print_warn(text: str) -> None:
     if VERBOSE:
-        print(_prefix_lines('warn>', text))
+        sys.stderr.write(_prefix_lines('warn>', text) + "\n")

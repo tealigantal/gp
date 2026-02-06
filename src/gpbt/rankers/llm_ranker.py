@@ -161,7 +161,7 @@ def rank(cfg: AppConfig, date: str, template_id: str, force: bool = False, topk:
                 'ts_code': ts,
                 'score': float(s),
                 'confidence': 0.5,
-                'reasons': ["mock: rule-based by momentum"],
+                'reasons': ["mock: momentum score (no LLM)"],
                 'risk_flags': []
             })
         data = {'date': date, 'template_id': template_id, 'picks': picks, '_provider': 'mock'}
@@ -179,24 +179,10 @@ def rank(cfg: AppConfig, date: str, template_id: str, force: bool = False, topk:
                 data = json.loads(text)
             except Exception as e:
                 raise RuntimeError(f'LLM output is not valid JSON: {e}\n{text}')
-        except Exception:
-            # Fallback to rule-based ranking when key missing or request fails
-            sc = []
-            for _, r in feats.iterrows():
-                s = float(r.get('ret_5', 0.0)) + 0.5 * float(r.get('ret_20', 0.0)) + 1e-12 * float(r.get('amt20', 0.0))
-                sc.append((str(r['ts_code']), s))
-            sc.sort(key=lambda x: x[1], reverse=True)
-            picks = []
-            for ts, s in sc[:topk]:
-                picks.append({
-                    'ts_code': ts,
-                    'score': float(s),
-                    'confidence': 0.4,
-                    'reasons': ["fallback: no LLM key, rule-based score"],
-                    'risk_flags': []
-                })
-            data = {'date': date, 'template_id': template_id, 'picks': picks, '_provider': 'fallback_rule'}
-            out_file.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding='utf-8')
+        except Exception as e:
+            # Do not perform any rule-based fallback here.
+            # Let the higher-level assistant fall back to mock provider.
+            raise RuntimeError(f'LLM ranking failed: {e}')
 
     # Validate schema
     try:
