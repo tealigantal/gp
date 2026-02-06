@@ -1,5 +1,13 @@
 from __future__ import annotations
 
+VERBOSE = False
+
+
+def set_verbose(enabled: bool) -> None:
+    global VERBOSE
+    VERBOSE = bool(enabled)
+
+
 def _prefix_lines(prefix: str, text: str) -> str:
     lines = text.splitlines() or ['']
     return "\n".join([f"{prefix} {ln}" for ln in lines])
@@ -14,13 +22,15 @@ def print_agent(text: str) -> None:
 
 
 def print_tool(text: str) -> None:
-    print(_prefix_lines('tool>', text))
+    if VERBOSE:
+        print(_prefix_lines('tool>', text))
 
 
 def print_exec(text: str) -> None:
-    print(_prefix_lines('exec>', text))
+    if VERBOSE:
+        print(_prefix_lines('exec>', text))
 
 
 def print_warn(text: str) -> None:
-    print(_prefix_lines('warn>', text))
-
+    if VERBOSE:
+        print(_prefix_lines('warn>', text))

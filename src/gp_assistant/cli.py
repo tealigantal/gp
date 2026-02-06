@@ -17,6 +17,7 @@ def main() -> None:
     p_chat.add_argument("--once", type=str, default=None, help="Run one-shot chat with the given text and exit")
     p_chat.add_argument("--print-state", action="store_true", help="Print state summary after actions")
     p_chat.add_argument("--reset-state", action="store_true", help="Reset state before starting chat")
+    p_chat.add_argument("--verbose-tools", action="store_true", help="Print tool/exec/warn messages to terminal")
 
     p_index = sub.add_parser("index", help="Build or refresh local index")
     p_index.add_argument("--force", action="store_true")
@@ -48,6 +49,13 @@ def main() -> None:
         if getattr(args, 'print_state', False):
             try:
                 agent.print_state = True  # type: ignore[attr-defined]
+            except Exception:
+                pass
+        # Set verbose tools printing
+        if getattr(args, 'verbose_tools', False):
+            try:
+                from .repl_render import set_verbose
+                set_verbose(True)
             except Exception:
                 pass
         if args.once:
