@@ -1,0 +1,210 @@
+from __future__ import annotations
+
+import json
+import os
+import re
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple
+
+import pandas as pd
+
+from ..tools.gpbt_runner import run_gpbt
+from ..tools.doctor_reader import read_doctor
+
+
+@dataclass
+class PickResult:
+    date: str
+    topk: int
+    template: str
+    provider: str
+    ranked: List[Dict[str, Any]]
+    data_status: Dict[str, Any]
+    out_file: Path
+
+
+def _latest_pool_date(universe_root: Path) -> Optional[str]:
+    pats = list(universe_root.glob('candidate_pool_*.csv'))
+    if not pats:
+        return None
+    dates: List[str] = []
+    for p in pats:
+        m = re.match(r"candidate_pool_(\d{8})\.csv$", p.name)
+        if m:
+            dates.append(m.group(1))
+    if not dates:
+        return None
+    return sorted(dates)[-1]
+
+
+def _last_trade_date_from_calendar(data_root: Path, today: Optional[str] = None) -> Optional[str]:
+    from ...gpbt.storage import load_parquet, raw_path
+    cal = load_parquet(raw_path(data_root, 'trade_cal.parquet'))
+    if cal.empty:
+        return None
+    arr = cal['trade_date'].astype(str).tolist()
+    if today and today.isdigit():
+        arr = [d for d in arr if d <= today]
+    return sorted(arr)[-1] if arr else None
+
+
+def _ensure_inited(python_exe: str, repo: Path, session) -> None:
+    code, out, err, dt = run_gpbt(python_exe, repo, 'init', [], allow=['init'])
+    session.append('tool', 'gpbt', {'cmd': ['init'], 'code': code, 'stderr': err[:2000], 'seconds': dt})
+
+
+def _ensure_candidate_pool(python_exe: str, repo: Path, session, date: str) -> None:
+    f = repo / 'universe' / f'candidate_pool_{date}.csv'
+    if f.exists():
+        return
+    code, out, err, dt = run_gpbt(python_exe, repo, 'build-candidates-range', ['--start', date, '--end', date], allow=['build-candidates-range'])
+    session.append('tool', 'gpbt', {'cmd': ['build-candidates-range','--start',date,'--end',date], 'code': code, 'stderr': err[:2000], 'seconds': dt})
+    if code != 0:
+        raise RuntimeError(f'Failed to build candidate pool for {date}: {err or out}')
+
+
+def _doctor(repo: Path, session, start: str, end: str) -> Dict[str, Any]:
+    import json
+    # Prefer reading latest doctor in results; if missing, run
+    code, out, err, dt = run_gpbt(os.sys.executable, repo, 'doctor', ['--start', start, '--end', end], allow=['doctor'])
+    session.append('tool', 'gpbt', {'cmd': ['doctor','--start',start,'--end',end], 'code': code, 'stderr': err[:2000], 'seconds': dt})
+    # Read latest
+    rep = read_doctor(repo / 'results')
+    return rep or {}
+
+
+def _detect_daily_gaps(repo: Path, date: str, pool_codes: List[str]) -> List[str]:
+    from ...gpbt.storage import load_parquet, daily_bar_path
+    gaps: List[str] = []
+    data_root = repo / 'data'
+    for ts in pool_codes:
+        df = load_parquet(daily_bar_path(data_root, ts))
+        if df.empty or not (df['trade_date'].astype(str) == date).any():
+            gaps.append(ts)
+    return gaps
+
+
+def _fetch_daily_for_codes(repo: Path, session, date: str, codes: List[str]) -> None:
+    if not codes:
+        return
+    args = ['--start', date, '--end', date, '--no-minutes', '--codes', ','.join(codes)]
+    code, out, err, dt = run_gpbt(os.sys.executable, repo, 'fetch', args, allow=['fetch'])
+    session.append('tool', 'gpbt', {'cmd': ['fetch'] + args, 'code': code, 'stderr': err[:2000], 'seconds': dt})
+
+
+def _fetch_min5_for_pool(repo: Path, session, date: str, min_provider: Optional[str] = None) -> None:
+    args = ['--date', date]
+    if min_provider:
+        args += ['--min-provider', min_provider]
+    code, out, err, dt = run_gpbt(os.sys.executable, repo, 'fetch-min5-for-pool', args, allow=['fetch-min5-for-pool'])
+    session.append('tool', 'gpbt', {'cmd': ['fetch-min5-for-pool'] + args, 'code': code, 'stderr': err[:2000], 'seconds': dt})
+
+
+def _rank_llm(repo: Path, session, date: str, template: str, topk: int) -> Tuple[str, List[Dict[str, Any]], str]:
+    # Returns (provider, ranked_rows, raw_text)
+    allow = ['llm-rank']
+    args = ['--date', date, '--template', template]
+    # topk is enforced inside ranker; still pass for clarity if CLI supports
+    try:
+        args += ['--topk', str(topk)]
+    except Exception:
+        pass
+    code, out, err, dt = run_gpbt(os.sys.executable, repo, 'llm-rank', args, allow=allow)
+    session.append('tool', 'gpbt', {'cmd': ['llm-rank'] + args, 'code': code, 'stderr': err[:2000], 'seconds': dt})
+    # Read ranked CSV
+    ranked_csv = repo / 'universe' / f'candidate_pool_{date}_ranked_{template}.csv'
+    if not ranked_csv.exists():
+        raise RuntimeError('ranked CSV missing, llm-rank failed')
+    rdf = pd.read_csv(ranked_csv)
+    ranked = rdf.to_dict(orient='records')
+    # Read raw text
+    out_file = repo / 'data' / 'llm_cache' / 'outputs' / f'date={date}' / f'template={template}.json'
+    raw = out_file.read_text(encoding='utf-8') if out_file.exists() else ''
+    # Inspect raw for provider hint
+    provider = 'llm'
+    try:
+        obj = json.loads(raw)
+        provider = obj.get('_provider', provider)
+    except Exception:
+        pass
+    return provider, ranked, raw
+
+
+def pick_once(repo_root: Path, session, *, date: Optional[str], topk: int, template: str, tier: Optional[str] = None) -> PickResult:
+    repo = Path(repo_root)
+    python_exe = os.sys.executable
+    # 1) init
+    _ensure_inited(python_exe, repo, session)
+    # 2) decide date
+    d = date
+    if not d:
+        d = _latest_pool_date(repo / 'universe')
+    if not d:
+        # Last trading day from calendar (<= today)
+        today = None
+        try:
+            from datetime import datetime
+            today = datetime.today().strftime('%Y%m%d')
+        except Exception:
+            pass
+        d = _last_trade_date_from_calendar(repo / 'data', today)
+    if not d:
+        raise RuntimeError('无法确定交易日；请先生成候选池或交易日历')
+    # 3) candidate pool
+    _ensure_candidate_pool(python_exe, repo, session, d)
+    pool_path = repo / 'universe' / f'candidate_pool_{d}.csv'
+    pool_df = pd.read_csv(pool_path)
+    pool_codes = pool_df['ts_code'].astype(str).tolist()
+    # 4) doctor + data gaps
+    rep = _doctor(repo, session, d, d)
+    checks = rep.get('checks', {}) if rep else {}
+    mincov = checks.get('min5_coverage', {})
+    min_missing_map: Dict[str, List[str]] = {}
+    if mincov and 'missing_pairs' in mincov:
+        min_missing_map = {k: list(v) for k, v in (mincov.get('missing_pairs') or {}).items()}
+    # Daily gaps by direct check
+    daily_missing = _detect_daily_gaps(repo, d, pool_codes)
+    # Try safe backfill
+    if daily_missing:
+        session.append('assistant', f"缺少日线数据 {len(daily_missing)} 支，将补齐当日快照。")
+        _fetch_daily_for_codes(repo, session, d, daily_missing)
+    # For minutes: prefer pool-only fetch
+    if min_missing_map.get(d):
+        session.append('assistant', f"分钟线缺口 {len(min_missing_map[d])} 支，尝试为候选池补齐5min。")
+        # Optional provider override from configs/config.yaml
+        min_provider = None
+        try:
+            import yaml
+            cfg = yaml.safe_load((repo / 'configs' / 'config.yaml').read_text(encoding='utf-8')) or {}
+            min_provider = cfg.get('min_provider') or None
+        except Exception:
+            min_provider = None
+        _fetch_min5_for_pool(repo, session, d, min_provider=min_provider)
+    # 5) rank
+    provider, ranked, raw = _rank_llm(repo, session, d, template, topk)
+    # 6) persist result
+    out_dir = repo / 'store' / 'assistant' / 'picks'
+    out_dir.mkdir(parents=True, exist_ok=True)
+    out_file = out_dir / f'pick_{d}_{template}.json'
+    digest = {'len': len(raw), 'sha256': (str(pd.util.hash_pandas_object(pd.DataFrame({'x':[raw]})).iloc[0]) if raw else '')}
+    status = {
+        'pool_ready': pool_path.exists(),
+        'min5_missing': min_missing_map,
+        'daily_missing': daily_missing,
+    }
+    # redact keys just in case
+    safe_raw = re.sub(r"sk-[A-Za-z0-9]{4,}", "sk-***", raw or '')
+    payload = {
+        'date': d,
+        'template': template,
+        'topk': topk,
+        'provider': provider,
+        'ranked_list': ranked,
+        'raw_llm_output_digest': digest,
+        'raw_llm_sample': safe_raw[:0],  # do not store payloads; keep empty per security
+        'data_status_summary': status,
+    }
+    out_file.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding='utf-8')
+    return PickResult(date=d, topk=topk, template=template, provider=provider, ranked=ranked, data_status=status, out_file=out_file)
+

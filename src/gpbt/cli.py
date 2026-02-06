@@ -192,7 +192,7 @@ def cmd_build_candidates(cfg: AppConfig, date: str) -> None:
     out_path.parent.mkdir(parents=True, exist_ok=True)
     dfout.to_csv(out_path, index=False, encoding='utf-8')
     logger.success("Candidate pool saved: {} ({} rows)", out_path, len(dfout))
-    # Sidecar metadata: as-of timestamp and generation hints to prevent lookahead
+    # Sidecar metadata (vNext): as-of cutoff and selector params for auditing
     try:
         cal = load_parquet(raw_path(cfg.paths.data_root, 'trade_cal.parquet'))
         prev_days = cal[cal['trade_date'] < int(date)]['trade_date'].astype(str).tolist()
@@ -200,9 +200,20 @@ def cmd_build_candidates(cfg: AppConfig, date: str) -> None:
     except Exception:
         asof_day = date
     meta = {
-        'asof_timestamp': f"{asof_day[:4]}-{asof_day[4:6]}-{asof_day[6:]} 15:00:00",
-        'used_features_window': 'lookback=20d, exclude current day',
-        'generation_method': 'select_top_k(score_simple, daily<=asof_day)'
+        'trade_date': f"{date[:4]}-{date[4:6]}-{date[6:]}",
+        'asof_datetime': f"{asof_day[:4]}-{asof_day[4:6]}-{asof_day[6:]} 15:00:00",
+        'selector_name': 'score_simple_topk',
+        'selector_params': {
+            'window_days': 20,
+            'exclude_current_day': True,
+            'top_k': int(cfg.experiment.candidate_size)
+        },
+        'filters_applied': {
+            'min_list_days': int(cfg.universe.min_list_days),
+            'exclude_st': bool(cfg.universe.exclude_st),
+            'min_amount': float(cfg.universe.min_amount),
+            'min_vol': int(cfg.universe.min_vol)
+        }
     }
     meta_path = out_path.with_suffix('.meta.json')
     meta_path.write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding='utf-8')
@@ -299,7 +310,7 @@ def _load_strategy(name: str):
     raise ValueError(f"Unknown strategy: {name}")
 
 
-def cmd_backtest(cfg: AppConfig, start: str, end: str, strategy_names: list[str], require_trades: bool = False) -> None:
+def cmd_backtest(cfg: AppConfig, start: str, end: str, strategy_names: list[str], require_trades: bool | None = None) -> None:
     engine = BacktestEngine(cfg)
     strategies: Dict[str, object] = {}
     expanded: list[str] = []
@@ -309,6 +320,8 @@ def cmd_backtest(cfg: AppConfig, start: str, end: str, strategy_names: list[str]
         strategies[n] = _load_strategy(n)
     res_dir = engine.run_weekly(start, end, strategies=strategies)  # type: ignore
     logger.success("Backtest finished. Results at {}", res_dir)
+    if require_trades is None:
+        require_trades = bool(getattr(cfg.experiment, 'require_trades', False))
     if require_trades:
         import pandas as pd
         cmp = pd.read_csv(res_dir / 'compare_strategies.csv') if (res_dir / 'compare_strategies.csv').exists() else None

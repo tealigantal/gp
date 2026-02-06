@@ -143,20 +143,60 @@ def rank(cfg: AppConfig, date: str, template_id: str, force: bool = False, topk:
     }
     in_file.write_text(json.dumps(user_payload, ensure_ascii=False, indent=2), encoding='utf-8')
 
-    # Call LLM
-    client = DeepseekClient(_load_llm_cfg())
-    resp = client.chat([
-        {"role": "system", "content": system_prompt},
-        {"role": "user", "content": json.dumps(user_payload, ensure_ascii=False)}
-    ])
-    text = resp.get('choices', [{}])[0].get('message', {}).get('content', '').strip()
-    # Always write raw content to outputs for debugging, even if invalid
-    out_file.write_text(text, encoding='utf-8')
-    # Must be valid JSON
-    try:
-        data = json.loads(text)
-    except Exception as e:
-        raise RuntimeError(f'LLM output is not valid JSON: {e}\n{text}')
+    # Call LLM with provider-aware fallback
+    llm_cfg = _load_llm_cfg()
+    provider = llm_cfg.provider.lower()
+    data = None
+    if provider == 'mock':
+        # Deterministic mock: score by simple linear combo and keep pool order deterministic
+        feats = feats.sort_values('ts_code')  # stable
+        sc = []
+        for _, r in feats.iterrows():
+            s = float(r.get('ret_5', 0.0)) + 0.5 * float(r.get('ret_20', 0.0)) + 1e-12 * float(r.get('amt20', 0.0))
+            sc.append((str(r['ts_code']), s))
+        sc.sort(key=lambda x: x[1], reverse=True)
+        picks = []
+        for ts, s in sc[:topk]:
+            picks.append({
+                'ts_code': ts,
+                'score': float(s),
+                'confidence': 0.5,
+                'reasons': ["mock: rule-based by momentum"],
+                'risk_flags': []
+            })
+        data = {'date': date, 'template_id': template_id, 'picks': picks, '_provider': 'mock'}
+        out_file.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding='utf-8')
+    else:
+        try:
+            client = DeepseekClient(llm_cfg)
+            resp = client.chat([
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": json.dumps(user_payload, ensure_ascii=False)}
+            ])
+            text = resp.get('choices', [{}])[0].get('message', {}).get('content', '').strip()
+            out_file.write_text(text, encoding='utf-8')
+            try:
+                data = json.loads(text)
+            except Exception as e:
+                raise RuntimeError(f'LLM output is not valid JSON: {e}\n{text}')
+        except Exception:
+            # Fallback to rule-based ranking when key missing or request fails
+            sc = []
+            for _, r in feats.iterrows():
+                s = float(r.get('ret_5', 0.0)) + 0.5 * float(r.get('ret_20', 0.0)) + 1e-12 * float(r.get('amt20', 0.0))
+                sc.append((str(r['ts_code']), s))
+            sc.sort(key=lambda x: x[1], reverse=True)
+            picks = []
+            for ts, s in sc[:topk]:
+                picks.append({
+                    'ts_code': ts,
+                    'score': float(s),
+                    'confidence': 0.4,
+                    'reasons': ["fallback: no LLM key, rule-based score"],
+                    'risk_flags': []
+                })
+            data = {'date': date, 'template_id': template_id, 'picks': picks, '_provider': 'fallback_rule'}
+            out_file.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding='utf-8')
 
     # Validate schema
     try:

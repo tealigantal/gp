@@ -1,0 +1,21 @@
+version: '3.9'
+services:
+  gp:
+    build: .
+    env_file: .env
+    volumes:
+      - ./data:/app/data
+      - ./results:/app/results
+      - ./universe:/app/universe
+      - ./store:/app/store
+      - ./cache:/app/cache
+      - ./configs:/app/configs
+    tty: true
+    stdin_open: true
+    command: ["python","assistant.py","chat"]
+
+  llm-proxy:
+    build: ./services/llm_proxy
+    env_file: .env
+    ports:
+      - "8080:8080"

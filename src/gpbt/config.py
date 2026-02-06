@@ -52,6 +52,7 @@ class ExperimentCfg:
     candidate_size: int = 20
     initial_cash: float = 1_000_000
     run_id: str = "default"
+    require_trades: bool = False
 
 
 @dataclass

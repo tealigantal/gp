@@ -114,7 +114,7 @@ def run_doctor(cfg: AppConfig, start: str, end: str) -> Path:
             continue
         try:
             meta = json.loads(meta_path.read_text(encoding='utf-8'))
-            asof = str(meta.get('asof_timestamp', ''))
+            asof = str(meta.get('asof_datetime', meta.get('asof_timestamp', '')))
             # Compare to D 09:30:00 local string
             open_ts = f"{d[:4]}-{d[4:6]}-{d[6:]} 09:30:00"
             if asof and asof > open_ts:
@@ -125,6 +125,10 @@ def run_doctor(cfg: AppConfig, start: str, end: str) -> Path:
         'missing_meta': cand_meta_missing,
         'asof_after_open': cand_asof_after_open,
     }
+    if cand_asof_after_open:
+        report['status'] = 'ERROR'
+    elif cand_meta_missing:
+        report['status'] = 'WARNING'
 
     # fetch失败清单
     failures = cfg.paths.data_root / 'logs' / 'fetch_failures.csv'

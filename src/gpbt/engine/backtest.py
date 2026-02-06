@@ -10,6 +10,10 @@ import pandas as pd
 from ..config import AppConfig
 from ..strategy.base import Strategy, OrderIntent
 from ..storage import load_parquet, min5_bar_path, daily_bar_path
+from ..doctor import run_doctor
+import json as _json
+import hashlib
+import subprocess
 
 
 @dataclass
@@ -99,8 +103,12 @@ class BacktestEngine:
         def week_of(d: str) -> str:
             return d[:6] + "W"
 
-        compare_rows: List[str] = ["strategy,n_trades,win_rate,avg_pnl,avg_win,avg_loss,payoff_ratio,total_return,max_drawdown,no_fill_buy,no_fill_sell,forced_flat_delayed,status"]
+        # vNext compare schema (net-based)
+        compare_rows: List[str] = [
+            "strategy,n_trades,win_rate,total_return_net,max_drawdown_net,turnover,no_fill_buy,no_fill_sell,forced_flat_count,status"
+        ]
         costs_rows: List[str] = ["strategy,gross_return,net_return,turnover,fees_paid"]
+        events_all: List[dict] = []
 
         for strat_name, strat in strategies.items():
             strat_dir = results_root / strat_name
@@ -159,6 +167,7 @@ class BacktestEngine:
                         pnl = (price - positions[ts].cost) * shares - fees
                         week_trades.append(pnl)
                         trades_rows.append(f"{len(trades_rows)},{date},{ts},sell,{price:.4f},{shares},{strat_name},DAILY_EXIT")
+                        events_all.append({'time': f"{date} 09:30:00", 'strategy': strat_name, 'code': ts, 'event_type': 'fill', 'side': 'sell', 'price': float(price), 'qty': int(shares), 'reason': 'DAILY_EXIT'})
                         positions.pop(ts, None)
 
                     k = getattr(getattr(strat, 'params', None), 'buy_top_k', 1)
@@ -182,6 +191,7 @@ class BacktestEngine:
                         positions[ts] = Position(ts, shares, price, buy_date=date)
                         buy_intent_count += 1
                         trades_rows.append(f"{len(trades_rows)},{date},{ts},buy,{price:.4f},{shares},{strat_name},DAILY_ENTRY")
+                        events_all.append({'time': f"{date} 09:30:00", 'strategy': strat_name, 'code': ts, 'event_type': 'fill', 'side': 'buy', 'price': float(price), 'qty': int(shares), 'reason': 'DAILY_ENTRY'})
 
                     idx = all_dates.index(date)
                     is_last = (idx == len(all_dates) - 1)
@@ -202,6 +212,7 @@ class BacktestEngine:
                             pnl = (price - pos.cost) * shares - fees
                             week_trades.append(pnl)
                             trades_rows.append(f"{len(trades_rows)},{date},{ts},sell,{price:.4f},{shares},{strat_name},FORCE_FRIDAY")
+                            events_all.append({'time': f"{date} 15:00:00", 'strategy': strat_name, 'code': ts, 'event_type': 'force_flat', 'side': 'sell', 'price': float(price), 'qty': int(shares), 'reason': 'FORCE_FRIDAY'})
                             positions.pop(ts, None)
 
                     mtm = 0.0
@@ -265,6 +276,7 @@ class BacktestEngine:
                                 positions[ts] = Position(ts, shares, price, buy_date=date)
                                 buy_intent_count += 1
                                 trades_rows.append(f"{len(trades_rows)},{date},{ts},buy,{price:.4f},{shares},{strat_name},{pending_reason}")
+                                events_all.append({'time': t, 'strategy': strat_name, 'code': ts, 'event_type': 'fill', 'side': 'buy', 'price': float(price), 'qty': int(shares), 'reason': pending_reason})
                             else:
                                 pos = positions.get(ts)
                                 if pos and pos.shares > 0:
@@ -277,6 +289,7 @@ class BacktestEngine:
                                     pnl = (price - pos.cost) * shares - fees
                                     week_trades.append(pnl)
                                     trades_rows.append(f"{len(trades_rows)},{date},{ts},sell,{price:.4f},{shares},{strat_name},{pending_reason}")
+                                    events_all.append({'time': t, 'strategy': strat_name, 'code': ts, 'event_type': 'fill', 'side': 'sell', 'price': float(price), 'qty': int(shares), 'reason': pending_reason})
                                     positions.pop(ts, None)
                             pending_side = None
 
@@ -336,18 +349,15 @@ class BacktestEngine:
 
             n_tr = len(week_trades)
             if n_tr > 0:
-                avg_pnl = sum(week_trades)/n_tr
-                wins_list = [p for p in week_trades if p>0]
-                losses_list = [p for p in week_trades if p<0]
-                avg_win = sum(wins_list)/max(1,len(wins_list))
-                avg_loss = sum(losses_list)/max(1,len(losses_list))
-                payoff = (avg_win/abs(avg_loss)) if avg_loss<0 else 0.0
-                win_rate = len(wins_list)/n_tr
+                wins_list = [p for p in week_trades if p > 0]
+                win_rate = len(wins_list) / n_tr
             else:
-                avg_pnl=0.0; avg_win=0.0; avg_loss=0.0; payoff=0.0; win_rate=0.0
+                win_rate = 0.0
             status = 'OK' if buy_intent_count>0 else 'NO_SIGNAL'
             (results_root / 'compare_strategies.csv').touch()
-            compare_rows.append(f"{strat_name},{n_tr},{win_rate:.3f},{avg_pnl:.2f},{avg_win:.2f},{avg_loss:.2f},{payoff:.2f},{(last_nav/self.cfg.experiment.initial_cash -1):.3f},0.000,{not_filled_buy},{not_filled_sell},{forced_flat_delayed},{status}")
+            net_ret = (last_nav / self.cfg.experiment.initial_cash - 1.0)
+            turnover = (total_buy_amt + total_sell_amt) / max(1.0, self.cfg.experiment.initial_cash)
+            compare_rows.append(f"{strat_name},{n_tr},{win_rate:.3f},{net_ret:.3f},0.000,{turnover:.6f},{not_filled_buy},{not_filled_sell},{forced_flat_delayed},{status}")
 
             (strat_dir / 'trades.csv').write_text("\n".join(trades_rows), encoding='utf-8')
             (strat_dir / 'daily_equity.csv').write_text("\n".join(equity_rows), encoding='utf-8')
@@ -367,4 +377,72 @@ class BacktestEngine:
 
         (results_root / 'compare_strategies.csv').write_text("\n".join(compare_rows), encoding='utf-8')
         (results_root / 'costs.csv').write_text("\n".join(costs_rows), encoding='utf-8')
+        # Run-level events
+        if events_all:
+            with open(results_root / 'events.jsonl', 'w', encoding='utf-8') as f:
+                for ev in events_all:
+                    f.write(_json.dumps(ev, ensure_ascii=False) + '\n')
+        # Manifest (vNext)
+        manifest = {
+            'git_commit': _safe_git_commit(),
+            'configs_hash': _hash_configs(self.cfg),
+            'engine_policy': {
+                'bar_close_confirm': True,
+                'next_open_fill': True,
+                't_plus_one': True,
+                'lot_size': 100,
+                'limit_one_word_bar_unfilled': True,
+                'force_flat_friday': True,
+            },
+            'cost_model': {
+                'commission_rate': self.cfg.fees.commission_rate,
+                'commission_cap': self.cfg.fees.commission_cap,
+                'transfer_fee_rate': self.cfg.fees.transfer_fee_rate,
+                'stamp_duty_rate': self.cfg.fees.stamp_duty_rate,
+                'slippage_bps': self.cfg.fees.slippage_bps,
+                'min_commission': self.cfg.fees.min_commission,
+            },
+            'asof_policy': {
+                'candidate_meta_required': True,
+                'asof_datetime_rule': 'D-1 15:00:00',
+                'pool_size': self.cfg.experiment.candidate_size,
+            },
+            'data_coverage_summary': _doctor_summary(self.cfg, start, end),
+        }
+        (results_root / 'manifest.json').write_text(_json.dumps(manifest, ensure_ascii=False, indent=2), encoding='utf-8')
         return results_root
+
+
+def _safe_git_commit() -> str:
+    try:
+        out = subprocess.check_output(['git', 'rev-parse', 'HEAD'], stderr=subprocess.DEVNULL)
+        return out.decode('utf-8').strip()
+    except Exception:
+        return 'unknown'
+
+
+def _hash_configs(cfg: AppConfig) -> str:
+    root = Path('configs')
+    h = hashlib.sha256()
+    if root.exists():
+        for p in sorted(root.rglob('*.yaml')):
+            try:
+                h.update(p.read_bytes())
+            except Exception:
+                pass
+    return h.hexdigest()
+
+
+def _doctor_summary(cfg: AppConfig, start: str, end: str) -> dict:
+    try:
+        out = run_doctor(cfg, start, end)
+        obj = _json.loads(out.read_text(encoding='utf-8'))
+        checks = obj.get('checks', {})
+        cov = checks.get('min5_coverage', {})
+        return {
+            'pairs_total': cov.get('pairs_total', 0),
+            'pairs_covered': cov.get('pairs_covered', 0),
+            'missing_days': len(checks.get('candidates', {}).get('missing_days', [])),
+        }
+    except Exception:
+        return {}

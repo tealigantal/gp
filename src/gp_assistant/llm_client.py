@@ -47,12 +47,18 @@ class SimpleLLMClient:
                 self.cfg.max_tokens = int(overrides['max_tokens'])
             if 'timeout' in overrides and overrides['timeout'] is not None:
                 self.cfg.timeout_sec = int(overrides['timeout'])
+        if self.cfg.provider.lower() == 'mock':
+            self.api_key = 'mock'
+            return
         api_key = os.getenv(self.cfg.api_key_env)
         if not api_key:
             raise RuntimeError(f"LLM API Key missing in env: {self.cfg.api_key_env}")
         self.api_key = api_key
 
     def chat(self, messages: List[Dict[str, Any]], json_response: bool = False) -> Dict[str, Any]:
+        if self.cfg.provider.lower() == 'mock':
+            content = json.dumps({'echo': True, 'messages': [m.get('role') for m in messages]}, ensure_ascii=False)
+            return {'choices': [{'message': {'content': content}}]}
         url = self.cfg.base_url.rstrip('/') + '/chat/completions'
         headers = {
             'Authorization': f'Bearer {self.api_key}',
@@ -78,4 +84,3 @@ class SimpleLLMClient:
                 last_exc = e
         assert last_exc is not None
         raise last_exc
-

@@ -11,15 +11,12 @@ class StrategySummary:
     strategy: str
     n_trades: int
     win_rate: float
-    avg_pnl: float
-    avg_win: float
-    avg_loss: float
-    payoff_ratio: float
     total_return: float
     max_drawdown: float
+    turnover: float
     no_fill_buy: int
     no_fill_sell: int
-    forced_flat_delayed: int
+    forced_flat_count: int
     status: str
 
 
@@ -40,19 +37,21 @@ def read_compare(run_dir: Path) -> List[StrategySummary]:
         r = csv.DictReader(f)
         for row in r:
             try:
+                # Support vNext net schema; fallback to legacy
+                total_ret = float(row.get('total_return_net', row.get('total_return', 0.0)))
+                max_dd = float(row.get('max_drawdown_net', row.get('max_drawdown', 0.0)))
+                turnover = float(row.get('turnover', 0.0))
+                forced_flat = int(float(row.get('forced_flat_count', row.get('forced_flat_delayed', 0))))
                 out.append(StrategySummary(
                     strategy=row['strategy'],
                     n_trades=int(float(row['n_trades'])),
                     win_rate=float(row['win_rate']),
-                    avg_pnl=float(row['avg_pnl']),
-                    avg_win=float(row['avg_win']),
-                    avg_loss=float(row['avg_loss']),
-                    payoff_ratio=float(row['payoff_ratio']),
-                    total_return=float(row['total_return']),
-                    max_drawdown=float(row['max_drawdown']),
+                    total_return=total_ret,
+                    max_drawdown=max_dd,
+                    turnover=turnover,
                     no_fill_buy=int(float(row['no_fill_buy'])),
                     no_fill_sell=int(float(row['no_fill_sell'])),
-                    forced_flat_delayed=int(float(row['forced_flat_delayed'])),
+                    forced_flat_count=forced_flat,
                     status=row.get('status', 'OK'),
                 ))
             except Exception:
@@ -77,7 +76,6 @@ def summarize_run(results_root: Path, run_id: Optional[str] = None) -> str:
     lines = [f"Results at {run_dir} (top by trades,win,ret):"]
     for s in rows:
         lines.append(
-            f"- {s.strategy}: trades={s.n_trades}, win={s.win_rate:.1%}, ret={s.total_return:.2%}, dd={s.max_drawdown:.2%}, status={s.status}"
+            f"- {s.strategy}: trades={s.n_trades}, win={s.win_rate:.1%}, ret={s.total_return:.2%}, dd={s.max_drawdown:.2%}, turn={s.turnover:.2f}, status={s.status}"
         )
     return "\n".join(lines)
-

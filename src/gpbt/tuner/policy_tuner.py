@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
@@ -65,8 +65,8 @@ def tune(cfg: AppConfig, end: str, lookback_weeks: int, eval_weeks: int, templat
                 n_tr = int(row['n_trades'])
                 status = str(row['status'])
                 win_rate = float(row['win_rate'])
-                avg_pnl = float(row['avg_pnl'])
-                max_dd = float(row['max_drawdown'])
+                avg_pnl = float(row.get('avg_pnl', 0.0))
+                max_dd = float(row.get('max_drawdown_net', row.get('max_drawdown', 0.0)))
 
                 store.append_score({
                     'lookback_start': lookback_start,
@@ -130,7 +130,7 @@ def tune(cfg: AppConfig, end: str, lookback_weeks: int, eval_weeks: int, templat
                 'test_end': test_end,
                 'n_trades': int(row['n_trades']),
                 'win_rate': float(row['win_rate']),
-                'total_return': float(row['total_return']),
+                'total_return_net': float(row.get('total_return_net', row.get('total_return', 0.0))),
                 'status': str(row['status'])
             })
             # move window backward
@@ -158,6 +158,25 @@ def tune(cfg: AppConfig, end: str, lookback_weeks: int, eval_weeks: int, templat
             'sensitivity': sensitivity,
         }
 
+    # Produce tune report under results
+    import json
+    from datetime import datetime as _dt
+    run_dir = cfg.paths.results_root / f"run_tune_{end}_{_dt.now().strftime('%Y%m%d_%H%M%S')}"
+    run_dir.mkdir(parents=True, exist_ok=True)
+    tune_report = {
+        'best': {
+            'template': tmpl,
+            'entry': entry,
+            'exit': exit_id,
+            'n_trades': n_tr,
+            'win_rate': win_rate,
+            'row.get('avg_pnl', 0.0): avg_pnl,
+            'max_drawdown': max_dd,
+        },
+        'walk_forward': wf_result if wf_result else None,
+    }
+    (run_dir / 'tune_report.json').write_text(json.dumps(tune_report, ensure_ascii=False, indent=2), encoding='utf-8')
+
     spec = PolicySpec(
         as_of_date=end,
         lookback_start=lookback_start,
@@ -171,7 +190,7 @@ def tune(cfg: AppConfig, end: str, lookback_weeks: int, eval_weeks: int, templat
         score=win_rate,
         metrics={
             'win_rate': win_rate,
-            'avg_pnl': avg_pnl,
+            'row.get('avg_pnl', 0.0): avg_pnl,
             'max_drawdown': max_dd,
             'n_trades': n_tr,
             'walk_forward': wf_result if wf_result else None,
@@ -179,3 +198,4 @@ def tune(cfg: AppConfig, end: str, lookback_weeks: int, eval_weeks: int, templat
         notes='auto-selected by tune',
     )
     return store.save_current(spec)
+
