@@ -27,7 +27,7 @@
 ## 对话示例
 - “荐股”
 - “推荐 20260106 top5”
-- “/pick --date 20260106 --topk 5 --template momentum_v1”
+- “/pick --date 20260106 --topk 5 --template momentum_v1 --mode auto”
 
 输出包含：TopK 股票代码、简短理由、使用模板/策略/日期，以及数据就绪情况（候选池/分钟线缺口/日线缺口）。
 
@@ -41,4 +41,4 @@
 - LLM 排名（支持 mock/fallback）：
   - `python gpbt.py llm-rank --date 20260106 --template momentum_v1`
 
-注意：任何 API Key 仅从环境变量或 .env 中读取；日志与落盘会自动脱敏，不会写入明文 Key。
+说明：无真实 key 时会用 mock/fallback 仍给结果；如需真实 LLM，可填 UPSTREAM_API_KEY（走 llm-proxy）或 DEEPSEEK_API_KEY（直连）。任何 Key 仅从 env/.env 读取；输出/落盘均脱敏。

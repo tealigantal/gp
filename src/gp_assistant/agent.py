@@ -119,7 +119,9 @@ class ChatAgent:
             # Natural-language trigger for stock picking
             if any(k in q for k in ['荐股', '推荐', '选股', 'topk', 'TopK', 'TOPK']):
                 try:
-                    res = pick_once(self.repo, self.session, date=None, topk=3, template='momentum_v1', mode='auto')
+                    from .actions.pick import parse_pick_text
+                    d, k, tpl = parse_pick_text(q)
+                    res = pick_once(self.repo, self.session, date=d, topk=(k or 3), template=(tpl or 'momentum_v1'), mode='auto')
                     print(self._format_pick_result(res))
                 except Exception as e:
                     print('Pick failed:', e)

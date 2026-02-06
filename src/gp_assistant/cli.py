@@ -44,18 +44,18 @@ def main() -> None:
             if any(k in q for k in ['荐股', '推荐', '选股', 'topk', 'TopK', 'TOPK']) or q.startswith('/pick'):
                 # Route to pick action by parsing minimal options if present
                 from .actions.pick import pick_once
+                from .actions.pick import parse_pick_text
                 date = None
                 topk = 3
                 template = 'momentum_v1'
                 mode = 'auto'
-                # crude parse for YYYYMMDD and topk
-                import re
-                m = re.search(r"(20\d{6})", q)
-                if m:
-                    date = m.group(1)
-                mk = re.search(r"top\s*([0-9]+)", q, re.IGNORECASE)
-                if mk:
-                    topk = int(mk.group(1))
+                d, k, tpl = parse_pick_text(q)
+                if d:
+                    date = d
+                if k:
+                    topk = k
+                if tpl:
+                    template = tpl
                 try:
                     res = pick_once(Path(cfg.workspace_root), agent.session, date=date, topk=topk, template=template, mode=mode)
                     print(agent._format_pick_result(res))

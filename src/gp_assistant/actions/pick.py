@@ -26,6 +26,45 @@ class PickResult:
     trace: List[Dict[str, Any]]
 
 
+TEMPLATE_SYNONYMS = {
+    '动量': 'momentum_v1',
+    '回踩': 'pullback_v1',
+    '防御': 'defensive_v1',
+}
+
+
+def parse_pick_text(text: str) -> Tuple[Optional[str], Optional[int], Optional[str]]:
+    """Parse natural text for date/topk/template.
+    - Dates: YYYYMMDD | YYYY-MM-DD | YYYY/MM/DD
+    - TopK: top5 | Top 5 | top 5 | 前5 | 前 5
+    - Templates: 动量/回踩/防御 to mapped IDs
+    Returns (date, topk, template) where values may be None if not found.
+    """
+    t = text.strip()
+    date = None
+    topk = None
+    template = None
+    # date variants
+    m = re.search(r"(20\d{2}[-/ ]?\d{2}[-/ ]?\d{2})", t)
+    if m:
+        ds = re.sub(r"[-/ ]", "", m.group(1))
+        if len(ds) == 8:
+            date = ds
+    # topk variants
+    m2 = re.search(r"(?:top\s*|Top\s*|TOP\s*|前\s*)(\d+)", t)
+    if m2:
+        try:
+            topk = int(m2.group(1))
+        except Exception:
+            pass
+    # synonyms for template
+    for zh, tid in TEMPLATE_SYNONYMS.items():
+        if zh in t:
+            template = tid
+            break
+    return date, topk, template
+
+
 def _latest_pool_date(universe_root: Path) -> Optional[str]:
     pats = list(universe_root.glob('candidate_pool_*.csv'))
     if not pats:
@@ -197,16 +236,15 @@ def pick_once(repo_root: Path, session, *, date: Optional[str], topk: int, templ
     provider = 'rule'
     ranked: List[Dict[str, Any]]
     raw = ''
-    chosen_mode = mode
-    if mode not in ('auto','llm','rule'):
-        chosen_mode = 'auto'
-    if chosen_mode in ('llm','auto'):
+    mode_param = mode if mode in ('auto','llm','rule') else 'auto'
+    if mode_param in ('llm','auto'):
         try:
             provider, ranked, raw = _rank_llm(repo, session, d, template, topk, trace)
-            chosen_mode = 'llm' if provider not in ('mock','fallback_rule') else 'rule'
         except Exception:
-            chosen_mode = 'rule'
-    if chosen_mode == 'rule':
+            provider = 'fallback_rule'
+            ranked = []
+            raw = ''
+    if provider in ('fallback_rule',) or mode_param == 'rule':
         # Deterministic rule-ranking (same as fallback)
         from ...gpbt.storage import load_parquet, daily_bar_path
         feats_rows = []
@@ -235,7 +273,7 @@ def pick_once(repo_root: Path, session, *, date: Optional[str], topk: int, templ
     # 6) persist result
     out_dir = repo / 'store' / 'assistant' / 'picks'
     out_dir.mkdir(parents=True, exist_ok=True)
-    out_file = out_dir / f'pick_{d}_{template}_{chosen_mode}.json'
+    out_file = out_dir / f'pick_{d}_{template}_{mode_param}.json'
     digest = {'len': len(raw), 'sha256': (str(pd.util.hash_pandas_object(pd.DataFrame({'x':[raw]})).iloc[0]) if raw else '')}
     status = {
         'pool_ready': pool_path.exists(),
@@ -248,7 +286,7 @@ def pick_once(repo_root: Path, session, *, date: Optional[str], topk: int, templ
         'date': d,
         'template': template,
         'topk': topk,
-        'mode': chosen_mode,
+        'mode': mode_param,
         'provider': provider,
         'ranked_list': ranked,
         'raw_llm_output_digest': digest,
@@ -257,4 +295,4 @@ def pick_once(repo_root: Path, session, *, date: Optional[str], topk: int, templ
         'tool_trace_digest': trace,
     }
     out_file.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding='utf-8')
-    return PickResult(date=d, topk=topk, template=template, mode=chosen_mode, provider=provider, ranked=ranked, data_status=status, out_file=out_file, trace=trace)
+    return PickResult(date=d, topk=topk, template=template, mode=mode_param, provider=provider, ranked=ranked, data_status=status, out_file=out_file, trace=trace)

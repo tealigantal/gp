@@ -26,19 +26,26 @@ class DeepseekClient:
     def __init__(self, cfg: Optional[LLMConfig] = None):
         self.cfg = cfg or LLMConfig()
         key = os.getenv(self.cfg.api_key_env)
-        if not key:
-            raise RuntimeError(f"LLM API Key missing in env: {self.cfg.api_key_env}")
-        self.api_key = key
+        # Allow no key when using in-cluster llm-proxy and PROXY_REQUIRE_AUTH is false
+        base = (self.cfg.base_url or '').lower()
+        proxy_auth_required = os.getenv('PROXY_REQUIRE_AUTH','false').lower() == 'true'
+        if not key and ('llm-proxy' in base) and not proxy_auth_required:
+            self.api_key = ''  # no Authorization header required
+        else:
+            if not key:
+                raise RuntimeError(f"LLM API Key missing in env: {self.cfg.api_key_env}")
+            self.api_key = key
 
     def chat(self, messages: List[dict]) -> dict:
         if not self.cfg.json_mode:
             raise RuntimeError("LLM JSON mode is required (configs/llm.yaml json_mode must be true)")
         url = self.cfg.base_url.rstrip('/') + '/chat/completions'
         headers = {
-            'Authorization': f'Bearer {self.api_key}',
             'Content-Type': 'application/json; charset=utf-8',
             'Accept': 'application/json',
         }
+        if self.api_key:
+            headers['Authorization'] = f'Bearer {self.api_key}'
         payload = {
             'model': self.cfg.model,
             'messages': messages,
