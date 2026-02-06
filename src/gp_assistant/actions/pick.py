@@ -24,6 +24,7 @@ def _daily_bar_path(data_root: Path, ts_code: str) -> Path:
     return data_root / 'bars' / 'daily' / f"ts_code={ts_code}.parquet"
 from ..tools.gpbt_runner import run_gpbt
 from ..tools.doctor_reader import read_doctor
+from ..date_utils import resolve_effective_date
 
 
 @dataclass
@@ -37,6 +38,8 @@ class PickResult:
     data_status: Dict[str, Any]
     out_file: Path
     trace: List[Dict[str, Any]]
+    requested_date: Optional[str] = None
+    fallback_reason: Optional[str] = None
 
 
 TEMPLATE_SYNONYMS = {
@@ -76,6 +79,12 @@ def parse_pick_text(text: str) -> Tuple[Optional[str], Optional[int], Optional[s
             template = tid
             break
     return date, topk, template
+
+
+def _norm_code(code: str) -> str:
+    s = str(code)
+    m = re.search(r"(\d{6})", s)
+    return m.group(1) if m else s
 
 
 def _latest_pool_date(universe_root: Path) -> Optional[str]:
@@ -271,19 +280,29 @@ def pick_once(repo_root: Path, session, *, date: Optional[str], topk: int, templ
     trace: List[Dict[str, Any]] = []
     # 1) init
     _ensure_inited(python_exe, repo, session, trace)
-    # 2) decide date
-    d = date
-    if not d:
-        d = _latest_pool_date(repo / 'universe')
-    if not d:
-        # Last trading day from calendar (<= today)
-        today = None
-        try:
-            from datetime import datetime
-            today = datetime.today().strftime('%Y%m%d')
-        except Exception:
-            pass
-        d = _last_trade_date_from_calendar(repo / 'data', today)
+    # 2) decide effective date transparently
+    requested = date
+    av = []
+    uni = (repo / 'universe')
+    for p in uni.glob('candidate_pool_*.csv'):
+        m = re.match(r"candidate_pool_(\d{8})\.csv$", p.name)
+        if m:
+            av.append(m.group(1))
+    eff = resolve_effective_date(requested, av)
+    d = eff.effective
+    fallback_reason = eff.reason
+    # If requested specified but not available, try to build that specific day once
+    if requested and (not (uni / f"candidate_pool_{requested}.csv").exists()):
+        _ensure_candidate_pool(python_exe, repo, session, requested, trace)
+        # recompute availability
+        av = []
+        for p in uni.glob('candidate_pool_*.csv'):
+            m = re.match(r"candidate_pool_(\d{8})\.csv$", p.name)
+            if m:
+                av.append(m.group(1))
+        eff = resolve_effective_date(requested, av)
+        d = eff.effective
+        fallback_reason = eff.reason
     if not d:
         raise RuntimeError('无法确定交易日；请先生成候选池或交易日历')
     # 3) candidate pool
@@ -324,12 +343,16 @@ def pick_once(repo_root: Path, session, *, date: Optional[str], topk: int, templ
         except Exception:
             min_provider = None
         _fetch_min5_for_pool(repo, session, d, trace, min_provider=min_provider)
-    # 5) rank
+    # 5) decide provider/mode based on data quality
     provider = 'rule'
     ranked: List[Dict[str, Any]]
     raw = ''
     mode_param = mode if mode in ('auto','llm','rule') else 'auto'
-    if mode_param in ('llm','auto'):
+    # If daily still missing after attempted fetch, degrade to rule
+    data_degraded = False
+    if daily_missing:
+        data_degraded = True
+    if mode_param in ('llm','auto') and not data_degraded:
         try:
             provider, ranked, raw = _rank_llm(repo, session, d, template, topk, trace)
         except Exception:
@@ -359,8 +382,41 @@ def pick_once(repo_root: Path, session, *, date: Optional[str], topk: int, templ
             s = float(r.get('ret_5', 0.0)) + 0.5 * float(r.get('ret_20', 0.0)) + 1e-12 * float(r.get('amt20', 0.0))
             sc.append((str(r['ts_code']), s))
         sc.sort(key=lambda x: x[1], reverse=True)
-        ranked = [{'trade_date': d, 'rank': i+1, 'ts_code': ts, 'score': s, 'confidence': 0.4, 'reasons': 'fallback: rule-based', 'risk_flags': ''} for i,(ts,s) in enumerate(sc[:topk])]
+        ranked = [{'trade_date': d, 'rank': i+1, 'ts_code': ts, 'score': s, 'confidence': 0.4, 'reasons': f'rule: ret5={float(r.get("ret_5",0.0)):.3f}, ret20={float(r.get("ret_20",0.0)):.3f}, amt20={float(r.get("amt20",0.0)):.1f}', 'risk_flags': ''} for i,(ts,s) in enumerate(sc[:topk])]
         provider = 'fallback_rule'
+    # Enforce pool membership strictly
+    pool_norm = { _norm_code(c) for c in pool_codes }
+    ranked_norm = [ (_norm_code(r.get('ts_code','')), r) for r in ranked ]
+    in_pool = [ r for code,r in ranked_norm if code in pool_norm ]
+    if len(in_pool) < len(ranked):
+        # If provider was llm, degrade and rebuild via rule
+        if provider == 'llm':
+            provider = 'fallback_rule'
+            feats_rows = []
+            prev_d = _last_trade_date_from_calendar(repo / 'data', d)
+            for ts in pool_codes:
+                df = _load_parquet(_daily_bar_path(repo / 'data', ts))
+                df = df[df['trade_date'].astype(str) <= (prev_d or d)].sort_values('trade_date')
+                if df.empty:
+                    continue
+                close = df['close']
+                feats_rows.append({
+                    'ts_code': ts,
+                    'ret_5': float((close.iloc[-1] / close.iloc[-6]) - 1) if len(close) >= 6 else 0.0,
+                    'ret_20': float((close.iloc[-1] / close.iloc[-21]) - 1) if len(close) >= 21 else 0.0,
+                    'amt20': float(df['amount'].tail(20).mean() if 'amount' in df.columns else 0.0),
+                })
+            fdf = pd.DataFrame(feats_rows)
+            sc = []
+            for _, r in fdf.iterrows():
+                s = float(r.get('ret_5', 0.0)) + 0.5 * float(r.get('ret_20', 0.0)) + 1e-12 * float(r.get('amt20', 0.0))
+                sc.append((str(r['ts_code']), s))
+            sc.sort(key=lambda x: x[1], reverse=True)
+            ranked = [{'trade_date': d, 'rank': i+1, 'ts_code': ts, 'score': s, 'confidence': 0.4, 'reasons': f'rule: ret5={float(r.get("ret_5",0.0)):.3f}, ret20={float(r.get("ret_20",0.0)):.3f}', 'risk_flags': ''} for i,(ts,s) in enumerate(sc[:topk])]
+        else:
+            ranked = [r for _,r in ranked_norm if _norm_code(r.get('ts_code','')) in pool_norm]
+    # Re-trim to topk
+    ranked = ranked[:topk]
     # Filter by exclusions / holdings if requested
     ranked = _mark_holdings_and_exclusions(ranked, positions, exclusions, no_holdings)
     # suggestions by cash (lot size 100)
@@ -374,6 +430,11 @@ def pick_once(repo_root: Path, session, *, date: Optional[str], topk: int, templ
         'pool_ready': pool_path.exists(),
         'min5_missing': min_missing_map,
         'daily_missing': daily_missing,
+        'pool_count': len(pool_codes),
+        'requested_date': requested,
+        'effective_date': d,
+        'fallback_reason': fallback_reason,
+        'data_degraded': data_degraded,
     }
     # redact keys just in case
     safe_raw = re.sub(r"sk-[A-Za-z0-9]{4,}", "sk-***", raw or '')
@@ -390,4 +451,4 @@ def pick_once(repo_root: Path, session, *, date: Optional[str], topk: int, templ
         'tool_trace_digest': trace,
     }
     out_file.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding='utf-8')
-    return PickResult(date=d, topk=topk, template=template, mode=mode_param, provider=provider, ranked=ranked, data_status=status, out_file=out_file, trace=trace)
+    return PickResult(date=d, topk=topk, template=template, mode=mode_param, provider=provider, ranked=ranked, data_status=status, out_file=out_file, trace=trace, requested_date=requested, fallback_reason=fallback_reason)

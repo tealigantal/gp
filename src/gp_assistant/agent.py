@@ -182,6 +182,15 @@ class ChatAgent:
                 try:
                     from .actions.pick import parse_pick_text
                     d, k, tpl = parse_pick_text(q)
+                    # Robust short-date parsing like 0209
+                    try:
+                        from datetime import datetime
+                        from .date_utils import parse_user_date
+                        pd = parse_user_date(q, datetime.now().date())
+                        if pd is not None:
+                            d = pd.strftime('%Y%m%d')
+                    except Exception:
+                        pass
                     d2, k2, tpl2, md2 = apply_defaults(d, k, tpl, None, self.state)
                     res = pick_once(self.repo, self.session, date=d2 or None, topk=k2, template=tpl2, mode=md2,
                                      positions=self.state.positions if self.state.no_holdings else None,
