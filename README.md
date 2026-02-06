@@ -17,8 +17,8 @@
 1) 复制环境变量模板：
    - `cp .env.example .env`
    - 如需启用 DeepSeek，请在 `.env` 设置 `DEEPSEEK_API_KEY`；或在 `configs/llm.yaml` 设为 `provider: mock` 走离线自测。
-2) 构建镜像：
-   - `docker compose build`
+2) 构建镜像并启动：
+   - `docker compose up --build -d`
 3) 进入可交互对话：
    - `docker compose run --rm gp`
 
@@ -42,4 +42,3 @@
   - `python gpbt.py llm-rank --date 20260106 --template momentum_v1`
 
 注意：任何 API Key 仅从环境变量或 .env 中读取；日志与落盘会自动脱敏，不会写入明文 Key。
-

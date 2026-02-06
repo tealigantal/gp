@@ -10,6 +10,7 @@ PATTERNS = [
     re.compile(r"sk-[A-Za-z0-9]{12,}"),
     re.compile(r"DEEPSEEK_API_KEY\s*=\s*sk-[A-Za-z0-9]+"),
     re.compile(r"OPENAI_API_KEY\s*=\s*sk-[A-Za-z0-9]+"),
+    re.compile(r"Bearer\s+[A-Za-z0-9\-_\.]{16,}"),
 ]
 
 EXCLUDES = {'.git', 'data', 'results', 'store', '.pytest_cache', '__pycache__', 'EMQuantAPI_Python'}
@@ -48,4 +49,3 @@ def main() -> int:
 
 if __name__ == '__main__':
     sys.exit(main())
-

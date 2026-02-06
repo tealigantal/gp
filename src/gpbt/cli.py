@@ -373,10 +373,11 @@ def main() -> None:
     p_doc.add_argument('--start', required=True, help='YYYYMMDD')
     p_doc.add_argument('--end', required=True, help='YYYYMMDD')
 
-    p_llm = sub.add_parser('llm-rank', help='鐩樺墠 LLM 鑽愯偂鎺掑簭锛堜弗鏍糐SON锛屾棤fallback锛?)
+    p_llm = sub.add_parser('llm-rank', help='当前 LLM 荐股排序（JSON+缓存，支持mock/fallback）')
     p_llm.add_argument('--date', required=True, help='YYYYMMDD')
     p_llm.add_argument('--template', required=True, help='妯℃澘ID锛屽 momentum_v1')
     p_llm.add_argument('--force', action='store_true', help='寮哄埗閲嶈窇骞惰鐩栫紦瀛?)
+    p_llm.add_argument('--topk', type=int, default=3, help='返回TopK（默认3）')
 
     p_tune = sub.add_parser('tune', help='鍥炴函閫夋嫨鏈€浼樼粍鍚堢瓥鐣ュ苟钀界洏 current_policy')
     p_tune.add_argument('--end', required=True, help='YYYYMMDD')
@@ -422,7 +423,7 @@ def main() -> None:
     elif args.cmd == 'doctor':
         run_doctor(cfg, args.start, args.end)
     elif args.cmd == 'llm-rank':
-        llm_rank(cfg, args.date, args.template, force=args.force)
+        llm_rank(cfg, args.date, args.template, force=args.force, topk=int(getattr(args, 'topk', 3)))
     elif args.cmd == 'tune':
         templates = [t.strip() for t in args.templates.split(',') if t.strip()]
         entries = [t.strip() for t in args.entries.split(',') if t.strip()]

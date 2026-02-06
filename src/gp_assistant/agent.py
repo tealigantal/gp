@@ -119,7 +119,7 @@ class ChatAgent:
             # Natural-language trigger for stock picking
             if any(k in q for k in ['荐股', '推荐', '选股', 'topk', 'TopK', 'TOPK']):
                 try:
-                    res = pick_once(self.repo, self.session, date=None, topk=3, template='momentum_v1')
+                    res = pick_once(self.repo, self.session, date=None, topk=3, template='momentum_v1', mode='auto')
                     print(self._format_pick_result(res))
                 except Exception as e:
                     print('Pick failed:', e)
@@ -206,13 +206,14 @@ class ChatAgent:
             ap.add_argument('--topk', dest='topk', type=int, default=3)
             ap.add_argument('--template', dest='template', default='momentum_v1')
             ap.add_argument('--tier', dest='tier', default=None)
+            ap.add_argument('--mode', dest='mode', default='auto', choices=['auto','llm','rule'])
             try:
                 ns, _ = ap.parse_known_args(shlex.split(arg))
             except SystemExit:
                 print('Usage: /pick [--date YYYYMMDD] [--topk K] [--template XXX] [--tier XXX]')
                 return True
             try:
-                res = pick_once(self.repo, self.session, date=ns.date, topk=ns.topk, template=ns.template, tier=ns.tier)
+                res = pick_once(self.repo, self.session, date=ns.date, topk=ns.topk, template=ns.template, tier=ns.tier, mode=ns.mode)
                 print(self._format_pick_result(res))
             except Exception as e:
                 print('Pick failed:', e)
@@ -261,5 +262,8 @@ class ChatAgent:
             items.append(f"{r.get('rank', '?')}. {r.get('ts_code')}  {reason}")
         status = res.data_status
         status_s = f"pool={'ok' if status.get('pool_ready') else 'missing'}; min5_gap={len(status.get('min5_missing', {}))}; daily_gap={len(status.get('daily_missing', {}))}"
-        hdr = f"荐股 Top{res.topk}（{res.date} | 模板 {res.template} | provider={res.provider}）\n数据: {status_s}"
+        fallback_note = ''
+        if res.provider in ('mock','fallback_rule'):
+            fallback_note = ' | LLM未启用（fallback规则排序）'
+        hdr = f"荐股 Top{res.topk}（{res.date} | 模板 {res.template} | 模式 {res.mode} | provider={res.provider}{fallback_note}）\n数据: {status_s}"
         return hdr + "\n" + "\n".join(items)

@@ -47,6 +47,7 @@ def main() -> None:
                 date = None
                 topk = 3
                 template = 'momentum_v1'
+                mode = 'auto'
                 # crude parse for YYYYMMDD and topk
                 import re
                 m = re.search(r"(20\d{6})", q)
@@ -56,7 +57,7 @@ def main() -> None:
                 if mk:
                     topk = int(mk.group(1))
                 try:
-                    res = pick_once(Path(cfg.workspace_root), agent.session, date=date, topk=topk, template=template)
+                    res = pick_once(Path(cfg.workspace_root), agent.session, date=date, topk=topk, template=template, mode=mode)
                     print(agent._format_pick_result(res))
                     raise SystemExit(0)
                 except Exception as e:

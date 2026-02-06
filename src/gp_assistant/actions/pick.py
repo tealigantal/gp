@@ -18,10 +18,12 @@ class PickResult:
     date: str
     topk: int
     template: str
+    mode: str
     provider: str
     ranked: List[Dict[str, Any]]
     data_status: Dict[str, Any]
     out_file: Path
+    trace: List[Dict[str, Any]]
 
 
 def _latest_pool_date(universe_root: Path) -> Optional[str]:
@@ -49,26 +51,30 @@ def _last_trade_date_from_calendar(data_root: Path, today: Optional[str] = None)
     return sorted(arr)[-1] if arr else None
 
 
-def _ensure_inited(python_exe: str, repo: Path, session) -> None:
+def _ensure_inited(python_exe: str, repo: Path, session, trace: List[Dict[str, Any]]) -> None:
     code, out, err, dt = run_gpbt(python_exe, repo, 'init', [], allow=['init'])
+    rec = {'tool': 'gpbt', 'cmd': ['init'], 'code': code, 'seconds': dt}
     session.append('tool', 'gpbt', {'cmd': ['init'], 'code': code, 'stderr': err[:2000], 'seconds': dt})
+    trace.append(rec)
 
 
-def _ensure_candidate_pool(python_exe: str, repo: Path, session, date: str) -> None:
+def _ensure_candidate_pool(python_exe: str, repo: Path, session, date: str, trace: List[Dict[str, Any]]) -> None:
     f = repo / 'universe' / f'candidate_pool_{date}.csv'
     if f.exists():
         return
     code, out, err, dt = run_gpbt(python_exe, repo, 'build-candidates-range', ['--start', date, '--end', date], allow=['build-candidates-range'])
     session.append('tool', 'gpbt', {'cmd': ['build-candidates-range','--start',date,'--end',date], 'code': code, 'stderr': err[:2000], 'seconds': dt})
+    trace.append({'tool':'gpbt','cmd':['build-candidates-range','--start',date,'--end',date],'code':code,'seconds':dt})
     if code != 0:
         raise RuntimeError(f'Failed to build candidate pool for {date}: {err or out}')
 
 
-def _doctor(repo: Path, session, start: str, end: str) -> Dict[str, Any]:
+def _doctor(repo: Path, session, start: str, end: str, trace: List[Dict[str, Any]]) -> Dict[str, Any]:
     import json
     # Prefer reading latest doctor in results; if missing, run
     code, out, err, dt = run_gpbt(os.sys.executable, repo, 'doctor', ['--start', start, '--end', end], allow=['doctor'])
     session.append('tool', 'gpbt', {'cmd': ['doctor','--start',start,'--end',end], 'code': code, 'stderr': err[:2000], 'seconds': dt})
+    trace.append({'tool':'gpbt','cmd':['doctor','--start',start,'--end',end],'code':code,'seconds':dt})
     # Read latest
     rep = read_doctor(repo / 'results')
     return rep or {}
@@ -85,23 +91,27 @@ def _detect_daily_gaps(repo: Path, date: str, pool_codes: List[str]) -> List[str
     return gaps
 
 
-def _fetch_daily_for_codes(repo: Path, session, date: str, codes: List[str]) -> None:
+def _fetch_daily_for_codes(repo: Path, session, date: str, codes: List[str], trace: List[Dict[str, Any]]) -> None:
     if not codes:
         return
     args = ['--start', date, '--end', date, '--no-minutes', '--codes', ','.join(codes)]
     code, out, err, dt = run_gpbt(os.sys.executable, repo, 'fetch', args, allow=['fetch'])
     session.append('tool', 'gpbt', {'cmd': ['fetch'] + args, 'code': code, 'stderr': err[:2000], 'seconds': dt})
+    trace.append({'tool':'gpbt','cmd':['fetch']+args,'code':code,'seconds':dt})
 
 
-def _fetch_min5_for_pool(repo: Path, session, date: str, min_provider: Optional[str] = None) -> None:
+def _fetch_min5_for_pool(repo: Path, session, date: str, trace: List[Dict[str, Any]], min_provider: Optional[str] = None) -> None:
     args = ['--date', date]
     if min_provider:
         args += ['--min-provider', min_provider]
+    # default retries 2
+    args += ['--retries', '2']
     code, out, err, dt = run_gpbt(os.sys.executable, repo, 'fetch-min5-for-pool', args, allow=['fetch-min5-for-pool'])
     session.append('tool', 'gpbt', {'cmd': ['fetch-min5-for-pool'] + args, 'code': code, 'stderr': err[:2000], 'seconds': dt})
+    trace.append({'tool':'gpbt','cmd':['fetch-min5-for-pool']+args,'code':code,'seconds':dt})
 
 
-def _rank_llm(repo: Path, session, date: str, template: str, topk: int) -> Tuple[str, List[Dict[str, Any]], str]:
+def _rank_llm(repo: Path, session, date: str, template: str, topk: int, trace: List[Dict[str, Any]]) -> Tuple[str, List[Dict[str, Any]], str]:
     # Returns (provider, ranked_rows, raw_text)
     allow = ['llm-rank']
     args = ['--date', date, '--template', template]
@@ -112,6 +122,7 @@ def _rank_llm(repo: Path, session, date: str, template: str, topk: int) -> Tuple
         pass
     code, out, err, dt = run_gpbt(os.sys.executable, repo, 'llm-rank', args, allow=allow)
     session.append('tool', 'gpbt', {'cmd': ['llm-rank'] + args, 'code': code, 'stderr': err[:2000], 'seconds': dt})
+    trace.append({'tool':'gpbt','cmd':['llm-rank']+args,'code':code,'seconds':dt})
     # Read ranked CSV
     ranked_csv = repo / 'universe' / f'candidate_pool_{date}_ranked_{template}.csv'
     if not ranked_csv.exists():
@@ -131,11 +142,12 @@ def _rank_llm(repo: Path, session, date: str, template: str, topk: int) -> Tuple
     return provider, ranked, raw
 
 
-def pick_once(repo_root: Path, session, *, date: Optional[str], topk: int, template: str, tier: Optional[str] = None) -> PickResult:
+def pick_once(repo_root: Path, session, *, date: Optional[str], topk: int, template: str, tier: Optional[str] = None, mode: str = 'auto') -> PickResult:
     repo = Path(repo_root)
     python_exe = os.sys.executable
+    trace: List[Dict[str, Any]] = []
     # 1) init
-    _ensure_inited(python_exe, repo, session)
+    _ensure_inited(python_exe, repo, session, trace)
     # 2) decide date
     d = date
     if not d:
@@ -152,12 +164,12 @@ def pick_once(repo_root: Path, session, *, date: Optional[str], topk: int, templ
     if not d:
         raise RuntimeError('无法确定交易日；请先生成候选池或交易日历')
     # 3) candidate pool
-    _ensure_candidate_pool(python_exe, repo, session, d)
+    _ensure_candidate_pool(python_exe, repo, session, d, trace)
     pool_path = repo / 'universe' / f'candidate_pool_{d}.csv'
     pool_df = pd.read_csv(pool_path)
     pool_codes = pool_df['ts_code'].astype(str).tolist()
     # 4) doctor + data gaps
-    rep = _doctor(repo, session, d, d)
+    rep = _doctor(repo, session, d, d, trace)
     checks = rep.get('checks', {}) if rep else {}
     mincov = checks.get('min5_coverage', {})
     min_missing_map: Dict[str, List[str]] = {}
@@ -168,7 +180,7 @@ def pick_once(repo_root: Path, session, *, date: Optional[str], topk: int, templ
     # Try safe backfill
     if daily_missing:
         session.append('assistant', f"缺少日线数据 {len(daily_missing)} 支，将补齐当日快照。")
-        _fetch_daily_for_codes(repo, session, d, daily_missing)
+        _fetch_daily_for_codes(repo, session, d, daily_missing, trace)
     # For minutes: prefer pool-only fetch
     if min_missing_map.get(d):
         session.append('assistant', f"分钟线缺口 {len(min_missing_map[d])} 支，尝试为候选池补齐5min。")
@@ -180,13 +192,50 @@ def pick_once(repo_root: Path, session, *, date: Optional[str], topk: int, templ
             min_provider = cfg.get('min_provider') or None
         except Exception:
             min_provider = None
-        _fetch_min5_for_pool(repo, session, d, min_provider=min_provider)
+        _fetch_min5_for_pool(repo, session, d, trace, min_provider=min_provider)
     # 5) rank
-    provider, ranked, raw = _rank_llm(repo, session, d, template, topk)
+    provider = 'rule'
+    ranked: List[Dict[str, Any]]
+    raw = ''
+    chosen_mode = mode
+    if mode not in ('auto','llm','rule'):
+        chosen_mode = 'auto'
+    if chosen_mode in ('llm','auto'):
+        try:
+            provider, ranked, raw = _rank_llm(repo, session, d, template, topk, trace)
+            chosen_mode = 'llm' if provider not in ('mock','fallback_rule') else 'rule'
+        except Exception:
+            chosen_mode = 'rule'
+    if chosen_mode == 'rule':
+        # Deterministic rule-ranking (same as fallback)
+        from ...gpbt.storage import load_parquet, daily_bar_path
+        feats_rows = []
+        prev_d = _last_trade_date_from_calendar(repo / 'data', d)
+        for ts in pool_codes:
+            df = load_parquet(daily_bar_path(repo / 'data', ts))
+            df = df[df['trade_date'].astype(str) <= (prev_d or d)].sort_values('trade_date')
+            if df.empty:
+                continue
+            close = df['close']
+            row = {
+                'ts_code': ts,
+                'ret_5': float((close.iloc[-1] / close.iloc[-6]) - 1) if len(close) >= 6 else 0.0,
+                'ret_20': float((close.iloc[-1] / close.iloc[-21]) - 1) if len(close) >= 21 else 0.0,
+                'amt20': float(df['amount'].tail(20).mean() if 'amount' in df.columns else 0.0),
+            }
+            feats_rows.append(row)
+        fdf = pd.DataFrame(feats_rows)
+        sc = []
+        for _, r in fdf.iterrows():
+            s = float(r.get('ret_5', 0.0)) + 0.5 * float(r.get('ret_20', 0.0)) + 1e-12 * float(r.get('amt20', 0.0))
+            sc.append((str(r['ts_code']), s))
+        sc.sort(key=lambda x: x[1], reverse=True)
+        ranked = [{'trade_date': d, 'rank': i+1, 'ts_code': ts, 'score': s, 'confidence': 0.4, 'reasons': 'fallback: rule-based', 'risk_flags': ''} for i,(ts,s) in enumerate(sc[:topk])]
+        provider = 'fallback_rule'
     # 6) persist result
     out_dir = repo / 'store' / 'assistant' / 'picks'
     out_dir.mkdir(parents=True, exist_ok=True)
-    out_file = out_dir / f'pick_{d}_{template}.json'
+    out_file = out_dir / f'pick_{d}_{template}_{chosen_mode}.json'
     digest = {'len': len(raw), 'sha256': (str(pd.util.hash_pandas_object(pd.DataFrame({'x':[raw]})).iloc[0]) if raw else '')}
     status = {
         'pool_ready': pool_path.exists(),
@@ -199,12 +248,13 @@ def pick_once(repo_root: Path, session, *, date: Optional[str], topk: int, templ
         'date': d,
         'template': template,
         'topk': topk,
+        'mode': chosen_mode,
         'provider': provider,
         'ranked_list': ranked,
         'raw_llm_output_digest': digest,
         'raw_llm_sample': safe_raw[:0],  # do not store payloads; keep empty per security
         'data_status_summary': status,
+        'tool_trace_digest': trace,
     }
     out_file.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding='utf-8')
-    return PickResult(date=d, topk=topk, template=template, provider=provider, ranked=ranked, data_status=status, out_file=out_file)
-
+    return PickResult(date=d, topk=topk, template=template, mode=chosen_mode, provider=provider, ranked=ranked, data_status=status, out_file=out_file, trace=trace)

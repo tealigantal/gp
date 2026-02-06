@@ -6,6 +6,7 @@ import pandas as pd
 
 from src.gpbt.config import AppConfig, Paths, Fees, UniverseCfg, BarsCfg, ExperimentCfg
 from src.gpbt.engine.backtest import BacktestEngine
+from src.gpbt.cli import cmd_backtest
 from src.gpbt.strategy.time_entry_min5 import TimeEntryMin5, TimeEntryParams
 from src.gpbt.strategy.open_range_breakout import OpenRangeBreakout, ORBParams
 from src.gpbt.strategy.vwap_reclaim_pullback import VWAPReclaimPullback, VWAPParams
@@ -43,6 +44,19 @@ def test_strategy_smoke_all(tmp_path: Path):
     assert by.get('open_range_breakout', 0) >= 1
     assert by.get('vwap_reclaim_pullback', 0) >= 1
     assert by.get('baseline_daily', 0) >= 1
+
+
+def test_strategy_smoke_min5_cli(tmp_path: Path):
+    cfg = make_cfg(tmp_path, run_id='cli')
+    # Run via gpbt cmd_backtest (CLI-equivalent) to ensure results pipeline
+    cmd_backtest(cfg, '20260106', '20260107', ['time_entry_min5','open_range_breakout','vwap_reclaim_pullback','baseline_daily'])
+    run_dir = cfg.paths.results_root / f"run_{cfg.experiment.run_id}"
+    assert (run_dir / 'compare_strategies.csv').exists()
+    # Strictly ensure ORB and VWAP have at least 1 trade
+    cmp = pd.read_csv(run_dir / 'compare_strategies.csv')
+    by = {r['strategy']: int(r['n_trades']) for _, r in cmp.iterrows()}
+    assert by.get('open_range_breakout', 0) >= 1
+    assert by.get('vwap_reclaim_pullback', 0) >= 1
 
 
 def test_no_future_function_fill_policy(tmp_path: Path):
@@ -90,4 +104,3 @@ def test_lot_size_100(tmp_path: Path):
     rows = (trg.read_text(encoding='utf-8').strip().splitlines())[1:]
     shares = [int(r.split(',')[5]) for r in rows]
     assert all(s % 100 == 0 for s in shares)
-
