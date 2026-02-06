@@ -15,6 +15,8 @@ def main() -> None:
 
     p_chat = sub.add_parser("chat", help="Open REPL chat")
     p_chat.add_argument("--once", type=str, default=None, help="Run one-shot chat with the given text and exit")
+    p_chat.add_argument("--print-state", action="store_true", help="Print state summary after actions")
+    p_chat.add_argument("--reset-state", action="store_true", help="Reset state before starting chat")
 
     p_index = sub.add_parser("index", help="Build or refresh local index")
     p_index.add_argument("--force", action="store_true")
@@ -38,6 +40,16 @@ def main() -> None:
 
     if args.cmd == "chat":
         agent = ChatAgent(cfg)
+        if getattr(args, 'reset_state', False):
+            try:
+                agent.state = type(agent.state)()  # type: ignore[attr-defined]
+            except Exception:
+                pass
+        if getattr(args, 'print_state', False):
+            try:
+                agent.print_state = True  # type: ignore[attr-defined]
+            except Exception:
+                pass
         if args.once:
             q = args.once
             # Natural language triggers are handled inside repl; emulate here

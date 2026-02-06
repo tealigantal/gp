@@ -1,0 +1,100 @@
+{
+  "date": "20260127",
+  "template": "momentum_v1",
+  "topk": 5,
+  "mode": "auto",
+  "provider": "llm",
+  "ranked_list": [
+    {
+      "trade_date": 20260127,
+      "rank": 1,
+      "ts_code": "600519.SH",
+      "score": 0.8,
+      "confidence": 0.7,
+      "reasons": "Highest ret_5 and ret_20 among pool, indicating strong recent momentum",
+      "risk_flags": "High price may limit liquidity"
+    },
+    {
+      "trade_date": 20260127,
+      "rank": 2,
+      "ts_code": "000538.SZ",
+      "score": 0.6,
+      "confidence": 0.5,
+      "reasons": "Non-zero ret_5 and ret_20, showing positive momentum",
+      "risk_flags": "Lower amt20 suggests lower trading volume"
+    },
+    {
+      "trade_date": 20260127,
+      "rank": 3,
+      "ts_code": "000568.SZ",
+      "score": 0.55,
+      "confidence": 0.45,
+      "reasons": "Non-zero ret_5 and ret_20, consistent with momentum",
+      "risk_flags": "Moderate amt20 may indicate volatility"
+    }
+  ],
+  "raw_llm_output_digest": {
+    "len": 861,
+    "sha256": "12483657265886187363"
+  },
+  "raw_llm_sample": "",
+  "data_status_summary": {
+    "pool_ready": true,
+    "min5_missing": {},
+    "daily_missing": [
+      "000568.SZ",
+      "000001.SZ"
+    ]
+  },
+  "tool_trace_digest": [
+    {
+      "tool": "gpbt",
+      "cmd": [
+        "init"
+      ],
+      "code": 0,
+      "seconds": 0.6568493843078613
+    },
+    {
+      "tool": "gpbt",
+      "cmd": [
+        "doctor",
+        "--start",
+        "20260127",
+        "--end",
+        "20260127"
+      ],
+      "code": 0,
+      "seconds": 0.9463365077972412
+    },
+    {
+      "tool": "gpbt",
+      "cmd": [
+        "fetch",
+        "--start",
+        "20260127",
+        "--end",
+        "20260127",
+        "--no-minutes",
+        "--codes",
+        "000568.SZ,000001.SZ"
+      ],
+      "code": 0,
+      "seconds": 23.136842966079712
+    },
+    {
+      "tool": "gpbt",
+      "cmd": [
+        "llm-rank",
+        "--date",
+        "20260127",
+        "--template",
+        "momentum_v1",
+        "--topk",
+        "5"
+      ],
+      "code": 0,
+      "seconds": 0.6502573490142822
+    }
+  ]
+}

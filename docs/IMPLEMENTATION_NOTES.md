@@ -61,3 +61,32 @@ Available and used subcommands:
 - When LLM is unavailable (no key/proxy), auto mode falls back to a deterministic, interpretable rule ranking.
 - All logs and persisted outputs are sanitized; no API keys are written to disk.
 
+## 6) Docker Import Errors (Repro + Fix)
+
+Repro inside container (before fix):
+- `docker compose run --rm gp python assistant.py chat` → raised `attempted relative import beyond top-level package` due to `src/gp_assistant/actions/pick.py` using `from ...gpbt` (cross-package relative import went beyond top-level `gp_assistant`).
+- `docker compose run --rm gp python -m gp_assistant.cli chat` → `ModuleNotFoundError: No module named 'gp_assistant'` because the package under `src/` was not installed/importable.
+
+Fixes applied:
+- Converted cross-package relative imports to absolute: `from gpbt.storage import ...` in `src/gp_assistant/actions/pick.py`.
+- Added `pyproject.toml` with setuptools `[tool.setuptools.packages.find] where=["src"]` and updated Dockerfile to `pip install -e .` after requirements so `gp_assistant` and `gpbt` are importable.
+- Switched compose command to module entry: `python -m gp_assistant.cli chat`.
+- Removed `version:` key from `docker-compose.yml` to eliminate obsolete warning.
+
+Validation (container):
+- `docker compose build --no-cache gp`
+- `docker compose run --rm gp python -c "import gp_assistant; print('ok')"` → ok
+- `docker compose run --rm gp python -m gp_assistant.cli --help` → shows usage
+- `docker compose run --rm gp` → enters REPL without relative import errors
+
+## 7) IndentationError in gp container (Repro + Fix)
+
+Repro (before fix):
+- `docker compose run --rm gp` during import raised:
+  - `IndentationError: expected an indented block after function definition on line 82`
+  - File: `/app/src/gp_assistant/actions/pick.py`
+  - An import statement (`from gpbt.storage import load_parquet, raw_path`) appeared at top-level immediately after a function header due to a merge artifact.
+
+Fix:
+- Consolidated imports to file top, ensured all function bodies are properly indented.
+- Added tests to run `python -m compileall -q src/gp_assistant` to guard against regressions.

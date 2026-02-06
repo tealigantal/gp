@@ -1,4 +1,3 @@
-version: '3.9'
 services:
   gp:
     build: .
@@ -12,7 +11,7 @@ services:
       - ./configs:/app/configs
     tty: true
     stdin_open: true
-    command: ["python","assistant.py","chat"]
+    command: ["python","-m","gp_assistant.cli","chat"]
 
   llm-proxy:
     build: ./services/llm_proxy

@@ -170,7 +170,7 @@ def tune(cfg: AppConfig, end: str, lookback_weeks: int, eval_weeks: int, templat
             'exit': exit_id,
             'n_trades': n_tr,
             'win_rate': win_rate,
-            'row.get('avg_pnl', 0.0): avg_pnl,
+            'avg_pnl': avg_pnl,
             'max_drawdown': max_dd,
         },
         'walk_forward': wf_result if wf_result else None,
@@ -190,7 +190,7 @@ def tune(cfg: AppConfig, end: str, lookback_weeks: int, eval_weeks: int, templat
         score=win_rate,
         metrics={
             'win_rate': win_rate,
-            'row.get('avg_pnl', 0.0): avg_pnl,
+            'avg_pnl': avg_pnl,
             'max_drawdown': max_dd,
             'n_trades': n_tr,
             'walk_forward': wf_result if wf_result else None,

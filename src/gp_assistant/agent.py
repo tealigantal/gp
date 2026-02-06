@@ -21,6 +21,8 @@ from .session_store import SessionStore
 from .config import AssistantConfig
 from .llm_client import SimpleLLMClient
 from .actions.pick import PickResult, pick_once
+from .state import SessionState, update_state_from_text, apply_defaults
+from .repl_render import print_agent, print_tool, print_exec, print_warn, render_user_prompt
 from .tools.results_reader import summarize_run
 from .tools.doctor_reader import read_doctor, summarize_doctor
 from .tools.manifest_reader import read_manifest, summarize_manifest
@@ -45,6 +47,9 @@ class ChatAgent:
         self.sessions_dir = self.repo / 'store' / 'assistant' / 'sessions'
         self.session = SessionStore(self.sessions_dir)
         self.index = IndexStore(Path(cfg.rag.index_db))
+        # Session state (per session only)
+        self.state = SessionState()
+        self.print_state = False
         # LLM may be optional (mock or disabled). Initialize defensively.
         try:
             self.llm = SimpleLLMClient(cfg.llm.llm_config_file, {
@@ -96,15 +101,20 @@ class ChatAgent:
         return content
 
     def repl(self) -> None:
-        print("Repo assistant ready. Type /help for commands. Ctrl+C to exit.")
+        print_agent("Repo assistant ready. Type /help for commands. Ctrl+C to exit.")
         while True:
             try:
-                q = input('>>> ').strip()
+                q = input(render_user_prompt()).strip()
             except (EOFError, KeyboardInterrupt):
                 print()
                 break
             if not q:
                 continue
+            # Update state from natural text first
+            delta = update_state_from_text(self.state, q)
+            if delta:
+                self.session.append('tool', 'state_update', delta)
+                print_tool(f"state updated: date={delta.get('default_date','-')}, cash={delta.get('cash_available','-')}, positions={delta.get('positions',{}) if 'positions' in delta else '-'}, topk={delta.get('default_topk','-')}")
             if q.startswith('/'):
                 handled = self._handle_command(q)
                 if handled:
@@ -116,18 +126,78 @@ class ChatAgent:
             if q.startswith('!gp '):
                 self._run_gp_from_line(q[len('!gp '):])
                 continue
+            # Quick follow-ups: exclude codes or toggle no_holdings
+            if '排除' in q:
+                import re as _re
+                m = _re.search(r"排除\s*([0-9]{6}(?:\.(?:SZ|SH))?)", q)
+                if m:
+                    code = m.group(1)
+                    if code not in self.state.exclusions:
+                        self.state.exclusions.append(code)
+                    print_tool(f'excluded: {code}')
+                    # re-run pick if possible
+                    if self.state.last_pick:
+                        try:
+                            res = pick_once(self.repo, self.session, date=self.state.default_date, topk=self.state.default_topk, template=self.state.default_template, mode=self.state.default_mode,
+                                             positions=self.state.positions if self.state.no_holdings else None,
+                                             cash=self.state.cash_available, exclusions=self.state.exclusions or None, no_holdings=self.state.no_holdings)
+                            self.state.last_pick = {'date': res.date, 'mode': res.mode, 'provider': res.provider, 'ranked_list': res.ranked}
+                            print_agent(self._format_pick_result(res))
+                        except Exception as e:
+                            print_warn(f'Pick failed: {e}')
+                    continue
+            if '只要非持仓' in q or '不要重复' in q:
+                self.state.no_holdings = True
+                print_tool('filter: no_holdings=true')
+                if self.state.last_pick:
+                    try:
+                        res = pick_once(self.repo, self.session, date=self.state.default_date, topk=self.state.default_topk, template=self.state.default_template, mode=self.state.default_mode,
+                                         positions=self.state.positions if self.state.no_holdings else None,
+                                         cash=self.state.cash_available, exclusions=self.state.exclusions or None, no_holdings=self.state.no_holdings)
+                        self.state.last_pick = {'date': res.date, 'mode': res.mode, 'provider': res.provider, 'ranked_list': res.ranked}
+                        print_agent(self._format_pick_result(res))
+                    except Exception as e:
+                        print_warn(f'Pick failed: {e}')
+                continue
+
+            # Follow-up: Nth reason
+            if '为什么' in q and ('第' in q or '第' in q):
+                import re as _re
+                m = _re.search(r"第\s*(\d+)\s*只", q)
+                if not m:
+                    m = _re.search(r"(\d+)号", q)
+                if m and self.state.last_pick:
+                    idx = int(m.group(1))
+                    lst = self.state.last_pick.get('ranked_list', [])  # type: ignore
+                    if 1 <= idx <= len(lst):
+                        item = lst[idx-1]
+                        reason = item.get('reasons') or item.get('reason') or ''
+                        if isinstance(reason, list):
+                            reason = ';'.join([str(x) for x in reason])
+                        print_agent(f"第{idx}只 {item.get('ts_code')}: {reason}")
+                        continue
+
             # Natural-language trigger for stock picking
-            if any(k in q for k in ['荐股', '推荐', '选股', 'topk', 'TopK', 'TOPK']):
+            if any(k in q for k in ['荐股', '推荐', '选股', 'topk', 'TopK', 'TOPK', '前5', '前 5']):
                 try:
                     from .actions.pick import parse_pick_text
                     d, k, tpl = parse_pick_text(q)
-                    res = pick_once(self.repo, self.session, date=d, topk=(k or 3), template=(tpl or 'momentum_v1'), mode='auto')
-                    print(self._format_pick_result(res))
+                    d2, k2, tpl2, md2 = apply_defaults(d, k, tpl, None, self.state)
+                    res = pick_once(self.repo, self.session, date=d2 or None, topk=k2, template=tpl2, mode=md2,
+                                     positions=self.state.positions if self.state.no_holdings else None,
+                                     cash=self.state.cash_available,
+                                     exclusions=self.state.exclusions or None,
+                                     no_holdings=self.state.no_holdings)
+                    self.state.default_date = res.date
+                    self.state.last_pick = {'date': res.date, 'mode': res.mode, 'provider': res.provider, 'ranked_list': res.ranked}
+                    print_agent(self._format_pick_result(res))
+                    if self.print_state:
+                        print_tool('state: ' + self.state.summary())
                 except Exception as e:
-                    print('Pick failed:', e)
+                    print_warn(f'Pick failed: {e}')
                 continue
             ans = self._chat_once(q)
-            print(ans)
+            print_agent(ans)
 
     def _handle_command(self, line: str) -> bool:
         import shlex
@@ -135,70 +205,105 @@ class ChatAgent:
         cmd = parts[0].lower()
         arg = parts[1] if len(parts) > 1 else ''
         if cmd in ['/help', '/h']:
-            print('/help, /runs, /run <id>, /doctor <id>, /open <path>, /exec gpbt|gp <args>')
+            print_tool('/help, /state, /reset, /exclude <code>, /include <code>, /runs, /run <id>, /doctor <id>, /open <path>, /exec gpbt|gp <args>')
             return True
         if cmd == '/runs':
             runs = list_runs(self.repo / 'results', limit=20)
             for r in runs:
-                print('-', r)
+                print_tool(f'- {r}')
             self.session.append('tool', 'runs_list', {'count': len(runs)})
             return True
         if cmd == '/run':
             rid = arg.strip()
             txt = summarize_run(self.repo / 'results', run_id=rid if rid else None)
             man = summarize_manifest(read_manifest(self.repo / 'results', run_id=rid if rid else None))
-            print(txt)
-            print(man)
+            if txt:
+                print_tool(txt)
+            if man:
+                print_tool(man)
             self.session.append('tool', 'run_summary', {'id': rid or 'latest'})
             return True
         if cmd == '/doctor':
             rid = arg.strip() or None
             rep = read_doctor(self.repo / 'results', rid)
-            print(summarize_doctor(rep))
+            print_tool(summarize_doctor(rep))
             self.session.append('tool', 'doctor_summary', {'id': rid or 'latest'})
             return True
         if cmd == '/open':
             p = arg.strip()
             try:
                 content, n = safe_read(p, self.repo, allow_roots=[self.repo], max_bytes=2000)
-                print(content)
+                print_tool(content)
                 self.session.append('tool', 'file_read', {'path': p, 'bytes': n})
             except Exception as e:
-                print('Error:', e)
+                print_warn(f'Error: {e}')
             return True
         if cmd == '/exec':
             try:
                 # Expect: gpbt <subcmd> ... OR gp <subcmd> ...
                 tokens = shlex.split(arg)
                 if not tokens:
-                    print('Usage: /exec gpbt|gp <subcmd> ...')
+                    print_warn('Usage: /exec gpbt|gp <subcmd> ...')
                     return True
                 prog = tokens[0]
                 sub = tokens[1] if len(tokens) > 1 else ''
                 args = tokens[2:]
                 if prog == 'gpbt':
                     if sub not in self.cfg.tools.gpbt_allow_subcommands:
-                        print('Refused: not allowed. Allowed:', self.cfg.tools.gpbt_allow_subcommands)
+                        print_warn('Refused: not allowed. Allowed: ' + ','.join(self.cfg.tools.gpbt_allow_subcommands))
                         return True
                     code, out, err, dt = run_gpbt(sys.executable, self.repo, sub, args, self.cfg.tools.gpbt_allow_subcommands)
                     self.session.append('tool', 'gpbt', {'cmd': [sub] + args, 'code': code, 'stderr': err[:2000], 'seconds': dt})
-                    print(out)
+                    if out:
+                        print_exec(out)
                     if err:
-                        print(err, file=sys.stderr)
+                        print_warn(err)
                     return True
                 if prog == 'gp':
                     if sub not in self.cfg.tools.gp_allow_subcommands:
-                        print('Refused: not allowed. Allowed:', self.cfg.tools.gp_allow_subcommands)
+                        print_warn('Refused: not allowed. Allowed: ' + ','.join(self.cfg.tools.gp_allow_subcommands))
                         return True
                     code, out, err, dt = run_gp(sys.executable, self.repo, sub, args, self.cfg.tools.gp_allow_subcommands)
                     self.session.append('tool', 'gp', {'cmd': [sub] + args, 'code': code, 'stderr': err[:2000], 'seconds': dt})
-                    print(out)
+                    if out:
+                        print_exec(out)
                     if err:
-                        print(err, file=sys.stderr)
+                        print_warn(err)
                     return True
-                print('Unknown program for /exec. Use gpbt or gp.')
+                print_warn('Unknown program for /exec. Use gpbt or gp.')
             except Exception as e:
-                print('Error:', e)
+                print_warn(f'Error: {e}')
+            return True
+        if cmd == '/state':
+            print_tool('state: ' + getattr(self, 'state').summary())
+            return True
+        if cmd == '/reset':
+            self.state = SessionState()
+            print_tool('state reset')
+            return True
+        if cmd == '/exclude':
+            c = arg.strip()
+            if c:
+                if c not in self.state.exclusions:
+                    self.state.exclusions.append(c)
+                print_tool(f'excluded: {c}')
+            if self.state.last_pick:
+                try:
+                    res = pick_once(self.repo, self.session, date=self.state.default_date, topk=self.state.default_topk, template=self.state.default_template, mode=self.state.default_mode,
+                                     positions=self.state.positions if self.state.no_holdings else None,
+                                     cash=self.state.cash_available,
+                                     exclusions=self.state.exclusions or None,
+                                     no_holdings=self.state.no_holdings)
+                    self.state.last_pick = {'date': res.date, 'mode': res.mode, 'provider': res.provider, 'ranked_list': res.ranked}
+                    print_agent(self._format_pick_result(res))
+                except Exception as e:
+                    print_warn(f'Pick failed: {e}')
+            return True
+        if cmd == '/include':
+            c = arg.strip()
+            if c and c in self.state.exclusions:
+                self.state.exclusions = [x for x in self.state.exclusions if x != c]
+                print_tool(f'included: {c}')
             return True
         if cmd == '/pick':
             # Usage: /pick [--date YYYYMMDD] [--topk K] [--template XXX] [--tier XXX]
@@ -215,10 +320,17 @@ class ChatAgent:
                 print('Usage: /pick [--date YYYYMMDD] [--topk K] [--template XXX] [--tier XXX]')
                 return True
             try:
-                res = pick_once(self.repo, self.session, date=ns.date, topk=ns.topk, template=ns.template, tier=ns.tier, mode=ns.mode)
-                print(self._format_pick_result(res))
+                d2, k2, tpl2, md2 = apply_defaults(ns.date, ns.topk, ns.template, ns.mode, self.state)
+                res = pick_once(self.repo, self.session, date=d2 or None, topk=k2, template=tpl2, tier=ns.tier, mode=md2,
+                                 positions=self.state.positions if self.state.no_holdings else None,
+                                 cash=self.state.cash_available,
+                                 exclusions=self.state.exclusions or None,
+                                 no_holdings=self.state.no_holdings)
+                self.state.default_date = res.date
+                self.state.last_pick = {'date': res.date, 'mode': res.mode, 'provider': res.provider, 'ranked_list': res.ranked}
+                print_agent(self._format_pick_result(res))
             except Exception as e:
-                print('Pick failed:', e)
+                print_warn(f'Pick failed: {e}')
             return True
         return False
 
@@ -233,9 +345,10 @@ class ChatAgent:
             return
         code, out, err, dt = run_gpbt(sys.executable, self.repo, sub, args, self.cfg.tools.gpbt_allow_subcommands)
         self.session.append('tool', 'gpbt', {'cmd': [sub] + args, 'code': code, 'stderr': err[:2000], 'seconds': dt})
-        print(out)
+        if out:
+            print_exec(out)
         if err:
-            print(err, file=sys.stderr)
+            print_warn(err)
 
     def _run_gp_from_line(self, line: str) -> None:
         parts = line.split()
@@ -248,9 +361,10 @@ class ChatAgent:
             return
         code, out, err, dt = run_gp(sys.executable, self.repo, sub, args, self.cfg.tools.gp_allow_subcommands)
         self.session.append('tool', 'gp', {'cmd': [sub] + args, 'code': code, 'stderr': err[:2000], 'seconds': dt})
-        print(out)
+        if out:
+            print_exec(out)
         if err:
-            print(err, file=sys.stderr)
+            print_warn(err)
 
     def results_summary_latest(self) -> str:
         return summarize_run(self.repo / 'results')
@@ -261,7 +375,9 @@ class ChatAgent:
             reason = r.get('reasons', '') or r.get('reason', '') or ''
             if isinstance(reason, list):
                 reason = ';'.join([str(x) for x in reason])
-            items.append(f"{r.get('rank', '?')}. {r.get('ts_code')}  {reason}")
+            hold_mark = ' [HOLDING]' if r.get('holding') else ''
+            qty_sug = f" qty={r.get('suggest_qty')}" if r.get('suggest_qty') else ''
+            items.append(f"{r.get('rank', '?')}. {r.get('ts_code')}{hold_mark}  {reason}{qty_sug}")
         status = res.data_status
         status_s = f"pool={'ok' if status.get('pool_ready') else 'missing'}; min5_gap={len(status.get('min5_missing', {}))}; daily_gap={len(status.get('daily_missing', {}))}"
         fallback_note = ''

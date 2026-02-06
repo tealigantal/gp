@@ -79,6 +79,26 @@ def main() -> int:
     tmp.mkdir(parents=True, exist_ok=True)
     run_backtest_with_fixture(tmp)
     run_assistant_once(tmp)
+    # Ensure module entry is available
+    cmd2 = [sys.executable, '-m', 'gp_assistant.cli', 'chat', '--once', '荐股']
+    p3 = subprocess.run(cmd2, cwd=str(tmp), stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    if p3.returncode != 0:
+        raise RuntimeError('module entry failed: ' + (p3.stderr or p3.stdout))
+    # Two-turn interactive simulation: provide account then pick
+    repo_root = Path(__file__).resolve().parents[1]
+    cmd = [sys.executable, str(repo_root / 'assistant.py'), 'chat']
+    p = subprocess.Popen(cmd, cwd=str(tmp), stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    assert p.stdin is not None and p.stdout is not None
+    # Turn1: account description
+    p.stdin.write('可用资金26722.07，200股科士达002518，100股紫金矿业601899，800股黄金ETF518880\n')
+    # Turn2: pick
+    p.stdin.write('荐股\n')
+    p.stdin.close()
+    out, err = p.communicate(timeout=30)
+    if p.returncode not in (0, None):
+        raise RuntimeError('interactive chat failed: ' + (err or out))
+    if 'agent> 荐股 Top' not in out and '荐股 Top' not in out:
+        raise RuntimeError('interactive output missing agent> 荐股 Top')
     print('Selfcheck OK')
     return 0
 

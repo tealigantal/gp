@@ -9,6 +9,19 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import pandas as pd
 
+# Local helpers to avoid import name clash with top-level gpbt.py shadowing the gpbt package.
+def _load_parquet(path: Path) -> pd.DataFrame:
+    if not path.exists():
+        return pd.DataFrame()
+    return pd.read_parquet(path)
+
+
+def _raw_path(data_root: Path, name: str) -> Path:
+    return data_root / 'raw' / name
+
+
+def _daily_bar_path(data_root: Path, ts_code: str) -> Path:
+    return data_root / 'bars' / 'daily' / f"ts_code={ts_code}.parquet"
 from ..tools.gpbt_runner import run_gpbt
 from ..tools.doctor_reader import read_doctor
 
@@ -80,8 +93,7 @@ def _latest_pool_date(universe_root: Path) -> Optional[str]:
 
 
 def _last_trade_date_from_calendar(data_root: Path, today: Optional[str] = None) -> Optional[str]:
-    from ...gpbt.storage import load_parquet, raw_path
-    cal = load_parquet(raw_path(data_root, 'trade_cal.parquet'))
+    cal = _load_parquet(_raw_path(data_root, 'trade_cal.parquet'))
     if cal.empty:
         return None
     arr = cal['trade_date'].astype(str).tolist()
@@ -93,7 +105,11 @@ def _last_trade_date_from_calendar(data_root: Path, today: Optional[str] = None)
 def _ensure_inited(python_exe: str, repo: Path, session, trace: List[Dict[str, Any]]) -> None:
     code, out, err, dt = run_gpbt(python_exe, repo, 'init', [], allow=['init'])
     rec = {'tool': 'gpbt', 'cmd': ['init'], 'code': code, 'seconds': dt}
-    session.append('tool', 'gpbt', {'cmd': ['init'], 'code': code, 'stderr': err[:2000], 'seconds': dt})
+    try:
+        if session is not None:
+            session.append('tool', 'gpbt', {'cmd': ['init'], 'code': code, 'stderr': err[:2000], 'seconds': dt})
+    except Exception:
+        pass
     trace.append(rec)
 
 
@@ -102,7 +118,11 @@ def _ensure_candidate_pool(python_exe: str, repo: Path, session, date: str, trac
     if f.exists():
         return
     code, out, err, dt = run_gpbt(python_exe, repo, 'build-candidates-range', ['--start', date, '--end', date], allow=['build-candidates-range'])
-    session.append('tool', 'gpbt', {'cmd': ['build-candidates-range','--start',date,'--end',date], 'code': code, 'stderr': err[:2000], 'seconds': dt})
+    try:
+        if session is not None:
+            session.append('tool', 'gpbt', {'cmd': ['build-candidates-range','--start',date,'--end',date], 'code': code, 'stderr': err[:2000], 'seconds': dt})
+    except Exception:
+        pass
     trace.append({'tool':'gpbt','cmd':['build-candidates-range','--start',date,'--end',date],'code':code,'seconds':dt})
     if code != 0:
         raise RuntimeError(f'Failed to build candidate pool for {date}: {err or out}')
@@ -112,7 +132,11 @@ def _doctor(repo: Path, session, start: str, end: str, trace: List[Dict[str, Any
     import json
     # Prefer reading latest doctor in results; if missing, run
     code, out, err, dt = run_gpbt(os.sys.executable, repo, 'doctor', ['--start', start, '--end', end], allow=['doctor'])
-    session.append('tool', 'gpbt', {'cmd': ['doctor','--start',start,'--end',end], 'code': code, 'stderr': err[:2000], 'seconds': dt})
+    try:
+        if session is not None:
+            session.append('tool', 'gpbt', {'cmd': ['doctor','--start',start,'--end',end], 'code': code, 'stderr': err[:2000], 'seconds': dt})
+    except Exception:
+        pass
     trace.append({'tool':'gpbt','cmd':['doctor','--start',start,'--end',end],'code':code,'seconds':dt})
     # Read latest
     rep = read_doctor(repo / 'results')
@@ -120,11 +144,10 @@ def _doctor(repo: Path, session, start: str, end: str, trace: List[Dict[str, Any
 
 
 def _detect_daily_gaps(repo: Path, date: str, pool_codes: List[str]) -> List[str]:
-    from ...gpbt.storage import load_parquet, daily_bar_path
     gaps: List[str] = []
     data_root = repo / 'data'
     for ts in pool_codes:
-        df = load_parquet(daily_bar_path(data_root, ts))
+        df = _load_parquet(_daily_bar_path(data_root, ts))
         if df.empty or not (df['trade_date'].astype(str) == date).any():
             gaps.append(ts)
     return gaps
@@ -135,7 +158,11 @@ def _fetch_daily_for_codes(repo: Path, session, date: str, codes: List[str], tra
         return
     args = ['--start', date, '--end', date, '--no-minutes', '--codes', ','.join(codes)]
     code, out, err, dt = run_gpbt(os.sys.executable, repo, 'fetch', args, allow=['fetch'])
-    session.append('tool', 'gpbt', {'cmd': ['fetch'] + args, 'code': code, 'stderr': err[:2000], 'seconds': dt})
+    try:
+        if session is not None:
+            session.append('tool', 'gpbt', {'cmd': ['fetch'] + args, 'code': code, 'stderr': err[:2000], 'seconds': dt})
+    except Exception:
+        pass
     trace.append({'tool':'gpbt','cmd':['fetch']+args,'code':code,'seconds':dt})
 
 
@@ -146,7 +173,11 @@ def _fetch_min5_for_pool(repo: Path, session, date: str, trace: List[Dict[str, A
     # default retries 2
     args += ['--retries', '2']
     code, out, err, dt = run_gpbt(os.sys.executable, repo, 'fetch-min5-for-pool', args, allow=['fetch-min5-for-pool'])
-    session.append('tool', 'gpbt', {'cmd': ['fetch-min5-for-pool'] + args, 'code': code, 'stderr': err[:2000], 'seconds': dt})
+    try:
+        if session is not None:
+            session.append('tool', 'gpbt', {'cmd': ['fetch-min5-for-pool'] + args, 'code': code, 'stderr': err[:2000], 'seconds': dt})
+    except Exception:
+        pass
     trace.append({'tool':'gpbt','cmd':['fetch-min5-for-pool']+args,'code':code,'seconds':dt})
 
 
@@ -160,7 +191,11 @@ def _rank_llm(repo: Path, session, date: str, template: str, topk: int, trace: L
     except Exception:
         pass
     code, out, err, dt = run_gpbt(os.sys.executable, repo, 'llm-rank', args, allow=allow)
-    session.append('tool', 'gpbt', {'cmd': ['llm-rank'] + args, 'code': code, 'stderr': err[:2000], 'seconds': dt})
+    try:
+        if session is not None:
+            session.append('tool', 'gpbt', {'cmd': ['llm-rank'] + args, 'code': code, 'stderr': err[:2000], 'seconds': dt})
+    except Exception:
+        pass
     trace.append({'tool':'gpbt','cmd':['llm-rank']+args,'code':code,'seconds':dt})
     # Read ranked CSV
     ranked_csv = repo / 'universe' / f'candidate_pool_{date}_ranked_{template}.csv'
@@ -181,7 +216,56 @@ def _rank_llm(repo: Path, session, date: str, template: str, topk: int, trace: L
     return provider, ranked, raw
 
 
-def pick_once(repo_root: Path, session, *, date: Optional[str], topk: int, template: str, tier: Optional[str] = None, mode: str = 'auto') -> PickResult:
+def _mark_holdings_and_exclusions(ranked: List[Dict[str, Any]], positions: Optional[Dict[str, int]], exclusions: Optional[List[str]], no_holdings: bool) -> List[Dict[str, Any]]:
+    def code_match(ts: str, key: str) -> bool:
+        # match on full or suffix 6-digit
+        if ts == key:
+            return True
+        if key.isdigit() and ts.endswith(key):
+            return True
+        return False
+    out: List[Dict[str, Any]] = []
+    for r in ranked:
+        ts = str(r.get('ts_code'))
+        if exclusions and any(code_match(ts, ex) for ex in exclusions):
+            continue
+        if positions and any(code_match(ts, k) for k in positions.keys()):
+            r = dict(r)
+            r['holding'] = True
+            if no_holdings:
+                # skip holdings if filter enabled
+                continue
+        out.append(r)
+    # re-assign rank after filtering to keep 1..N
+    for i, rr in enumerate(out, start=1):
+        rr['rank'] = i
+    return out
+
+
+def _suggest_qty(repo: Path, date: str, ranked: List[Dict[str, Any]], cash: Optional[float]) -> None:
+    if not cash or cash <= 0:
+        return
+    prev = _last_trade_date_from_calendar(repo / 'data', date)
+    n = max(1, len(ranked))
+    budget_per = cash / n
+    for r in ranked:
+        ts = str(r.get('ts_code'))
+        try:
+            df = _load_parquet(_daily_bar_path(repo / 'data', ts))
+            if df.empty:
+                continue
+            ddf = df[df['trade_date'].astype(str) <= (prev or date)].sort_values('trade_date')
+            if ddf.empty:
+                continue
+            px = float(ddf.iloc[-1]['close'])
+            qty = int((budget_per // (px * 100.0)) * 100)
+            if qty > 0:
+                r['suggest_qty'] = qty
+        except Exception:
+            continue
+
+
+def pick_once(repo_root: Path, session, *, date: Optional[str], topk: int, template: str, tier: Optional[str] = None, mode: str = 'auto', positions: Optional[Dict[str,int]] = None, cash: Optional[float] = None, exclusions: Optional[List[str]] = None, no_holdings: bool = False) -> PickResult:
     repo = Path(repo_root)
     python_exe = os.sys.executable
     trace: List[Dict[str, Any]] = []
@@ -218,11 +302,19 @@ def pick_once(repo_root: Path, session, *, date: Optional[str], topk: int, templ
     daily_missing = _detect_daily_gaps(repo, d, pool_codes)
     # Try safe backfill
     if daily_missing:
-        session.append('assistant', f"缺少日线数据 {len(daily_missing)} 支，将补齐当日快照。")
+        try:
+            if session is not None:
+                session.append('assistant', f"缺少日线数据 {len(daily_missing)} 支，将补齐当日快照。")
+        except Exception:
+            pass
         _fetch_daily_for_codes(repo, session, d, daily_missing, trace)
     # For minutes: prefer pool-only fetch
     if min_missing_map.get(d):
-        session.append('assistant', f"分钟线缺口 {len(min_missing_map[d])} 支，尝试为候选池补齐5min。")
+        try:
+            if session is not None:
+                session.append('assistant', f"分钟线缺口 {len(min_missing_map[d])} 支，尝试为候选池补齐5min。")
+        except Exception:
+            pass
         # Optional provider override from configs/config.yaml
         min_provider = None
         try:
@@ -246,11 +338,10 @@ def pick_once(repo_root: Path, session, *, date: Optional[str], topk: int, templ
             raw = ''
     if provider in ('fallback_rule',) or mode_param == 'rule':
         # Deterministic rule-ranking (same as fallback)
-        from ...gpbt.storage import load_parquet, daily_bar_path
         feats_rows = []
         prev_d = _last_trade_date_from_calendar(repo / 'data', d)
         for ts in pool_codes:
-            df = load_parquet(daily_bar_path(repo / 'data', ts))
+            df = _load_parquet(_daily_bar_path(repo / 'data', ts))
             df = df[df['trade_date'].astype(str) <= (prev_d or d)].sort_values('trade_date')
             if df.empty:
                 continue
@@ -270,6 +361,10 @@ def pick_once(repo_root: Path, session, *, date: Optional[str], topk: int, templ
         sc.sort(key=lambda x: x[1], reverse=True)
         ranked = [{'trade_date': d, 'rank': i+1, 'ts_code': ts, 'score': s, 'confidence': 0.4, 'reasons': 'fallback: rule-based', 'risk_flags': ''} for i,(ts,s) in enumerate(sc[:topk])]
         provider = 'fallback_rule'
+    # Filter by exclusions / holdings if requested
+    ranked = _mark_holdings_and_exclusions(ranked, positions, exclusions, no_holdings)
+    # suggestions by cash (lot size 100)
+    _suggest_qty(repo, d, ranked, cash)
     # 6) persist result
     out_dir = repo / 'store' / 'assistant' / 'picks'
     out_dir.mkdir(parents=True, exist_ok=True)

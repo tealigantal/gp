@@ -21,12 +21,16 @@
 
 预置卷确保数据持久化：`./data ./universe ./results ./store ./cache ./configs`。
 
-## 对话示例
-- “荐股”
-- “推荐 2026-02-06 top5”
-- “/pick --date 2026-02-06 --topk 5 --template momentum_v1 --mode auto”
+## 对话示例（两轮，多轮状态生效）
+user> 2026-02-09 荐股，我的账户可用资金26722.07，200股科士达002518，100股紫金矿业601899，800股黄金ETF518880
 
-输出包含：TopK 股票代码、简短理由、使用模板/策略/日期，以及数据就绪情况（候选池/分钟线缺口/日线缺口）。
+agent> 荐股 Top5（2026-02-09 | 模板 momentum_v1 | 模式 auto | provider=...）
+agent> ...
+
+user> 第2只为什么推荐？
+
+agent> （解释第2只的理由摘要）
+
 
 ## 可选：使用 gpbt 原生命令
 - 初始化与抓取：
@@ -39,3 +43,10 @@
   - `python gpbt.py llm-rank --date 20260106 --template momentum_v1`
 
 一句话说明：无 key 会走规则 fallback；有 key 会走 gpbt llm-rank（按 configs/llm.yaml 配置）。任何 Key 仅从 env/.env 读取；输出/落盘均脱敏。
+
+内置命令：
+- `/state` 打印当前 state 摘要（cash/positions/default_date/default_topk/template/mode）
+- `/reset` 清空 state
+- `/pick ...` 手动指定参数
+- `/exclude <code>` 增加排除并重跑
+- `/include <code>` 取消排除
