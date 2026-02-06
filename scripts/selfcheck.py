@@ -61,6 +61,13 @@ def run_assistant_once(tmp: Path) -> None:
         raise RuntimeError('assistant once failed: ' + (p.stderr or p.stdout))
     if '荐股 Top' not in (p.stdout or ''):
         raise RuntimeError('assistant output missing TopK')
+    # Switch to rule fallback by setting deepseek without proxy and no key
+    (tmp / 'configs' / 'llm.yaml').write_text('provider: deepseek\nbase_url: http://127.0.0.1:65535/v1\njson_mode: true\n', encoding='utf-8')
+    p2 = subprocess.run(cmd, cwd=str(tmp), stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    if p2.returncode != 0:
+        raise RuntimeError('assistant once (rule fallback) failed: ' + (p2.stderr or p2.stdout))
+    if '荐股 Top' not in (p2.stdout or ''):
+        raise RuntimeError('assistant output missing TopK (rule)')
 
 
 def main() -> int:

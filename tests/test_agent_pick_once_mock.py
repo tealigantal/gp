@@ -36,3 +36,8 @@ def test_agent_pick_once_mock(tmp_path: Path, monkeypatch):
     # Must contain TopK and list items
     assert '荐股 Top' in out
     assert any(code in out for code in ['000001.SZ','000002.SZ','000003.SZ'])
+    # Pick JSON persisted
+    picks_dir = tmp_path / 'store' / 'assistant' / 'picks'
+    assert picks_dir.exists()
+    files = [x.name for x in picks_dir.glob('pick_20260106_*_*.json')]
+    assert files, 'picks json not found'
