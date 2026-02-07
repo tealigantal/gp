@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import os
 import sys
@@ -35,10 +35,10 @@ from gp_core.pipeline import Pipeline as CorePipeline, PipelineConfig as CorePip
 
 
 SYS_PROMPT = (
-    "你是仓库内置的研究助手。回答前应尽量检索仓库事实（README、configs、src、策略yaml、results/）后作答�?\
-    "当你声称‘我读了某文�?/ 执行了某命令’，会话日志中必须包含对应的工具调用记录�?\
-    "仅允许受控动作：python gpbt.py �?python gp.py 的白名单子命令。禁止任意Shell�?\
-    "优先基于 compare_strategies.csv、doctor_report.json、metrics.json 作答；缺内容时再建议下一步命令�?
+    "浣犳槸浠撳簱鍐呯疆鐨勭爺绌跺姪鎵嬨€傚洖绛斿墠搴斿敖閲忔绱粨搴撲簨瀹烇紙README銆乧onfigs銆乻rc銆佺瓥鐣aml銆乺esults/锛夊悗浣滅瓟銆?\
+    "褰撲綘澹扮О鈥樻垜璇讳簡鏌愭枃浠?/ 鎵ц浜嗘煇鍛戒护鈥欙紝浼氳瘽鏃ュ織涓繀椤诲寘鍚搴旂殑宸ュ叿璋冪敤璁板綍銆?\
+    "浠呭厑璁稿彈鎺у姩浣滐細python gpbt.py 涓?python gp.py 鐨勭櫧鍚嶅崟瀛愬懡浠ゃ€傜姝换鎰廠hell銆?\
+    "浼樺厛鍩轰簬 compare_strategies.csv銆乨octor_report.json銆乵etrics.json 浣滅瓟锛涚己鍐呭鏃跺啀寤鸿涓嬩竴姝ュ懡浠ゃ€?
 )
 
 
@@ -74,12 +74,12 @@ class ChatAgent:
             self.session.append('tool', 'repo_search', {'path': path, 'bytes': len(snip)})
             ctx.append(f"[FILE] {path}\n{snip}\n")
         # Attach latest results summary if relevant
-        if any(k in q.lower() for k in ['compare_strategies', '策略', '回测', '收益', '胜率']):
+        if any(k in q.lower() for k in ['compare_strategies', '绛栫暐', '鍥炴祴', '鏀剁泭', '鑳滅巼']):
             txt = summarize_run(self.repo / 'results')
             if txt:
                 self.session.append('tool', 'results_reader', {'summary_len': len(txt)})
                 ctx.append("[RESULTS]\n" + txt)
-        if any(k in q.lower() for k in ['doctor', '分钟', '缺失', '诊断']):
+        if any(k in q.lower() for k in ['doctor', '鍒嗛挓', '缂哄け', '璇婃柇']):
             rep = read_doctor(self.repo / 'results')
             summ = summarize_doctor(rep)
             if summ:
@@ -89,10 +89,10 @@ class ChatAgent:
 
     def _chat_once(self, user: str) -> str:
         if self.llm is None:
-            return 'LLM 未启用；请尝试使�?/pick 或输入“荐股”�?
+            return 'LLM 鏈惎鐢紱璇峰皾璇曚娇鐢?/pick 鎴栬緭鍏モ€滆崘鑲♀€濄€?
         ctx = self._gather_context(user)
         sys_msg = {'role': 'system', 'content': SYS_PROMPT}
-        usr = {'role': 'user', 'content': f"问题：{user}\n\n可用上下文（可能不全）：\n{ctx}"}
+        usr = {'role': 'user', 'content': f"闂锛歿user}\n\n鍙敤涓婁笅鏂囷紙鍙兘涓嶅叏锛夛細\n{ctx}"}
         self.session.append('user', user)
         resp = self.llm.chat([sys_msg, usr], json_response=False)
         try:
@@ -104,7 +104,7 @@ class ChatAgent:
 
     def repl(self, *, print_text_only: bool = False, include_debug: bool = True) -> None:
         # Interactive loop that prints a single JSON (or text) per user turn
-        # 为保证前端对接，默认不打印欢迎语，保持一问一答的纯输出�?        print_tool("ready: /help for commands (hidden by default)")
+        # 涓轰繚璇佸墠绔鎺ワ紝榛樿涓嶆墦鍗版杩庤锛屼繚鎸佷竴闂竴绛旂殑绾緭鍑恒€?        print_tool("ready: /help for commands (hidden by default)")
         while True:
             try:
                 q = input(render_user_prompt()).strip()
@@ -113,7 +113,7 @@ class ChatAgent:
                 break
             if not q:
                 continue
-            # Update state from natural text first（确定性解析，LLM planner �?respond_json 内完成）
+            # Update state from natural text first锛堢‘瀹氭€цВ鏋愶紝LLM planner 鍦?respond_json 鍐呭畬鎴愶級
             delta = update_state_from_text(self.state, q)
             if delta:
                 self.session.append('tool', 'state_update', delta)
@@ -130,9 +130,9 @@ class ChatAgent:
                 self._run_gp_from_line(q[len('!gp '):])
                 continue
             # Quick follow-ups: exclude codes or toggle no_holdings
-            if '排除' in q:
+            if '鎺掗櫎' in q:
                 import re as _re
-                m = _re.search(r"排除\s*([0-9]{6}(?:\.(?:SZ|SH))?)", q)
+                m = _re.search(r"鎺掗櫎\s*([0-9]{6}(?:\.(?:SZ|SH))?)", q)
                 if m:
                     code = m.group(1)
                     if code not in self.state.exclusions:
@@ -149,7 +149,7 @@ class ChatAgent:
                         except Exception as e:
                             print_warn(f'Pick failed: {e}')
                     continue
-            if '只要非持�? in q or '不要重复' in q:
+            if '鍙闈炴寔浠? in q or '涓嶈閲嶅' in q:
                 self.state.no_holdings = True
                 print_tool('filter: no_holdings=true')
                 if self.state.last_pick:
@@ -164,11 +164,11 @@ class ChatAgent:
                 continue
 
             # Follow-up: Nth reason
-            if '为什�? in q and ('�? in q or '�? in q):
+            if '涓轰粈涔? in q and ('绗? in q or '绗? in q):
                 import re as _re
-                m = _re.search(r"第\s*(\d+)\s*�?, q)
+                m = _re.search(r"绗琝s*(\d+)\s*鍙?, q)
                 if not m:
-                    m = _re.search(r"(\d+)�?, q)
+                    m = _re.search(r"(\d+)鍙?, q)
                 if m and self.state.last_pick:
                     idx = int(m.group(1))
                     lst = self.state.last_pick.get('ranked_list', [])  # type: ignore
@@ -177,7 +177,7 @@ class ChatAgent:
                         reason = item.get('reasons') or item.get('reason') or ''
                         if isinstance(reason, list):
                             reason = ';'.join([str(x) for x in reason])
-                        print_agent(f"第{idx}�?{item.get('ts_code')}: {reason}")
+                        print_agent(f"绗瑊idx}鍙?{item.get('ts_code')}: {reason}")
                         continue
 
             # Natural-language trigger for stock picking
@@ -295,7 +295,7 @@ class ChatAgent:
                 print_tool(f'included: {c}')
             return True
         if cmd in ['/pref', '/profile']:
-            # Usage: /pref risk=conservative style=trend topk=3 universe=A�?            kvs = {}
+            # Usage: /pref risk=conservative style=trend topk=3 universe=A鑲?            kvs = {}
             for tok in arg.split():
                 if '=' in tok:
                     k, v = tok.split('=', 1)
@@ -378,6 +378,7 @@ class ChatAgent:
         return summarize_run(self.repo / 'results')
 
     def _format_pick_result(self, res: PickResult) -> str:
+    def _format_pick_result(self, res: PickResult) -> str:
         items = []
         for r in res.ranked:
             reason = r.get('reasons', '') or r.get('reason', '') or ''
@@ -388,112 +389,28 @@ class ChatAgent:
             items.append(f"{r.get('rank', '?')}. {r.get('ts_code')}{hold_mark}  {reason}{qty_sug}")
         status = res.data_status
         status_s = f"pool={'ok' if status.get('pool_ready') else 'missing'}; min5_gap={len(status.get('min5_missing', {}))}; daily_gap={len(status.get('daily_missing', {}))}"
-        fallback_note = ''
-        if res.provider in ('mock',):
-            fallback_note = ' | LLM未启�?失败（使�?mock 补齐�?
-        hdr = f"荐股 Top{res.topk}（{res.date} | 模板 {res.template} | 模式 {res.mode} | provider={res.provider}{fallback_note}）\n数据: {status_s}"
+        hdr = f"荐股 Top{res.topk}（{res.date} | 模板 {res.template} | 模式 {res.mode} | provider={res.provider}）\n数据: {status_s}"
         return hdr + "\n" + "\n".join(items)
-
-    def respond_json(self, user_text: str, *, include_debug: bool = True) -> Dict[str, Any]:
-        """Build a single JSON response for a user_text according to schema gp.assistant.v1"""
-        raw = user_text
-        # 使用 LLM 做分流（planner）；失败时默�?pick（避免关键词 if 过拟合）
-        plan = self._plan_intent(raw)
-        intent = plan.get('intent', 'chat')
-        req_date = plan.get('date')
-        # Update state（资�?持仓/topk/排除/默认日期）已�?repl 前置解析，这里只采用 planner 的关键字�?        if not req_date:
-            try:
-                from datetime import datetime
-                pd = parse_user_date(raw, datetime.now().date())
-                if pd is not None:
-                    req_date = pd.strftime('%Y%m%d')
-            except Exception:
-                req_date = None
-
-        # Update state (cash/positions/topk/exclusions/date)
-        delta = update_state_from_text(self.state, raw)
-        if delta:
-            self.session.append('tool', 'state_update', delta)
-
-        if intent == 'why_nth' and self.state.last_pick:
-            # extract number n
-            import re as _re
-            m = _re.search(r"第\s*(\d+)\s*�?, raw)
-            if not m:
-                m = _re.search(r"(\d+)�?, raw)
-            n = int(m.group(1)) if m else 1
-            lst = self.state.last_pick.get('ranked_list', [])  # type: ignore
-            text = '暂无上一轮结�?
-            if 1 <= n <= len(lst):
-                item = lst[n-1]
-                reason = item.get('reasons') or item.get('reason') or ''
-                if isinstance(reason, list):
-                    reason = ';'.join([str(x) for x in reason])
-                text = f"第{n}�?{item.get('ts_code')}: {reason}"
+            if run_id:
+                try:
+                    p = self.repo / 'store' / 'pipeline_runs' / run_id / '05_final_response.json'
+                    obj = _json.loads(p.read_text(encoding='utf-8')) if p.exists() else {}
+                    recs = obj.get('recommendations', [])
+                    if 1 <= n <= len(recs):
+                        it = recs[n-1]
+                        code = it.get('code') or ''
+                        reason = it.get('thesis') or ''
+                        text = f"第{n}：{code} {reason}"
+                except Exception:
+                    pass
             return {
                 'schema_version': 'gp.assistant.v1',
                 'type': 'chat',
                 'ok': True,
-                'request': {
-                    'raw_user_text': raw,
-                    'intent': 'why_nth',
-                    'requested_date': req_date,
-                    'topk': self.state.default_topk if hasattr(self.state,'default_topk') else 5,
-                    'template': getattr(self.state, 'default_template', 'momentum_v1'),
-                    'mode': getattr(self.state, 'default_mode', 'auto'),
-                },
-                'decision': {
-                    'effective_date': self.state.last_pick.get('date') if isinstance(self.state.last_pick, dict) else None,
-                    'fallback_reason': None,
-                    'provider': self.state.last_pick.get('provider') if isinstance(self.state.last_pick, dict) else None,
-                    'provider_reason': None,
-                },
+                'request': {'raw_user_text': raw, 'intent': 'why_nth', 'requested_date': req_date, 'topk': getattr(self.state,'default_topk',5), 'template': getattr(self.state, 'default_template', 'momentum_v1'), 'mode': getattr(self.state,'default_mode','auto')},
+                'decision': {'effective_date': getattr(self.state,'default_date',None), 'fallback_reason': None, 'provider': 'pipeline', 'provider_reason': 'read-artifacts'},
                 'data_status': {},
-                'portfolio_context': {
-                    'cash_available': getattr(self.state, 'cash_available', None),
-                    'positions': [{'code': k, 'shares': v} for k, v in getattr(self.state, 'positions', {}).items()],
-                    'exclusions': list(getattr(self.state, 'exclusions', [])),
-                },
-                'recommendations': [],
-                'text': text,
-                'next_steps': [],
-                'debug': None if not include_debug else {'tool_trace_digest': []},
-            }
-
-        # If user asks general "为什�? and we have last pick, summarize reasons instead of re-pick
-        if ('为什�? in raw) and self.state.last_pick and intent not in ('why_nth', 'exclude'):
-            lst = self.state.last_pick.get('ranked_list', []) if isinstance(self.state.last_pick, dict) else []
-            lines = []
-            for r in lst:
-                why = r.get('reasons') or r.get('reason') or ''
-                if isinstance(why, list):
-                    why = ';'.join([str(x) for x in why])
-                lines.append(f"{r.get('rank')}. {r.get('ts_code')} {why}")
-            text = "上一轮荐股依据：\n" + ("\n".join(lines) if lines else '无可用记�?)
-            return {
-                'schema_version': 'gp.assistant.v1',
-                'type': 'chat',
-                'ok': True,
-                'request': {
-                    'raw_user_text': raw,
-                    'intent': 'why',
-                    'requested_date': req_date,
-                    'topk': getattr(self.state, 'default_topk', 3),
-                    'template': getattr(self.state, 'default_template', 'momentum_v1'),
-                    'mode': getattr(self.state, 'default_mode', 'auto'),
-                },
-                'decision': {
-                    'effective_date': self.state.last_pick.get('date') if isinstance(self.state.last_pick, dict) else None,
-                    'fallback_reason': None,
-                    'provider': self.state.last_pick.get('provider') if isinstance(self.state.last_pick, dict) else None,
-                    'provider_reason': None,
-                },
-                'data_status': {},
-                'portfolio_context': {
-                    'cash_available': getattr(self.state, 'cash_available', None),
-                    'positions': [{'code': k, 'shares': v} for k, v in getattr(self.state, 'positions', {}).items()],
-                    'exclusions': list(getattr(self.state, 'exclusions', [])),
-                },
+                'portfolio_context': {'cash_available': getattr(self.state,'cash_available',None), 'positions': [{'code': k, 'shares': v} for k, v in getattr(self.state, 'positions', {}).items()], 'exclusions': list(getattr(self.state, 'exclusions', []))},
                 'recommendations': [],
                 'text': text,
                 'next_steps': [],
@@ -501,26 +418,24 @@ class ChatAgent:
             }
 
         if intent == 'pick':
-            # Use defaults
-            d2, k2, tpl2, md2 = apply_defaults(req_date, None, None, None, self.state)
+            d2, _, _, _ = apply_defaults(req_date, None, None, None, self.state)
+            profile = {
+                'risk_level': getattr(self.state, 'risk_pref', None) or 'neutral',
+                'style_preference': None,
+                'universe': 'A股',
+                'max_positions': int(getattr(self.state, 'default_topk', 3) or 3),
+                'sector_preference': [],
+                'max_drawdown_tolerance': None,
+                'topk': int(getattr(self.state, 'default_topk', 3) or 3),
+            }
+            from gp_core.pipeline import Pipeline as CorePipeline, PipelineConfig as CorePipelineConfig
+            pipe = CorePipeline(self.repo, llm_cfg='configs/llm.yaml', search_cfg='configs/search.yaml', strategies_cfg=str(self.repo / 'configs' / 'strategies.yaml'), cfg=CorePipelineConfig(lookback_days=14, topk=profile['topk'], queries=['A股 市场 两周 摘要','指数 成交额 情绪','板块 轮动 热点']))
             try:
-            # New pipeline path (fail-fast): run pipeline and return
-            try:
-                profile = {
-                    'risk_level': getattr(self.state, 'risk_pref', None) or 'neutral',
-                    'style_preference': None,
-                    'universe': 'A��',
-                    'max_positions': int(getattr(self.state, 'default_topk', 3) or 3),
-                    'sector_preference': [],
-                    'max_drawdown_tolerance': None,
-                    'topk': int(getattr(self.state, 'default_topk', 3) or 3),
-                }
-                pipe = CorePipeline(self.repo, llm_cfg='configs/llm.yaml', search_cfg='configs/search.yaml', strategies_cfg=str(self.repo / 'configs' / 'strategies.yaml'), cfg=CorePipelineConfig(lookback_days=14, topk=profile['topk'], queries=['A�� �г� ���� ժҪ', 'ָ�� �ɽ��� ����', '��� �ֶ� �ȵ�']))
                 run_id, A, sel, runs, champ, resp = pipe.run(end_date=d2 or '', user_profile=profile, user_question=raw, topk=profile['topk'])
                 self.state.default_date = d2
                 self.state.last_run_id = run_id
-                ftxt = (self.repo / 'store' / 'pipeline_runs' / run_id / '05_final_response.txt')
-                text = ftxt.read_text(encoding='utf-8') if ftxt.exists() else '��ɣ���ȱ�������ı�����ļ���'
+                ftxt = self.repo / 'store' / 'pipeline_runs' / run_id / '05_final_response.txt'
+                text = ftxt.read_text(encoding='utf-8') if ftxt.exists() else '完成，但缺少最终文本输出文件。'
                 return {
                     'schema_version': 'gp.assistant.v1',
                     'type': 'pick',
@@ -539,169 +454,23 @@ class ChatAgent:
                     'schema_version': 'gp.assistant.v1',
                     'type': 'error',
                     'ok': False,
-                    'request': {'raw_user_text': raw, 'intent': 'pick', 'requested_date': d2, 'topk': getattr(self.state,'default_topk',3), 'template': None, 'mode': 'pipeline'},
+                    'request': {'raw_user_text': raw, 'intent': 'pick', 'requested_date': d2, 'topk': profile['topk'], 'template': None, 'mode': 'pipeline'},
                     'decision': {'effective_date': None, 'fallback_reason': str(e), 'provider': None, 'provider_reason': 'pipeline error'},
                     'data_status': {},
                     'portfolio_context': {'cash_available': getattr(self.state,'cash_available',None), 'positions': [{'code': k, 'shares': v} for k,v in getattr(self.state,'positions',{}).items()], 'exclusions': list(getattr(self.state,'exclusions',[]))},
                     'recommendations': [],
-                    'text': f'��������{e}',
+                    'text': f'发生错误：{e}',
                     'next_steps': [],
                     'debug': None,
                 }
-                res = pick_once(self.repo, self.session, date=d2 or None, topk=k2, template=tpl2, mode=md2,
-                                positions=self.state.positions if getattr(self.state,'no_holdings',False) else None,
-                                cash=getattr(self.state,'cash_available',None), exclusions=getattr(self.state,'exclusions',None),
-                                no_holdings=getattr(self.state,'no_holdings',False))
-                # Update state
-                self.state.default_date = res.date
-                self.state.last_pick = {'date': res.date, 'mode': res.mode, 'provider': res.provider, 'ranked_list': res.ranked}
-                # Build JSON
-                recs = []
-                for r in res.ranked:
-                    why = r.get('reasons')
-                    if isinstance(why, str):
-                        why_list = [why] if why else []
-                    else:
-                        why_list = list(why or [])
-                    recs.append({
-                        'rank': int(r.get('rank', 0) or 0),
-                        'code': str(r.get('ts_code','')),
-                        'name': None,
-                        'action': 'BUY',
-                        'score': float(r.get('score', 0.0) or 0.0),
-                        'confidence': float(r.get('confidence', 0.0) or 0.0),
-                        'suggested_order': {'shares': int(r.get('suggest_qty', 0) or 0), 'est_price': None},
-                        'why': why_list,
-                        'risk_flags': [],
-                    })
-                status = res.data_status
-                # daily missing -> risk flag
-                daily_missing_codes = list(status.get('daily_missing', []) or [])
-                if daily_missing_codes:
-                    for x in recs:
-                        # just annotate overall
-                        x['risk_flags'].append('DATA_GAP')
-                min5_pairs = 0
-                mm = status.get('min5_missing', {}) or {}
-                if isinstance(mm, dict):
-                    min5_pairs = sum(len(v) for v in mm.values())
-                    if min5_pairs:
-                        for x in recs:
-                            x['risk_flags'].append('MIN5_MISSING')
 
-                # Compose new pipeline (market info + judge + QA)
-                # Build user profile from session state
-                profile = {
-                    'risk_level': getattr(self.state, 'risk_pref', None) or 'neutral',
-                    'style_preference': None,
-                    'universe': 'A�?,
-                    'max_positions': int(getattr(self.state, 'default_topk', 3) or 3),
-                    'sector_preference': [],
-                    'max_drawdown_tolerance': None,
-                    'topk': int(res.topk or 3),
-                }
-                try:
-                    pipe = CorePipeline(self.repo, llm_cfg='configs/llm.yaml', search_cfg='configs/search.yaml', strategies_cfg=str(self.repo / 'configs' / 'strategies.yaml'), cfg=CorePipelineConfig(lookback_days=14, topk=res.topk, queries=["A�?市场 两周 摘要", "指数 成交�?情绪", "板块 轮动 热点"]))
-                    run_id, mc, sel, runs, champ, final = pipe.run(end_date=res.date, user_profile=profile, user_question=str(raw), topk=res.topk)
-                    self.state.last_run_id = run_id
-                    # Extend text with market summary and champion
-                    extra_lines = []
-                    ms = (mc.market_style_guess or {}).get('reason') if hasattr(mc, 'market_style_guess') else None
-                    if not ms and isinstance(mc, dict):
-                        ms = (mc.get('market_style_guess') or {}).get('reason')
-                    if ms:
-                        extra_lines.append(f"近两周市场摘要：{str(ms)[:160]}")
-                    extra_lines.append(f"冠军策略：{champ.get('name')}（{champ.get('reason')}�?)
-                    if final and getattr(final, 'risks', None):
-                        # final is RecommendationResponse
-                        risks = final.risks if isinstance(final.risks, list) else []
-                        if risks:
-                            extra_lines.append('风险提示�? + '�?.join(risks[:3]))
-                    text = ("\n".join(extra_lines) + "\n\n" + self._build_pick_text(res)) if extra_lines else self._build_pick_text(res)
-                except Exception:
-                    text = self._build_pick_text(res)
-                debug = None
-                if include_debug:
-                    debug = {'tool_trace_digest': res.trace}
-                return {
-                    'schema_version': 'gp.assistant.v1',
-                    'type': 'pick',
-                    'ok': True,
-                    'request': {
-                        'raw_user_text': raw,
-                        'intent': 'pick',
-                        'requested_date': res.requested_date,
-                        'topk': res.topk,
-                        'template': res.template,
-                        'mode': res.mode,
-                    },
-                    'decision': {
-                        'effective_date': res.date,
-                        'fallback_reason': res.fallback_reason,
-                        'provider': res.provider,
-                        'provider_reason': ('LLM 排序成功（候选池已校验）' if res.provider == 'llm' else 'LLM 不可�?失败，已使用 mock 进行补齐与排�?),
-                    },
-                    'data_status': {
-                        'pool_path': str((self.repo / 'universe' / f"candidate_pool_{res.date}.csv")),
-                        'pool_count': int(status.get('pool_count', 0) or 0),
-                        'daily_missing_codes': daily_missing_codes,
-                        'min5_missing_pairs_count': int(min5_pairs),
-                        'meta_missing_days': [],
-                        'doctor_status': None,
-                    },
-                    'portfolio_context': {
-                        'cash_available': getattr(self.state, 'cash_available', None),
-                        'positions': [{'code': k, 'shares': v} for k, v in getattr(self.state, 'positions', {}).items()],
-                        'exclusions': list(getattr(self.state, 'exclusions', [])),
-                    },
-                    'recommendations': recs,
-                    'text': text,
-                    'next_steps': [],
-                    'debug': debug,
-                }
-            except Exception as e:
-                # Return an error JSON, never crash
-                return {
-                    'schema_version': 'gp.assistant.v1',
-                    'type': 'error',
-                    'ok': False,
-                    'request': {
-                        'raw_user_text': raw,
-                        'intent': 'pick',
-                        'requested_date': req_date,
-                        'topk': getattr(self.state, 'default_topk', 5),
-                        'template': getattr(self.state, 'default_template', 'momentum_v1'),
-                        'mode': getattr(self.state, 'default_mode', 'auto'),
-                    },
-                    'decision': {'effective_date': None, 'fallback_reason': str(e), 'provider': None, 'provider_reason': 'pick failed: exception'},
-                    'data_status': {},
-                    'portfolio_context': {
-                        'cash_available': getattr(self.state, 'cash_available', None),
-                        'positions': [{'code': k, 'shares': v} for k, v in getattr(self.state, 'positions', {}).items()],
-                        'exclusions': list(getattr(self.state, 'exclusions', [])),
-                    },
-                    'recommendations': [],
-                    'text': f'发生错误：{e}。建议先修复数据或配置后再试�?,
-                    'next_steps': [
-                        'python gpbt.py init',
-                        'python gpbt.py fetch --start YYYYMMDD --end YYYYMMDD --no-minutes',
-                        'python gpbt.py build-candidates --date YYYYMMDD',
-                        'python gpbt.py doctor --start YYYYMMDD --end YYYYMMDD'
-                    ],
-                    'debug': None if not include_debug else {'tool_trace_digest': []},
-                }
-
-        # default chat (robust: never crash on LLM/proxy errors)
+        # default chat
         try:
             s = self._chat_once(raw)
             ok = True
             fallback = None
         except Exception as e:
-            s = (
-                "对话模型不可用：已保底为‘荐股’通道可用。你可以直接输入‘荐股’或�?0260209荐股’继续使用自动选股�?
-                "如走直连 DeepSeek，请在环境中设置 DEEPSEEK_API_KEY，并�?configs/llm.yaml �?base_url 设为 https://api.deepseek.com/v1�?
-                "如走 llm-proxy，请设置 UPSTREAM_API_KEY（代理读取此变量转发）�?
-            )
+            s = '对话模型不可用，请配置 LLM Key 后重试。'
             ok = False
             fallback = str(e)
         return {
@@ -714,17 +483,12 @@ class ChatAgent:
             'portfolio_context': {'cash_available': getattr(self.state,'cash_available',None), 'positions': [{'code': k, 'shares': v} for k,v in getattr(self.state,'positions',{}).items()], 'exclusions': list(getattr(self.state,'exclusions',[]))},
             'recommendations': [],
             'text': s,
-            'next_steps': [
-                'export DEEPSEEK_API_KEY=sk-... 或设�?UPSTREAM_API_KEY',
-                '检�?configs/llm.yaml �?provider/base_url/model 设置',
-                'assistant chat --once "20260209荐股" 以走荐股通道'
-            ],
+            'next_steps': [],
             'debug': None if not include_debug else {'tool_trace_digest': []},
         }
-
     def _plan_intent(self, user_text: str) -> Dict[str, Any]:
         """Planner-first routing. Try LLM to classify intent; fallback to keyword router only for intent (no rule-based ranking).
-        返回 dict: {intent, date, topk, template, mode, exclude, why_n}
+        杩斿洖 dict: {intent, date, topk, template, mode, exclude, why_n}
         """
         import json as _json
         # Prefer LLM planner if available
@@ -738,9 +502,9 @@ class ChatAgent:
                 'exclusions': list(getattr(self.state, 'exclusions', [])),
             }
             sys_prompt = (
-                "你是参数规划器，只返回一�?JSON（不要多余文本）。\n"
-                "字段: intent(pick|chat|why_nth|exclude|help), date(YYYYMMDD|null), topk(int|null), template(momentum_v1|pullback_v1|defensive_v1|null), mode(auto|llm|null), exclude([codes]), why_n(int|null)。\n"
-                "只负责分流，不进行任何排序或业务决策。无法判断时输出 intent=chat�?
+                "浣犳槸鍙傛暟瑙勫垝鍣紝鍙繑鍥炰竴涓?JSON锛堜笉瑕佸浣欐枃鏈級銆俓n"
+                "瀛楁: intent(pick|chat|why_nth|exclude|help), date(YYYYMMDD|null), topk(int|null), template(momentum_v1|pullback_v1|defensive_v1|null), mode(auto|llm|null), exclude([codes]), why_n(int|null)銆俓n"
+                "鍙礋璐ｅ垎娴侊紝涓嶈繘琛屼换浣曟帓搴忔垨涓氬姟鍐崇瓥銆傛棤娉曞垽鏂椂杈撳嚭 intent=chat銆?
             )
             content = {'user_text': user_text, 'state': state_summary}
             try:
@@ -760,9 +524,9 @@ class ChatAgent:
         # why nth
         import re as _re
         why_n = None
-        m = _re.search(r"第\s*(\d+)\s*�?, t)
+        m = _re.search(r"绗琝s*(\d+)\s*鍙?, t)
         if not m:
-            m = _re.search(r"(\d+)�?, t)
+            m = _re.search(r"(\d+)鍙?, t)
         if m:
             try:
                 why_n = int(m.group(1))
@@ -770,14 +534,14 @@ class ChatAgent:
                 why_n = None
         # exclude codes
         ex_codes: List[str] = []
-        for m2 in _re.finditer(r"排除\s*([0-9]{6}(?:\.(?:SZ|SH))?)", t):
+        for m2 in _re.finditer(r"鎺掗櫎\s*([0-9]{6}(?:\.(?:SZ|SH))?)", t):
             ex_codes.append(m2.group(1))
-        if 'help' in t.lower() or '/help' in t.lower() or '帮助' in t:
+        if 'help' in t.lower() or '/help' in t.lower() or '甯姪' in t:
             intent = 'help'
         elif why_n is not None:
             intent = 'why_nth'
-        elif any(k in t for k in ['荐股','选股','股票','买什�?,'pick']):
-            # 如果包含“为什么”，优先按问答处理，避免误触发荐�?            if '为什�? in t:
+        elif any(k in t for k in ['鑽愯偂','閫夎偂','鑲＄エ','涔颁粈涔?,'pick']):
+            # 濡傛灉鍖呭惈鈥滀负浠€涔堚€濓紝浼樺厛鎸夐棶绛斿鐞嗭紝閬垮厤璇Е鍙戣崘鑲?            if '涓轰粈涔? in t:
                 intent = 'chat'
             else:
                 intent = 'pick'
@@ -792,25 +556,25 @@ class ChatAgent:
         parts = []
         rq = res.requested_date
         # First line: concise outcome + provider explanation
-        provider_note = '（LLM 排序�? if res.provider == 'llm' else '（LLM 不可�?失败 �?使用 mock 补齐，仅作演示）'
-        head = f"日期：{res.date} {provider_note}"
+        provider_note = '锛圠LM 鎺掑簭锛? if res.provider == 'llm' else '锛圠LM 涓嶅彲鐢?澶辫触 鈫?浣跨敤 mock 琛ラ綈锛屼粎浣滄紨绀猴級'
+        head = f"鏃ユ湡锛歿res.date} {provider_note}"
         if rq and rq != res.date:
-            head += f"（requested={rq}，已回退�?
+            head += f"锛坮equested={rq}锛屽凡鍥為€€锛?
         parts.append(head)
         # data gaps
         daily_missing = status.get('daily_missing', []) or []
         mm = status.get('min5_missing', {}) or {}
         miss = []
         if daily_missing:
-            miss.append(f"日线缺失{len(daily_missing)}�?)
+            miss.append(f"鏃ョ嚎缂哄け{len(daily_missing)}鍙?)
         if isinstance(mm, dict):
             pairs = sum(len(v) for v in mm.values())
             if pairs:
-                miss.append(f"分钟缺失{pairs}�?)
+                miss.append(f"鍒嗛挓缂哄け{pairs}瀵?)
         if miss:
-            parts.append("数据缺口�? + ",".join(miss))
+            parts.append("鏁版嵁缂哄彛锛? + ",".join(miss))
         # provider and mode
-        parts.append(f"策略：template={res.template} mode={res.mode} provider={res.provider}")
+        parts.append(f"绛栫暐锛歵emplate={res.template} mode={res.mode} provider={res.provider}")
         # TopK summary
         lines = []
         for r in res.ranked:
@@ -818,6 +582,6 @@ class ChatAgent:
             if isinstance(why, list):
                 why = ';'.join([str(x) for x in why])
             lines.append(f"{r.get('rank')}. {r.get('ts_code')} {why or ''}")
-        parts.append("TopK：\n" + "\n".join(lines))
-        parts.append("操作与风险：建议100股整数倍，非下单指令；关注数据缺口与分钟线风险�?)
+        parts.append("TopK锛歕n" + "\n".join(lines))
+        parts.append("鎿嶄綔涓庨闄╋細寤鸿100鑲℃暣鏁板€嶏紝闈炰笅鍗曟寚浠わ紱鍏虫敞鏁版嵁缂哄彛涓庡垎閽熺嚎椋庨櫓銆?)
         return "\n".join(parts)
