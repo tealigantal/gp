@@ -1,0 +1,5 @@
+provider: duckduckgo  # duckduckgo | tavily | bing | serpapi | mock
+api_key_env: SEARCH_API_KEY
+default_recency_days: 14
+default_top_k: 8
+

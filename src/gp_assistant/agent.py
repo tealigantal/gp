@@ -31,6 +31,7 @@ from .tools.run_registry import list_runs
 from .tools.file_read import safe_read
 from .tools.gpbt_runner import run_gpbt
 from .tools.gp_runner import run_gp
+from gp_research.pipeline import RecommendPipeline, PipelineConfig
 
 
 SYS_PROMPT = (
@@ -294,6 +295,26 @@ class ChatAgent:
                 self.state.exclusions = [x for x in self.state.exclusions if x != c]
                 print_tool(f'included: {c}')
             return True
+        if cmd in ['/pref', '/profile']:
+            # Usage: /pref risk=conservative style=trend topk=3 universe=A股
+            kvs = {}
+            for tok in arg.split():
+                if '=' in tok:
+                    k, v = tok.split('=', 1)
+                    kvs[k.strip().lower()] = v.strip()
+            if 'risk' in kvs:
+                self.state.risk_pref = kvs['risk']
+            if 'topk' in kvs:
+                try:
+                    self.state.default_topk = int(kvs['topk'])
+                except Exception:
+                    pass
+            if 'template' in kvs:
+                self.state.default_template = kvs['template']
+            if 'mode' in kvs:
+                self.state.default_mode = kvs['mode']
+            print_tool(f"profile updated: {self.state.summary()}")
+            return True
         if cmd == '/pick':
             # Usage: /pick [--date YYYYMMDD] [--topk K] [--template XXX] [--tier XXX]
             import shlex, argparse
@@ -527,7 +548,36 @@ class ChatAgent:
                         for x in recs:
                             x['risk_flags'].append('MIN5_MISSING')
 
-                text = self._build_pick_text(res)
+                # Compose new pipeline (market info + judge + QA)
+                # Build user profile from session state
+                profile = {
+                    'risk_level': getattr(self.state, 'risk_pref', None) or 'neutral',
+                    'style_preference': None,
+                    'universe': 'A股',
+                    'max_positions': int(getattr(self.state, 'default_topk', 3) or 3),
+                    'sector_preference': [],
+                    'max_drawdown_tolerance': None,
+                    'topk': int(res.topk or 3),
+                }
+                try:
+                    pipeline = RecommendPipeline(self.repo, llm_client=self.llm, cfg=PipelineConfig(market_provider='mock', lookback_days=14, judge='rule', topk=res.topk))
+                    mc, sel, runs, champ, final = pipeline.run(end_date=res.date, user_profile=profile, user_question=str(raw), topk=res.topk)
+                    # Extend text with market summary and champion
+                    extra_lines = []
+                    ms = (mc.market_style_guess or {}).get('reason') if hasattr(mc, 'market_style_guess') else None
+                    if not ms and isinstance(mc, dict):
+                        ms = (mc.get('market_style_guess') or {}).get('reason')
+                    if ms:
+                        extra_lines.append(f"近两周市场摘要：{str(ms)[:160]}")
+                    extra_lines.append(f"冠军策略：{champ.get('name')}（{champ.get('reason')}）")
+                    if final and getattr(final, 'risks', None):
+                        # final is RecommendationResponse
+                        risks = final.risks if isinstance(final.risks, list) else []
+                        if risks:
+                            extra_lines.append('风险提示：' + '；'.join(risks[:3]))
+                    text = ("\n".join(extra_lines) + "\n\n" + self._build_pick_text(res)) if extra_lines else self._build_pick_text(res)
+                except Exception:
+                    text = self._build_pick_text(res)
                 debug = None
                 if include_debug:
                     debug = {'tool_trace_digest': res.trace}

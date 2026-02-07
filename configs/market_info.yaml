@@ -1,0 +1,4 @@
+provider: mock  # web_search | emquant | manual | mock
+lookback_days: 14
+keywords: ["大盘", "热点", "资金", "板块轮动"]
+

@@ -1,0 +1,4 @@
+topk_default: 3
+judge: rule  # rule | llm
+backtest_window_months: 1
+
