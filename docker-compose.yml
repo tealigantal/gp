@@ -10,7 +10,7 @@ services:
       - ./configs:/app/configs
     tty: true
     stdin_open: true
-    command: ["python","-m","gp_assistant.cli","chat"]
+    command: ["python","-m","gp_assistant","chat"]
     environment:
       - DEEPSEEK_API_KEY
       - UPSTREAM_API_KEY

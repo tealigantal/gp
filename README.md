@@ -56,3 +56,46 @@ First run triggers the pipeline and stores run_id in session; follow‑ups like 
 
 ## Repro and Audit
 Each run writes `index.json` and all prompts/raw responses for full reproducibility.
+
+---
+
+# Minimal Assistant (Single Entry)
+
+This repo now includes a simplified, single-entry agent under `src/gp_assistant` with pluggable data providers and AkShare fallback. It is independent from the `gp_core` pipeline and can be used without any LLM keys.
+
+## Usage
+- CLI entry: `python -m gp_assistant`
+- Subcommands:
+  - `chat` (rule-based router for text like `data 000001 start=2024-01-01`)
+  - `data --symbol 000001 [--start YYYY-MM-DD --end YYYY-MM-DD]`
+  - `pick`
+  - `backtest --strategy NAME` (placeholder)
+
+## Provider Configuration
+- `DATA_PROVIDER` (default: `akshare`)
+- `OFFICIAL_API_KEY` (for future official provider; if missing, we auto-downgrade to `akshare` and log a message)
+
+AkShare is listed in `requirements.txt`. The healthcheck avoids hitting the network and only validates module import.
+
+## Quick Validation
+Run these three commands to sanity-check the refactor:
+
+1) Provider status
+```
+python -c "from src.gp_assistant.providers.factory import provider_health; import json; print(json.dumps(provider_health(), ensure_ascii=False, indent=2))"
+```
+
+2) Data command (should return readable output or readable error)
+```
+python -m gp_assistant data --symbol 000001
+```
+
+3) Pick command (runs to completion and prints a structured result)
+```
+python -m gp_assistant pick
+```
+
+Or run the helper script:
+```
+python tools/smoke_test.py
+```
