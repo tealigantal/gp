@@ -10,21 +10,7 @@ services:
       - ./configs:/app/configs
     tty: true
     stdin_open: true
-    command: ["python","-m","gp_assistant","chat"]
+    command: ["python","-m","gp_assistant","chat","--repl"]
     environment:
       - DEEPSEEK_API_KEY
-      - UPSTREAM_API_KEY
-      - UPSTREAM_BASE_URL
-      - PROXY_REQUIRE_AUTH
-      - PROXY_CLIENT_TOKENS
       - TZ
-
-  llm-proxy:
-    build: ./services/llm_proxy
-    environment:
-      - UPSTREAM_API_KEY
-      - UPSTREAM_BASE_URL
-      - PROXY_REQUIRE_AUTH
-      - PROXY_CLIENT_TOKENS
-    ports:
-      - "8080:8080"

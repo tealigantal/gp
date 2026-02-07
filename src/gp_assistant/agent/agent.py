@@ -8,6 +8,8 @@ from ..providers.factory import provider_health
 from .state import State
 from ..tools.registry import Tool, ToolRegistry
 from ..tools import market_data, universe, signals, rank, backtest, explain
+from ..tools import strategy_score, market_info, recommend
+from .router_factory import route_text
 
 
 def build_registry() -> ToolRegistry:
@@ -60,6 +62,30 @@ def build_registry() -> ToolRegistry:
             run=explain.run_explain,
         )
     )
+    reg.add(
+        Tool(
+            name="strategy_score",
+            description="对候选池进行策略评分（占位）",
+            args_schema={"symbols": "list[str]", "topk": "int?", "offset": "int?"},
+            run=strategy_score.run_strategy_score,
+        )
+    )
+    reg.add(
+        Tool(
+            name="market_info",
+            description="当日市场信息摘要（占位）",
+            args_schema={"date": "str?"},
+            run=market_info.run_market_info,
+        )
+    )
+    reg.add(
+        Tool(
+            name="recommend",
+            description="汇总评分与市场摘要生成推荐（占位）",
+            args_schema={"candidates": "list", "topk": "int?", "market_context": "dict?", "explain": "bool?", "need_trade_points": "bool?"},
+            run=recommend.run_recommend,
+        )
+    )
     return reg
 
 
@@ -82,18 +108,53 @@ class Agent:
             rres = self.registry.get("rank").run({"candidates": candidates}, self.state)
             return ToolResult(ok=True, message=rres.message, data=rres.data)
 
+        if tool_name == "recommend":
+            # pipeline: universe -> strategy_score(topk) -> market_info(date) -> recommend
+            topk = int(args.get("topk", 3) or 3)
+            offset = int(args.get("offset", 0) or 0)
+            date = args.get("date")
+            uni = self.registry.get("universe").run({}, self.state)
+            if not uni.ok:
+                return uni
+            symbols = uni.data.get("symbols", []) if uni.data else []
+            score_res = self.registry.get("strategy_score").run({"symbols": symbols, "topk": topk, "offset": offset}, self.state)
+            if not score_res.ok:
+                return score_res
+            mi_res = self.registry.get("market_info").run({"date": date}, self.state)
+            if not mi_res.ok:
+                return mi_res
+            cand = score_res.data.get("candidates", []) if score_res.data else []
+            ctx = mi_res.data or {}
+            rec_res = self.registry.get("recommend").run({"candidates": cand, "topk": topk, "market_context": ctx}, self.state)
+            # persist minimal recommend context for multi-turn continuity
+            try:
+                self.state.context["last_recommend"] = {
+                    "topk": topk,
+                    "offset": offset,
+                    "symbols": [c.get("symbol") for c in cand],
+                    "date": date,
+                }
+            except Exception:
+                pass
+            return rec_res
+
         tool = self.registry.get(tool_name)
         res = tool.run(args, self.state)
+        # record minimal history for multi-turn context
+        try:
+            self.state.history.append({"tool": tool_name, "args": args, "ok": res.ok})
+            # keep last 10
+            if len(self.state.history) > 10:
+                self.state.history = self.state.history[-10:]
+        except Exception:
+            pass
         return res
 
     def render_help(self) -> str:
         hc = provider_health()
         lines = [
-            "可用子命令:",
-            " - chat: 文本路由模式 (data/pick/backtest)",
-            " - data --symbol 000001 [--start YYYY-MM-DD --end YYYY-MM-DD]",
-            " - pick",
-            " - backtest --strategy NAME",
+            "接口: chat (LLM 路由，仅此一个)",
+            "提示: 在容器中运行 `python -m gp_assistant chat --repl` 进入多轮模式",
             f"数据源: {hc}",
         ]
         return "\n".join(lines)

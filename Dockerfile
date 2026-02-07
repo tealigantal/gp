@@ -13,4 +13,4 @@ COPY . /app
 # Install the src/ package so gp_assistant, gpbt are importable via module paths
 RUN pip install -e .
 
-CMD ["python","-m","gp_assistant","chat"]
+CMD ["python","-m","gp_assistant","chat","--repl"]
