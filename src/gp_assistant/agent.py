@@ -3,13 +3,13 @@ from __future__ import annotations
 import json
 import sys
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict
 
 from .config import AssistantConfig
 from .session_store import SessionStore
 from .index.store import IndexStore
 from .state import SessionState, update_state_from_text, apply_defaults
-from .repl_render import print_agent, print_tool, print_exec, print_warn, render_user_prompt
+from .repl_render import print_tool, print_exec, print_warn, render_user_prompt
 from .tools.gpbt_runner import run_gpbt
 from .tools.gp_runner import run_gp
 from .tools.results_reader import summarize_run
@@ -18,10 +18,10 @@ from .tools.file_read import safe_read
 
 
 SYS_PROMPT = (
-    "Repository assistant. Prefer repo facts (README/configs/src/strategy yaml/results) before answering."
-    "If you claim reading/executing, include tool call logs in the session."
-    "Only allow whitelisted python gpbt.py/gp.py subcommands. No arbitrary shell."
-    "Prefer compare_strategies.csv, doctor_report.json, metrics.json; if missing, suggest next steps."
+    "你是仓库内的研究助手。回答前尽量基于仓库事实（README/configs/src/策略yaml/results）。"
+    "当你声称‘读了某文件/执行某命令’，会话日志中必须包含相应的工具调用记录。"
+    "仅允许受控动作：python gpbt.py / python gp.py 的白名单子命令，禁止任意 shell。"
+    "优先 compare_strategies.csv / doctor_report.json / metrics.json；缺内容时建议下一步命令。"
 )
 
 
@@ -34,7 +34,6 @@ class ChatAgent:
         self.index = IndexStore(Path(cfg.rag.index_db))
         self.state = SessionState()
         self.print_state = False
-        # LLM is optional for basic flows
         try:
             from .llm_client import SimpleLLMClient
             self.llm = SimpleLLMClient(cfg.llm.llm_config_file, {
@@ -66,10 +65,10 @@ class ChatAgent:
 
     def _chat_once(self, user: str) -> str:
         if self.llm is None:
-            return 'LLM 未启用；请配置后再试或使用荐股指令。'
+            return 'LLM 未启用；请配置后再试或使用 “荐股” 指令。'
         ctx = self._gather_context(user)
         sys_msg = {'role': 'system', 'content': SYS_PROMPT}
-        usr = {'role': 'user', 'content': f"问题：{user}\n\n可用上下文：\n{ctx}"}
+        usr = {'role': 'user', 'content': f"问题：{user}\n\n上下文（可能不全）：\n{ctx}"}
         self.session.append('user', user)
         resp = self.llm.chat([sys_msg, usr], json_response=False)
         try:
@@ -161,6 +160,15 @@ class ChatAgent:
         plan = self._plan_intent(raw)
         intent = plan.get('intent', 'chat')
         req_date = plan.get('date')
+        if not req_date:
+            try:
+                from datetime import datetime as _dt
+                from .date_utils import parse_user_date
+                d = parse_user_date(raw, _dt.now().date())
+                if d is not None:
+                    req_date = d.strftime('%Y%m%d')
+            except Exception:
+                req_date = None
         delta = update_state_from_text(self.state, raw)
         if delta:
             self.session.append('tool', 'state_update', delta)
@@ -169,7 +177,7 @@ class ChatAgent:
             import re as _re
             m = _re.search(r'(\d+)', raw)
             n = int(m.group(1)) if m else 1
-            text = '暂无最近一次 pipeline 运行记录'
+            text = '暂无最近一次运行记录'
             run_id = getattr(self.state, 'last_run_id', None)
             if run_id:
                 try:
@@ -180,7 +188,7 @@ class ChatAgent:
                         it = recs[n-1]
                         code = it.get('code') or ''
                         reason = it.get('thesis') or ''
-                        text = f"第{n}：{code} {reason}"
+                        text = f"第{n}只：{code} {reason}"
                 except Exception:
                     pass
             return {
@@ -209,13 +217,19 @@ class ChatAgent:
                 'max_drawdown_tolerance': None,
                 'topk': int(getattr(self.state, 'default_topk', 3) or 3),
             }
-            pipe = CorePipeline(self.repo, llm_cfg='configs/llm.yaml', search_cfg='configs/search.yaml', strategies_cfg=str(self.repo / 'configs' / 'strategies.yaml'), cfg=CorePipelineConfig(lookback_days=14, topk=profile['topk'], queries=['A股 市场 两周 摘要','指数 成交额 情绪','板块 轮动 热点']))
+            pipe = CorePipeline(
+                self.repo,
+                llm_cfg='configs/llm.yaml',
+                search_cfg='configs/search.yaml',
+                strategies_cfg=str(self.repo / 'configs' / 'strategies.yaml'),
+                cfg=CorePipelineConfig(lookback_days=14, topk=profile['topk'], queries=['A股 两周市场摘要','指数 成交额 情绪','板块 轮动 热点'])
+            )
             try:
                 run_id, A, sel, runs, champ, resp = pipe.run(end_date=d2 or '', user_profile=profile, user_question=raw, topk=profile['topk'])
                 self.state.default_date = d2
                 self.state.last_run_id = run_id
                 ftxt = self.repo / 'store' / 'pipeline_runs' / run_id / '05_final_response.txt'
-                text = ftxt.read_text(encoding='utf-8') if ftxt.exists() else '完成，但缺少最终文本输出文件。'
+                text = ftxt.read_text(encoding='utf-8') if ftxt.exists() else '已完成，但最终文本缺失。'
                 return {
                     'schema_version': 'gp.assistant.v1',
                     'type': 'pick',
@@ -244,7 +258,6 @@ class ChatAgent:
                     'debug': None,
                 }
 
-        # default chat
         try:
             s = self._chat_once(raw)
             ok = True
@@ -271,11 +284,12 @@ class ChatAgent:
         t = str(user_text)
         if '/help' in t.lower():
             return {'intent': 'help'}
-        if any(k in t for k in ['荐股', '选股', '股票', 'pick']):
+        if any(k in t for k in ['荐股','选股','股票','买哪个','买什么']) or any(k in t.lower() for k in ['recommend','pick','stock']):
             return {'intent': 'pick', 'date': None}
         import re as _re
-        m = _re.search(r'第\s*(\d+)\s*', t)
-        if m:
+        m = _re.search(r'(\d+)', t)
+        if m and ('第' in t or any(ch in t for ch in ['#','No','no'])):
             return {'intent': 'why_nth', 'n': int(m.group(1))}
+        if '为什么' in t and getattr(self.state, 'last_run_id', None):
+            return {'intent': 'why_nth', 'n': 1}
         return {'intent': 'chat'}
-

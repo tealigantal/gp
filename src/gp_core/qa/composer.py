@@ -26,8 +26,10 @@ class AnswerComposer:
         if not A.sources:
             raise RuntimeError('MarketContext missing sources; Step1 likely failed')
         sys_prompt = (
-            '你是投研答复助手。仅返回 JSON：{provider, summary, chosen_strategy{name,reason}, recommendations[], risks[], assumptions[], evidence[]}。\n'
-            'recommendations 每项含 code/name?/direction/thesis/entry/stop_loss/take_profit/position_sizing。引用 sources 作为 evidence（url 列表）。不得多余文本。'
+            '你是投研答复助手。只返回 JSON，不要多余文字。字段：'
+            '{provider, summary, chosen_strategy{name,reason}, recommendations[], risks[], assumptions[], evidence[] }。'
+            'recommendations 每项包含 code/name?/direction/thesis/entry/stop_loss/take_profit/position_sizing。'
+            'evidence 用 URL 列表引用来源。请使用简体中文。'
         )
         content = {
             'question': user_question,
@@ -64,4 +66,3 @@ class AnswerComposer:
         if resp.risks:
             lines.append("风险提示：" + '；'.join(resp.risks))
         return '\n'.join(lines)
-

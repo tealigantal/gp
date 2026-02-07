@@ -5,6 +5,8 @@ from dataclasses import dataclass
 from typing import List, Optional
 
 import requests
+import re
+import urllib.parse
 import yaml
 
 
@@ -27,8 +29,8 @@ class SearchResult:
 def load_search_config(path: str) -> SearchConfig:
     raw = yaml.safe_load(open(path, 'r', encoding='utf-8').read()) or {}
     prov = str(raw.get('provider', '')).lower()
-    if not prov or prov == 'mock':
-        raise RuntimeError('Search provider invalid; set configs/search.yaml with a real provider and API key env')
+    if not prov:
+        prov = 'duckduckgo'
     return SearchConfig(
         provider=prov,
         api_key_env=str(raw.get('api_key_env', '')),
@@ -40,9 +42,7 @@ def load_search_config(path: str) -> SearchConfig:
 class SearchClient:
     def __init__(self, cfg_path: str):
         self.cfg = load_search_config(cfg_path)
-        api_key = os.getenv(self.cfg.api_key_env)
-        if not api_key:
-            raise RuntimeError(f'SEARCH API Key missing in env: {self.cfg.api_key_env}')
+        api_key = os.getenv(self.cfg.api_key_env) if self.cfg.api_key_env else None
         self.api_key = api_key
 
     def search(self, query: str, *, recency_days: Optional[int] = None, top_k: Optional[int] = None) -> List[SearchResult]:
@@ -53,6 +53,8 @@ class SearchClient:
             return self._bing(query, top_k or self.cfg.default_top_k)
         elif prov in ('serpapi',):
             return self._serpapi(query, top_k or self.cfg.default_top_k)
+        elif prov in ('duckduckgo','ddg','duckduckgo_html'):
+            return self._duckduckgo_html(query, top_k or self.cfg.default_top_k)
         raise RuntimeError(f'Unknown search provider: {prov}')
 
     def _tavily(self, query: str, recency_days: int, top_k: int) -> List[SearchResult]:
@@ -99,3 +101,29 @@ class SearchClient:
             out.append(SearchResult(url=it.get('link',''), title=it.get('title',''), snippet=it.get('snippet','')))
         return out
 
+    def _duckduckgo_html(self, query: str, top_k: int) -> List[SearchResult]:
+        """Non‑key, HTML-based DDG search (best effort)."""
+        url = 'https://duckduckgo.com/html/'
+        params = {'q': query}
+        try:
+            r = requests.get(url, params=params, timeout=15, headers={'User-Agent':'Mozilla/5.0'})
+            r.raise_for_status()
+            html = r.text
+            out: List[SearchResult] = []
+            # <a rel="nofollow" class="result__a" href="/l/?uddg=...">Title</a>
+            for m in re.finditer(r'<a[^>]*class=\"result__a\"[^>]*href=\"([^\"]+)\"[^>]*>(.*?)</a>', html, re.I|re.S):
+                href = m.group(1)
+                title_raw = re.sub(r'<.*?>','', m.group(2))
+                u = href
+                if '/l/?uddg=' in href:
+                    try:
+                        u = urllib.parse.parse_qs(urllib.parse.urlparse(href).query).get('uddg',[href])[0]
+                        u = urllib.parse.unquote(u)
+                    except Exception:
+                        u = href
+                out.append(SearchResult(url=u, title=title_raw.strip(), snippet='', published_at=None))
+                if len(out) >= top_k:
+                    break
+            return out
+        except Exception:
+            return []

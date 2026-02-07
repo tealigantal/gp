@@ -1,24 +1,18 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
-from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List
 
 import pandas as pd
 
 from gp_core.io import save_json, save_prompt, save_llm_raw
 from gp_core.llm import LLMClient
-from gp_core.schemas import (
-    MarketContext,
-    StrategySelection,
-    StrategyRunMetrics,
-    StrategyRunResult,
-)
+from gp_core.schemas import MarketContext, StrategySelection, StrategyRunMetrics, StrategyRunResult
 from gp_core.strategies.registry import StrategyRegistry
 
 
 def _load_configured_appcfg(repo_root: Path):
-    from src.gpbt.config import AppConfig, Paths, Fees, UniverseCfg, BarsCfg, ExperimentCfg
+    from src.gpbt.config import AppConfig
     p = Path(repo_root) / 'configs' / 'config.yaml'
     if not p.exists():
         raise RuntimeError('configs/config.yaml missing (gpbt)')
@@ -32,17 +26,20 @@ class StrategyEngine:
         self.registry = registry
 
     def screen(self, run_dir: Path, *, A: MarketContext, user_profile: Dict[str, Any]) -> StrategySelection:
-        # LLM-based selection (fail-fast)
         sys_prompt = (
-            '你是策略筛选器。仅返回 JSON：{selected: [{strategy_id, reason}], rationale: str}。\n'
-            '根据用户偏好（风险/风格/行业）与市场风格，从策略库中选择最合适的若干个。不得添加多余文本。'
+            '你是策略筛选器。只返回 JSON：{selected: [{strategy_id, reason}], rationale}。'
+            '根据用户偏好与市场背景，从策略库选择合适的若干策略，不要多余文字。请使用简体中文。'
         )
         content = {
             'user_profile': user_profile,
             'market_context': A.dict(),
             'registry': [s.dict() for s in self.registry.items],
         }
-        save_prompt(run_dir, '02', 'select_strategies', {'model': self.llm.cfg.model, 'provider': self.llm.cfg.provider, 'messages': [{'role':'system','content':sys_prompt},{'role':'user','content':content}]})
+        save_prompt(run_dir, '02', 'select_strategies', {
+            'model': self.llm.cfg.model,
+            'provider': self.llm.cfg.provider,
+            'messages': [{'role':'system','content':sys_prompt},{'role':'user','content':content}],
+        })
         resp = self.llm.chat([
             {'role': 'system', 'content': sys_prompt},
             {'role': 'user', 'content': __import__('json').dumps(content, ensure_ascii=False)},
@@ -72,7 +69,6 @@ class StrategyEngine:
         return rows
 
     def _metrics_for(self, picks: List[Dict[str, Any]], date: str) -> StrategyRunMetrics:
-        # Compute naive win_rate/avg_return from daily bars around date (proxy)
         from src.gpbt.storage import daily_bar_path, load_parquet
         rets: List[float] = []
         for p in picks:
@@ -95,20 +91,17 @@ class StrategyEngine:
         spec = self.registry.by_id(strategy_id)
         picks = self._rank_picks(date, strategy_id, topk)
         metrics = self._metrics_for(picks, date)
-
-        # LLM explanation and suggestions
         sys_prompt = (
-            '你是策略解释器。仅返回 JSON：{rules_summary, signals[], suggestions{entry,stop_loss,take_profit,position}, llm_explanation}。\n'
-            '结合市场背景，对该策略在当前周期的表现、适配性、信号触发条件与交易建议做解释。不得多余文本。'
+            '你是策略解释器。只返回 JSON：{rules_summary, signals[], suggestions{entry,stop_loss,take_profit,position}, llm_explanation}。'
+            '结合当前市场背景，说明该策略的适配性，并给出入场/止损/止盈/仓位建议。不要多余文字，用简体中文。'
         )
-        content = {
-            'strategy': spec.dict(),
-            'market_context': A.dict(),
-            'picks': picks,
-            'metrics': metrics.dict(),
-        }
+        content = {'strategy': spec.dict(), 'market_context': A.dict(), 'picks': picks, 'metrics': metrics.dict()}
         tag = f'run_{strategy_id}'
-        save_prompt(run_dir, '03', tag, {'model': self.llm.cfg.model, 'provider': self.llm.cfg.provider, 'messages': [{'role':'system','content':sys_prompt},{'role':'user','content':content}]})
+        save_prompt(run_dir, '03', tag, {
+            'model': self.llm.cfg.model,
+            'provider': self.llm.cfg.provider,
+            'messages': [{'role':'system','content':sys_prompt},{'role':'user','content':content}],
+        })
         resp = self.llm.chat([
             {'role': 'system', 'content': sys_prompt},
             {'role': 'user', 'content': __import__('json').dumps(content, ensure_ascii=False)},
@@ -131,4 +124,3 @@ class StrategyEngine:
         )
         save_json(run_dir / '03_strategy_runs' / f'{spec.id}.json', run.dict())
         return run
-

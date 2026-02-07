@@ -1,17 +1,18 @@
-strategies:
+﻿strategies:
   - id: momentum_v1
-    name: 动量V1
+    name: 鍔ㄩ噺V1
     tags: [trend, high_vol]
     risk_profile: [neutral, aggressive]
     params: {lookback_days: 60}
   - id: pullback_v1
-    name: 回踩V1
+    name: 鍥炶俯V1
     tags: [range, low_vol]
     risk_profile: [conservative, neutral]
     params: {lookback_days: 60}
   - id: defensive_v1
-    name: 防御V1
+    name: 闃插尽V1
     tags: [low_vol]
     risk_profile: [conservative]
     params: {lookback_days: 60}
+
 

@@ -1,4 +1,4 @@
-provider: tavily  # tavily | bing | serpapi
-api_key_env: TAVILY_API_KEY
+provider: duckduckgo  # duckduckgo (no key) | tavily | bing | serpapi
+api_key_env: ""
 default_recency_days: 14
 default_top_k: 8
