@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import argparse
 import json
@@ -85,7 +85,7 @@ def cmd_fetch(cfg: AppConfig, start: str, end: str, *, max_codes: int | None = N
         logger.info("Skip minute bars by --no-minutes")
         return
 
-    # Minute bars per date partition锛堜弗鏍兼ā寮忥細澶辫触鍗虫姤閿欙紝鍙厤缃噸璇曟鏁帮級
+    # Minute bars per date partition锛堜弗鏍兼ā寮忥細澶辫触鍗虫姤閿欙紝鍙厤缃噸璇曟鏁帮級
     cal = load_parquet(raw_path(cfg.paths.data_root, 'trade_cal.parquet'))
     if cal.empty:
         # derive trade dates from daily bars when calendar is missing
@@ -129,7 +129,7 @@ def cmd_fetch(cfg: AppConfig, start: str, end: str, *, max_codes: int | None = N
                     if attempt >= retries:
                         with open(failures_csv, 'a', encoding='utf-8') as f:
                             f.write(f"min5,{min_provider or cfg.provider},{ts_code},{d},\"{str(e).replace(',', ';')}\"\n")
-                        # 涓嶄腑鏂棩绾挎垚鏋滐紝璁板綍澶辫触缁х画鍏朵粬鏍囩殑/鏃ユ湡
+                        # 涓嶄腑鏂棩绾挎垚鏋滐紝璁板綍澶辫触缁х画鍏朵粬鏍囩殑/鏃ユ湡
                         break
                     attempt += 1
                     logger.warning("min_bar閲嶈瘯 {}/{} {} {}: {}", attempt, retries, ts_code, d, e)

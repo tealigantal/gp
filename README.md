@@ -55,6 +55,11 @@ python assistant.py chat --once "2026-02-09 荐股，我的账户可用资金267
 - `configs/strategies.yaml`：策略注册表（id/name/tags/风险偏好/默认参数）。
 - `configs/pipeline.yaml`：默认 lookback/topk/queries（代码当前也内置了等价默认值）。
 
+## 编码与字符门禁
+- 仅允许 UTF-8 源码，禁止混入私用区/不可打印字符。
+- 本仓库提供 `tools/check_nonprintable.py` 与测试 `tests/test_nonprintable.py`；任何违规会直接失败。
+- 建议使用纯文本编辑器/终端粘贴中文，不要从富文本拷贝。
+- 若遇异常，可运行 `python tools/sanitize_nonprintable.py` 一键清理并查看 `store/nonprintable_cleanup_report.json`。
+
 ## 复现与审计
 每次运行均生成 `index.json` 与完整 prompts/raw 响应，可根据 run_id 完整复现与审计。
-
