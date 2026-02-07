@@ -1,52 +1,60 @@
-# 使用说明（gp + gpbt + 对话 Agent）
+# 架构与使用（gp_core Pipeline）
 
-本仓库已封装一个可对话的 Agent，能够在本地或 Docker 中直接对话，并通过现有 gpbt 能力完成“LLM 荐股→回测”的工作流。以下仅保留“怎么用”的说明。
+本仓库后端已重构为三模块 + 一个编排主干：
+- 模块① MarketInfo：真实网络搜索 + 抓正文 + LLM 结构化两周市场信息（含 sources 证据链）。
+- 模块② StrategyEngine：LLM 选择策略集合 → 逐策略模拟/解释（结合 gpbt 数据） → 产出每策略结果。
+- 模块③ AnswerComposer：综合用户提问 + 用户偏好 + A/B/回测结论 → LLM 生成最终建议。
+- 编排器 Pipeline：按 Step1~Step5 串行执行，上下文与 LLM 提示/原始响应全部落盘。
 
-## 本地快速跑
-- `pip install -r requirements.txt`
-- `python gpbt.py init`
-- `python assistant.py chat`
-- `python assistant.py chat --once "荐股"`
+重要：生产逻辑不包含任何 mock/fallback。缺少 LLM Key 或 Search Key 会直接报错（fail-fast）。
 
-提示：若未配置真实 LLM Key，Agent 仍可用，会使用“可解释的规则排序”作为荐股结果，并在输出中标注 provider=fallback/mock。
+## 目录结构（后端）
+- `src/gp_core/`：核心模块（schemas/io/llm/search/market_info/strategies/judge/qa/pipeline）
+- `src/gp/cli.py`：新增 `gp recommend` 命令
+- `src/gp/serve.py`：新增 Pipeline API（见下）
+- `configs/`：`llm.yaml`、`search.yaml`、`strategies.yaml`、`pipeline.yaml`
+- `store/pipeline_runs/`：每次运行的产物与审计材料
 
-## Docker 快速跑（推荐）
-1) 复制环境变量模板：
-   - `cp .env.example .env`
-   - 如需启用 DeepSeek，请在 `.env` 设置 `DEEPSEEK_API_KEY`；或在 `configs/llm.yaml` 设为 `provider: mock` 走离线自测。
-2) 构建镜像并启动：
-   - `docker compose up --build`
-3) 进入可交互对话：
-   - `docker compose run --rm gp`
+## 快速开始
+1) 安装依赖：`pip install -r requirements.txt`
+2) 配置环境：`cp .env.example .env` 并设置：
+   - `DEEPSEEK_API_KEY`（或你的真实 LLM provider 的 key 与 base_url/model）
+   - `TAVILY_API_KEY`（或 `BING_API_KEY`/`SERPAPI_API_KEY`）
+3) 准备数据（示例）：`python gpbt.py init`，并根据需要更新数据/候选池。
 
-预置卷确保数据持久化：`./data ./universe ./results ./store ./cache ./configs`。
+### CLI（Pipeline）
+运行：
+```
+python gp.py recommend --date 2026-02-09 --question "偏好短线，一周内机会？" --topk 3 --profile profile.json
+```
+输出 run_id 与最终建议文本，同时将产物写入 `store/pipeline_runs/{run_id}/`：
+- `01_market_context.json`
+- `01_sources.jsonl`
+- `02_selected_strategies.json`
+- `03_strategy_runs/{strategy_id}.json`
+- `04_champion.json`
+- `05_final_response.json`
+- `05_final_response.txt`
+- `prompts/{step}_{name}.json`（请求消息）
+- `llm_raw/{step}_{name}.json`（原始响应）
 
-## 对话示例（两轮，多轮状态生效）
-user> 2026-02-09 荐股，我的账户可用资金26722.07，200股科士达002518，100股紫金矿业601899，800股黄金ETF518880
+### Assistant 对话
+```
+python assistant.py chat --once "2026-02-09 荐股，我的账户可用资金26722.07，..."
+```
+首轮“荐股”触发完整 Pipeline，并把 run_id 存入会话；后续如“第2只为什么推荐？”仅读取该 run 的产物进行解释（不重跑）。
 
-agent> 荐股 Top5（2026-02-09 | 模板 momentum_v1 | 模式 auto | provider=...）
-agent> ...
+## API（FastAPI）
+- `POST /api/recommend` → 直接跑 Pipeline，返回 `{run_id, response}`
+- `GET  /api/runs/{run_id}` → 返回该 run 的 `index.json`
+- `GET  /api/runs/{run_id}/artifacts/{name}` → 下载/查看单个产物（json/jsonl/txt）
 
-user> 第2只为什么推荐？
+## 配置说明
+- `configs/llm.yaml`：必须为真实 provider；缺 key 将直接报错。
+- `configs/search.yaml`：必须为真实搜索 provider（tavily/bing/serpapi）与对应 env。
+- `configs/strategies.yaml`：策略注册表（id/name/tags/风险偏好/默认参数）。
+- `configs/pipeline.yaml`：默认 lookback/topk/queries（代码当前也内置了等价默认值）。
 
-agent> （解释第2只的理由摘要）
+## 复现与审计
+每次运行均生成 `index.json` 与完整 prompts/raw 响应，可根据 run_id 完整复现与审计。
 
-
-## 可选：使用 gpbt 原生命令
-- 初始化与抓取：
-  - `python gpbt.py init`
-  - `python gpbt.py fetch --start 20260103 --end 20260110 --no-minutes`
-- 构建候选池与诊断：
-  - `python gpbt.py build-candidates-range --start 20260106 --end 20260110`
-  - `python gpbt.py doctor --start 20260106 --end 20260106`
-- LLM 排名（支持 mock/fallback）：
-  - `python gpbt.py llm-rank --date 20260106 --template momentum_v1`
-
-一句话说明：无 key 会走规则 fallback；有 key 会走 gpbt llm-rank（按 configs/llm.yaml 配置）。任何 Key 仅从 env/.env 读取；输出/落盘均脱敏。
-
-内置命令：
-- `/state` 打印当前 state 摘要（cash/positions/default_date/default_topk/template/mode）
-- `/reset` 清空 state
-- `/pick ...` 手动指定参数
-- `/exclude <code>` 增加排除并重跑
-- `/include <code>` 取消排除

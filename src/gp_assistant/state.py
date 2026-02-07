@@ -17,6 +17,7 @@ class SessionState:
     exclusions: List[str] = field(default_factory=list)
     no_holdings: bool = False
     last_pick: Optional[dict] = None
+    last_run_id: Optional[str] = None
 
     def summary(self) -> str:
         pos = ','.join([f"{k}:{v}" for k,v in self.positions.items()]) or '-'

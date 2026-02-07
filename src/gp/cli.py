@@ -139,6 +139,27 @@ def main():
     p_srv.add_argument("--port", type=int, default=8000)
     p_srv.set_defaults(func=cmd_serve)
 
+    # New: pipeline recommend
+    def cmd_recommend(args):
+        from gp_core.pipeline import Pipeline, PipelineConfig
+        repo = Path('.')
+        import json as _json
+        profile = _json.loads(Path(args.profile).read_text(encoding='utf-8')) if args.profile else {'risk_level': 'neutral', 'topk': args.topk}
+        date = args.date.replace('-', '')
+        pipe = Pipeline(repo, llm_cfg='configs/llm.yaml', search_cfg='configs/search.yaml', strategies_cfg=str(repo / 'configs' / 'strategies.yaml'), cfg=PipelineConfig(lookback_days=args.lookback, topk=args.topk, queries=['A股 市场 两周 摘要','指数 成交额 情绪','板块 轮动 热点']))
+        run_id, A, sel, runs, champ, resp = pipe.run(end_date=date, user_profile=profile, user_question=args.question or '', topk=args.topk)
+        print('run_id:', run_id)
+        txt = (Path('store') / 'pipeline_runs' / run_id / '05_final_response.txt').read_text(encoding='utf-8')
+        print(txt)
+
+    p_rec = sub.add_parser("recommend", help="Pipeline 推荐")
+    p_rec.add_argument("--date", required=True, help="YYYYMMDD|YYYY-MM-DD")
+    p_rec.add_argument("--question", default="")
+    p_rec.add_argument("--profile", default=None, help="JSON file with UserProfile")
+    p_rec.add_argument("--topk", type=int, default=3)
+    p_rec.add_argument("--lookback", type=int, default=14)
+    p_rec.set_defaults(func=cmd_recommend)
+
     args = p.parse_args()
     args.func(args)
 
