@@ -1,3 +1,4 @@
+# 简介：工具 - 市场统计与信息汇总（轻量），便于命令行快速查看概况。
 from __future__ import annotations
 
 from typing import Any, List, Dict, Tuple

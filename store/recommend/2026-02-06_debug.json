@@ -1,0 +1,48 @@
+{
+  "timing": {},
+  "sources": [
+    {
+      "symbol": "000001",
+      "data_source": "fixtures/provider/synthetic"
+    },
+    {
+      "symbol": "000002",
+      "data_source": "fixtures/provider/synthetic"
+    },
+    {
+      "symbol": "600519",
+      "data_source": "fixtures/provider/synthetic"
+    },
+    {
+      "symbol": "000333",
+      "data_source": "fixtures/provider/synthetic"
+    }
+  ],
+  "failures": [],
+  "cv": {
+    "000001": {
+      "k": 0,
+      "win_rate_5d_mean": 0.0,
+      "win_rate_5d_std": 0.0,
+      "mean_return_5d_mean": 0.0,
+      "mean_return_5d_std": 0.0,
+      "drawdown_proxy_mean": 0.0
+    },
+    "600519": {
+      "k": 0,
+      "win_rate_5d_mean": 0.0,
+      "win_rate_5d_std": 0.0,
+      "mean_return_5d_mean": 0.0,
+      "mean_return_5d_std": 0.0,
+      "drawdown_proxy_mean": 0.0
+    },
+    "000333": {
+      "k": 0,
+      "win_rate_5d_mean": 0.0,
+      "win_rate_5d_std": 0.0,
+      "mean_return_5d_mean": 0.0,
+      "mean_return_5d_std": 0.0,
+      "drawdown_proxy_mean": 0.0
+    }
+  }
+}

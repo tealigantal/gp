@@ -1,0 +1,18 @@
+[
+  {
+    "symbol": "000001",
+    "data_source": "fixtures/provider/synthetic"
+  },
+  {
+    "symbol": "000002",
+    "data_source": "fixtures/provider/synthetic"
+  },
+  {
+    "symbol": "600519",
+    "data_source": "fixtures/provider/synthetic"
+  },
+  {
+    "symbol": "000333",
+    "data_source": "fixtures/provider/synthetic"
+  }
+]

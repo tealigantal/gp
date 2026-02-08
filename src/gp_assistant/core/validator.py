@@ -1,3 +1,4 @@
+# 简介：数据校验与规范化工具（轻量）。用于在策略/引擎中做必要的结构检查。
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -60,4 +61,3 @@ def validate_pick_json(obj: Dict[str, Any]) -> ValidationResult:
         errors.append("缺少 disclaimer 字段")
     ok = not errors
     return ValidationResult(ok=ok, errors=errors, replaced_text=None)
-

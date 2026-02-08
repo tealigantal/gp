@@ -1,3 +1,4 @@
+# 简介：工具 - 生成或检视信号（如 bias 交叉、NR7 等），便于脚本化验证。
 from __future__ import annotations
 
 from typing import Any, List, Dict

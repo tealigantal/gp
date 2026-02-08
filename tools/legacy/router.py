@@ -11,9 +11,7 @@ class Route:
 
 def route_text(query: str) -> Route:
     q = (query or "").strip().lower()
-    # minimal rules: check leading keyword
     if q.startswith("data"):
-        # data 000001 start=2024-01-01 end=2024-02-01
         parts = q.split()
         symbol = parts[1] if len(parts) > 1 else ""
         args = {"symbol": symbol}

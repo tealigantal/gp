@@ -1,3 +1,4 @@
+# 简介：官方数据源占位提供者。需要 OFFICIAL_API_KEY，当前接口以占位/健康检查为主。
 from __future__ import annotations
 
 from typing import Dict, Any
@@ -33,4 +34,3 @@ class OfficialProvider(MarketDataProvider):
                 "reason": "OFFICIAL_API_KEY 未配置",
             }
         return {"name": self.name, "ok": True, "reason": None}
-

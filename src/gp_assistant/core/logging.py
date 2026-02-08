@@ -1,3 +1,4 @@
+# 简介：日志封装。基于 loguru 提供简单统一的日志记录接口与默认配置。
 from __future__ import annotations
 
 import logging
@@ -15,4 +16,3 @@ def setup_logging() -> None:
 
 
 logger = logging.getLogger("gp_assistant")
-

@@ -4,16 +4,16 @@ import argparse
 import json
 import sys
 
-from .core.logging import setup_logging
+from gp_assistant.core.logging import setup_logging
 Agent = None  # lazy import
 route_text = None  # lazy import
-from .providers.factory import get_provider
-from .tools.universe import build_universe
-from .tools.market_data import normalize_daily_ohlcv
-from .tools.signals import compute_indicators
-from .tools.backtest import load_strategies, run_event_backtest, save_stats
-from .tools.rank import rank_candidates
-from .core.validator import validate_pick_json
+from gp_assistant.providers.factory import get_provider
+from gp_assistant.tools.universe import build_universe
+from gp_assistant.tools.market_data import normalize_daily_ohlcv
+from gp_assistant.tools.signals import compute_indicators
+from gp_assistant.tools.backtest import load_strategies, run_event_backtest, save_stats
+from gp_assistant.tools.rank import rank_candidates
+from gp_assistant.core.validator import validate_pick_json
 
 
 def _sanitize(obj):
@@ -45,10 +45,10 @@ def main(argv: list[str] | None = None) -> int:
     # Lazy import to avoid importing optional deps during module import
     global Agent, route_text
     if Agent is None:
-        from .agent.agent import Agent as _Agent  # type: ignore
+        from gp_assistant.agent.agent import Agent as _Agent  # type: ignore
         Agent = _Agent
     if route_text is None:
-        from .agent.router_factory import route_text as _route_text  # type: ignore
+        from gp_assistant.agent.router_factory import route_text as _route_text  # type: ignore
         route_text = _route_text
     agent = Agent()
 
@@ -108,7 +108,7 @@ def main(argv: list[str] | None = None) -> int:
                     strat = s
                     break
         if not strat and args.strategy.upper() == "S1":
-            from .tools.backtest import _default_strategies
+            from gp_assistant.tools.backtest import _default_strategies
             strat = _default_strategies()[0]
         if not strat:
             return _print_result(type("Res", (), {"ok": False, "message": f"invalid strategy: {args.strategy}", "data": None}))
@@ -150,7 +150,7 @@ def main(argv: list[str] | None = None) -> int:
             except Exception:
                 continue
         import json as _json
-        from .core.paths import store_dir as _store_dir
+        from gp_assistant.core.paths import store_dir as _store_dir
         champ_fp = _store_dir() / "champion.json"
         champion_state = None
         if champ_fp.exists():
@@ -194,3 +194,4 @@ def main(argv: list[str] | None = None) -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
+

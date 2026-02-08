@@ -1,3 +1,5 @@
+# 简介：数据源选择工厂。按偏好与健康检查在 official/local/akshare 间选择，
+# 提供 provider_health 概览。
 from __future__ import annotations
 
 from typing import Literal
@@ -75,4 +77,3 @@ def provider_health() -> dict:
     p = get_provider()
     hc = p.healthcheck()
     return {"selected": p.name, **hc}
-

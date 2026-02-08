@@ -1,3 +1,4 @@
+# 简介：工具 - 统一注册中心/发现机制（轻量），集中列出可用工具入口。
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -31,4 +32,3 @@ class ToolRegistry:
 
     def list(self) -> Dict[str, Tool]:
         return dict(self._tools)
-

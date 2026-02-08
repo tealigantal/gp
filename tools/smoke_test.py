@@ -1,62 +1,29 @@
-"""Minimal smoke tests for the refactored single-entry architecture.
-
-Run with:
-  python tools/smoke_test.py
-"""
 from __future__ import annotations
 
 import json
-import subprocess
 import sys
-
-import os
-import sys
-from pathlib import Path
-
-# Ensure local import without install
-ROOT = Path(__file__).resolve().parent.parent
-SRC = ROOT / "src"
-if str(SRC) not in sys.path:
-    sys.path.insert(0, str(SRC))
-
-from gp_assistant.providers.factory import provider_health
+import time
+import requests
 
 
-def check_health():
-    info = provider_health()
-    assert "selected" in info and "ok" in info, f"bad health: {info}"
-    print("[ok] provider.healthcheck()", json.dumps(info, ensure_ascii=False))
-
-
-def run_cmd(args: list[str]):
-    env = dict(**os.environ)
-    # Ensure local run can import from src without installation
-    env["PYTHONPATH"] = (env.get("PYTHONPATH", "") + (";" if os.name == "nt" else ":") + "src").strip(";:")
-    proc = subprocess.run([sys.executable, "-m", "gp_assistant", *args], capture_output=True, text=True, env=env)
-    return proc.returncode, proc.stdout.strip(), proc.stderr.strip()
-
-
-def check_data():
-    code, out, err = run_cmd(["data", "--symbol", "000001"])
-    # Should not crash; either ok or readable error
-    assert code in (0, 1), f"unexpected code: {code}"
-    assert out, "no output"
-    print("[ok] gp data --symbol 000001", out)
-
-
-def check_pick():
-    code, out, err = run_cmd(["pick"])
-    assert code in (0, 1)
-    assert out
-    print("[ok] gp pick", out)
-
-
-def main():
-    check_health()
-    check_data()
-    check_pick()
-    print("Smoke tests completed.")
+def main() -> int:
+    base = "http://127.0.0.1:8000"
+    try:
+        h = requests.get(base + "/health", timeout=5).json()
+        print("/health:", json.dumps(h, ensure_ascii=False))
+        c1 = requests.post(base + "/chat", json={"message": "hi"}, timeout=10).json()
+        print("/chat1:", json.dumps({k: c1[k] for k in ("session_id", "reply")}, ensure_ascii=False))
+        sid = c1["session_id"]
+        c2 = requests.post(base + "/chat", json={"session_id": sid, "message": "推荐3只"}, timeout=30).json()
+        print("/chat2:", "triggered", c2.get("tool_trace", {}).get("triggered_recommend"))
+        r = requests.post(base + "/recommend", json={"universe": "symbols", "symbols": ["000001","000333","600519"]}, timeout=30).json()
+        print("/recommend:", "picks", len(r.get("picks", [])))
+        return 0
+    except Exception as e:  # noqa: BLE001
+        print("smoke failed:", e)
+        return 1
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
+

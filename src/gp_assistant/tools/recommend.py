@@ -1,3 +1,4 @@
+# 简介：工具 - 直接调用荐股引擎并输出结构化结果，便于 CLI 或批处理使用。
 from __future__ import annotations
 
 from typing import Any, List, Dict

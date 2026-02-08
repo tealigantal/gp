@@ -1,3 +1,5 @@
+# 简介：Agent 运行态封装。包含 session_id、配置、上下文与历史，
+# 便于在无服务模式下复用核心能力。
 from __future__ import annotations
 
 from dataclasses import dataclass, field

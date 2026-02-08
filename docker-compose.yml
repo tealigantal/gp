@@ -1,4 +1,4 @@
-services:
+﻿services:
   gp:
     build: .
     volumes:
@@ -8,9 +8,13 @@ services:
       - ./store:/app/store
       - ./cache:/app/cache
       - ./configs:/app/configs
-    tty: true
-    stdin_open: true
-    command: ["python","-m","gp_assistant","chat","--repl"]
+    command: ["uvicorn","gp_assistant.server.app:app","--host","0.0.0.0","--port","8000"]
     environment:
-      - DEEPSEEK_API_KEY
-      - TZ
+      - TZ=Asia/Shanghai
+      - LLM_BASE_URL
+      - LLM_API_KEY
+      - CHAT_MODEL
+      - DATA_PROVIDER=akshare
+      - GP_REQUEST_TIMEOUT_SEC
+    ports:
+      - "8000:8000"

@@ -20,4 +20,4 @@ fastapi>=0.110
 uvicorn>=0.24
 httpx>=0.26
 pytest>=7.0
-
+tzdata>=2023.3

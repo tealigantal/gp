@@ -1,3 +1,5 @@
+# 简介：项目路径工具。统一定位 data/results/universe/store/cache/configs 等目录，
+# 供各子模块读写数据与缓存。
 from __future__ import annotations
 
 from pathlib import Path
@@ -41,4 +43,3 @@ def _ensure_dir(path_str: str) -> Path:
     p = Path(path_str)
     p.mkdir(parents=True, exist_ok=True)
     return p
-

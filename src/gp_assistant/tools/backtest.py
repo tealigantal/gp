@@ -1,3 +1,4 @@
+# 简介：工具 - 回测入口/辅助，提供简单策略回放与结果导出。
 from __future__ import annotations
 
 from dataclasses import dataclass

@@ -1,3 +1,5 @@
+# 简介：本地 Parquet 日线数据提供者。按约定路径读取并做最小规范化，
+# 失败时抛出 DataProviderError，健康检查仅检查文件存在性。
 from __future__ import annotations
 
 from typing import Dict, Any

@@ -1,8 +1,10 @@
+# 简介：行情数据提供者抽象基类（接口约定），统一 get_daily/healthcheck 等方法。
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from typing import Dict, Any
 import pandas as pd
+from ..core.errors import DataProviderError
 
 
 class MarketDataProvider(ABC):
@@ -16,18 +18,20 @@ class MarketDataProvider(ABC):
         """
 
     def get_intraday(self, symbol: str, date: str) -> pd.DataFrame:
-        raise NotImplementedError("intraday not implemented")
+        raise DataProviderError("intraday not supported", symbol=symbol)
 
     def get_fundamentals(self, symbol: str):  # noqa: ANN001
-        raise NotImplementedError("fundamentals not implemented")
+        raise DataProviderError("fundamentals not supported", symbol=symbol)
 
     # Optional: basic info table for names/labels
     def get_stock_basic(self):  # noqa: ANN001
         """Return a DataFrame with at least columns: ts_code/name.
 
-        Default: raise NotImplementedError. Providers may override.
+        Default: empty DataFrame; providers may override.
         """
-        raise NotImplementedError("stock_basic not implemented")
+        import pandas as _pd
+
+        return _pd.DataFrame(columns=["ts_code", "name"])  # type: ignore[name-defined]
 
     @abstractmethod
     def healthcheck(self) -> Dict[str, Any]:

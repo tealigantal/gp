@@ -1,3 +1,4 @@
+# 简介：AkShare 数据提供者。对接 akshare 库拉取日线并规范化列；健康检查只做导入检测。
 from __future__ import annotations
 
 from typing import Dict, Any

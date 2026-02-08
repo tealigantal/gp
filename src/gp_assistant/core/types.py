@@ -1,3 +1,4 @@
+# 简介：常用类型别名与结构定义，便于类型标注与静态检查。
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -12,4 +13,3 @@ class ToolResult:
 
 
 JSONDict = Dict[str, Any]
-

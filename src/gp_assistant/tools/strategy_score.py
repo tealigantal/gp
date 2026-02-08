@@ -1,3 +1,4 @@
+# 简介：工具 - 策略打分与对比的命令行辅助，便于快速评估候选分数。
 from __future__ import annotations
 
 from typing import Any, List, Dict

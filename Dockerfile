@@ -13,4 +13,6 @@ COPY . /app
 # Install the src/ package so gp_assistant, gpbt are importable via module paths
 RUN pip install -e .
 
-CMD ["python","-m","gp_assistant","chat","--repl"]
+ENV TZ=Asia/Shanghai
+EXPOSE 8000
+CMD ["uvicorn","gp_assistant.server.app:app","--host","0.0.0.0","--port","8000"]

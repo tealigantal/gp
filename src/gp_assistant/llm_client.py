@@ -1,3 +1,5 @@
+# 简介：简化版 LLM 客户端（可加载 YAML 配置）。提供输⼊清洗与重试，
+# 可用于离线/Mock 或自定义代理场景。
 from __future__ import annotations
 
 import json
@@ -26,10 +28,10 @@ class LLMConfig:
 def load_llm_config(path: str) -> LLMConfig:
     raw = yaml.safe_load(open(path, 'r', encoding='utf-8').read()) or {}
     return LLMConfig(
-        provider=raw.get('provider', 'openai'),
-        base_url=str(raw.get('base_url', 'https://api.openai.com/v1')),
-        model=str(raw.get('model', 'gpt-4o-mini')),
-        api_key_env=str(raw.get('api_key_env', 'OPENAI_API_KEY')),
+        provider=raw.get('provider', 'deepseek'),
+        base_url=str(raw.get('base_url', 'https://api.deepseek.com/v1')),
+        model=str(raw.get('model', 'deepseek-chat')),
+        api_key_env=str(raw.get('api_key_env', 'LLM_API_KEY')),
         temperature=float(raw.get('temperature', 0.0)),
         max_tokens=int(raw.get('max_tokens', 1200)),
         timeout_sec=int(raw.get('timeout_sec', 60)),

@@ -1,0 +1,1181 @@
+{
+  "as_of": "2026-02-06",
+  "timezone": "Asia/Shanghai",
+  "env": {
+    "grade": "B",
+    "reasons": [
+      "指数20日斜率均值=0.015"
+    ],
+    "recovery_conditions": [],
+    "raw": {
+      "indices": {
+        "000001": {
+          "len": 30,
+          "insufficient": true
+        },
+        "399001": {
+          "len": 30,
+          "insufficient": true
+        },
+        "399006": {
+          "len": 30,
+          "insufficient": true
+        }
+      },
+      "market_stats": {
+        "total_amount": null,
+        "limit_up": null,
+        "limit_down": null,
+        "seal_rate": null,
+        "ladder_max": null,
+        "ladder_breaks": null,
+        "_reason": null,
+        "source": "cache"
+      }
+    }
+  },
+  "themes": [
+    {
+      "name": "主题-000001",
+      "strength": "0.76%",
+      "evidence": [
+        "近1日相对强度 0.76%"
+      ]
+    },
+    {
+      "name": "主题-600519",
+      "strength": "0.30%",
+      "evidence": [
+        "近1日相对强度 0.30%"
+      ]
+    }
+  ],
+  "candidate_pool": [
+    {
+      "symbol": "000001",
+      "name": null,
+      "source_reason": "默认候选池",
+      "liquidity": {
+        "avg5_amount": 16599333.333333334,
+        "grade": "C"
+      },
+      "atr_pct": 0.023789644572439036,
+      "gap_pct": 0.0,
+      "pressure_flags": {
+        "near_ma20": false
+      },
+      "q_grade": "Q3",
+      "chip": {
+        "avg_cost": 11.712555555555557,
+        "profit_ratio": 1.0,
+        "band_90_low": 10.275533333333334,
+        "band_90_high": 13.056466666666665,
+        "concentration_90": 0.8666666666666667,
+        "dist_to_90_high_pct": -0.010993275362910893,
+        "confidence": "low",
+        "model_used": "B",
+        "sample_n": 30
+      },
+      "indicators": {
+        "ma20": 12.25,
+        "slope20": 0.04344122657580934,
+        "atr_pct": 0.023789644572439036,
+        "gap_pct": 0.0
+      },
+      "close": 13.2,
+      "flags": {
+        "must_observe_only": true,
+        "reasons": [
+          "流动性C：仅观察仓",
+          "贴近筹码90%上限：当日禁买"
+        ]
+      }
+    },
+    {
+      "symbol": "000002",
+      "name": null,
+      "source_reason": "默认候选池",
+      "liquidity": {
+        "avg5_amount": 0.0,
+        "grade": "C"
+      },
+      "atr_pct": 0.023157894736842172,
+      "gap_pct": 0.0,
+      "pressure_flags": {
+        "near_ma20": false
+      },
+      "q_grade": "Q3",
+      "chip": {
+        "avg_cost": 4.766666666666667,
+        "profit_ratio": 0.0,
+        "band_90_low": 4.766666666666667,
+        "band_90_high": 4.766666666666667,
+        "concentration_90": 1.0,
+        "dist_to_90_high_pct": 0.003496503496503484,
+        "confidence": "low",
+        "model_used": "B",
+        "sample_n": 1
+      },
+      "indicators": {
+        "ma20": 0.0,
+        "slope20": NaN,
+        "atr_pct": 0.023157894736842172,
+        "gap_pct": 0.0
+      },
+      "close": 4.75,
+      "flags": {
+        "must_observe_only": true,
+        "reasons": [
+          "流动性C：仅观察仓",
+          "贴近筹码90%上限：当日禁买"
+        ]
+      }
+    },
+    {
+      "symbol": "600519",
+      "name": null,
+      "source_reason": "默认候选池",
+      "liquidity": {
+        "avg5_amount": 177489999.99999997,
+        "grade": "C"
+      },
+      "atr_pct": 0.00943451943703217,
+      "gap_pct": 0.0,
+      "pressure_flags": {
+        "near_ma20": false
+      },
+      "q_grade": "Q3",
+      "chip": {
+        "avg_cost": 1581.647111111111,
+        "profit_ratio": 1.0,
+        "band_90_low": 1512.5213333333334,
+        "band_90_high": 1647.8233333333333,
+        "concentration_90": 0.8666666666666667,
+        "dist_to_90_high_pct": -0.004355240347367376,
+        "confidence": "low",
+        "model_used": "B",
+        "sample_n": 30
+      },
+      "indicators": {
+        "ma20": 1607.5,
+        "slope20": 0.01579778830963665,
+        "atr_pct": 0.00943451943703217,
+        "gap_pct": 0.0
+      },
+      "close": 1655.0,
+      "flags": {
+        "must_observe_only": true,
+        "reasons": [
+          "流动性C：仅观察仓",
+          "贴近筹码90%上限：当日禁买"
+        ]
+      }
+    },
+    {
+      "symbol": "000333",
+      "name": null,
+      "source_reason": "默认候选池",
+      "liquidity": {
+        "avg5_amount": 57946000.0,
+        "grade": "C"
+      },
+      "atr_pct": 0.010142190319053649,
+      "gap_pct": 0.0,
+      "pressure_flags": {
+        "near_ma20": false
+      },
+      "q_grade": "Q3",
+      "chip": {
+        "avg_cost": 42.539044444444436,
+        "profit_ratio": 1.0,
+        "band_90_low": 40.55586666666667,
+        "band_90_high": 43.989799999999995,
+        "concentration_90": 0.8666666666666667,
+        "dist_to_90_high_pct": -0.0025051261883437996,
+        "confidence": "low",
+        "model_used": "B",
+        "sample_n": 30
+      },
+      "indicators": {
+        "ma20": 43.15,
+        "slope20": 0.01231671554252196,
+        "atr_pct": 0.010142190319053649,
+        "gap_pct": 0.0
+      },
+      "close": 44.1,
+      "flags": {
+        "must_observe_only": true,
+        "reasons": [
+          "流动性C：仅观察仓",
+          "贴近筹码90%上限：当日禁买"
+        ]
+      }
+    }
+  ],
+  "picks": [
+    {
+      "symbol": "000001",
+      "name": null,
+      "source_reason": "默认候选池",
+      "liquidity": {
+        "avg5_amount": 16599333.333333334,
+        "grade": "C"
+      },
+      "atr_pct": 0.023789644572439036,
+      "gap_pct": 0.0,
+      "pressure_flags": {
+        "near_ma20": false
+      },
+      "q_grade": "Q3",
+      "chip": {
+        "avg_cost": 11.712555555555557,
+        "profit_ratio": 1.0,
+        "band_90_low": 10.275533333333334,
+        "band_90_high": 13.056466666666665,
+        "concentration_90": 0.8666666666666667,
+        "dist_to_90_high_pct": -0.010993275362910893,
+        "confidence": "low",
+        "model_used": "B",
+        "sample_n": 30
+      },
+      "indicators": {
+        "ma20": 12.25,
+        "slope20": 0.04344122657580934,
+        "atr_pct": 0.023789644572439036,
+        "gap_pct": 0.0
+      },
+      "close": 13.2,
+      "flags": {
+        "must_observe_only": true,
+        "reasons": [
+          "流动性C：仅观察仓",
+          "贴近筹码90%上限：当日禁买"
+        ]
+      },
+      "announcement_risk": {
+        "list": [
+          {
+            "title": "关于工银瑞信创业板50交易型开放式指数证券投资基金变更基金经理的公告",
+            "date": 1770393600000,
+            "type": "0101050911||013705||0101050917",
+            "url": "finalpage/2026-02-07/1224971765.PDF",
+            "source": "cninfo"
+          },
+          {
+            "title": "关于全资子公司签署<资产租赁合同>暨关联交易的公告",
+            "date": 1770393600000,
+            "type": "01010503||010112||011719||012327",
+            "url": "finalpage/2026-02-07/1224971285.PDF",
+            "source": "cninfo"
+          },
+          {
+            "title": "关于增加2026年度日常关联交易预计的公告",
+            "date": 1770393600000,
+            "type": "01010503||010112||011719",
+            "url": "finalpage/2026-02-07/1224971284.PDF",
+            "source": "cninfo"
+          },
+          {
+            "title": "关于召开2026年第三次临时股东会的通知",
+            "date": 1770393600000,
+            "type": "01010503||010112||011901",
+            "url": "finalpage/2026-02-07/1224971283.PDF",
+            "source": "cninfo"
+          },
+          {
+            "title": "第八届董事会第四次会议决议公告",
+            "date": 1770393600000,
+            "type": "01010503||010112||01239901",
+            "url": "finalpage/2026-02-07/1224971282.PDF",
+            "source": "cninfo"
+          },
+          {
+            "title": "新疆塔里木农业综合开发股份有限公司关于2026年度为控股子公司提供财务资助的公告",
+            "date": 1770393600000,
+            "type": "01010503||010113||011713",
+            "url": "finalpage/2026-02-07/1224970849.PDF",
+            "source": "cninfo"
+          },
+          {
+            "title": "新疆塔里木农业综合开发股份有限公司关于聘任公司高级管理人员的公告",
+            "date": 1770393600000,
+            "type": "01010503||010113||012303",
+            "url": "finalpage/2026-02-07/1224970845.PDF",
+            "source": "cninfo"
+          },
+          {
+            "title": "新疆塔里木农业综合开发股份有限公司九届四次董事会决议公告",
+            "date": 1770393600000,
+            "type": "01010503||010113||01239901",
+            "url": "finalpage/2026-02-07/1224970841.PDF",
+            "source": "cninfo"
+          },
+          {
+            "title": "新疆塔里木农业综合开发股份有限公司关于2026年度预计为子公司借款提供担保的公告",
+            "date": 1770393600000,
+            "type": "01010503||010113||011709||011711",
+            "url": "finalpage/2026-02-07/1224970838.PDF",
+            "source": "cninfo"
+          },
+          {
+            "title": "新疆塔里木农业综合开发股份有限公司关于预计2026年度日常关联交易的公告",
+            "date": 1770393600000,
+            "type": "01010503||010113||011719",
+            "url": "finalpage/2026-02-07/1224970830.PDF",
+            "source": "cninfo"
+          },
+          {
+            "title": "新疆塔里木农业综合开发股份有限公司关于2026年度投资计划的公告",
+            "date": 1770393600000,
+            "type": "01010501||010113||012399",
+            "url": "finalpage/2026-02-07/1224970819.PDF",
+            "source": "cninfo"
+          },
+          {
+            "title": "新疆塔里木农业综合开发股份有限公司关于召开2026年第一次临时股东会的通知",
+            "date": 1770393600000,
+            "type": "01010503||010113||011901",
+            "url": "finalpage/2026-02-07/1224970817.PDF",
+            "source": "cninfo"
+          },
+          {
+            "title": "平安基金管理有限公司关于调整旗下部分公募基金风险等级相关事项的公告",
+            "date": 1770393600000,
+            "type": "0101050911||0101050917||013799",
+            "url": "finalpage/2026-02-07/1224970612.PDF",
+            "source": "cninfo"
+          },
+          {
+            "title": "国金证券股份有限公司关于北京浩瀚深度信息技术股份有限公司首次公开发行部分限售股上市流通的核查意见",
+            "date": 1770393600000,
+            "type": "010109||010123||0129",
+            "url": "finalpage/2026-02-07/1224970197.PDF",
+            "source": "cninfo"
+          },
+          {
+            "title": "北京浩瀚深度信息技术股份有限公司首次公开发行限售股上市流通的公告",
+            "date": 1770393600000,
+            "type": "01010503||010123||011303",
+            "url": "finalpage/2026-02-07/1224970196.PDF",
+            "source": "cninfo"
+          },
+          {
+            "title": "新疆赛里木现代农业股份有限公司关于开立募集资金临时补流专项账户并签订募集资金专户存储三方监管协议的公告",
+            "date": 1770393600000,
+            "type": "01010503||010113||012315",
+            "url": "finalpage/2026-02-07/1224970163.PDF",
+            "source": "cninfo"
+          },
+          {
+            "title": "上海安硕信息技术股份有限公司2025年度向特定对象发行A股股票募集说明书（修订稿）",
+            "date": 1770373569000,
+            "type": "01010501||010112||010115||010705",
+            "url": "finalpage/2026-02-06/1224970907.PDF",
+            "source": "cninfo"
+          },
+          {
+            "title": "华福证券股份有限公司关于上海安硕信息技术股份有限公司2025年度向特定对象发行A股股票的上市保荐书（修订稿）",
+            "date": 1770373569000,
+            "type": "01010701||010112||010115||012911",
+            "url": "finalpage/2026-02-06/1224970906.PDF",
+            "source": "cninfo"
+          },
+          {
+            "title": "华福证券股份有限公司关于上海安硕信息技术股份有限公司2025年度向特定对象发行A股股票的发行保荐书（修订稿）",
+            "date": 1770373569000,
+            "type": "01010701||010112||010115||012911",
+            "url": "finalpage/2026-02-06/1224970904.PDF",
+            "source": "cninfo"
+          },
+          {
+            "title": "关于上海安硕信息技术股份有限公司申请向特定对象发行股票的审核问询函之回复（修订版）",
+            "date": 1770373569000,
+            "type": "01010501||010112||010115||012399",
+            "url": "finalpage/2026-02-06/1224970903.PDF",
+            "source": "cninfo"
+          }
+        ],
+        "risk_level": "medium",
+        "evidence": [
+          "问询"
+        ],
+        "catalyst": [],
+        "_reason": "cninfo_ok",
+        "source": "cache"
+      },
+      "event_risk": {
+        "event_risk": "low",
+        "evidence": [
+          "未来14日未检测到关键事件数据源，按低风险处理（降级口径）"
+        ]
+      },
+      "stats": {
+        "k": 0,
+        "win_rate_5": 0.0,
+        "avg_return_5": 0.0,
+        "mdd10_avg": 0.0,
+        "sample_warning": true
+      },
+      "strategies": {
+        "S1": {
+          "cv": {
+            "k": 0,
+            "win_rate_5d_mean": 0.0,
+            "win_rate_5d_std": 0.0,
+            "mean_return_5d_mean": 0.0,
+            "mean_return_5d_std": 0.0,
+            "drawdown_proxy_mean": 0.0
+          },
+          "event_study": {
+            "k": 0,
+            "win_rate_2": 0.0,
+            "win_rate_5": 0.0,
+            "win_rate_10": 0.0,
+            "mean_return_2": 0.0,
+            "mean_return_5": 0.0,
+            "mean_return_10": 0.0,
+            "mdd10_proxy": 0.0,
+            "sample_warning": true
+          }
+        }
+      },
+      "_env": {
+        "grade": "B",
+        "reasons": [
+          "指数20日斜率均值=0.015"
+        ],
+        "recovery_conditions": [],
+        "raw": {
+          "indices": {
+            "000001": {
+              "len": 30,
+              "insufficient": true
+            },
+            "399001": {
+              "len": 30,
+              "insufficient": true
+            },
+            "399006": {
+              "len": 30,
+              "insufficient": true
+            }
+          },
+          "market_stats": {
+            "total_amount": null,
+            "limit_up": null,
+            "limit_down": null,
+            "seal_rate": null,
+            "ladder_max": null,
+            "ladder_breaks": null,
+            "_reason": null,
+            "source": "cache"
+          }
+        }
+      },
+      "_theme_strength": 0.7,
+      "score": 59.12044024121777,
+      "theme": "主题-000001",
+      "trade_plan": {
+        "panel": {
+          "avg5_amount": 16599333.333333334,
+          "atr_pct": 0.023789644572439036,
+          "gap_pct": 0.0,
+          "slope20": 0.04344122657580934
+        },
+        "q": {
+          "grade": "Q3"
+        },
+        "chip_and_bands": {
+          "S1": 10.275533333333334,
+          "S2": 11.712555555555557,
+          "R1": 13.056466666666665,
+          "R2": 13.317595999999998,
+          "confidence": "low",
+          "model": "B"
+        },
+        "bias_stats": {
+          "bias6": null,
+          "bias12": null,
+          "bias6_cross_up": false
+        },
+        "announcements": {
+          "risk_level": "medium",
+          "evidence": [
+            "问询"
+          ]
+        },
+        "events": {
+          "event_risk": "low",
+          "evidence": [
+            "未来14日未检测到关键事件数据源，按低风险处理（降级口径）"
+          ]
+        },
+        "window_A": {
+          "structure_conditions": [
+            "关键带回收且不再创新低",
+            "量能衰减或被承接消化",
+            "分时重心抬高/横向消化"
+          ],
+          "confirm_actions": [
+            "仅记录承接≥2项；A窗不追价"
+          ],
+          "if_not_met": "放弃/观望"
+        },
+        "window_B": {
+          "structure_conditions": [
+            "收盘前站稳关键结构",
+            "回落不破支撑带上沿",
+            "尾盘不再大幅二次下砸"
+          ],
+          "confirm_actions": [
+            "满足≥2项可评估隔夜；仍不追价"
+          ],
+          "if_not_met": "放弃/观望"
+        },
+        "risk": {
+          "position_shares": 100,
+          "risk_budget_pct": 0.7,
+          "stop_loss": "收盘有效跌破支撑带",
+          "time_stop": "第3日不强必走",
+          "add_rule": "只允许结构性加仓，禁止摊平亏损"
+        },
+        "invalidation": [
+          "放量不涨",
+          "频繁冲高回落/长上影",
+          "贴近压力带/20日压力/筹码90%上限",
+          "命中一票否决（Gap>+2%、公告高风险、ATR%>8%等）"
+        ]
+      },
+      "champion": {
+        "strategy": "S1",
+        "cv": {
+          "k": 0,
+          "win_rate_5d_mean": 0.0,
+          "win_rate_5d_std": 0.0,
+          "mean_return_5d_mean": 0.0,
+          "mean_return_5d_std": 0.0,
+          "drawdown_proxy_mean": 0.0
+        },
+        "score": 0.0
+      }
+    },
+    {
+      "symbol": "600519",
+      "name": null,
+      "source_reason": "默认候选池",
+      "liquidity": {
+        "avg5_amount": 177489999.99999997,
+        "grade": "C"
+      },
+      "atr_pct": 0.00943451943703217,
+      "gap_pct": 0.0,
+      "pressure_flags": {
+        "near_ma20": false
+      },
+      "q_grade": "Q3",
+      "chip": {
+        "avg_cost": 1581.647111111111,
+        "profit_ratio": 1.0,
+        "band_90_low": 1512.5213333333334,
+        "band_90_high": 1647.8233333333333,
+        "concentration_90": 0.8666666666666667,
+        "dist_to_90_high_pct": -0.004355240347367376,
+        "confidence": "low",
+        "model_used": "B",
+        "sample_n": 30
+      },
+      "indicators": {
+        "ma20": 1607.5,
+        "slope20": 0.01579778830963665,
+        "atr_pct": 0.00943451943703217,
+        "gap_pct": 0.0
+      },
+      "close": 1655.0,
+      "flags": {
+        "must_observe_only": true,
+        "reasons": [
+          "流动性C：仅观察仓",
+          "贴近筹码90%上限：当日禁买"
+        ]
+      },
+      "announcement_risk": {
+        "list": [
+          {
+            "title": "贵州茅台关于回购股份实施进展的公告",
+            "date": 1770134400000,
+            "type": "01010503||010113||011513",
+            "url": "finalpage/2026-02-04/1224965185.PDF",
+            "source": "cninfo"
+          },
+          {
+            "title": "贵州茅台第四届董事会2026年度第一次会议决议公告",
+            "date": 1768320000000,
+            "type": "01010503||010113||01239901",
+            "url": "finalpage/2026-01-14/1224931927.PDF",
+            "source": "cninfo"
+          }
+        ],
+        "risk_level": "low",
+        "evidence": [],
+        "catalyst": [],
+        "_reason": "cninfo_ok",
+        "source": "cache"
+      },
+      "event_risk": {
+        "event_risk": "low",
+        "evidence": [
+          "未来14日未检测到关键事件数据源，按低风险处理（降级口径）"
+        ]
+      },
+      "stats": {
+        "k": 0,
+        "win_rate_5": 0.0,
+        "avg_return_5": 0.0,
+        "mdd10_avg": 0.0,
+        "sample_warning": true
+      },
+      "strategies": {
+        "S1": {
+          "cv": {
+            "k": 0,
+            "win_rate_5d_mean": 0.0,
+            "win_rate_5d_std": 0.0,
+            "mean_return_5d_mean": 0.0,
+            "mean_return_5d_std": 0.0,
+            "drawdown_proxy_mean": 0.0
+          },
+          "event_study": {
+            "k": 0,
+            "win_rate_2": 0.0,
+            "win_rate_5": 0.0,
+            "win_rate_10": 0.0,
+            "mean_return_2": 0.0,
+            "mean_return_5": 0.0,
+            "mean_return_10": 0.0,
+            "mdd10_proxy": 0.0,
+            "sample_warning": true
+          }
+        }
+      },
+      "_env": {
+        "grade": "B",
+        "reasons": [
+          "指数20日斜率均值=0.015"
+        ],
+        "recovery_conditions": [],
+        "raw": {
+          "indices": {
+            "000001": {
+              "len": 30,
+              "insufficient": true
+            },
+            "399001": {
+              "len": 30,
+              "insufficient": true
+            },
+            "399006": {
+              "len": 30,
+              "insufficient": true
+            }
+          },
+          "market_stats": {
+            "total_amount": null,
+            "limit_up": null,
+            "limit_down": null,
+            "seal_rate": null,
+            "ladder_max": null,
+            "ladder_breaks": null,
+            "_reason": null,
+            "source": "cache"
+          }
+        }
+      },
+      "_theme_strength": 0.7,
+      "score": 59.08174180238006,
+      "theme": "主题-000001",
+      "trade_plan": {
+        "panel": {
+          "avg5_amount": 177489999.99999997,
+          "atr_pct": 0.00943451943703217,
+          "gap_pct": 0.0,
+          "slope20": 0.01579778830963665
+        },
+        "q": {
+          "grade": "Q3"
+        },
+        "chip_and_bands": {
+          "S1": 1512.5213333333334,
+          "S2": 1581.647111111111,
+          "R1": 1647.8233333333333,
+          "R2": 1680.7798,
+          "confidence": "low",
+          "model": "B"
+        },
+        "bias_stats": {
+          "bias6": null,
+          "bias12": null,
+          "bias6_cross_up": false
+        },
+        "announcements": {
+          "risk_level": "low",
+          "evidence": []
+        },
+        "events": {
+          "event_risk": "low",
+          "evidence": [
+            "未来14日未检测到关键事件数据源，按低风险处理（降级口径）"
+          ]
+        },
+        "window_A": {
+          "structure_conditions": [
+            "关键带回收且不再创新低",
+            "量能衰减或被承接消化",
+            "分时重心抬高/横向消化"
+          ],
+          "confirm_actions": [
+            "仅记录承接≥2项；A窗不追价"
+          ],
+          "if_not_met": "放弃/观望"
+        },
+        "window_B": {
+          "structure_conditions": [
+            "收盘前站稳关键结构",
+            "回落不破支撑带上沿",
+            "尾盘不再大幅二次下砸"
+          ],
+          "confirm_actions": [
+            "满足≥2项可评估隔夜；仍不追价"
+          ],
+          "if_not_met": "放弃/观望"
+        },
+        "risk": {
+          "position_shares": 100,
+          "risk_budget_pct": 0.7,
+          "stop_loss": "收盘有效跌破支撑带",
+          "time_stop": "第3日不强必走",
+          "add_rule": "只允许结构性加仓，禁止摊平亏损"
+        },
+        "invalidation": [
+          "放量不涨",
+          "频繁冲高回落/长上影",
+          "贴近压力带/20日压力/筹码90%上限",
+          "命中一票否决（Gap>+2%、公告高风险、ATR%>8%等）"
+        ]
+      },
+      "champion": {
+        "strategy": "S1",
+        "cv": {
+          "k": 0,
+          "win_rate_5d_mean": 0.0,
+          "win_rate_5d_std": 0.0,
+          "mean_return_5d_mean": 0.0,
+          "mean_return_5d_std": 0.0,
+          "drawdown_proxy_mean": 0.0
+        },
+        "score": 0.0
+      }
+    },
+    {
+      "symbol": "000333",
+      "name": null,
+      "source_reason": "默认候选池",
+      "liquidity": {
+        "avg5_amount": 57946000.0,
+        "grade": "C"
+      },
+      "atr_pct": 0.010142190319053649,
+      "gap_pct": 0.0,
+      "pressure_flags": {
+        "near_ma20": false
+      },
+      "q_grade": "Q3",
+      "chip": {
+        "avg_cost": 42.539044444444436,
+        "profit_ratio": 1.0,
+        "band_90_low": 40.55586666666667,
+        "band_90_high": 43.989799999999995,
+        "concentration_90": 0.8666666666666667,
+        "dist_to_90_high_pct": -0.0025051261883437996,
+        "confidence": "low",
+        "model_used": "B",
+        "sample_n": 30
+      },
+      "indicators": {
+        "ma20": 43.15,
+        "slope20": 0.01231671554252196,
+        "atr_pct": 0.010142190319053649,
+        "gap_pct": 0.0
+      },
+      "close": 44.1,
+      "flags": {
+        "must_observe_only": true,
+        "reasons": [
+          "流动性C：仅观察仓",
+          "贴近筹码90%上限：当日禁买"
+        ]
+      },
+      "announcement_risk": {
+        "list": [
+          {
+            "title": "景顺长城基金管理有限公司关于景顺长城纳斯达克科技市值加权交易型开放式指数证券投资基金（QDII）二级市场交易价格溢价风险提示及停牌公告",
+            "date": 1770307200000,
+            "type": "0101050911||013799||0101050917",
+            "url": "finalpage/2026-02-06/1224967936.PDF",
+            "source": "cninfo"
+          },
+          {
+            "title": "景顺长城基金管理有限公司关于景顺长城纳斯达克科技市值加权交易型开放式指数证券投资基金（QDII）二级市场交易价格溢价风险提示及停牌公告",
+            "date": 1770220800000,
+            "type": "0101050911||013799||0101050917",
+            "url": "finalpage/2026-02-05/1224966168.PDF",
+            "source": "cninfo"
+          },
+          {
+            "title": "截至2026年1月31日止月份之股份发行人的证券变动月报表",
+            "date": 1770209907000,
+            "type": "01010517||0101051701",
+            "url": "finalpage/2026-02-04/1224967641.PDF",
+            "source": "cninfo"
+          },
+          {
+            "title": "景顺长城基金管理有限公司关于景顺长城纳斯达克科技市值加权交易型开放式指数证券投资基金（QDII）二级市场交易价格溢价风险提示及停牌公告",
+            "date": 1770134400000,
+            "type": "0101050911||013799||0101050917",
+            "url": "finalpage/2026-02-04/1224964228.PDF",
+            "source": "cninfo"
+          },
+          {
+            "title": "关于以集中竞价交易方式回购A股股份进展情况的公告",
+            "date": 1770048000000,
+            "type": "01010503||010112||011513",
+            "url": "finalpage/2026-02-03/1224961792.PDF",
+            "source": "cninfo"
+          },
+          {
+            "title": "景顺长城基金管理有限公司关于景顺长城纳斯达克科技市值加权交易型开放式指数证券投资基金（QDII）二级市场交易价格溢价风险提示及停牌公告",
+            "date": 1770048000000,
+            "type": "0101050911||013799||0101050917",
+            "url": "finalpage/2026-02-03/1224961394.PDF",
+            "source": "cninfo"
+          },
+          {
+            "title": "海外监管公告 - 美的集团股份有限公司关於以集中竞价交易方式回购A股股份进展情况的公告",
+            "date": 1770026069000,
+            "type": "01010517||0101051701",
+            "url": "finalpage/2026-02-02/1224962701.PDF",
+            "source": "cninfo"
+          },
+          {
+            "title": "景顺长城基金管理有限公司关于景顺长城纳斯达克科技市值加权交易型开放式指数证券投资基金（QDII）二级市场交易价格溢价风险提示及停牌公告",
+            "date": 1769961600000,
+            "type": "0101050911||013799||0101050917",
+            "url": "finalpage/2026-02-02/1224958218.PDF",
+            "source": "cninfo"
+          },
+          {
+            "title": "2026年1月30日投资者关系活动记录表",
+            "date": 1769782732000,
+            "type": "012001",
+            "url": "finalpage/2026-01-30/1224960763.PDF",
+            "source": "cninfo"
+          },
+          {
+            "title": "景顺长城基金管理有限公司关于聘任基金经理助理的公告",
+            "date": 1769702400000,
+            "type": "0101050911||013705||0101050917",
+            "url": "finalpage/2026-01-30/1224956341.PDF",
+            "source": "cninfo"
+          },
+          {
+            "title": "景顺长城基金管理有限公司关于景顺长城纳斯达克科技市值加权交易型开放式指数证券投资基金（QDII）二级市场交易价格溢价风险提示及停牌公告",
+            "date": 1769702400000,
+            "type": "0101050911||013799||0101050917",
+            "url": "finalpage/2026-01-30/1224955646.PDF",
+            "source": "cninfo"
+          },
+          {
+            "title": "翌日披露报表",
+            "date": 1769679130000,
+            "type": "01010517||0101051701",
+            "url": "finalpage/2026-01-29/1224956289.PDF",
+            "source": "cninfo"
+          },
+          {
+            "title": "景顺长城基金管理有限公司关于景顺长城纳斯达克科技市值加权交易型开放式指数证券投资基金（QDII）二级市场交易价格溢价风险提示及停牌公告",
+            "date": 1769616000000,
+            "type": "0101050911||013799||0101050917",
+            "url": "finalpage/2026-01-29/1224953646.PDF",
+            "source": "cninfo"
+          },
+          {
+            "title": "翌日披露报表",
+            "date": 1769596452000,
+            "type": "01010517||0101051701",
+            "url": "finalpage/2026-01-28/1224954763.PDF",
+            "source": "cninfo"
+          },
+          {
+            "title": "000030富奥股份投资者关系管理信息20260127",
+            "date": 1769560209000,
+            "type": "012001",
+            "url": "finalpage/2026-01-28/1224953467.PDF",
+            "source": "cninfo"
+          },
+          {
+            "title": "景顺长城基金管理有限公司关于景顺长城纳斯达克科技市值加权交易型开放式指数证券投资基金（QDII）二级市场交易价格溢价风险提示及停牌公告",
+            "date": 1769529600000,
+            "type": "0101050911||013799||0101050917",
+            "url": "finalpage/2026-01-28/1224951995.PDF",
+            "source": "cninfo"
+          },
+          {
+            "title": "翌日披露报表",
+            "date": 1769504769000,
+            "type": "01010517||0101051701",
+            "url": "finalpage/2026-01-27/1224952209.PDF",
+            "source": "cninfo"
+          },
+          {
+            "title": "景顺长城基金管理有限公司关于景顺长城纳斯达克科技市值加权交易型开放式指数证券投资基金（QDII）二级市场交易价格溢价风险提示及停牌公告",
+            "date": 1769443200000,
+            "type": "0101050911||013799||0101050917",
+            "url": "finalpage/2026-01-27/1224949735.PDF",
+            "source": "cninfo"
+          },
+          {
+            "title": "翌日披露报表",
+            "date": 1769422330000,
+            "type": "01010517||0101051701",
+            "url": "finalpage/2026-01-26/1224950625.PDF",
+            "source": "cninfo"
+          },
+          {
+            "title": "景顺长城基金管理有限公司关于景顺长城纳斯达克科技市值加权交易型开放式指数证券投资基金（QDII）二级市场交易价格溢价风险提示及停牌公告",
+            "date": 1769356800000,
+            "type": "0101050911||013799||0101050917",
+            "url": "finalpage/2026-01-26/1224947195.PDF",
+            "source": "cninfo"
+          }
+        ],
+        "risk_level": "medium",
+        "evidence": [
+          "风险提示"
+        ],
+        "catalyst": [],
+        "_reason": "cninfo_ok",
+        "source": "cache"
+      },
+      "event_risk": {
+        "event_risk": "low",
+        "evidence": [
+          "未来14日未检测到关键事件数据源，按低风险处理（降级口径）"
+        ]
+      },
+      "stats": {
+        "k": 0,
+        "win_rate_5": 0.0,
+        "avg_return_5": 0.0,
+        "mdd10_avg": 0.0,
+        "sample_warning": true
+      },
+      "strategies": {
+        "S1": {
+          "cv": {
+            "k": 0,
+            "win_rate_5d_mean": 0.0,
+            "win_rate_5d_std": 0.0,
+            "mean_return_5d_mean": 0.0,
+            "mean_return_5d_std": 0.0,
+            "drawdown_proxy_mean": 0.0
+          },
+          "event_study": {
+            "k": 0,
+            "win_rate_2": 0.0,
+            "win_rate_5": 0.0,
+            "win_rate_10": 0.0,
+            "mean_return_2": 0.0,
+            "mean_return_5": 0.0,
+            "mean_return_10": 0.0,
+            "mdd10_proxy": 0.0,
+            "sample_warning": true
+          }
+        }
+      },
+      "_env": {
+        "grade": "B",
+        "reasons": [
+          "指数20日斜率均值=0.015"
+        ],
+        "recovery_conditions": [],
+        "raw": {
+          "indices": {
+            "000001": {
+              "len": 30,
+              "insufficient": true
+            },
+            "399001": {
+              "len": 30,
+              "insufficient": true
+            },
+            "399006": {
+              "len": 30,
+              "insufficient": true
+            }
+          },
+          "market_stats": {
+            "total_amount": null,
+            "limit_up": null,
+            "limit_down": null,
+            "seal_rate": null,
+            "ladder_max": null,
+            "ladder_breaks": null,
+            "_reason": null,
+            "source": "cache"
+          }
+        }
+      },
+      "_theme_strength": 0.7,
+      "score": 58.93621986426976,
+      "theme": "主题-000001",
+      "trade_plan": {
+        "panel": {
+          "avg5_amount": 57946000.0,
+          "atr_pct": 0.010142190319053649,
+          "gap_pct": 0.0,
+          "slope20": 0.01231671554252196
+        },
+        "q": {
+          "grade": "Q3"
+        },
+        "chip_and_bands": {
+          "S1": 40.55586666666667,
+          "S2": 42.539044444444436,
+          "R1": 43.989799999999995,
+          "R2": 44.869595999999994,
+          "confidence": "low",
+          "model": "B"
+        },
+        "bias_stats": {
+          "bias6": null,
+          "bias12": null,
+          "bias6_cross_up": false
+        },
+        "announcements": {
+          "risk_level": "medium",
+          "evidence": [
+            "风险提示"
+          ]
+        },
+        "events": {
+          "event_risk": "low",
+          "evidence": [
+            "未来14日未检测到关键事件数据源，按低风险处理（降级口径）"
+          ]
+        },
+        "window_A": {
+          "structure_conditions": [
+            "关键带回收且不再创新低",
+            "量能衰减或被承接消化",
+            "分时重心抬高/横向消化"
+          ],
+          "confirm_actions": [
+            "仅记录承接≥2项；A窗不追价"
+          ],
+          "if_not_met": "放弃/观望"
+        },
+        "window_B": {
+          "structure_conditions": [
+            "收盘前站稳关键结构",
+            "回落不破支撑带上沿",
+            "尾盘不再大幅二次下砸"
+          ],
+          "confirm_actions": [
+            "满足≥2项可评估隔夜；仍不追价"
+          ],
+          "if_not_met": "放弃/观望"
+        },
+        "risk": {
+          "position_shares": 100,
+          "risk_budget_pct": 0.7,
+          "stop_loss": "收盘有效跌破支撑带",
+          "time_stop": "第3日不强必走",
+          "add_rule": "只允许结构性加仓，禁止摊平亏损"
+        },
+        "invalidation": [
+          "放量不涨",
+          "频繁冲高回落/长上影",
+          "贴近压力带/20日压力/筹码90%上限",
+          "命中一票否决（Gap>+2%、公告高风险、ATR%>8%等）"
+        ]
+      },
+      "champion": {
+        "strategy": "S1",
+        "cv": {
+          "k": 0,
+          "win_rate_5d_mean": 0.0,
+          "win_rate_5d_std": 0.0,
+          "mean_return_5d_mean": 0.0,
+          "mean_return_5d_std": 0.0,
+          "drawdown_proxy_mean": 0.0
+        },
+        "score": 0.0
+      }
+    }
+  ],
+  "execution_checklist": [
+    "1) 环境分层：按指数与成交额口径判断",
+    "2) 主线：只做回踩确认，不追价",
+    "3) 噪声等级Q：Q2以上A窗禁买，B窗收盘确认",
+    "4) 窗口A动作：结构不满足→放弃",
+    "5) 窗口B动作：收盘确认决定是否隔夜；第3日硬止损"
+  ],
+  "disclaimer": "本内容仅供研究与教育，不构成任何投资建议或收益承诺；市场有风险，决策需独立承担。",
+  "debug": {
+    "timing": {},
+    "sources": [
+      {
+        "symbol": "000001",
+        "data_source": "fixtures/provider/synthetic"
+      },
+      {
+        "symbol": "000002",
+        "data_source": "fixtures/provider/synthetic"
+      },
+      {
+        "symbol": "600519",
+        "data_source": "fixtures/provider/synthetic"
+      },
+      {
+        "symbol": "000333",
+        "data_source": "fixtures/provider/synthetic"
+      }
+    ],
+    "failures": [],
+    "cv": {
+      "000001": {
+        "k": 0,
+        "win_rate_5d_mean": 0.0,
+        "win_rate_5d_std": 0.0,
+        "mean_return_5d_mean": 0.0,
+        "mean_return_5d_std": 0.0,
+        "drawdown_proxy_mean": 0.0
+      },
+      "600519": {
+        "k": 0,
+        "win_rate_5d_mean": 0.0,
+        "win_rate_5d_std": 0.0,
+        "mean_return_5d_mean": 0.0,
+        "mean_return_5d_std": 0.0,
+        "drawdown_proxy_mean": 0.0
+      },
+      "000333": {
+        "k": 0,
+        "win_rate_5d_mean": 0.0,
+        "win_rate_5d_std": 0.0,
+        "mean_return_5d_mean": 0.0,
+        "mean_return_5d_std": 0.0,
+        "drawdown_proxy_mean": 0.0
+      }
+    }
+  }
+}

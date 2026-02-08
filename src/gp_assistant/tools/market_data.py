@@ -1,3 +1,4 @@
+# 简介：工具 - 行情数据标准化/读取辅助，供 CLI 与引擎复用。
 from __future__ import annotations
 
 from typing import Any, Tuple, Dict, Optional

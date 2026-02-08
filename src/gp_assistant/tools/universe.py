@@ -1,3 +1,4 @@
+# 简介：工具 - 标的池管理（universe），用于维护/导入/导出候选标的集合。
 from __future__ import annotations
 
 from typing import Any, List, Dict, Optional

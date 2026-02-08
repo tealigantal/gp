@@ -1,3 +1,4 @@
+# 简介：工具 - 排名/排序辅助（对候选或指标进行排序展示）。
 from __future__ import annotations
 
 from typing import Any, List, Dict, Optional

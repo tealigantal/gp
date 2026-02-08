@@ -2,14 +2,14 @@ from __future__ import annotations
 
 from typing import Any
 
-from ..core.types import ToolResult
-from ..core.logging import logger
-from ..providers.factory import provider_health
-from .state import State
-from ..tools.registry import Tool, ToolRegistry
-from ..tools import market_data, universe, signals, rank, backtest, explain
-from ..tools import strategy_score, market_info, recommend
-from .router_factory import route_text
+from gp_assistant.core.types import ToolResult
+from gp_assistant.core.logging import logger
+from gp_assistant.providers.factory import provider_health
+from gp_assistant.agent.state import State
+from gp_assistant.tools.registry import Tool, ToolRegistry
+from gp_assistant.tools import market_data, universe, signals, rank, backtest, explain
+from gp_assistant.tools import strategy_score, market_info, recommend
+from tools.legacy.router_factory import route_text
 
 
 def build_registry() -> ToolRegistry:
@@ -99,7 +99,6 @@ class Agent:
             return ToolResult(ok=True, message=self.render_help())
 
         if tool_name == "pick":
-            # minimal pick pipeline: universe -> data (per symbol) -> rank
             uni = self.registry.get("universe").run({}, self.state)
             if not uni.ok:
                 return uni
@@ -109,7 +108,6 @@ class Agent:
             return ToolResult(ok=True, message=rres.message, data=rres.data)
 
         if tool_name == "recommend":
-            # pipeline: universe -> strategy_score(topk) -> market_info(date) -> recommend
             topk = int(args.get("topk", 3) or 3)
             offset = int(args.get("offset", 0) or 0)
             date = args.get("date")
@@ -126,7 +124,6 @@ class Agent:
             cand = score_res.data.get("candidates", []) if score_res.data else []
             ctx = mi_res.data or {}
             rec_res = self.registry.get("recommend").run({"candidates": cand, "topk": topk, "market_context": ctx}, self.state)
-            # persist minimal recommend context for multi-turn continuity
             try:
                 self.state.context["last_recommend"] = {
                     "topk": topk,
@@ -140,10 +137,8 @@ class Agent:
 
         tool = self.registry.get(tool_name)
         res = tool.run(args, self.state)
-        # record minimal history for multi-turn context
         try:
             self.state.history.append({"tool": tool_name, "args": args, "ok": res.ok})
-            # keep last 10
             if len(self.state.history) > 10:
                 self.state.history = self.state.history[-10:]
         except Exception:
@@ -158,3 +153,4 @@ class Agent:
             f"数据源: {hc}",
         ]
         return "\n".join(lines)
+
