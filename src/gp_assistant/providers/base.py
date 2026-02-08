@@ -33,6 +33,11 @@ class MarketDataProvider(ABC):
 
         return _pd.DataFrame(columns=["ts_code", "name"])  # type: ignore[name-defined]
 
+    # Optional: real-time/spot snapshot for the whole market
+    def get_spot_snapshot(self):  # noqa: ANN001
+        import pandas as _pd
+        raise DataProviderError("spot snapshot not supported")
+
     @abstractmethod
     def healthcheck(self) -> Dict[str, Any]:
         """Return health info: {name, ok, reason}.

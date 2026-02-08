@@ -32,6 +32,20 @@ class AppConfig:
     llm_base_url: Optional[str] = os.getenv("LLM_BASE_URL")
     llm_api_key: Optional[str] = os.getenv("LLM_API_KEY")
     chat_model: str = os.getenv("CHAT_MODEL", "deepseek-chat")
+    # Strict real data only (no synthetic/degrade). Default ON per user requirement
+    strict_real_data: bool = os.getenv("STRICT_REAL_DATA", "1").lower() in {"1", "true", "yes"}
+    # Universe/dynamic pool knobs
+    min_avg_amount: float = float(os.getenv("GP_MIN_AVG_AMOUNT", "5e8"))
+    new_stock_days: int = int(os.getenv("GP_NEW_STOCK_DAYS", "60"))
+    price_min: float = float(os.getenv("GP_PRICE_MIN", "2"))
+    price_max: float = float(os.getenv("GP_PRICE_MAX", "500"))
+    dynamic_pool_size: int = int(os.getenv("GP_DYNAMIC_POOL_SIZE", "200"))
+    # Mainline restriction
+    restrict_to_mainline: bool = os.getenv("GP_RESTRICT_MAINLINE", "1").lower() in {"1", "true", "yes"}
+    mainline_top_n: int = int(os.getenv("GP_MAINLINE_TOP_N", "2"))
+    mainline_mode: str = os.getenv("GP_MAINLINE_MODE", "auto")  # industry|concept|auto
+    # Diversification
+    max_per_industry: int = int(os.getenv("GP_MAX_PER_INDUSTRY", "2"))
 
 
 def load_config() -> AppConfig:

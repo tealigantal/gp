@@ -23,6 +23,7 @@ from ..strategy.event_study import event_study_from_mask
 from ..strategy.indicators import compute_indicators
 from ..strategy.scoring import score_item
 from ..strategy.champion import choose_champion
+from ..core.config import load_config
 
 
 def _make_trade_plan(item: Dict[str, Any], env_grade: str, risk_profile: str) -> Dict[str, Any]:
@@ -126,9 +127,16 @@ def run(date: Optional[str] = None, topk: int = 3, universe: str = "auto", symbo
     if universe == "symbols" and symbols:
         base = symbols
     else:
-        base = cfg.default_universe
+        # 严格模式下基于实时快照构建动态候选池，由 candidate_gen 内部实现
+        base = None
 
     pool, veto = generate_candidates(base, env.get("grade", "C"), topk=topk)
+
+    # Prepare benchmark for RS
+    try:
+        idx_df, _ = hub.index_daily("000300")  # 沪深300
+    except Exception:
+        idx_df = None
 
     # Attach announcements/events/statistics and scores
     picks: List[Dict[str, Any]] = []
@@ -152,10 +160,27 @@ def run(date: Optional[str] = None, topk: int = 3, universe: str = "auto", symbo
         estats = event_study_from_mask(df_feat, mask)
         cv = purged_walk_forward(df_feat, k_folds=5, gap=5)
 
+        # Relative strength vs benchmark (5/20 trading days)
+        rs = {"rs5": None, "rs20": None}
+        try:
+            import pandas as pd
+            if idx_df is not None and len(df_feat) >= 25 and len(idx_df) >= 25:
+                # align by date
+                dfm = df_feat[["date", "close"]].merge(idx_df[["date", "close"]], on="date", suffixes=("_s", "_i"))
+                if len(dfm) >= 25:
+                    r5_s = float(dfm["close_s"].iloc[-1] / dfm["close_s"].iloc[-6] - 1.0)
+                    r5_i = float(dfm["close_i"].iloc[-1] / dfm["close_i"].iloc[-6] - 1.0)
+                    r20_s = float(dfm["close_s"].iloc[-1] / dfm["close_s"].iloc[-21] - 1.0)
+                    r20_i = float(dfm["close_i"].iloc[-1] / dfm["close_i"].iloc[-21] - 1.0)
+                    rs = {"rs5": r5_s - r5_i, "rs20": r20_s - r20_i}
+        except Exception:
+            pass
+
         item = {
             **cand,
             "announcement_risk": ann,
             "event_risk": ev,
+            "rel_strength": rs,
             "stats": {
                 "k": estats.k,
                 "win_rate_5": estats.win_rate_5,
@@ -178,9 +203,21 @@ def run(date: Optional[str] = None, topk: int = 3, universe: str = "auto", symbo
         item["trade_plan"] = tp
         picks.append(item)
 
-    # rank and cap topk (do not override observe_only)
+    # rank then apply diversification cap per industry/theme
     picks.sort(key=lambda x: x.get("score", 0.0), reverse=True)
-    picks = picks[:topk]
+    max_per_ind = int(getattr(cfg, "max_per_industry", 2)) if hasattr(cfg, "max_per_industry") else 2
+    chosen: list[Dict[str, Any]] = []
+    used: dict[str, int] = {}
+    for it in picks:
+        key = str(it.get("industry") or it.get("theme") or "NA")
+        cnt = used.get(key, 0)
+        if cnt >= max_per_ind:
+            continue
+        chosen.append(it)
+        used[key] = cnt + 1
+        if len(chosen) >= topk:
+            break
+    picks = chosen
 
     # champion per pick
     champs = choose_champion(picks)

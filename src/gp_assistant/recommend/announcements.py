@@ -1,5 +1,4 @@
-# 简介：公告风险检索（占位/轻实现）。提供公告风险等级与简短证据，
-# 用于交易计划中的风险提示。
+# 简介：公告风险检索（严格模式）。尝试 CNINFO；失败不降级，不造数据，返回 risk_level=None 并附 error。
 from __future__ import annotations
 
 import json
@@ -9,6 +8,7 @@ from typing import Any, Dict, List, Optional
 import requests
 
 from ..core.paths import store_dir
+from ..core.config import load_config
 
 
 def _cache_path(symbol: str) -> str:
@@ -31,14 +31,15 @@ def _save_cache(symbol: str, data: Dict[str, Any]) -> None:
 
 
 def fetch_announcements(symbol: str) -> Dict[str, Any]:
-    # Try cache first
+    cfg = load_config()
+    # Try cache first（严格模式下仍允许已存在的真实缓存命中）
     cached = _load_cache(symbol)
     if cached:
         return {**cached, "source": "cache"}
-    # Try CNINFO API (may fail due to network)
+    # Try CNINFO API（可能失败）
     end = datetime.now().strftime("%Y-%m-%d")
     start = (datetime.now() - timedelta(days=30)).strftime("%Y-%m-%d")
-    result = {"list": [], "risk_level": "medium", "evidence": [], "catalyst": [], "_reason": None}
+    result = {"list": [], "risk_level": None, "evidence": [], "catalyst": [], "_reason": None}
     try:
         # CNINFO requires complex params; use a placeholder endpoint that's public. If fails, degrade.
         # For compliance we attempt and record failure without crashing.
@@ -65,12 +66,14 @@ def fetch_announcements(symbol: str) -> Dict[str, Any]:
         if any(hits):
             result["risk_level"] = "high" if len(hits) >= 2 else "medium"
             result["evidence"] = hits[:2]
-        else:
-            result["risk_level"] = "low"
         result["_reason"] = "cninfo_ok"
     except Exception as e:  # noqa: BLE001
-        result["_reason"] = f"cninfo_failed:{e}"
-        # Degrade risk upwards, no crash
-        result["risk_level"] = "medium"
+        if cfg.strict_real_data:
+            # 不造数据：只标注错误信息，保持 risk_level=None
+            result["_reason"] = f"cninfo_failed:{e}"
+            result["error"] = str(e)
+        else:
+            result["_reason"] = f"cninfo_failed:{e}"
+            result["risk_level"] = "medium"
     _save_cache(symbol, result)
     return result

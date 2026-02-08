@@ -16,6 +16,7 @@ def score_item(item: Dict[str, Any]) -> float:
     - chip 0–15
     - statistics 0–10
     - announcements/events 0–5
+    - relative strength 0–10
     """
     env = item.get("_env", {})
     env_grade = env.get("grade", "C")
@@ -59,5 +60,12 @@ def score_item(item: Dict[str, Any]) -> float:
     if ev == "high":
         s_risk -= 2.5
 
-    total = s_env + s_theme + s_trend + s_vol + s_chip + s_stat + s_risk
+    # Relative strength contribution
+    rs = item.get("rel_strength", {})
+    rs5 = float(rs.get("rs5", 0.0) or 0.0)
+    rs20 = float(rs.get("rs20", 0.0) or 0.0)
+    # Scale: 100*(0.6*rs5+0.4*rs20), clamp 0..10
+    s_rs = max(0.0, min(10.0, 100.0 * (0.6 * max(0.0, rs5) + 0.4 * max(0.0, rs20))))
+
+    total = s_env + s_theme + s_trend + s_vol + s_chip + s_stat + s_risk + s_rs
     return float(max(0.0, min(100.0, total)))

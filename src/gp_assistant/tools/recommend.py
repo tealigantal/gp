@@ -1,4 +1,4 @@
-# 简介：工具 - 直接调用荐股引擎并输出结构化结果，便于 CLI 或批处理使用。
+# 简介：工具 - 调用“荐股主引擎”并输出结构化结果，支持确定性说明（可选LLM增强）。
 from __future__ import annotations
 
 from typing import Any, List, Dict
@@ -8,6 +8,11 @@ from ..core.types import ToolResult
 from ..core.paths import configs_dir
 from ..core.logging import logger
 from ..llm_client import SimpleLLMClient
+from ..recommend.agent import run as recommend_run
+
+
+def _compose_missing(reason: str | None = None) -> Dict:
+    return {"narrative": None, "reasoning": None, "trade_points": None, "missing": reason or "llm_unavailable"}
 
 
 def _compose_with_llm(picks: List[Dict], market_context: Dict, *, explain: bool, need_trade_points: bool) -> Dict:
@@ -45,21 +50,38 @@ def _compose_with_llm(picks: List[Dict], market_context: Dict, *, explain: bool,
         logger.warning("推荐合成失败: %s", e)
         return {"narrative": None, "reasoning": None, "trade_points": None}
 
-
 def run_recommend(args: dict, state: Any) -> ToolResult:  # noqa: ANN401
-    candidates: List[Dict] = args.get("candidates", [])
+    """基于主引擎生成推荐结果。
+
+    支持两种用法：
+    1) 直接指定 `symbols`（或使用默认池），由主引擎产生候选、统计与打分；
+    2) 传入已有 `candidates` 时，也会尽量补齐统计并按打分排序（未来版本）。
+    """
     topk: int = int(args.get("topk", 3) or 3)
-    context = args.get("market_context") or {}
+    date = args.get("date")
+    risk_profile = str(args.get("risk_profile", "normal"))
+    use_llm = bool(args.get("use_llm", False))
     explain: bool = bool(args.get("explain") or False)
     need_tp: bool = bool(args.get("need_trade_points") or False)
-    picks = candidates[:topk]
-    llm_out = _compose_with_llm(picks, context, explain=explain, need_trade_points=need_tp)
-    return ToolResult(
-        ok=True,
-        message=f"已生成推荐: {len(picks)} 只",
-        data={
+
+    # 优先走主引擎（可选 symbols）；否则退化到 candidates 列表
+    symbols = args.get("symbols")
+    universe = "symbols" if symbols else "auto"
+    try:
+        payload = recommend_run(date=date, topk=topk, universe=universe, symbols=symbols, risk_profile=risk_profile)
+        picks: List[Dict] = list(payload.get("picks", []))
+        context = payload.get("env", {})
+        # 说明生成：仅在 use_llm=true 时调用；否则返回缺失标记
+        if use_llm:
+            composed = _compose_with_llm(picks, context, explain=explain, need_trade_points=need_tp)
+        else:
+            composed = _compose_missing("llm_disabled")
+        data = {
             "picks": picks,
-            "market_context": {"summary": context.get("summary", ""), "sources": context.get("sources", [])},
-            **llm_out,
-        },
-    )
+            "market_context": context,
+            **composed,
+        }
+        return ToolResult(ok=True, message=f"已生成推荐: {len(picks)} 只", data=data)
+    except Exception as e:  # noqa: BLE001
+        logger.error("主引擎推荐失败: %s", e)
+        return ToolResult(ok=False, message=f"推荐失败: {e}", data={"error": str(e)})

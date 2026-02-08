@@ -5,13 +5,88 @@ from typing import Any, List, Dict, Optional
 from dataclasses import dataclass
 
 from ..core.types import ToolResult
-from .universe import UniverseResult
+from .universe import UniverseResult, build_universe, UniverseEntry
+from .market_data import normalize_daily_ohlcv
+from .signals import compute_indicators
+from .backtest import StrategyDef, run_event_backtest
+from ..providers.factory import get_provider
 
 
 def run_rank(args: dict, state: Any) -> ToolResult:  # noqa: ANN401
-    """Rank candidates using a simple heuristic (placeholder)."""
-    candidates: List[Dict] = args.get("candidates") or []
-    return ToolResult(ok=True, message=f"排名完成: {len(candidates)} 条", data={"ranked": candidates})
+    """对候选/默认池进行完整打分排序（非占位）。
+
+    支持：
+    - symbols: 可选，指定一组标的；缺省走默认 universe
+    - topk: 返回前K条（默认10）
+    - as_of: 可选日期（YYYY-MM-DD）
+    """
+    symbols: List[str] | None = args.get("symbols")
+    topk: int = int(args.get("topk", 10) or 10)
+    as_of = args.get("as_of")
+
+    provider = get_provider()
+    # Build universe
+    if symbols:
+        uni = UniverseResult(
+            kept=[UniverseEntry(symbol=s) for s in symbols],
+            watch_only=[],
+            rejected=[],
+        )
+    else:
+        uni = build_universe(provider=provider, as_of_date=as_of)
+
+    # Prepare features and backtest stats
+    features_by_symbol: Dict[str, Any] = {}
+    backtest_stats_by_symbol: Dict[str, Any] = {}
+
+    strat = StrategyDef(id="S1", name="Bias6 CrossUp", enabled=True, event_rule={"name": "bias6_cross_up", "params": {}}, lookback_days=250, forward_days=[2, 5, 10], min_samples=5)
+
+    def load_feat(sym: str):
+        df_raw = provider.get_daily(sym, start=None, end=as_of)
+        df_norm, _ = normalize_daily_ohlcv(df_raw)
+        feat = compute_indicators(df_norm, None)
+        feat = feat.copy()
+        feat.attrs["symbol"] = sym
+        return feat
+
+    for entry in list(uni.kept) + list(uni.watch_only):
+        sym = entry.symbol
+        try:
+            feat = load_feat(sym)
+            features_by_symbol[sym] = feat
+            stats = run_event_backtest(feat, strat)
+            backtest_stats_by_symbol[sym] = stats
+        except Exception:
+            continue
+
+    # Rank
+    result = rank_candidates(uni, features_by_symbol, backtest_stats_by_symbol, champion_state=None, config=None)
+    top_items = result.top[:topk]
+
+    # Convert dataclasses to dict for output
+    def to_dict_item(it: PickItem) -> Dict[str, Any]:
+        return {
+            "symbol": it.symbol,
+            "name": it.name,
+            "sector": it.sector,
+            "indicators": it.indicators,
+            "noise_level": it.noise_level,
+            "strategy_attribution": it.strategy_attribution,
+            "backtest": it.backtest.__dict__,
+            "risk_constraints": it.risk_constraints,
+            "actions": it.actions,
+            "time_stop": it.time_stop,
+            "events": it.events,
+            "score": it.score,
+        }
+
+    data = {
+        "top": [to_dict_item(x) for x in top_items],
+        "kept_count": result.kept_count,
+        "watch_count": result.watch_count,
+        "rejected_count": result.rejected_count,
+    }
+    return ToolResult(ok=True, message=f"排名完成: {len(top_items)} / kept={result.kept_count} watch={result.watch_count}", data=data)
 
 
 @dataclass

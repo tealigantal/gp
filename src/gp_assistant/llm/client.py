@@ -21,7 +21,8 @@ class LLMClient:
         cfg = load_config()
         self.base_url = (base_url or cfg.llm_base_url or "").strip()
         self.api_key = (api_key or cfg.llm_api_key or "").strip()
-        self.model = (model or cfg.chat_model or "gpt-4o-mini").strip()
+        # Default to DeepSeek-friendly model name if not provided
+        self.model = (model or cfg.chat_model or "deepseek-chat").strip()
         self.timeout = cfg.request_timeout_sec
 
     @staticmethod
@@ -43,9 +44,7 @@ class LLMClient:
     def chat(self, messages: List[Dict[str, Any]], temperature: float = 0.2, stream: bool = False) -> Dict[str, Any]:
         ok, reason = self.available()
         if not ok:
-            # graceful degradation
-            content = f"【降级】LLM未配置：{reason}。原样回显：" + (messages[-1].get("content", "") if messages else "")
-            return {"choices": [{"message": {"role": "assistant", "content": content}}]}
+            raise RuntimeError(f"LLM 未就绪：{reason}")
 
         url = self.base_url.rstrip("/") + "/chat/completions"
         payload = self.build_payload(self.model, messages, temperature=temperature, stream=stream)

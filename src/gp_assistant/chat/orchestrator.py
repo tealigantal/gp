@@ -5,8 +5,7 @@ from __future__ import annotations
 from typing import Any, Dict, Optional
 
 from .intent import detect_intent
-from .render import render_recommendation
-from ..guards.output_guard import guard
+from .render import render_recommendation, render_recommendation_narrative
 from ..llm.client import LLMClient
 from ..recommend import agent as rec_agent
 from . import session_store as store
@@ -19,12 +18,15 @@ def handle_message(session_id: Optional[str], message: str) -> Dict[str, Any]:
     tool_trace = {"triggered_recommend": False, "recommend_result": None}
     reply = ""
     if intent["name"] == "recommend":
-        res = rec_agent.run(topk=intent["slots"].get("topk", 3))
-        store.save_last_recommend(sid, res)
-        txt = render_recommendation(res)
-        ok, safe_txt = guard(txt)
-        reply = safe_txt if ok else safe_txt
-        tool_trace = {"triggered_recommend": True, "recommend_result": res}
+        try:
+            res = rec_agent.run(topk=intent["slots"].get("topk", 3))
+            store.save_last_recommend(sid, res)
+            # Prefer LLM narrative; 若不可用，仅提示缺失，不回退规则清单
+            reply = render_recommendation_narrative(res)
+            tool_trace = {"triggered_recommend": True, "recommend_result": res}
+        except Exception as e:  # noqa: BLE001
+            reply = f"[data_unavailable] 推荐生成失败：{e}"
+            tool_trace = {"triggered_recommend": False, "error": str(e)}
     else:
         # normal chat via LLM with graceful degradation
         client = LLMClient()
@@ -32,14 +34,16 @@ def handle_message(session_id: Optional[str], message: str) -> Dict[str, Any]:
         messages = ([{"role": "system", "content": "你是交易研究助理。"}] +
                     [{"role": h["role"], "content": h["content"]} for h in hist[-6:]] +
                     [{"role": "user", "content": message}])
-        resp = client.chat(messages, temperature=0.3)
-        reply = resp.get("choices", [{}])[0].get("message", {}).get("content", "")
+        try:
+            resp = client.chat(messages, temperature=0.3)
+            reply = resp.get("choices", [{}])[0].get("message", {}).get("content", "")
+        except Exception as e:  # noqa: BLE001
+            reply = f"[chat_unavailable] LLM 错误：{e}"
         # If user asked why/trade points and we have last recommend, append deterministic explanation
         if intent["name"] in {"followup_why", "followup_tp"}:
             last = store.load_last_recommend(sid)
             if last:
-                extra = render_recommendation(last)
-                ok, safe_extra = guard(extra)
-                reply += "\n\n【基于上次推荐的结构化说明】\n" + (safe_extra)
+                extra = render_recommendation_narrative(last)
+                reply += "\n\n【基于上次推荐的说明】\n" + extra
     store.append_message(sid, "assistant", reply)
     return {"session_id": sid, "reply": reply, "tool_trace": tool_trace}

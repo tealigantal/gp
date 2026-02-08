@@ -16,5 +16,15 @@
       - CHAT_MODEL
       - DATA_PROVIDER=akshare
       - GP_REQUEST_TIMEOUT_SEC
+      - STRICT_REAL_DATA=1
+      - GP_RESTRICT_MAINLINE=1
+      - GP_MAINLINE_TOP_N=2
+      - GP_MAINLINE_MODE=auto
+      - GP_MIN_AVG_AMOUNT=5e8
+      - GP_NEW_STOCK_DAYS=60
+      - GP_PRICE_MIN=2
+      - GP_PRICE_MAX=500
+      - GP_DYNAMIC_POOL_SIZE=200
+      - GP_MAX_PER_INDUSTRY=2
     ports:
       - "8000:8000"

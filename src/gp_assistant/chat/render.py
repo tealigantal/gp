@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Any, Dict, List
 
+from ..llm.client import LLMClient
+
 
 def _render_pick(it: Dict[str, Any]) -> str:
     sym = it.get("symbol")
@@ -53,5 +55,57 @@ def render_recommendation(obj: Dict[str, Any]) -> str:
         body_lines.append(_render_pick(it))
     body = "\n\n".join(body_lines) if body_lines else "（无可执行标的）"
     checklist = "\n".join(obj.get("execution_checklist", [])[:5])
-    disclaimer = obj.get("disclaimer", "本内容仅供研究与教育，不构成任何投资建议或收益承诺；市场有风险，决策需独立承担。")
-    return f"【市场环境与主题】\n{head_txt}\n\n【冠军策略与交易计划】\n{body}\n\n今日执行清单：\n{checklist}\n\n{disclaimer}"
+    return f"【市场环境与主题】\n{head_txt}\n\n【冠军策略与交易计划】\n{body}\n\n今日执行清单：\n{checklist}"
+
+
+def render_recommendation_narrative(obj: Dict[str, Any]) -> str:
+    """Use LLM (if available) to craft a conversational, non-rule-heavy summary.
+
+    Falls back to structured render if LLM is not configured.
+    """
+    client = LLMClient()
+    ok, reason = client.available()
+    if not ok:
+        # 不回退到规则清单，明确提示叙述缺失
+        return f"[narrative_unavailable] LLM 未就绪：{reason}。请配置 LLM_BASE_URL/LLM_API_KEY 后重试。"
+
+    picks = obj.get("picks", [])
+    env = obj.get("env", {})
+    themes = obj.get("themes", [])
+    sys_prompt = (
+        "你是一名交易研究搭档。基于输入的结构化候选与环境，给出自然、直观、面向实操的建议。\n"
+        "要求：\n"
+        "- 用中文、口语化，像同事交流；\n"
+        "- 不要列清单或大量规则；\n"
+        "- 每只只说要点：为什么现在关注、什么迹象再观察、保守与激进各一句建议；\n"
+        "- 避免合规/免责声明文案；\n"
+        "- 控制在 150~250 字内。"
+    )
+    user_payload = {
+        "env": {"grade": env.get("grade"), "summary": ";".join(env.get("reasons", []))},
+        "themes": themes[:2],
+        "picks": [
+            {
+                "symbol": it.get("symbol"),
+                "score": it.get("score"),
+                "q": it.get("q_grade") or it.get("indicators", {}).get("q_grade"),
+                "atr_pct": it.get("atr_pct", it.get("indicators", {}).get("atr_pct")),
+                "gap_pct": it.get("gap_pct", it.get("indicators", {}).get("gap_pct")),
+                "wr5": it.get("stats", {}).get("win_rate_5"),
+                "avg5": it.get("stats", {}).get("avg_return_5"),
+                "chip90_dist": (it.get("chip", {}) or {}).get("dist_to_90_high_pct"),
+                "observe_only": bool((it.get("flags") or {}).get("must_observe_only", False)),
+                "reasons": (it.get("flags") or {}).get("reasons", []),
+            }
+            for it in picks
+        ],
+    }
+    messages = [
+        {"role": "system", "content": sys_prompt},
+        {"role": "user", "content": str(user_payload)},
+    ]
+    try:
+        resp = client.chat(messages, temperature=0.25)
+        return resp.get("choices", [{}])[0].get("message", {}).get("content", "")
+    except Exception as e:  # noqa: BLE001
+        return f"[narrative_unavailable] LLM 错误：{e}"

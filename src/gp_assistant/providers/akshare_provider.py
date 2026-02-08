@@ -81,3 +81,13 @@ class AkShareProvider(MarketDataProvider):
             return res
         except Exception as e:  # noqa: BLE001
             raise DataProviderError(f"AkShare 获取基础信息失败: {e}")
+
+    def get_spot_snapshot(self):  # noqa: ANN001
+        ak = self._import()
+        try:
+            df = ak.stock_zh_a_spot_em()
+            if df is None or len(df) == 0:
+                raise DataProviderError("AkShare 返回空快照")
+            return df
+        except Exception as e:  # noqa: BLE001
+            raise DataProviderError(f"AkShare 获取快照失败: {e}")

@@ -12,7 +12,7 @@ from .local_provider import LocalParquetProvider
 from .base import MarketDataProvider
 
 
-def get_provider(prefer: Literal["local", "online", "auto", None] = None) -> MarketDataProvider:
+def get_provider(prefer: Literal["local", "online", "auto", "akshare", "official", None] = None) -> MarketDataProvider:
     """Provider selection with explicit preference and clear fallback chain.
 
     Preference order:
@@ -23,7 +23,7 @@ def get_provider(prefer: Literal["local", "online", "auto", None] = None) -> Mar
     An environment variable `GP_PREFER_LOCAL=1` only applies when prefer is None.
     """
     cfg = load_config()
-    choice = cfg.provider.data_provider
+    choice = (cfg.provider.data_provider or "auto").lower()
 
     # Handle env only when CLI didn't specify
     if prefer is None:
@@ -39,6 +39,14 @@ def get_provider(prefer: Literal["local", "online", "auto", None] = None) -> Mar
 
     local_hc = local.healthcheck()
     ak_hc = ak.healthcheck()
+    # When user explicitly sets DATA_PROVIDER, honor it strictly
+    if choice == "akshare":
+        return ak
+    if choice == "local":
+        return local
+    if choice == "official":
+        return off
+
     off_hc = off.healthcheck() if choice == "official" else {"ok": False, "reason": "not-selected"}
 
     if prefer == "local":
@@ -61,7 +69,7 @@ def get_provider(prefer: Literal["local", "online", "auto", None] = None) -> Mar
             return local
         return ak
 
-    # AUTO
+    # AUTO (or unknown)
     if off_hc.get("ok"):
         return off
     if local_hc.get("ok"):

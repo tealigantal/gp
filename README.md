@@ -1,123 +1,81 @@
-# gp assistant · 对话 LLM + 策略荐股 Agent（FastAPI）
+## 项目简介
 
-gp assistant 是一个最小可用的“对话 + 策略荐股”后端：
-- /chat：多轮对话入口，支持意图识别（推荐/追问/闲聊），未配置 LLM 时优雅降级。
-- /recommend：直接返回结构化 JSON 的荐股结果，便于前端/系统接入。
+对话式策略荐股助手（DeepSeek + 真实数据全链路）。支持多轮会话、意图识别、触发荐股与结构化结果落盘；候选池/主线/环境/公告/事件全部来源真实数据；当数据缺失时只返回 `missing/error` 提示，不回退规则化或合成内容。
 
-特性
-- 多轮会话：记录历史与最近一次推荐，支持“为什么/买卖点/止损”等追问。
-- 策略引擎：主题池、市场环境分层、候选生成、指标/事件统计、打分与冠军选择。
-- 数据源选择：本地 Parquet/官方/akshare 自动回退；可用离线夹带数据进行无网演示。
-- 降级容错：LLM 未配置时不阻断对话；行情不足时用合成数据标注为“insufficient”。
+---
 
-目录结构（要点）
-- src/gp_assistant/server：HTTP 服务入口（FastAPI）
-- src/gp_assistant/chat：意图识别、编排、渲染、会话存储
-- src/gp_assistant/recommend：荐股引擎与数据枢纽
-- src/gp_assistant/strategy：指标/事件研究/CV/打分/策略库
-- src/gp_assistant/providers：数据源适配与选择工厂
-- data | results | store | cache | universe | configs：挂载与产出目录
+## 快速开始
 
-快速开始（Docker）
-1) 复制环境文件并填写必要变量
-   cp .env.example .env
-   - TZ=Asia/Shanghai（默认）
-   - LLM_BASE_URL=https://api.deepseek.com/v1（或你的代理地址）
-   - LLM_API_KEY=你的密钥（留空则 /chat 闲聊降级，不影响 /recommend）
-   - CHAT_MODEL=deepseek-chat（或自定义）
-   - DATA_PROVIDER=akshare | local | official（默认 akshare）
-   - GP_REQUEST_TIMEOUT_SEC=60（建议，降低超时概率）
+1) 安装 Docker 与 Docker Compose（Docker Desktop 即可）。
+2) 配置环境变量：
+   - 复制模板并填写密钥：`cp .env.example .env`
+   - `.env` 关键项：
+     - `LLM_BASE_URL=https://api.deepseek.com/v1`
+     - `LLM_API_KEY=你的真实密钥`
+     - `CHAT_MODEL=deepseek-chat`
+     - `DATA_PROVIDER=akshare`（强制使用 AkShare）
+     - 已默认开启严格真实/主线约束等参数，见下文“参数说明”。
+3) 构建并启动服务：
+   - 构建镜像：`docker compose build`
+   - 启动服务：`docker compose up -d`
+   - 健康检查：`curl http://127.0.0.1:8000/health`
 
-2) 构建并启动
-```
-docker compose up -d --build
-```
+---
 
-3) 健康检查
-```
-curl -s http://127.0.0.1:8000/health | jq
-```
+## 使用方式
 
-4) 调用示例
-- 对话（新会话）：
-```
-curl -s -X POST http://127.0.0.1:8000/chat \
-  -H 'Content-Type: application/json' \
-  -d '{"message":"你好"}' | jq
-```
-- 同一会话触发推荐：
-```
-curl -s -X POST http://127.0.0.1:8000/chat \
-  -H 'Content-Type: application/json' \
-  -d '{"session_id":"sess-001","message":"请推荐3只股票"}' | jq
-```
-- 直接拿结构化结果：
-```
-curl -s -X POST http://127.0.0.1:8000/recommend \
-  -H 'Content-Type: application/json' \
-  -d '{"universe":"symbols","symbols":["000001","000333","600519"],"topk":3}' | jq
-```
+- 交互聊天（REPL）：
+  - `docker compose run --rm -it gp python -m gp_assistant chat`
+  - 示例：
+    - you> 给我推荐3只主板低吸
+    - agent> （DeepSeek 生成的自然语言建议；若 LLM 未就绪，将提示 narrative_unavailable）
+- HTTP 调用：
+  - POST `/chat`：`{"message":"给我推荐3只主板低吸"}`
+  - POST `/recommend`：`{"universe":"symbols","symbols":["600519","000333"],"topk":3}`（不传 symbols 则走全市场动态候选池）
+- 结果落盘：
+  - `store/recommend/<YYYY-MM-DD>.json`：包含 picks、trade_plan、stats、rel_strength、announcement_risk、event_risk、debug 等。
 
-本地运行（无需 Docker）
-- Python 3.11+
-- 安装依赖与包：
-```
-pip install -r requirements.txt
-pip install -e .
-```
-- 启动服务：
-```
-uvicorn gp_assistant.server.app:app --host 0.0.0.0 --port 8000
-```
+---
 
-API 约定
-- GET /health
-  - 返回：{status, llm_ready, data_provider, time}
-- POST /chat
-  - 请求：{session_id?, message}
-  - 响应：{session_id, reply(文本), tool_trace{triggered_recommend, recommend_result?}}
-  - 说明：意图为“推荐”时，内部调用同一引擎并将结构化结果渲染为文本；
-          非推荐/追问走 LLM；未配置 LLM 时降级为回显提示。
-- POST /recommend
-  - 请求：{date?, topk?, universe?(auto|symbols), symbols?, risk_profile?}
-  - 响应：结构化 JSON（env/themes/picks/execution_checklist/debug 等）；
-          同步落盘至 store/recommend/{as_of}.json 与 _debug/_sources。
+## 数据与引擎说明（真实链路）
 
-配置说明（环境变量）
-- TZ：时区，默认 Asia/Shanghai
-- LLM_BASE_URL / LLM_API_KEY / CHAT_MODEL：对话 LLM 配置
-- GP_REQUEST_TIMEOUT_SEC：HTTP 请求超时（秒），建议 30–60
-- DATA_PROVIDER：akshare | local | official（结合 providers/factory 自动回退）
-- OFFICIAL_API_KEY：官方数据源凭证（选配）
-- GP_PREFER_LOCAL=1：偏好本地数据（仅在 prefer=None/auto 时生效）
+- 候选池：AkShare 全市场快照 → 剔除 ST/*ST/退、新股≤60天、价格区间[2,500] → 按成交额取前 N（`GP_DYNAMIC_POOL_SIZE`） → 拉日线/指标/筹码 → 硬过滤（5日均额<阈值剔除）→ 观察/禁买标记。
+- 主线约束：默认仅从 TopN 行业/概念（真实来源）中选股；快照含“行业”优先，否则使用概念榜 TopN 并取成分股交集。
+- 市场环境：基于全市场快照的均值涨跌幅与上涨占比分层（A/B/C/D）。
+- 市场统计：快照聚合成交额与涨跌停数量；盘口口径缺失项返回 None 并记录 missing。
+- 公告：CNINFO 检索近30日公告列表并提取风险关键词；失败仅返回 `risk_level=None` 与 `error`。
+- 未来事件：AkShare gbbq（分红派息/登记等）+ 限售解禁（未来15日窗口）；缺失用 `event_risk=None` + missing 标注。
+- 打分：环境/主题/趋势/波动/筹码/统计/风险/相对强度（RS5/RS20），总分 0–100。
+- 分散度：同一行业/主题最多 N 只（默认2）。
 
-数据与产物
-- 会话库：store/sessions/session.db（多轮对话历史与最近推荐）
-- 推荐结果：store/recommend/{as_of}.json / *_debug.json / *_sources.json
-- 缓存：store/cache/**（公告/市场等）
+---
 
-常见问题
-- PowerShell 中文显示为乱码：接口是 UTF-8，建议用浏览器/Postman/curl 或调整控制台编码。
-- 未配置 LLM：/chat 闲聊会降级，/recommend 不受影响。
-- 无行情数据：将用合成序列补齐并在 meta 标注 insufficient，不用于真实交易。
+## 参数说明（.env）
 
-架构索引（主要文件）
-- 服务入口：src/gp_assistant/server/app.py
-- 对话编排：src/gp_assistant/chat/orchestrator.py
-- 荐股引擎：src/gp_assistant/recommend/agent.py
-- 数据枢纽：src/gp_assistant/recommend/datahub.py
-- 指标/统计：src/gp_assistant/strategy/*
-- 数据源选择：src/gp_assistant/providers/factory.py
-- 配置中心：src/gp_assistant/core/config.py
+- 必填 LLM：`LLM_BASE_URL`、`LLM_API_KEY`、`CHAT_MODEL`
+- 数据源：`DATA_PROVIDER=akshare`（强制选择 AkShare，避免 Local 抢占）
+- 严格真实：`STRICT_REAL_DATA=1`（禁用一切合成/降级）
+- 候选与主线：
+  - `GP_MIN_AVG_AMOUNT=5e8`（5日均额下限）
+  - `GP_NEW_STOCK_DAYS=60`
+  - `GP_PRICE_MIN=2`、`GP_PRICE_MAX=500`
+  - `GP_DYNAMIC_POOL_SIZE=200`
+  - `GP_RESTRICT_MAINLINE=1`、`GP_MAINLINE_TOP_N=2`、`GP_MAINLINE_MODE=auto`
+  - `GP_MAX_PER_INDUSTRY=2`
 
-开发与测试
-- 运行测试：
-```
-pytest -q
-```
-- 代码风格与类型：项目内以简洁为主，必要位置含类型标注；可按需使用编辑器格式化。
+---
 
-安全与合规
-- 请勿将真实密钥写入仓库；将 .env 添加到 .gitignore（已默认）。
-- 本项目仅用于研究与教育示例，不构成任何投资建议或收益承诺。市场有风险，决策需独立承担。
+## 诊断与排错
 
+- 查看当前 Provider：
+  - `docker compose exec gp python -c "from gp_assistant.providers.factory import provider_health; print(provider_health())"`
+- 遇到 `[data_unavailable] spot snapshot not supported`：
+  - 确认 `DATA_PROVIDER=akshare`；不要挂载带有 `data/bars/daily` 的本地数据目录（会触发 Local）。
+- 遇到 `[narrative_unavailable]`：
+  - 检查 DeepSeek 变量是否正确、网络是否可达。
+
+---
+
+## License
+
+MIT License，详见 `LICENSE`。
