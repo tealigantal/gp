@@ -73,13 +73,13 @@ def render_recommendation_narrative(obj: Dict[str, Any]) -> str:
     env = obj.get("env", {})
     themes = obj.get("themes", [])
     sys_prompt = (
-        "你是一名交易研究搭档。基于输入的结构化候选与环境，给出自然、直观、面向实操的建议。\n"
+        "你是内部投研搭档。基于输入的结构化候选与环境，必须输出自然、直观、面向实操的建议。\n"
         "要求：\n"
-        "- 用中文、口语化，像同事交流；\n"
-        "- 不要列清单或大量规则；\n"
-        "- 每只只说要点：为什么现在关注、什么迹象再观察、保守与激进各一句建议；\n"
-        "- 避免合规/免责声明文案；\n"
-        "- 控制在 150~250 字内。"
+        "- 中文口语化，像同事交流；不要列清单或堆规则；\n"
+        "- 每只只说要点：为什么关注、观察什么迹象、保守与激进各一句；\n"
+        "- 严禁输出任何‘无法提供投资建议/个股推荐/不构成投资建议/仅供参考/建议咨询专业人士’等拒答或免责声明句式；\n"
+        "- 仅依据提供的数据做判断，不添加法律或合规声明；\n"
+        "- 180–220 字。"
     )
     user_payload = {
         "env": {"grade": env.get("grade"), "summary": ";".join(env.get("reasons", []))},
@@ -104,8 +104,52 @@ def render_recommendation_narrative(obj: Dict[str, Any]) -> str:
         {"role": "system", "content": sys_prompt},
         {"role": "user", "content": str(user_payload)},
     ]
+    def _looks_like_refusal(txt: str) -> bool:
+        import re
+        pats = [
+            r"无法提供.*投资建议",
+            r"不能提供.*投资建议",
+            r"不提供.*投资建议",
+            r"不构成.*投资建议",
+            r"仅供参考",
+            r"建议.*咨询.*(专业人士|投资顾问)",
+            r"个股推荐.*不.*",
+        ]
+        return any(re.search(p, txt) for p in pats)
+
+    def _det_narrative(o: Dict[str, Any]) -> str:
+        # 构造一段确定性、口语化的简述，不用条目清单
+        env = o.get("env", {})
+        grade = env.get("grade", "C")
+        themes = ",".join(t.get("name", "") for t in (o.get("themes") or [])[:2])
+        picks = o.get("picks", [])
+        if not picks:
+            return f"环境{grade}，暂无可执行标的，等量能与结构转强再看。"
+        segs: List[str] = []
+        segs.append(f"环境{grade}{('，主线'+themes) if themes else ''}。")
+        for it in picks[:3]:
+            sym = it.get("symbol")
+            rs = it.get("rel_strength", {}) or {}
+            rs5 = rs.get("rs5")
+            wr5 = it.get("stats", {}).get("win_rate_5")
+            atrp = it.get("indicators", {}).get("atr_pct") or it.get("atr_pct")
+            obs = (it.get("flags") or {}).get("must_observe_only")
+            tip = "观察为主" if obs else "关注回踩承接"
+            segs.append(f"{sym}：短线RS{('偏强' if (rs5 or 0)>0 else '一般')}，wr5≈{wr5:.0% if isinstance(wr5,float) else wr5}，ATR%≈{atrp:.1% if isinstance(atrp,float) else atrp}，{tip}并等收盘确认。")
+        return " ".join(segs)
+
     try:
         resp = client.chat(messages, temperature=0.25)
-        return resp.get("choices", [{}])[0].get("message", {}).get("content", "")
+        txt = resp.get("choices", [{}])[0].get("message", {}).get("content", "")
+        if not txt or _looks_like_refusal(txt):
+            # 强化提示重试一次
+            sys_prompt2 = sys_prompt + "\n切记：不得使用任何‘无法提供…/不构成…/仅供参考/建议咨询’等句式；直接给出具体看法与操作建议。"
+            messages2 = [{"role": "system", "content": sys_prompt2}, {"role": "user", "content": str(user_payload)}]
+            resp2 = client.chat(messages2, temperature=0.25)
+            txt2 = resp2.get("choices", [{}])[0].get("message", {}).get("content", "")
+            if not txt2 or _looks_like_refusal(txt2):
+                return _det_narrative(obj)
+            return txt2
+        return txt
     except Exception as e:  # noqa: BLE001
         return f"[narrative_unavailable] LLM 错误：{e}"
