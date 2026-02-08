@@ -1,0 +1,15 @@
+{
+  "symbol": "600519",
+  "strategy_id": "S1",
+  "as_of_date": "2026-01-27",
+  "k": 0,
+  "win_rate_2": 0.0,
+  "win_rate_5": 0.0,
+  "win_rate_10": 0.0,
+  "avg_return_2": 0.0,
+  "avg_return_5": 0.0,
+  "avg_return_10": 0.0,
+  "mdd10_avg": 0.0,
+  "sample_warning": true,
+  "data_hash": "5ecfe8804bf715759a8ccf1104c2c5e4d6b9493f"
+}

@@ -21,9 +21,16 @@ class MarketDataProvider(ABC):
     def get_fundamentals(self, symbol: str):  # noqa: ANN001
         raise NotImplementedError("fundamentals not implemented")
 
+    # Optional: basic info table for names/labels
+    def get_stock_basic(self):  # noqa: ANN001
+        """Return a DataFrame with at least columns: ts_code/name.
+
+        Default: raise NotImplementedError. Providers may override.
+        """
+        raise NotImplementedError("stock_basic not implemented")
+
     @abstractmethod
     def healthcheck(self) -> Dict[str, Any]:
         """Return health info: {name, ok, reason}.
         Must not raise for expected misconfigurations; return reason instead.
         """
-

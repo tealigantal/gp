@@ -66,3 +66,17 @@ class AkShareProvider(MarketDataProvider):
         except Exception as e:  # noqa: BLE001
             return {"name": self.name, "ok": False, "reason": str(e)}
 
+    # Optional: basic
+    def get_stock_basic(self):  # noqa: ANN001
+        ak = self._import()
+        try:
+            df = ak.stock_zh_a_spot_em()
+            # Expected columns: 代码, 名称
+            import pandas as pd
+            res = pd.DataFrame({
+                "ts_code": df.get("代码"),
+                "name": df.get("名称"),
+            })
+            return res
+        except Exception as e:  # noqa: BLE001
+            raise DataProviderError(f"AkShare 获取基础信息失败: {e}")

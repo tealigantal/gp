@@ -21,6 +21,8 @@ class AppConfig:
     )
     # Additional knobs (extendable):
     request_timeout_sec: int = int(os.getenv("GP_REQUEST_TIMEOUT_SEC", "20"))
+    # Data defaults
+    default_volume_unit: str = os.getenv("GP_DEFAULT_VOLUME_UNIT", "share").lower()
 
 
 def load_config() -> AppConfig:
@@ -29,4 +31,3 @@ def load_config() -> AppConfig:
     # spreading defaults; keep single point here.
     _ = configs_dir()  # ensure exists
     return AppConfig()
-

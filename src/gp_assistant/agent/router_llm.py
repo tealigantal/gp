@@ -54,6 +54,8 @@ class LLMRouter:
         tools = [
             {"name": "recommend", "args": {"date": "str?", "topk": "int?", "offset": "int?"}},
             {"name": "data", "args": {"symbol": "str", "start": "str?", "end": "str?"}},
+            {"name": "market_info", "args": {"date": "str?"}},
+            {"name": "explain", "args": {"symbol": "str?", "include_reason": "bool?", "strategy_only": "bool?"}},
             {"name": "pick", "args": {}},
             {"name": "backtest", "args": {"strategy": "str"}},
             {"name": "help", "args": {}},

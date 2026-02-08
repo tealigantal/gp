@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
 import requests
+import re
 import yaml
 
 
@@ -55,6 +56,36 @@ class SimpleLLMClient:
             raise RuntimeError(f"LLM API Key missing in env: {self.cfg.api_key_env}")
         self.api_key = api_key
 
+    # --- Surrogate-safe sanitization ---
+    _SURROGATE_RE = re.compile(r"[\ud800-\udfff]")
+
+    @classmethod
+    def strip_surrogates(cls, s: str) -> str:
+        return cls._SURROGATE_RE.sub("", s)
+
+    @classmethod
+    def sanitize_for_llm(cls, obj):  # noqa: ANN001
+        if obj is None:
+            return None
+        if isinstance(obj, str):
+            return cls.strip_surrogates(obj)
+        if isinstance(obj, list):
+            return [cls.sanitize_for_llm(x) for x in obj]
+        if isinstance(obj, dict):
+            return {k: cls.sanitize_for_llm(v) for k, v in obj.items()}
+        return obj
+
+    @staticmethod
+    def find_surrogates(s: str, max_hits: int = 10):
+        hits = []
+        for i, ch in enumerate(s):
+            o = ord(ch)
+            if 0xD800 <= o <= 0xDFFF:
+                hits.append((i, hex(o)))
+                if len(hits) >= max_hits:
+                    break
+        return hits
+
     def chat(self, messages: List[Dict[str, Any]], json_response: bool = False) -> Dict[str, Any]:
         if self.cfg.provider.lower() == 'mock':
             content = json.dumps({'echo': True, 'messages': [m.get('role') for m in messages]}, ensure_ascii=False)
@@ -73,6 +104,7 @@ class SimpleLLMClient:
         }
         if json_response or self.cfg.json_mode:
             payload['response_format'] = {"type": "json_object"}
+        payload = self.sanitize_for_llm(payload)
         data = json.dumps(payload, ensure_ascii=False).encode('utf-8')
         last_exc: Optional[Exception] = None
         for i in range(self.cfg.retries + 1):
