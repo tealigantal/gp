@@ -10,6 +10,8 @@ class ToolResult:
     ok: bool
     message: str
     data: Any | None = None
+    # Optional tradeability flag for top-level visibility of degradations
+    tradeable: bool | None = None
 
 
 JSONDict = Dict[str, Any]

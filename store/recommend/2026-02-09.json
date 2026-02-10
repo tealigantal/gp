@@ -1,0 +1,117 @@
+{
+  "as_of": "2026-02-09",
+  "timezone": "Asia/Shanghai",
+  "env": {
+    "grade": "C",
+    "reasons": [
+      "no_snapshot_universe_mode"
+    ],
+    "recovery_conditions": [
+      "提供实时快照后可细化环境分层"
+    ],
+    "raw": {
+      "breadth": {
+        "mean_chg": null,
+        "up_ratio": null
+      }
+    }
+  },
+  "themes": [],
+  "candidate_pool": [],
+  "picks": [],
+  "execution_checklist": [
+    "1) 环境分层",
+    "2) 主线限制",
+    "3) 硬条件评估"
+  ],
+  "disclaimer": "本内容仅供研究与教育，不构成任何投资建议或收益承诺；市场有风险，决策需独立承担",
+  "debug": {
+    "timing": {},
+    "sources": [],
+    "failures": [],
+    "snapshot": {
+      "missing": true,
+      "degrade": "no_snapshot_universe_mode",
+      "error": "'AkShareProvider' object has no attribute '_cb_report_failure'"
+    },
+    "candidate_stats": {
+      "universe_in_count": 10,
+      "universe_after_filter_count": 10,
+      "bars_missing_count": 10,
+      "bars_too_short_count": 0,
+      "indicator_error_count": 0,
+      "skipped_symbols_sample": [
+        "600519",
+        "000333",
+        "601318",
+        "600036",
+        "600000",
+        "000001",
+        "000858",
+        "002594",
+        "002415",
+        "000651"
+      ],
+      "candidates_out_count": 0,
+      "universe_raw_count": 11,
+      "universe_cleaned_count": 10,
+      "universe_removed_counts": {
+        "bom_removed": 1,
+        "comment_lines_removed": 1,
+        "inline_comments_stripped": 0,
+        "blank_removed": 0,
+        "invalid_removed": 0,
+        "dedup_removed": 0
+      }
+    },
+    "degraded": true,
+    "degrade_reasons": [
+      {
+        "reason_code": "SNAPSHOT_MISSING",
+        "detail": {
+          "degrade": "no_snapshot_universe_mode",
+          "error": "'AkShareProvider' object has no attribute '_cb_report_failure'"
+        }
+      },
+      {
+        "reason_code": "ENV_NEUTRALIZED",
+        "detail": {}
+      },
+      {
+        "reason_code": "THEMES_EMPTY",
+        "detail": {}
+      },
+      {
+        "reason_code": "MARKET_STATS_MISSING",
+        "detail": {}
+      },
+      {
+        "reason_code": "UNIVERSE_TOO_SMALL",
+        "detail": {
+          "count": 10,
+          "min": 50
+        }
+      },
+      {
+        "reason_code": "CANDIDATE_TOO_SMALL",
+        "detail": {
+          "count": 0,
+          "min": 20
+        }
+      },
+      {
+        "reason_code": "UNIVERSE_DIRTY_INPUT",
+        "detail": {
+          "bom_removed": 1,
+          "comment_lines_removed": 1,
+          "inline_comments_stripped": 0,
+          "blank_removed": 0,
+          "invalid_removed": 0,
+          "dedup_removed": 0
+        }
+      }
+    ]
+  },
+  "tradeable": false,
+  "message": "NOT_TRADEABLE: SNAPSHOT_MISSING, ENV_NEUTRALIZED"
+}

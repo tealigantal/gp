@@ -34,6 +34,12 @@ def handle_message(session_id: Optional[str], message: str) -> Dict[str, Any]:
         messages = ([{"role": "system", "content": "你是交易研究助理。"}] +
                     [{"role": h["role"], "content": h["content"]} for h in hist[-6:]] +
                     [{"role": "user", "content": message}])
+        # 强化 chat 模式系统提示，避免免责声明/拒答
+        sys_prompt_chat = ("你是交易研究助理。"
+                           "严禁输出任何‘无法提供投资建议/个股推荐/不构成投资建议/仅供参考/建议咨询专业人士’等拒答或免责声明句式；"
+                           "涉及选股/建议/买卖点/持仓等问题时，直接给出具体看法与观察要点，不要写合规前言。")
+        if messages and messages[0].get("role") == "system":
+            messages[0]["content"] = sys_prompt_chat
         try:
             resp = client.chat(messages, temperature=0.3)
             reply = resp.get("choices", [{}])[0].get("message", {}).get("content", "")

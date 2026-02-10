@@ -1,7 +1,7 @@
 # 简介：主题池构建（严格模式）。基于全市场快照的短期相对强度给出主线线索。
 from __future__ import annotations
 
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 import pandas as pd
 
@@ -9,10 +9,12 @@ from .datahub import MarketDataHub
 from ..providers.factory import get_provider
 
 
-def build_themes(hub: MarketDataHub) -> List[Dict[str, Any]]:
+def build_themes(hub: MarketDataHub, snapshot: Optional[pd.DataFrame] = None) -> List[Dict[str, Any]]:
     # 优先使用快照中的行业列，按行业聚合给出主线；缺列则退为个股强势线索（仍来自真实快照）
-    p = get_provider()
-    snap = p.get_spot_snapshot()
+    if snapshot is None:
+        # Degrade: no snapshot path -> no strong themes inferred
+        return []
+    snap = snapshot
     cols = set(snap.columns)
     chg_col = None
     for c in ("涨跌幅", "涨跌幅(%)", "pct_chg", "涨跌", "changePct"):

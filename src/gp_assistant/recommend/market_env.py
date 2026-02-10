@@ -2,7 +2,7 @@
 # 驱动候选规模与仓位等风控倾向。
 from __future__ import annotations
 
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 import pandas as pd
 
@@ -10,13 +10,20 @@ from .datahub import MarketDataHub
 from ..providers.factory import get_provider
 
 
-def score_regime(hub: MarketDataHub) -> Dict[str, Any]:
+def score_regime(hub: MarketDataHub, snapshot: Optional[pd.DataFrame] = None) -> Dict[str, Any]:
     """基于全市场快照的环境分层（严格模式，无指数合成/降级）。
 
     逻辑：使用全市场涨跌幅分布与涨跌家数评估环境。
     """
-    p = get_provider()
-    snap = p.get_spot_snapshot()
+    if snapshot is None:
+        # Degrade: no snapshot path. Return neutral regime with clear reason.
+        return {
+            "grade": "C",
+            "reasons": ["no_snapshot_universe_mode"],
+            "recovery_conditions": ["提供实时快照后可细化环境分层"],
+            "raw": {"breadth": {"mean_chg": None, "up_ratio": None}},
+        }
+    snap = snapshot
     # 识别涨跌幅列
     chg_col = None
     for c in ("涨跌幅", "涨跌幅(%)", "pct_chg", "涨跌", "changePct"):

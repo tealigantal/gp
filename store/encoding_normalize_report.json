@@ -1,0 +1,18 @@
+﻿{
+    "files":  [
+                  {
+                      "summary":  "normalized to UTF-8 LF; removed BOM if any",
+                      "path":  "src/gp_assistant/providers/akshare_provider.py",
+                      "modified_codepoints":  [
+
+                                              ]
+                  },
+                  {
+                      "summary":  "normalized to UTF-8 LF; removed BOM if any",
+                      "path":  "src/gp_assistant/recommend/candidate_gen.py",
+                      "modified_codepoints":  [
+
+                                              ]
+                  }
+              ]
+}

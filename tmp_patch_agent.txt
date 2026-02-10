@@ -1,0 +1,69 @@
+*** Begin Patch
+*** Update File: src/gp_assistant/recommend/agent.py
+@@
+-from .candidate_gen import generate_candidates
++from .candidate_gen import generate_candidates
+@@
+-    pool, veto = generate_candidates(base, env.get("grade", "C"), topk=topk, snapshot=snapshot_df)
++    pool, veto, cand_stats = generate_candidates(base, env.get("grade", "C"), topk=topk, snapshot=snapshot_df)
+@@
+-    # Degradation recording based on snapshot/meta
+-    dbg = payload.setdefault("debug", {})
++    # Degradation recording based on snapshot/meta
++    dbg = payload.setdefault("debug", {})
++    try:
++        dbg["candidate_stats"] = cand_stats
++    except Exception:
++        pass
+@@
+-    # If we cannot confirm clean conditions, ensure conservative flag
+-    if not dbg.get("degraded"):
+-        # Confirm snapshot was live/direct with no cache/fallback/skip
+-        clean_snapshot = (snap_meta.get("source") == "em:direct" and not snap_meta.get("fallback") and not snap_meta.get("cache") and not snap_meta.get("skipped_routes"))
+-        if not clean_snapshot:
+-            degrade_record(dbg, "INSUFFICIENT_EVIDENCE_TRADEABLE", {"reason": "snapshot_not_confirmed_live"})
++    # Structured cleanliness check (do not rely on source text)
++    def _is_clean_live_snapshot(meta: Dict[str, Any]) -> bool:
++        try:
++            if meta.get("missing") is True:
++                return False
++            if meta.get("cache"):
++                return False
++            if meta.get("stale") is True:
++                return False
++            if meta.get("fallback") is True:
++                return False
++            if meta.get("skipped_routes"):
++                return False
++            if meta.get("error") or meta.get("error_type"):
++                return False
++        except Exception:
++            return False
++        return True
++
++    # Candidate size thresholds -> degrade reasons
++    cfg = load_config()
++    if (dbg.get("candidate_stats", {}).get("universe_after_filter_count", 0)) < getattr(cfg, "tradeable_min_universe", 50):
++        degrade_record(dbg, "UNIVERSE_TOO_SMALL", {"count": dbg.get("candidate_stats", {}).get("universe_after_filter_count", 0), "min": getattr(cfg, "tradeable_min_universe", 50)})
++    if (dbg.get("candidate_stats", {}).get("candidates_out_count", 0)) < getattr(cfg, "tradeable_min_candidates", 20):
++        degrade_record(dbg, "CANDIDATE_TOO_SMALL", {"count": dbg.get("candidate_stats", {}).get("candidates_out_count", 0), "min": getattr(cfg, "tradeable_min_candidates", 20)})
++    if (dbg.get("candidate_stats", {}).get("bars_too_short_count", 0)) > 0:
++        degrade_record(dbg, "BARS_TOO_SHORT", {"count": dbg.get("candidate_stats", {}).get("bars_too_short_count", 0)})
++    if (dbg.get("candidate_stats", {}).get("indicator_error_count", 0)) > 0:
++        degrade_record(dbg, "INDICATOR_PARTIAL", {"count": dbg.get("candidate_stats", {}).get("indicator_error_count", 0)})
++
++    # If we cannot confirm clean conditions and no degrade yet, mark insufficient evidence
++    if not dbg.get("degraded") and not _is_clean_live_snapshot(snap_meta):
++        degrade_record(dbg, "INSUFFICIENT_EVIDENCE_TRADEABLE", {"reason": "snapshot_not_clean"})
+@@
+-    # Top-level tradeable flag for HTTP output; CLI ToolResult sets its own
+-    payload["tradeable"] = False if dbg.get("degraded") else True
++    # Finalize hard assertions: tradeable only when no degrade and all clean
++    tradeable = not dbg.get("degraded") and _is_clean_live_snapshot(snap_meta) \
++        and dbg.get("candidate_stats", {}).get("universe_after_filter_count", 0) >= getattr(cfg, "tradeable_min_universe", 50) \
++        and dbg.get("candidate_stats", {}).get("candidates_out_count", 0) >= getattr(cfg, "tradeable_min_candidates", 20)
++    if tradeable and dbg.get("degrade_reasons"):
++        degrade_record(dbg, "INSUFFICIENT_EVIDENCE_TRADEABLE", {"reason": "degrade_reasons_present"})
++        tradeable = False
++    payload["tradeable"] = bool(tradeable)
+*** End Patch

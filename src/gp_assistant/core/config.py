@@ -46,6 +46,9 @@ class AppConfig:
     mainline_mode: str = os.getenv("GP_MAINLINE_MODE", "auto")  # industry|concept|auto
     # Diversification
     max_per_industry: int = int(os.getenv("GP_MAX_PER_INDUSTRY", "2"))
+    # Tradeable thresholds (hard conditions for live validation)
+    tradeable_min_universe: int = int(os.getenv("GP_TRADEABLE_MIN_UNIVERSE", "50"))
+    tradeable_min_candidates: int = int(os.getenv("GP_TRADEABLE_MIN_CANDIDATES", "20"))
 
 
 def load_config() -> AppConfig:

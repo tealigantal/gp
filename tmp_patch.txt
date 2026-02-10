@@ -1,0 +1,9 @@
+*** Begin Patch
+*** Update File: src/gp_assistant/core/config.py
+@@
+     # Diversification
+     max_per_industry: int = int(os.getenv("GP_MAX_PER_INDUSTRY", "2"))
++    # Tradeable thresholds (hard conditions for live validation)
++    tradeable_min_universe: int = int(os.getenv("GP_TRADEABLE_MIN_UNIVERSE", "50"))
++    tradeable_min_candidates: int = int(os.getenv("GP_TRADEABLE_MIN_CANDIDATES", "20"))
+*** End Patch

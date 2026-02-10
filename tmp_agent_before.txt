@@ -1,0 +1,381 @@
+# 简介：荐股主引擎。整合市场环境评分、主题池、候选生成、指标与统计�?# 打分与冠军选择，产�?picks 与交易计划，并将结果落盘�?store/recommend�?from __future__ import annotations
+
+import json
+from dataclasses import dataclass
+from typing import Any, Dict, List, Optional
+from pathlib import Path
+
+import pandas as pd
+
+from ..core.config import load_config
+from ..core.logging import logger
+from ..observe.degrade import record as degrade_record, warn_once as degrade_warn
+from ..core.paths import store_dir
+from .calendar import calendar_summary
+from .datahub import MarketDataHub
+from .market_env import score_regime
+from .theme_pool import build_themes
+from .candidate_gen import generate_candidates
+from ..providers.factory import get_provider
+from .announcements import fetch_announcements
+from .events import future_events
+from ..strategy.ts_cv import purged_walk_forward
+from ..strategy.event_study import event_study_from_mask
+from ..strategy.indicators import compute_indicators
+from ..strategy.scoring import score_item
+from ..strategy.champion import choose_champion
+from ..core.config import load_config
+
+
+def _make_trade_plan(item: Dict[str, Any], env_grade: str, risk_profile: str) -> Dict[str, Any]:
+    inds = item.get("indicators", {})
+    chip = item.get("chip", {})
+    q = item.get("q_grade")
+    ann = item.get("announcement_risk", {})
+    ev = item.get("event_risk", {})
+    # panel
+    panel = {
+        "avg5_amount": float(item.get("liquidity", {}).get("avg5_amount", 0.0)),
+        "atr_pct": float(inds.get("atr_pct", item.get("atr_pct", 0.0))),
+        "gap_pct": float(inds.get("gap_pct", item.get("gap_pct", 0.0))),
+        "slope20": float(inds.get("slope20", 0.0)),
+    }
+    chip_and_bands = {
+        "S1": float(chip.get("band_90_low", 0.0)),
+        "S2": float(chip.get("avg_cost", 0.0)),
+        "R1": float(chip.get("band_90_high", 0.0)),
+        "R2": float(chip.get("band_90_high", 0.0)) * 1.02 if chip.get("band_90_high") else 0.0,
+        "confidence": chip.get("confidence", "low"),
+        "model": chip.get("model_used", "B"),
+    }
+    bias_stats = {
+        "bias6": float(inds.get("bias6", 0.0)) if "bias6" in inds else None,
+        "bias12": float(inds.get("bias12", 0.0)) if "bias12" in inds else None,
+        "bias6_cross_up": bool(inds.get("bias6_cross_up", False)) if "bias6_cross_up" in inds else False,
+    }
+    announcements = {"risk_level": ann.get("risk_level", "medium"), "evidence": ann.get("evidence", [])[:2]}
+    events = {"event_risk": ev.get("event_risk", "low"), "evidence": ev.get("evidence", [])[:2]}
+    window_A = {
+        "structure_conditions": [
+            "关键带回收且不再创新�?,
+            "量能衰减或被承接消化",
+            "分时重心抬高/横向消化",
+        ],
+        "confirm_actions": ["仅记录承接≥2项；A窗不追价"],
+        "if_not_met": "放弃/观望",
+    }
+    window_B = {
+        "structure_conditions": [
+            "收盘前站稳关键结�?,
+            "回落不破支撑带上�?,
+            "尾盘不再大幅二次下砸",
+        ],
+        "confirm_actions": ["满足�?项可评估隔夜；仍不追�?],
+        "if_not_met": "放弃/观望",
+    }
+    # risk and position sizing (shares in lots of 100)
+    base_shares = 100
+    if env_grade == "A" and q in {"Q0", "Q1"} and not item.get("flags", {}).get("must_observe_only", False):
+        base_shares = 200 if risk_profile != "conservative" else 100
+    if q in {"Q2", "Q3"}:
+        base_shares = 100
+    risk = {
+        "position_shares": base_shares,
+        "risk_budget_pct": 1.0 if risk_profile == "aggressive" else (0.7 if risk_profile == "normal" else 0.5),
+        "stop_loss": "收盘有效跌破支撑�?,
+        "time_stop": "�?日不强必�?,
+        "add_rule": "只允许结构性加仓，禁止摊平亏损",
+    }
+    invalidation = [
+        "放量不涨",
+        "频繁冲高回落/长上�?,
+        "贴近压力�?20日压�?筹码90%上限",
+        "命中一票否决（Gap>+2%、公告高风险、ATR%>8%等）",
+    ]
+    return {
+        "panel": panel,
+        "q": {"grade": q},
+        "chip_and_bands": chip_and_bands,
+        "bias_stats": bias_stats,
+        "announcements": announcements,
+        "events": events,
+        "window_A": window_A,
+        "window_B": window_B,
+        "risk": risk,
+        "invalidation": invalidation,
+    }
+
+
+def _write_outputs(as_of: str, payload: Dict[str, Any]) -> None:
+    out_dir = store_dir() / "recommend"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    (out_dir / f"{as_of}.json").write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    # sources/debug already embedded in payload["debug"], write flat versions too
+    (out_dir / f"{as_of}_debug.json").write_text(json.dumps(payload.get("debug", {}), ensure_ascii=False, indent=2), encoding="utf-8")
+    (out_dir / f"{as_of}_sources.json").write_text(json.dumps(payload.get("debug", {}).get("sources", []), ensure_ascii=False, indent=2), encoding="utf-8")
+    # sources map is included in debug
+
+
+def run(date: Optional[str] = None, topk: int = 3, universe: str = "auto", symbols: Optional[List[str]] = None, risk_profile: str = "normal") -> Dict[str, Any]:
+    cfg = load_config()
+    cal = calendar_summary()
+    as_of = date or cal["as_of"]
+    hub = MarketDataHub()
+    # Fetch snapshot once and share within this run (degrade to None if unavailable)
+    provider = get_provider()
+    snapshot_df = None
+    snap_meta = {}
+    try:
+        snapshot_df = provider.get_spot_snapshot()
+        try:
+            snap_meta = getattr(provider, "last_snapshot_meta", lambda: {})()
+        except Exception:
+            snap_meta = {"source": provider.name}
+    except Exception as e:
+        snap_meta = {"missing": True, "degrade": "no_snapshot_universe_mode", "error": str(e)}
+        # defer all [DEGRADED] warnings to summary printing below
+    # propagate snapshot to consumers
+    # Snapshot schema quick check (when present)
+    if snapshot_df is not None:
+        cols = set(map(str, snapshot_df.columns))
+        chg_candidates = {"涨跌�?, "涨跌�?%)", "pct_chg", "涨跌", "changePct"}
+        if cols.isdisjoint(chg_candidates):
+            # mark missing chg fields for consumers relying on snapshot
+            pass  # recorded later into debug to centralize
+    env = score_regime(hub, snapshot=snapshot_df)
+    themes = build_themes(hub, snapshot=snapshot_df)
+
+    # Universe stats & base selection
+    universe_syms = None
+    universe_meta = None
+    if universe == "symbols" and symbols:
+        base = symbols
+        universe_syms = symbols
+        universe_meta = {"source": "symbols:param", "count_unique": len(set(symbols))}
+    elif snapshot_df is None:
+        # Universe mode when no snapshot
+        try:
+            from ..providers.universe_provider import UniverseProvider
+            uni = UniverseProvider()
+            universe_syms = uni.get_symbols()
+            try:
+                universe_meta = uni.last_meta()
+            except Exception:
+                universe_meta = {"source": "universe:file"}
+        except Exception:
+            universe_syms = []
+            universe_meta = {"source": "universe:file", "exists": False, "count_unique": 0}
+        base = universe_syms
+    else:
+        base = None
+
+    pool, veto, cand_stats = generate_candidates(base, env.get("grade", "C"), topk=topk, snapshot=snapshot_df)
+
+    # Prepare benchmark for RS
+    try:
+        idx_df, _ = hub.index_daily("000300")  # 沪深300
+    except Exception:
+        idx_df = None
+
+    # Attach announcements/events/statistics and scores
+    picks: List[Dict[str, Any]] = []
+    bars_too_short = 0
+    indicator_partial = 0
+    for cand in pool:
+        sym = cand["symbol"]
+        # announcements
+        ann = fetch_announcements(sym)
+        ev = future_events(sym)
+
+        # stats: CV and event study using bias6 cross up as a simple mask
+        # build feature df
+        df_feat = None
+        try:
+            df_feat = pd.DataFrame(cand.get("_df_feat")) if cand.get("_df_feat") is not None else None
+        except Exception:
+            df_feat = None
+        if df_feat is None:
+            df, meta_daily = hub.daily_ohlcv(sym, as_of, 250)
+            try:
+                if bool(meta_daily.get("insufficient_history")):
+                    bars_too_short += 1
+            except Exception:
+                pass
+            try:
+                df_feat = compute_indicators(df)
+            except Exception:
+                indicator_partial += 1
+                df_feat = compute_indicators(df)
+        mask = df_feat.get("bias6_cross_up", pd.Series([False] * len(df_feat)))
+        estats = event_study_from_mask(df_feat, mask)
+        cv = purged_walk_forward(df_feat, k_folds=5, gap=5)
+
+        # Relative strength vs benchmark (5/20 trading days)
+        rs = {"rs5": None, "rs20": None}
+        try:
+            import pandas as pd
+            if idx_df is not None and len(df_feat) >= 25 and len(idx_df) >= 25:
+                # align by date
+                dfm = df_feat[["date", "close"]].merge(idx_df[["date", "close"]], on="date", suffixes=("_s", "_i"))
+                if len(dfm) >= 25:
+                    r5_s = float(dfm["close_s"].iloc[-1] / dfm["close_s"].iloc[-6] - 1.0)
+                    r5_i = float(dfm["close_i"].iloc[-1] / dfm["close_i"].iloc[-6] - 1.0)
+                    r20_s = float(dfm["close_s"].iloc[-1] / dfm["close_s"].iloc[-21] - 1.0)
+                    r20_i = float(dfm["close_i"].iloc[-1] / dfm["close_i"].iloc[-21] - 1.0)
+                    rs = {"rs5": r5_s - r5_i, "rs20": r20_s - r20_i}
+        except Exception:
+            pass
+
+        item = {
+            **cand,
+            "announcement_risk": ann,
+            "event_risk": ev,
+            "rel_strength": rs,
+            "stats": {
+                "k": estats.k,
+                "win_rate_5": estats.win_rate_5,
+                "avg_return_5": estats.mean_return_5,
+                "mdd10_avg": estats.mdd10_proxy,
+                "sample_warning": estats.sample_warning,
+            },
+            "strategies": {
+                "S1": {"cv": cv.__dict__, "event_study": estats.__dict__},
+            },
+            "_env": env,
+            "_theme_strength": 0.7 if themes else 0.3,
+        }
+        item["score"] = score_item(item)
+        # decorate trade plan
+        tp = _make_trade_plan(item, env.get("grade", "C"), risk_profile)
+        # attach theme name
+        theme_name = themes[0]["name"] if themes else "行业轮动"
+        item["theme"] = theme_name
+        item["trade_plan"] = tp
+        picks.append(item)
+
+    # rank then apply diversification cap per industry/theme
+    picks.sort(key=lambda x: x.get("score", 0.0), reverse=True)
+    max_per_ind = int(getattr(cfg, "max_per_industry", 2)) if hasattr(cfg, "max_per_industry") else 2
+    chosen: list[Dict[str, Any]] = []
+    used: dict[str, int] = {}
+    for it in picks:
+        key = str(it.get("industry") or it.get("theme") or "NA")
+        cnt = used.get(key, 0)
+        if cnt >= max_per_ind:
+            continue
+        chosen.append(it)
+        used[key] = cnt + 1
+        if len(chosen) >= topk:
+            break
+    picks = chosen
+
+    # champion per pick
+    champs = choose_champion(picks)
+    for it in picks:
+        it["champion"] = champs.get(it["symbol"], {})
+
+    # hard rule: env=D -> empty picks or observe-only
+    if env.get("grade") == "D":
+        for it in picks:
+            it.setdefault("flags", {}).update({"must_observe_only": True})
+        picks = []  # keep empty to emphasize 空仓 倾向
+
+    execution_checklist = [
+        "1) 环境分层：按指数与成交额口径判断",
+        "2) 主线：只做回踩确认，不追�?,
+        "3) 噪声等级Q：Q2以上A窗禁买，B窗收盘确�?,
+        "4) 窗口A动作：结构不满足→放�?,
+        "5) 窗口B动作：收盘确认决定是否隔夜；�?日硬止损",
+    ]
+
+    # sources summary
+    sources = [
+        {"symbol": it["symbol"], "data_source": "fixtures/provider/synthetic"}
+        for it in pool
+    ]
+    # snapshot meta for diagnostics
+    # snap_meta already set above
+
+    payload = {
+        "as_of": as_of,
+        "timezone": cfg.timezone,
+        "env": env,
+        "themes": themes,
+        "candidate_pool": pool,
+        "picks": picks,
+        "execution_checklist": execution_checklist,
+        "disclaimer": "本内容仅供研究与教育，不构成任何投资建议或收益承诺；市场有风险，决策需独立承担�?,
+        "debug": {"timing": {}, "sources": sources, "failures": veto, "snapshot": snap_meta, "cv": {p["symbol"]: p.get("strategies", {}).get("S1", {}).get("cv", {}) for p in picks}},
+    }
+    # Degradation recording based on snapshot/meta\n    dbg = payload.setdefault("debug", {})\n    try:\n        dbg["candidate_stats"] = cand_stats\n    except Exception:\n        pass
+    if snap_meta.get("missing"):
+        degrade_record(dbg, "SNAPSHOT_MISSING", {k: v for k, v in snap_meta.items() if k != "missing"})
+    if snap_meta.get("cache") == "memory":
+        degrade_record(dbg, "SNAPSHOT_MEMORY_CACHE", {})
+    if snap_meta.get("cache") == "disk":
+        degrade_record(dbg, "SNAPSHOT_DISK_CACHE", {"age_sec": snap_meta.get("cache_age_sec")})
+    if bool(snap_meta.get("fallback")) and snap_meta.get("source") != "em:direct":
+        degrade_record(dbg, "SNAPSHOT_FALLBACK", {"to": snap_meta.get("source"), "reason": snap_meta.get("fallback_reason")})
+    if snap_meta.get("skipped_routes"):
+        degrade_record(dbg, "SNAPSHOT_ROUTE_SKIPPED", {"routes": snap_meta.get("skipped_routes")})
+    # When snapshot is None, down-streams are neutralized/missing
+    if snapshot_df is None:
+        degrade_record(dbg, "ENV_NEUTRALIZED", {})
+        degrade_record(dbg, "THEMES_EMPTY", {})
+        degrade_record(dbg, "MARKET_STATS_MISSING", {})
+    # Snapshot schema fields missing
+    if snapshot_df is not None:
+        cols = set(map(str, snapshot_df.columns))
+        chg_candidates = {"涨跌�?, "涨跌�?%)", "pct_chg", "涨跌", "changePct"}
+        if cols.isdisjoint(chg_candidates):
+            degrade_record(dbg, "SNAPSHOT_SCHEMA_MISSING_FIELDS", {"missing": ["chg"]})
+    # Universe/candidate stats and thresholds
+    cfg = load_config()
+    candidate_count = len(pool)
+    if candidate_count < cfg.tradeable_min_candidates:
+        degrade_record(dbg, "CANDIDATE_TOO_SMALL", {"count": candidate_count, "min": cfg.tradeable_min_candidates})
+    universe_block = {}
+    if universe_syms is not None or universe_meta is not None:
+        uc = len(set(universe_syms or []))
+        universe_block = {"count_unique": uc, **(universe_meta or {})}
+        if not universe_meta or not universe_meta.get("exists", True):
+            degrade_record(dbg, "UNIVERSE_MISSING", universe_block)
+        elif uc == 0:
+            degrade_record(dbg, "UNIVERSE_EMPTY", universe_block)
+        elif snapshot_df is None and uc < cfg.tradeable_min_universe:
+            degrade_record(dbg, "UNIVERSE_TOO_SMALL", {"count": uc, "min": cfg.tradeable_min_universe})
+    if universe_block:
+        dbg["universe"] = universe_block
+    # Bars/indicator issues
+    if bars_too_short > 0:
+        degrade_record(dbg, "BARS_TOO_SHORT", {"count": bars_too_short})
+    if indicator_partial > 0:
+        degrade_record(dbg, "INDICATOR_PARTIAL", {"count": indicator_partial})
+    # If we cannot confirm clean conditions, ensure conservative flag
+    if not dbg.get("degraded"):
+        # Confirm snapshot was live/direct with no cache/fallback/skip
+        clean_snapshot = (snap_meta.get("source") == "em:direct" and not snap_meta.get("fallback") and not snap_meta.get("cache") and not snap_meta.get("skipped_routes"))
+        if not clean_snapshot:
+            degrade_record(dbg, "INSUFFICIENT_EVIDENCE_TRADEABLE", {"reason": "snapshot_not_confirmed_live"})
+    # Top-level tradeable flag for HTTP output; CLI ToolResult sets its own
+    payload["tradeable"] = False if dbg.get("degraded") else True
+    # Print up to 3 summarized [DEGRADED] lines once
+    if dbg.get("degraded"):
+        rs = dbg.get("degrade_reasons", [])
+        for r in rs[:3]:
+            code = r.get("reason_code")
+            detail = r.get("detail", {})
+            # build terse detail parts for visibility
+            parts = []
+            for k in ("age_sec", "routes", "count", "min", "count_unique"):
+                if k in detail:
+                    parts.append(f"{k}={detail[k]}")
+            logger.warning(f"[DEGRADED] {code} {' '.join(parts)}".strip())
+    # Top-level tradeable flag for HTTP output; CLI ToolResult sets its own
+    payload["tradeable"] = False if dbg.get("degraded") else True
+    _write_outputs(as_of, payload)
+    return payload
+
+
+
+

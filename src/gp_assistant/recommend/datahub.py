@@ -121,7 +121,7 @@ class MarketDataHub:
         meta = {"source": "akshare:index", "len": len(out), "insufficient_history": len(out) < 120}
         return out, meta
 
-    def market_stats(self) -> Dict[str, Any]:
+    def market_stats(self, snapshot: Optional[pd.DataFrame] = None) -> Dict[str, Any]:
         """Compute basic market stats from real-time snapshot (no synthetic).
 
         Returns keys:
@@ -133,10 +133,19 @@ class MarketDataHub:
         - ladder_breaks: None
         - missing: list[str] 说明哪些字段缺失
         """
-        from ..providers.factory import get_provider
-
-        p = get_provider()
-        snap = p.get_spot_snapshot()
+        if snapshot is None:
+            # Degrade: no snapshot provided; return missing fields without hitting network
+            return {
+                "total_amount": None,
+                "limit_up": None,
+                "limit_down": None,
+                "seal_rate": None,
+                "ladder_max": None,
+                "ladder_breaks": None,
+                "missing": ["snapshot_unavailable"],
+                "source": "snapshot",
+            }
+        snap = snapshot
         cols = set(snap.columns)
         missing: list[str] = []
 

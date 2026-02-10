@@ -10,7 +10,7 @@ from .chat.orchestrator import handle_message
 def _chat_once(message: str, session_id: str | None = None) -> int:
     try:
         out = handle_message(session_id, message)
-        print(json.dumps(out, ensure_ascii=False))
+        print(json.dumps(out, ensure_ascii=True))
         return 0
     except Exception as e:  # noqa: BLE001
         print(f"error: {e}")
@@ -59,4 +59,3 @@ def main(argv: list[str] | None = None) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

@@ -1,0 +1,5 @@
+hist = store.load_history(sid, limit=20)
+        messages = ([{"role": "system", "content": "你是交易研究助理�?}] +
+                    [{"role": h["role"], "content": h["content"]} for h in hist[-6:]] +
+                    [{"role": "user", "content": message}])
+        try:
