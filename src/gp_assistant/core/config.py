@@ -10,6 +10,25 @@ import zoneinfo
 from .paths import configs_dir
 
 
+def _parse_priority_env(name: str, default: str, *, allow: list[str]) -> List[str]:
+    """Parse comma-separated priority from env with filtering and normalization.
+
+    Returns a list of lowercased route keys limited to `allow` while preserving order.
+    """
+    val = os.getenv(name, default)
+    items = [x.strip().lower() for x in (val or "").split(",") if x and x.strip()]
+    # keep only allowed and stable order (first occurrence wins)
+    seen: set[str] = set()
+    out: List[str] = []
+    for it in items:
+        if it in allow and it not in seen:
+            out.append(it)
+            seen.add(it)
+    if not out:
+        out = [x for x in default.split(",") if x in allow]
+    return out
+
+
 @dataclass
 class ProviderConfig:
     data_provider: str = os.getenv("DATA_PROVIDER", "akshare").lower()
@@ -34,6 +53,17 @@ class AppConfig:
     chat_model: str = os.getenv("CHAT_MODEL", "deepseek-chat")
     # Strict real data only (no synthetic/degrade). Default ON per user requirement
     strict_real_data: bool = os.getenv("STRICT_REAL_DATA", "1").lower() in {"1", "true", "yes"}
+    # AkShare multi-route priorities
+    ak_daily_priority: List[str] = field(
+        default_factory=lambda: _parse_priority_env(
+            "AK_DAILY_PRIORITY", "sina,em,tx", allow=["tx", "sina", "em"]
+        )
+    )
+    ak_spot_priority: List[str] = field(
+        default_factory=lambda: _parse_priority_env(
+            "AK_SPOT_PRIORITY", "em,sina", allow=["sina", "em"]
+        )
+    )
     # Universe/dynamic pool knobs
     min_avg_amount: float = float(os.getenv("GP_MIN_AVG_AMOUNT", "5e8"))
     new_stock_days: int = int(os.getenv("GP_NEW_STOCK_DAYS", "60"))
@@ -49,6 +79,8 @@ class AppConfig:
     # Tradeable thresholds (hard conditions for live validation)
     tradeable_min_universe: int = int(os.getenv("GP_TRADEABLE_MIN_UNIVERSE", "50"))
     tradeable_min_candidates: int = int(os.getenv("GP_TRADEABLE_MIN_CANDIDATES", "20"))
+    # Parallelism for candidate generation (0 -> auto)
+    parallel_workers: int = int(os.getenv("GP_PARALLEL", "0") or 0)
 
 
 def load_config() -> AppConfig:

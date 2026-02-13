@@ -55,7 +55,14 @@ def post_recommend(req: RecommendReq) -> Dict[str, Any]:
 def get_health() -> Dict[str, Any]:
     cfg = load_config()
     from ..providers.factory import get_provider
+
     provider = get_provider()
     now = datetime.now().isoformat()
     llm_ready = bool(cfg.llm_base_url and cfg.llm_api_key)
-    return {"status": "ok", "llm_ready": llm_ready, "data_provider": provider.name, "time": now}
+
+    return {
+        "status": "ok",
+        "llm_ready": llm_ready,
+        "provider": provider.healthcheck(),
+        "time": now,
+    }

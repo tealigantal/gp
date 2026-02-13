@@ -34,7 +34,7 @@ def get_provider(prefer: Literal["local", "online", "auto", "akshare", "official
 
     # Providers
     local = LocalParquetProvider()
-    ak = AkShareProvider()
+    ak = AkShareProvider(timeout_sec=cfg.request_timeout_sec)
     off = OfficialProvider(api_key=cfg.provider.official_api_key)
 
     local_hc = local.healthcheck()

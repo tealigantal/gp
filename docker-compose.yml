@@ -1,6 +1,10 @@
-﻿services:
+services:
   gp:
-    build: .
+    build:
+      context: .
+      args:
+        PIP_INDEX_URL: ${PIP_INDEX_URL:-https://pypi.org/simple}
+
     volumes:
       - ./data:/app/data
       - ./results:/app/results
@@ -8,23 +12,33 @@
       - ./store:/app/store
       - ./cache:/app/cache
       - ./configs:/app/configs
+
     command: ["uvicorn","gp_assistant.server.app:app","--host","0.0.0.0","--port","8000"]
+
     environment:
-      - TZ=Asia/Shanghai
-      - LLM_BASE_URL
-      - LLM_API_KEY
-      - CHAT_MODEL
-      - DATA_PROVIDER=akshare
-      - GP_REQUEST_TIMEOUT_SEC
-      - STRICT_REAL_DATA=1
-      - GP_RESTRICT_MAINLINE=1
-      - GP_MAINLINE_TOP_N=2
-      - GP_MAINLINE_MODE=auto
-      - GP_MIN_AVG_AMOUNT=5e8
-      - GP_NEW_STOCK_DAYS=60
-      - GP_PRICE_MIN=2
-      - GP_PRICE_MAX=500
-      - GP_DYNAMIC_POOL_SIZE=200
-      - GP_MAX_PER_INDUSTRY=2
+      TZ: ${TZ:-Asia/Shanghai}
+
+      # provider
+      DATA_PROVIDER: ${DATA_PROVIDER:-akshare}
+      GP_REQUEST_TIMEOUT_SEC: ${GP_REQUEST_TIMEOUT_SEC:-60}
+      STRICT_REAL_DATA: ${STRICT_REAL_DATA:-1}
+
+      # mainline / universe knobs
+      GP_RESTRICT_MAINLINE: ${GP_RESTRICT_MAINLINE:-1}
+      GP_MAINLINE_TOP_N: ${GP_MAINLINE_TOP_N:-2}
+      GP_MAINLINE_MODE: ${GP_MAINLINE_MODE:-auto}
+
+      GP_MIN_AVG_AMOUNT: ${GP_MIN_AVG_AMOUNT:-500000000}
+      GP_NEW_STOCK_DAYS: ${GP_NEW_STOCK_DAYS:-60}
+      GP_PRICE_MIN: ${GP_PRICE_MIN:-2}
+      GP_PRICE_MAX: ${GP_PRICE_MAX:-500}
+      GP_DYNAMIC_POOL_SIZE: ${GP_DYNAMIC_POOL_SIZE:-200}
+      GP_MAX_PER_INDUSTRY: ${GP_MAX_PER_INDUSTRY:-2}
+
+      # LLM (optional)
+      LLM_BASE_URL: ${LLM_BASE_URL:-}
+      LLM_API_KEY: ${LLM_API_KEY:-}
+      CHAT_MODEL: ${CHAT_MODEL:-deepseek-chat}
+
     ports:
       - "8000:8000"

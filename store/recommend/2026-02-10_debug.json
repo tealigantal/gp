@@ -1,31 +1,61 @@
 {
   "timing": {},
-  "sources": [],
+  "sources": [
+    {
+      "symbol": "600519",
+      "data_source": "provider"
+    },
+    {
+      "symbol": "002415",
+      "data_source": "provider"
+    },
+    {
+      "symbol": "000333",
+      "data_source": "provider"
+    },
+    {
+      "symbol": "000858",
+      "data_source": "provider"
+    },
+    {
+      "symbol": "000651",
+      "data_source": "provider"
+    },
+    {
+      "symbol": "000001",
+      "data_source": "provider"
+    },
+    {
+      "symbol": "601318",
+      "data_source": "provider"
+    },
+    {
+      "symbol": "600036",
+      "data_source": "provider"
+    },
+    {
+      "symbol": "002594",
+      "data_source": "provider"
+    },
+    {
+      "symbol": "600000",
+      "data_source": "provider"
+    }
+  ],
   "failures": [],
   "snapshot": {
     "missing": true,
     "degrade": "no_snapshot_universe_mode",
-    "error": "'AkShareProvider' object has no attribute '_cb_report_failure'"
+    "error": "AkShare snapshot failed: ('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))"
   },
   "candidate_stats": {
     "universe_in_count": 10,
     "universe_after_filter_count": 10,
-    "bars_missing_count": 10,
+    "bars_missing_count": 0,
     "bars_too_short_count": 0,
     "indicator_error_count": 0,
-    "skipped_symbols_sample": [
-      "600519",
-      "000333",
-      "601318",
-      "600036",
-      "600000",
-      "000001",
-      "000858",
-      "002594",
-      "002415",
-      "000651"
-    ],
-    "candidates_out_count": 0,
+    "skipped_symbols_sample": [],
+    "candidates_out_count": 10,
     "universe_raw_count": 11,
     "universe_cleaned_count": 10,
     "universe_removed_counts": {
@@ -43,7 +73,7 @@
       "reason_code": "SNAPSHOT_MISSING",
       "detail": {
         "degrade": "no_snapshot_universe_mode",
-        "error": "'AkShareProvider' object has no attribute '_cb_report_failure'"
+        "error": "AkShare snapshot failed: ('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))"
       }
     },
     {
@@ -68,7 +98,7 @@
     {
       "reason_code": "CANDIDATE_TOO_SMALL",
       "detail": {
-        "count": 0,
+        "count": 10,
         "min": 20
       }
     },

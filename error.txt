@@ -1,0 +1,878 @@
+35%|███████████████████████████████████████████▍                                                                                | 7/20 [00:02<00:04,  2.98it/s][日线] 命中 route=sina symbol=sh688012 rows=1587
+[候选] sz300604 src=akshare:sina bars=2138 -> cand liq=A avg5=2491629530.20 atr=5.08% gap=-0.94% obs=False
+[候选] sh688012 src=akshare:sina bars=1587 -> cand liq=A avg5=2602713714.60 atr=4.62% gap=-0.63% obs=True
+[并行] 进度 100/200，候选=100，否决=0，观察=42，跳过=0｜路由命中 tx=0 sina=100 em=0 other=0
+[日线] 开始 symbol=sh600397 routes=tx,sina,em window=[19000101,20500101] strict=True
+[日线] 尝试 route=tx symbol=sh600397
+[日线] 开始 symbol=sh601012 routes=tx,sina,em window=[19000101,20500101] strict=True
+[日线] 尝试 route=tx symbol=sh601012
+[日线] 命中 route=tx symbol=sh600309 rows=5894                                                                                                                  
+[日线] 失败 route=tx symbol=sh600309 err=KeyError: "['volume'] not in index"
+[日线] 尝试 route=sina symbol=sh600309
+ 16%|███████████████████▊                                                                                                        | 4/25 [00:01<00:07,  2.87it/s][日线] 命中 route=sina symbol=sh600309 rows=5894
+ 28%|██████████████████████████████████▋                                                                                         | 7/25 [00:02<00:05,  3.12it/s][候选] sh600309 src=akshare:sina bars=5894 -> cand liq=A avg5=3099097310.80 atr=4.26% gap=-1.12% obs=False
+[日线] 开始 symbol=sz300456 routes=tx,sina,em window=[19000101,20500101] strict=True
+[日线] 尝试 route=tx symbol=sz300456
+[日线] 命中 route=tx symbol=sz002463 rows=3755                                                                                                                  
+[日线] 失败 route=tx symbol=sz002463 err=KeyError: "['volume'] not in index"
+[日线] 尝试 route=sina symbol=sz002463
+ 75%|████████████████████████████████████████████████████████████████████████████████████████████▎                              | 15/20 [00:05<00:01,  2.71it/s][日线] 命中 route=tx symbol=sz002467 rows=3681
+[日线] 失败 route=tx symbol=sz002467 err=KeyError: "['volume'] not in index"
+[日线] 尝试 route=sina symbol=sz002467
+ 53%|██████████████████████████████████████████████████████████████████▏                                                         | 8/15 [00:02<00:02,  2.73it/s][日线] 命中 route=sina symbol=sz002463 rows=3755
+ 94%|███████████████████████████████████████████████████████████████████████████████████████████████████████████████████▎       | 30/32 [00:09<00:00,  2.78it/s][候选] sz002463 src=akshare:sina bars=3755 -> cand liq=A avg5=3438490680.20 atr=4.76% gap=-0.61% obs=True
+[日线] 开始 symbol=sz300008 routes=tx,sina,em window=[19000101,20500101] strict=True
+[日线] 尝试 route=tx symbol=sz300008
+ 97%|███████████████████████████████████████████████████████████████████████████████████████████████████████████████████████▏   | 31/32 [00:10<00:00,  2.81it/s][日线] 命中 route=sina symbol=sz002467 rows=3681
+[候选] sz002467 src=akshare:sina bars=3681 -> cand liq=B avg5=1794776912.20 atr=5.04% gap=1.96% obs=False
+ 48%|███████████████████████████████████████████████████████████                                                                | 12/25 [00:03<00:04,  2.94it/s][日线] 开始 symbol=sh600010 routes=tx,sina,em window=[19000101,20500101] strict=True
+[日线] 尝试 route=tx symbol=sh600010
+  0%|                                                                                                                                    | 0/26 [00:00<?, ?it/s][日线] 命中 route=tx symbol=sh600879 rows=7176
+[日线] 失败 route=tx symbol=sh600879 err=KeyError: "['volume'] not in index"
+[日线] 尝试 route=sina symbol=sh600879
+ 56%|████████████████████████████████████████████████████████████████████▉                                                      | 14/25 [00:04<00:03,  3.08it/s][日线] 命中 route=sina symbol=sh600879 rows=7176
+[候选] sh600879 src=akshare:sina bars=7176 -> cand liq=A avg5=4594127261.60 atr=6.73% gap=0.00% obs=False
+[日线] 开始 symbol=sz002812 routes=tx,sina,em window=[19000101,20500101] strict=True
+[日线] 尝试 route=tx symbol=sz002812
+[日线] 命中 route=tx symbol=sh601857 rows=4437                                                                                                                  
+[日线] 失败 route=tx symbol=sh601857 err=KeyError: "['volume'] not in index"
+[日线] 尝试 route=sina symbol=sh601857
+ 93%|██████████████████████████████████████████████████████████████████████████████████████████████████████████████████▊        | 14/15 [00:04<00:00,  3.08it/s][日线] 命中 route=sina symbol=sh601857 rows=4437
+ 15%|███████████████████                                                                                                         | 4/26 [00:01<00:07,  3.12it/s][候选] sh601857 src=akshare:sina bars=4437 -> cand liq=B avg5=1659931234.60 atr=3.22% gap=-2.17% obs=False
+[日线] 开始 symbol=sz002340 routes=tx,sina,em window=[19000101,20500101] strict=True
+[日线] 尝试 route=tx symbol=sz002340
+[日线] 命中 route=tx symbol=sh601012 rows=3327                                                                                                                  
+[日线] 失败 route=tx symbol=sh601012 err=KeyError: "['volume'] not in index"
+[日线] 尝试 route=sina symbol=sh601012
+ 92%|████████████████████████████████████████████████████████████████████████████████████████████████████████████████▊          | 11/12 [00:03<00:00,  3.02it/s][日线] 命中 route=sina symbol=sh601012 rows=3327
+[候选] sh601012 src=akshare:sina bars=3327 -> cand liq=A avg5=4174018567.60 atr=4.07% gap=-0.49% obs=False
+[日线] 开始 symbol=sz000833 routes=tx,sina,em window=[19000101,20500101] strict=True
+[日线] 尝试 route=tx symbol=sz000833
+ 12%|██████████████▌                                                                                                             | 2/17 [00:00<00:04,  3.06it/s][日线] 命中 route=tx symbol=sz300456 rows=2467
+[日线] 失败 route=tx symbol=sz300456 err=KeyError: "['volume'] not in index"
+[日线] 尝试 route=sina symbol=sz300456
+ 68%|███████████████████████████████████████████████████████████████████████████████████▋                                       | 17/25 [00:05<00:02,  3.02it/s][日线] 命中 route=sina symbol=sz300456 rows=2467
+[候选] sz300456 src=akshare:sina bars=2467 -> cand liq=A avg5=3330711643.40 atr=6.91% gap=-1.34% obs=False
+[日线] 开始 symbol=sz000858 routes=tx,sina,em window=[19000101,20500101] strict=True
+[日线] 尝试 route=tx symbol=sz000858
+[日线] 命中 route=tx symbol=sh600036 rows=5721                                                                                                                  
+[日线] 失败 route=tx symbol=sh600036 err=KeyError: "['volume'] not in index"
+[日线] 尝试 route=sina symbol=sh600036
+ 88%|████████████████████████████████████████████████████████████████████████████████████████████████████████████▏              | 22/25 [00:07<00:00,  3.01it/s][日线] 命中 route=tx symbol=sz002812 rows=2191
+[日线] 失败 route=tx symbol=sz002812 err=KeyError: "['volume'] not in index"
+[日线] 尝试 route=sina symbol=sz002812
+ 50%|█████████████████████████████████████████████████████████████▌                                                             | 13/26 [00:04<00:04,  3.00it/s][日线] 命中 route=sina symbol=sz002812 rows=2191
+[候选] sz002812 src=akshare:sina bars=2191 -> cand liq=A avg5=2266129373.40 atr=4.86% gap=-1.72% obs=False
+[日线] 开始 symbol=sz000630 routes=tx,sina,em window=[19000101,20500101] strict=True
+[日线] 尝试 route=tx symbol=sz000630
+ 17%|█████████████████████▍                                                                                                      | 5/29 [00:01<00:07,  3.03it/s][日线] 命中 route=sina symbol=sh600036 rows=5721
+ 92%|█████████████████████████████████████████████████████████████████████████████████████████████████████████████████▏         | 23/25 [00:07<00:00,  2.98it/s][候选] sh600036 src=akshare:sina bars=5721 -> cand liq=A avg5=2480464173.40 atr=1.65% gap=-0.10% obs=False
+[日线] 开始 symbol=sz300369 routes=tx,sina,em window=[19000101,20500101] strict=True
+[日线] 尝试 route=tx symbol=sz300369
+[日线] 命中 route=tx symbol=sh600397 rows=5559                                                                                                                  
+[日线] 失败 route=tx symbol=sh600397 err=KeyError: "['volume'] not in index"
+[日线] 尝试 route=sina symbol=sh600397
+ 28%|██████████████████████████████████▏                                                                                         | 8/29 [00:02<00:07,  2.85it/s][日线] 命中 route=sina symbol=sh600397 rows=5559
+[候选] sh600397 src=akshare:sina bars=5559 -> cand liq=B avg5=1039924267.60 atr=5.08% gap=2.03% obs=True
+[并行] 进度 110/200，候选=110，否决=0，观察=44，跳过=0｜路由命中 tx=0 sina=110 em=0 other=0
+ 10%|████████████                                                                                                                | 3/31 [00:00<00:08,  3.30it/s][日线] 开始 symbol=sz002202 routes=tx,sina,em window=[19000101,20500101] strict=True
+[日线] 尝试 route=tx symbol=sz002202
+[日线] 命中 route=tx symbol=sz300008 rows=3774                                                                                                                  
+[日线] 失败 route=tx symbol=sz300008 err=KeyError: "['volume'] not in index"
+[日线] 尝试 route=sina symbol=sz300008
+ 76%|██████████████████████████████████████████████████████████████████████████████████████████████                             | 13/17 [00:04<00:02,  1.99it/s][日线] 命中 route=sina symbol=sz300008 rows=3774
+[候选] sz300008 src=akshare:sina bars=3774 -> cand liq=B avg5=1606933384.00 atr=4.75% gap=0.56% obs=False
+  5%|██████▏                                                                                                                     | 1/20 [00:00<00:14,  1.35it/s]
+[日线] 尝试 route=tx symbol=sh600489
+[日线] 命中 route=tx symbol=sz002340 rows=3814                                                                                                                  
+[日线] 失败 route=tx symbol=sz002340 err=KeyError: "['volume'] not in index"
+[日线] 尝试 route=sina symbol=sz002340
+ 88%|████████████████████████████████████████████████████████████████████████████████████████████████████████████▊              | 23/26 [00:08<00:01,  2.37it/s][日线] 命中 route=sina symbol=sz002340 rows=3814
+[候选] sz002340 src=akshare:sina bars=3814 -> cand liq=A avg5=3106943407.00 atr=4.14% gap=-2.28% obs=False
+ 32%|███████████████████████████████████████▋                                                                                   | 10/31 [00:04<00:08,  2.45it/s][日线] 开始 symbol=sh601360 routes=tx,sina,em window=[19000101,20500101] strict=True
+[日线] 尝试 route=tx symbol=sh601360
+[日线] 命中 route=tx symbol=sh600010 rows=5935                                                                                                                  
+[日线] 失败 route=tx symbol=sh600010 err=KeyError: "['volume'] not in index"
+[日线] 尝试 route=sina symbol=sh600010
+[日线] 命中 route=tx symbol=sz300369 rows=2835                                                                                                                  
+[日线] 失败 route=tx symbol=sz300369 err=KeyError: "['volume'] not in index"
+[日线] 尝试 route=sina symbol=sz300369
+ 50%|█████████████████████████████████████████████████████████████▌                                                             | 10/20 [00:04<00:04,  2.48it/s][日线] 命中 route=sina symbol=sh600010 rows=5935
+[候选] sh600010 src=akshare:sina bars=5935 -> cand liq=A avg5=3519438503.00 atr=4.15% gap=-1.49% obs=False
+ 66%|████████████████████████████████████████████████████████████████████████████████▌                                          | 19/29 [00:07<00:04,  2.45it/s][日线] 开始 symbol=sz002842 routes=tx,sina,em window=[19000101,20500101] strict=True
+[日线] 尝试 route=tx symbol=sz002842
+ 27%|█████████████████████████████████                                                                                           | 4/15 [00:01<00:04,  2.72it/s][日线] 命中 route=sina symbol=sz300369 rows=2835
+[候选] sz300369 src=akshare:sina bars=2835 -> cand liq=B avg5=1254230527.20 atr=5.32% gap=2.32% obs=True
+[日线] 开始 symbol=sz300738 routes=tx,sina,em window=[19000101,20500101] strict=True
+[日线] 尝试 route=tx symbol=sz300738
+[日线] 命中 route=tx symbol=sz000833 rows=6334                                                                                                                  
+[日线] 失败 route=tx symbol=sz000833 err=KeyError: "['volume'] not in index"
+[日线] 尝试 route=sina symbol=sz000833
+ 75%|████████████████████████████████████████████████████████████████████████████████████████████▎                              | 18/24 [00:06<00:02,  2.96it/s][日线] 命中 route=sina symbol=sz000833 rows=6334
+[候选] sz000833 src=akshare:sina bars=6334 -> cand liq=B avg5=1066499345.00 atr=5.28% gap=0.40% obs=True
+ 74%|███████████████████████████████████████████████████████████████████████████████████████████▎                               | 23/31 [00:08<00:02,  2.97it/s][日线] 开始 symbol=sh603533 routes=tx,sina,em window=[19000101,20500101] strict=True
+[日线] 尝试 route=tx symbol=sh603533
+ 87%|██████████████████████████████████████████████████████████████████████████████████████████████████████████▌                | 13/15 [00:04<00:00,  2.90it/s][日线] 命中 route=tx symbol=sz002202 rows=4378
+[日线] 失败 route=tx symbol=sz002202 err=KeyError: "['volume'] not in index"
+[日线] 尝试 route=sina symbol=sz002202
+[日线] 命中 route=tx symbol=sz300738 rows=1959                                                                                                                  
+[日线] 失败 route=tx symbol=sz300738 err=KeyError: "['volume'] not in index"
+[日线] 尝试 route=sina symbol=sz300738
+ 79%|█████████████████████████████████████████████████████████████████████████████████████████████████▍                         | 19/24 [00:07<00:01,  2.94it/s][日线] 命中 route=sina symbol=sz002202 rows=4378
+ 77%|███████████████████████████████████████████████████████████████████████████████████████████████▏                           | 24/31 [00:09<00:02,  2.91it/s][候选] sz002202 src=akshare:sina bars=4378 -> cand liq=A avg5=3738970024.60 atr=6.45% gap=-0.32% obs=False
+[日线] 开始 symbol=sh600118 routes=tx,sina,em window=[19000101,20500101] strict=True
+[日线] 尝试 route=tx symbol=sh600118
+[日线] 命中 route=tx symbol=sz002842 rows=2200
+[日线] 失败 route=tx symbol=sz002842 err=KeyError: "['volume'] not in index"
+[日线] 尝试 route=sina symbol=sz002842
+[日线] 命中 route=tx symbol=sz000858 rows=6608
+[日线] 失败 route=tx symbol=sz000858 err=KeyError: "['volume'] not in index"
+[日线] 尝试 route=sina symbol=sz000858
+  0%|                                                                                                                                    | 0/30 [00:00<?, ?it/s][日线] 命中 route=sina symbol=sz300738 rows=1959
+[日线] 命中 route=sina symbol=sz002842 rows=2200
+[日线] 命中 route=tx symbol=sh601360 rows=3294
+[日线] 失败 route=tx symbol=sh601360 err=KeyError: "['volume'] not in index"
+[日线] 尝试 route=sina symbol=sh601360
+[候选] sz300738 src=akshare:sina bars=1959 -> cand liq=A avg5=2714812887.80 atr=5.58% gap=-3.01% obs=False
+[候选] sz002842 src=akshare:sina bars=2200 -> cand liq=A avg5=2044146807.40 atr=6.48% gap=-2.39% obs=False
+[日线] 开始 symbol=sz300102 routes=tx,sina,em window=[19000101,20500101] strict=True
+[日线] 尝试 route=tx symbol=sz300102
+[日线] 开始 symbol=sh688766 routes=tx,sina,em window=[19000101,20500101] strict=True
+[日线] 尝试 route=tx symbol=sh688766
+ 20%|████████████████████████▊                                                                                                   | 2/10 [00:00<00:02,  3.46it/s][日线] 命中 route=sina symbol=sz000858 rows=6608
+  0%|                                                                                                                                     | 0/6 [00:00<?, ?it/s][候选] sz000858 src=akshare:sina bars=6608 -> cand liq=B avg5=1977765350.80 atr=2.21% gap=0.08% obs=False
+[日线] 开始 symbol=sz300666 routes=tx,sina,em window=[19000101,20500101] strict=True
+[日线] 尝试 route=tx symbol=sz300666
+  3%|████▏                                                                                                                       | 1/30 [00:00<00:07,  3.99it/s][日线] 命中 route=sina symbol=sh601360 rows=3294
+ 30%|█████████████████████████████████████▏                                                                                      | 3/10 [00:00<00:02,  3.30it/s][候选] sh601360 src=akshare:sina bars=3294 -> cand liq=A avg5=3641258831.40 atr=4.64% gap=-1.60% obs=False
+[并行] 进度 120/200，候选=120，否决=0，观察=46，跳过=0｜路由命中 tx=0 sina=120 em=0 other=0
+[日线] 开始 symbol=sz002519 routes=tx,sina,em window=[19000101,20500101] strict=True
+[日线] 尝试 route=tx symbol=sz002519
+[日线] 命中 route=tx symbol=sh600489 rows=5383                                                                                                                  
+[日线] 失败 route=tx symbol=sh600489 err=KeyError: "['volume'] not in index"
+[日线] 尝试 route=sina symbol=sh600489
+ 60%|██████████████████████████████████████████████████████████████████████████▍                                                 | 6/10 [00:01<00:01,  2.91it/s][日线] 命中 route=sina symbol=sh600489 rows=5383
+[候选] sh600489 src=akshare:sina bars=5383 -> cand liq=A avg5=2420647459.20 atr=6.24% gap=-2.03% obs=False
+[日线] 开始 symbol=sz301018 routes=tx,sina,em window=[19000101,20500101] strict=True
+[日线] 尝试 route=tx symbol=sz301018
+[日线] 命中 route=tx symbol=sz000630 rows=6848                                                                                                                  
+[日线] 失败 route=tx symbol=sz000630 err=KeyError: "['volume'] not in index"
+[日线] 尝试 route=sina symbol=sz000630
+[日线] 命中 route=tx symbol=sh688766 rows=1077                                                                                                                  
+[日线] 失败 route=tx symbol=sh688766 err=KeyError: "['volume'] not in index"
+[日线] 尝试 route=sina symbol=sh688766
+ 33%|█████████████████████████████████████████▋                                                                                   | 2/6 [00:00<00:01,  3.64it/s][日线] 命中 route=sina symbol=sh688766 rows=1077
+ 41%|███████████████████████████████████████████████████                                                                         | 7/17 [00:02<00:03,  3.15it/s][候选] sh688766 src=akshare:sina bars=1077 -> cand liq=B avg5=1897207943.60 atr=8.17% gap=-2.50% obs=True
+[日线] 开始 symbol=sz000066 routes=tx,sina,em window=[19000101,20500101] strict=True
+[日线] 尝试 route=tx symbol=sz000066
+[日线] 命中 route=sina symbol=sz000630 rows=6848
+ 27%|█████████████████████████████████                                                                                           | 8/30 [00:02<00:07,  3.11it/s][候选] sz000630 src=akshare:sina bars=6848 -> cand liq=A avg5=3069134215.00 atr=6.22% gap=-1.52% obs=False
+[日线] 开始 symbol=sz002429 routes=tx,sina,em window=[19000101,20500101] strict=True
+[日线] 尝试 route=tx symbol=sz002429
+[日线] 命中 route=tx symbol=sh603533 rows=2037                                                                                                                  
+[日线] 失败 route=tx symbol=sh603533 err=KeyError: "['volume'] not in index"
+[日线] 尝试 route=sina symbol=sh603533
+ 67%|███████████████████████████████████████████████████████████████████████████████████▎                                         | 4/6 [00:01<00:00,  3.23it/s][日线] 命中 route=sina symbol=sh603533 rows=2037
+[候选] sh603533 src=akshare:sina bars=2037 -> cand liq=C avg5=662664437.80 atr=4.75% gap=5.94% obs=True
+ 47%|██████████████████████████████████████████████████████████▎                                                                 | 8/17 [00:02<00:02,  3.09it/s][日线] 开始 symbol=sh600330 routes=tx,sina,em window=[19000101,20500101] strict=True
+[日线] 尝试 route=tx symbol=sh600330
+[日线] 命中 route=tx symbol=sz301018 rows=1120                                                                                                                  
+[日线] 失败 route=tx symbol=sz301018 err=KeyError: "['volume'] not in index"
+[日线] 尝试 route=sina symbol=sz301018
+ 13%|████████████████▌                                                                                                           | 4/30 [00:01<00:08,  3.22it/s][日线] 命中 route=tx symbol=sz300666 rows=2088
+[日线] 失败 route=tx symbol=sz300666 err=KeyError: "['volume'] not in index"
+[日线] 尝试 route=sina symbol=sz300666
+ 24%|█████████████████████████████▏                                                                                              | 4/17 [00:01<00:04,  3.10it/s][日线] 命中 route=sina symbol=sz301018 rows=1120
+[候选] sz301018 src=akshare:sina bars=1120 -> cand liq=B avg5=1634019543.80 atr=6.43% gap=-2.74% obs=True
+[日线] 开始 symbol=sh688818 routes=tx,sina,em window=[19000101,20500101] strict=True
+[日线] 尝试 route=tx symbol=sh688818
+ 29%|████████████████████████████████████▍                                                                                       | 5/17 [00:01<00:03,  3.17it/s][日线] 命中 route=sina symbol=sz300666 rows=2088
+[候选] sz300666 src=akshare:sina bars=2088 -> cand liq=A avg5=2952278089.40 atr=5.24% gap=-2.15% obs=True
+[日线] 开始 symbol=sh688017 routes=tx,sina,em window=[19000101,20500101] strict=True
+[日线] 尝试 route=tx symbol=sh688017
+[日线] 命中 route=tx symbol=sh688818 rows=4
+[日线] 失败 route=tx symbol=sh688818 err=KeyError: "['volume'] not in index"
+[日线] 尝试 route=sina symbol=sh688818
+ 20%|████████████████████████▊                                                                                                   | 6/30 [00:01<00:07,  3.10it/s][日线] 命中 route=sina symbol=sh688818 rows=4
+ 35%|███████████████████████████████████████████▊                                                                                | 6/17 [00:01<00:03,  3.20it/s][候选] sh688818 src=akshare:sina bars=4 -> veto reason=LOW_LIQ_HARD avg5=0.0
+[日线] 开始 symbol=sz002155 routes=tx,sina,em window=[19000101,20500101] strict=True
+[日线] 尝试 route=tx symbol=sz002155
+[日线] 命中 route=tx symbol=sz300102 rows=3675                                                                                                                  
+[日线] 失败 route=tx symbol=sz300102 err=KeyError: "['volume'] not in index"
+[日线] 尝试 route=sina symbol=sz300102
+ 27%|█████████████████████████████████▍                                                                                          | 7/26 [00:02<00:07,  2.68it/s][日线] 命中 route=sina symbol=sz300102 rows=3675
+ 60%|█████████████████████████████████████████████████████████████████████████▊                                                 | 18/30 [00:05<00:04,  2.72it/s][候选] sz300102 src=akshare:sina bars=3675 -> cand liq=A avg5=3433014933.40 atr=8.93% gap=0.74% obs=True
+[日线] 开始 symbol=sh601615 routes=tx,sina,em window=[19000101,20500101] strict=True
+[日线] 尝试 route=tx symbol=sh601615
+[日线] 命中 route=tx symbol=sz002519 rows=3553                                                                                                                  
+[日线] 失败 route=tx symbol=sz002519 err=KeyError: "['volume'] not in index"
+[日线] 尝试 route=sina symbol=sz002519
+ 86%|███████████████████████████████████████████████████████████████████████████████████████████████████████████▏                 | 6/7 [00:01<00:00,  2.97it/s][日线] 命中 route=sina symbol=sz002519 rows=3553
+[候选] sz002519 src=akshare:sina bars=3553 -> cand liq=A avg5=2592450089.80 atr=8.29% gap=-0.32% obs=True
+[日线] 开始 symbol=sz300139 routes=tx,sina,em window=[19000101,20500101] strict=True
+[日线] 尝试 route=tx symbol=sz300139
+[日线] 命中 route=tx symbol=sh688017 rows=1326                                                                                                                  
+[日线] 失败 route=tx symbol=sh688017 err=KeyError: "['volume'] not in index"
+[日线] 尝试 route=sina symbol=sh688017
+ 70%|██████████████████████████████████████████████████████████████████████████████████████                                     | 21/30 [00:06<00:03,  2.91it/s][日线] 命中 route=sina symbol=sh688017 rows=1326
+ 35%|███████████████████████████████████████████▍                                                                                | 7/20 [00:02<00:04,  3.13it/s][候选] sh688017 src=akshare:sina bars=1326 -> cand liq=B avg5=1875649314.40 atr=5.84% gap=-1.48% obs=True
+[并行] 进度 130/200，候选=129，否决=1，观察=53，跳过=0｜路由命中 tx=0 sina=130 em=0 other=0
+[日线] 开始 symbol=sz301171 routes=tx,sina,em window=[19000101,20500101] strict=True
+[日线] 尝试 route=tx symbol=sz301171
+[日线] 命中 route=tx symbol=sz002429 rows=3711                                                                                                                  
+[日线] 失败 route=tx symbol=sz002429 err=KeyError: "['volume'] not in index"
+[日线] 尝试 route=sina symbol=sz002429
+ 80%|████████████████████████████████████████████████████████████████████████████████████████████████████                         | 4/5 [00:01<00:00,  3.31it/s][日线] 命中 route=sina symbol=sz002429 rows=3711
+ 35%|███████████████████████████████████████████▊                                                                                | 6/17 [00:01<00:03,  3.27it/s][候选] sz002429 src=akshare:sina bars=3711 -> cand liq=A avg5=2465772516.00 atr=6.65% gap=0.00% obs=False
+[日线] 开始 symbol=sz300567 routes=tx,sina,em window=[19000101,20500101] strict=True
+[日线] 尝试 route=tx symbol=sz300567
+[日线] 命中 route=tx symbol=sz301171 rows=844                                                                                                                   
+[日线] 失败 route=tx symbol=sz301171 err=KeyError: "['volume'] not in index"
+[日线] 尝试 route=sina symbol=sz301171
+[日线] 命中 route=tx symbol=sh601615 rows=1706                                                                                                                  
+[日线] 失败 route=tx symbol=sh601615 err=KeyError: "['volume'] not in index"
+[日线] 尝试 route=sina symbol=sh601615
+ 65%|███████████████████████████████████████████████████████████████████████████████▉                                           | 13/20 [00:04<00:02,  3.14it/s][日线] 命中 route=sina symbol=sz301171 rows=844
+[候选] sz301171 src=akshare:sina bars=844 -> cand liq=A avg5=3003614215.60 atr=9.56% gap=-1.67% obs=True
+[日线] 开始 symbol=sh603799 routes=tx,sina,em window=[19000101,20500101] strict=True
+[日线] 尝试 route=tx symbol=sh603799
+[日线] 命中 route=sina symbol=sh601615 rows=1706
+ 67%|██████████████████████████████████████████████████████████████████████████████████                                         | 20/30 [00:06<00:03,  3.31it/s][候选] sh601615 src=akshare:sina bars=1706 -> cand liq=A avg5=2705365378.80 atr=7.23% gap=0.00% obs=False
+[日线] 开始 symbol=sh601872 routes=tx,sina,em window=[19000101,20500101] strict=True
+[日线] 尝试 route=tx symbol=sh601872
+[日线] 命中 route=tx symbol=sh600118 rows=6826                                                                                                                  
+[日线] 失败 route=tx symbol=sh600118 err=KeyError: "['volume'] not in index"
+[日线] 尝试 route=sina symbol=sh600118
+ 85%|████████████████████████████████████████████████████████████████████████████████████████████████████████▌                  | 17/20 [00:05<00:00,  3.20it/s][日线] 命中 route=sina symbol=sh600118 rows=6826
+ 80%|██████████████████████████████████████████████████████████████████████████████████████████████████▍                        | 24/30 [00:07<00:01,  3.20it/s][候选] sh600118 src=akshare:sina bars=6826 -> cand liq=A avg5=3515819855.60 atr=6.16% gap=-0.34% obs=False
+[日线] 开始 symbol=sz300395 routes=tx,sina,em window=[19000101,20500101] strict=True
+[日线] 尝试 route=tx symbol=sz300395
+ 50%|██████████████████████████████████████████████████████████████                                                              | 6/12 [00:01<00:01,  3.10it/s][日线] 命中 route=tx symbol=sz002155 rows=4408
+[日线] 失败 route=tx symbol=sz002155 err=KeyError: "['volume'] not in index"
+[日线] 尝试 route=sina symbol=sz002155
+ 92%|█████████████████████████████████████████████████████████████████████████████████████████████████████████████████▌         | 24/26 [00:07<00:00,  3.14it/s][日线] 命中 route=sina symbol=sz002155 rows=4408
+ 58%|████████████████████████████████████████████████████████████████████████▎                                                   | 7/12 [00:02<00:01,  3.06it/s][候选] sz002155 src=akshare:sina bars=4408 -> cand liq=A avg5=3755446549.80 atr=5.91% gap=-1.36% obs=False
+[日线] 开始 symbol=sh688347 routes=tx,sina,em window=[19000101,20500101] strict=True
+[日线] 尝试 route=tx symbol=sh688347
+[日线] 命中 route=tx symbol=sz300139 rows=3695                                                                                                                  
+[日线] 失败 route=tx symbol=sz300139 err=KeyError: "['volume'] not in index"
+[日线] 尝试 route=sina symbol=sz300139
+[日线] 命中 route=tx symbol=sz300567 rows=2245                                                                                                                  
+[日线] 失败 route=tx symbol=sz300567 err=KeyError: "['volume'] not in index"
+[日线] 尝试 route=sina symbol=sz300567
+[日线] 命中 route=tx symbol=sh600330 rows=5904                                                                                                                  
+[日线] 失败 route=tx symbol=sh600330 err=KeyError: "['volume'] not in index"
+[日线] 尝试 route=sina symbol=sh600330
+ 75%|█████████████████████████████████████████████████████████████████████████████████████████████                               | 9/12 [00:02<00:00,  3.08it/s][日线] 命中 route=sina symbol=sz300139 rows=3695
+[候选] sz300139 src=akshare:sina bars=3695 -> cand liq=A avg5=2310142316.20 atr=10.70% gap=0.51% obs=True
+[日线] 开始 symbol=sh600711 routes=tx,sina,em window=[19000101,20500101] strict=True
+[日线] 尝试 route=tx symbol=sh600711
+[日线] 命中 route=tx symbol=sz000066 rows=6631                                                                                                                  
+[日线] 失败 route=tx symbol=sz000066 err=KeyError: "['volume'] not in index"
+[日线] 尝试 route=sina symbol=sz000066
+[日线] 命中 route=sina symbol=sz300567 rows=2245
+ 46%|█████████████████████████████████████████████████████████▏                                                                  | 6/13 [00:01<00:02,  3.24it/s][候选] sz300567 src=akshare:sina bars=2245 -> cand liq=B avg5=1688603560.20 atr=6.21% gap=-0.26% obs=True
+[日线] 开始 symbol=sh601398 routes=tx,sina,em window=[19000101,20500101] strict=True
+[日线] 尝试 route=tx symbol=sh601398
+ 48%|██████████████████████████████████████████████████████████▌                                                                | 10/21 [00:03<00:03,  3.18it/s][日线] 命中 route=sina symbol=sh600330 rows=5904
+[候选] sh600330 src=akshare:sina bars=5904 -> cand liq=A avg5=2749353165.60 atr=6.90% gap=-2.06% obs=False
+[日线] 开始 symbol=sz002400 routes=tx,sina,em window=[19000101,20500101] strict=True
+[日线] 尝试 route=tx symbol=sz002400
+ 54%|██████████████████████████████████████████████████████████████████▊                                                         | 7/13 [00:02<00:01,  3.19it/s][日线] 命中 route=sina symbol=sz000066 rows=6631
+ 52%|████████████████████████████████████████████████████████████████▍                                                          | 11/21 [00:03<00:03,  3.10it/s][候选] sz000066 src=akshare:sina bars=6631 -> cand liq=B avg5=1821409535.60 atr=4.10% gap=-0.85% obs=False
+  3%|████                                                                                                                        | 1/31 [00:00<00:06,  4.62it/s][日线] 开始 symbol=sz000725 routes=tx,sina,em window=[19000101,20500101] strict=True
+[日线] 尝试 route=tx symbol=sz000725
+[日线] 命中 route=tx symbol=sh688347 rows=604
+[日线] 失败 route=tx symbol=sh688347 err=KeyError: "['volume'] not in index"
+[日线] 尝试 route=sina symbol=sh688347
+ 57%|██████████████████████████████████████████████████████████████████████▎                                                    | 12/21 [00:03<00:02,  3.12it/s][日线] 命中 route=sina symbol=sh688347 rows=604
+  6%|████████                                                                                                                    | 2/31 [00:00<00:07,  3.71it/s][候选] sh688347 src=akshare:sina bars=604 -> cand liq=B avg5=1793568787.60 atr=6.11% gap=-0.73% obs=False
+[并行] 进度 140/200，候选=139，否决=1，观察=56，跳过=0｜路由命中 tx=0 sina=140 em=0 other=0
+[日线] 开始 symbol=sh601179 routes=tx,sina,em window=[19000101,20500101] strict=True
+[日线] 尝试 route=tx symbol=sh601179
+ 10%|███████████▊                                                                                                                | 2/21 [00:00<00:04,  3.87it/s][日线] 命中 route=tx symbol=sh603799 rows=2652
+[日线] 失败 route=tx symbol=sh603799 err=KeyError: "['volume'] not in index"
+[日线] 尝试 route=sina symbol=sh603799
+ 10%|████████████                                                                                                                | 3/31 [00:00<00:07,  3.62it/s][日线] 命中 route=sina symbol=sh603799 rows=2652
+[候选] sh603799 src=akshare:sina bars=2652 -> cand liq=A avg5=3010136754.60 atr=4.72% gap=-3.42% obs=False
+[日线] 开始 symbol=sz002624 routes=tx,sina,em window=[19000101,20500101] strict=True
+[日线] 尝试 route=tx symbol=sz002624
+[日线] 命中 route=tx symbol=sz300395 rows=2780                                                                                                                  
+[日线] 失败 route=tx symbol=sz300395 err=KeyError: "['volume'] not in index"
+[日线] 尝试 route=sina symbol=sz300395
+ 23%|████████████████████████████                                                                                                | 7/31 [00:02<00:07,  3.08it/s][日线] 命中 route=sina symbol=sz300395 rows=2780
+ 33%|█████████████████████████████████████████▎                                                                                  | 7/21 [00:02<00:05,  2.69it/s][候选] sz300395 src=akshare:sina bars=2780 -> cand liq=A avg5=3089746131.40 atr=5.98% gap=-1.00% obs=False
+[日线] 开始 symbol=sz300223 routes=tx,sina,em window=[19000101,20500101] strict=True
+[日线] 尝试 route=tx symbol=sz300223
+[日线] 命中 route=tx symbol=sh601872 rows=4541                                                                                                                  
+[日线] 失败 route=tx symbol=sh601872 err=KeyError: "['volume'] not in index"
+[日线] 尝试 route=sina symbol=sh601872
+ 39%|███████████████████████████████████████████████▌                                                                           | 12/31 [00:03<00:06,  2.84it/s][日线] 命中 route=sina symbol=sh601872 rows=4541
+[候选] sh601872 src=akshare:sina bars=4541 -> cand liq=B avg5=1399623102.60 atr=5.41% gap=-0.23% obs=True
+ 56%|█████████████████████████████████████████████████████████████████████▊                                                      | 9/16 [00:02<00:02,  3.01it/s][日线] 开始 symbol=sz000815 routes=tx,sina,em window=[19000101,20500101] strict=True
+[日线] 尝试 route=tx symbol=sz000815
+ 62%|███████████████████████████████████████████████████████████████████████████▋                                               | 16/26 [00:05<00:03,  3.00it/s][日线] 命中 route=tx symbol=sz002400 rows=3603
+[日线] 失败 route=tx symbol=sz002400 err=KeyError: "['volume'] not in index"
+[日线] 尝试 route=sina symbol=sz002400
+ 69%|████████████████████████████████████████████████████████████████████████████████████▌                                      | 11/16 [00:03<00:01,  3.07it/s][日线] 命中 route=sina symbol=sz002400 rows=3603
+[候选] sz002400 src=akshare:sina bars=3603 -> cand liq=A avg5=2909672036.00 atr=7.14% gap=-1.12% obs=False
+[日线] 开始 symbol=sh601231 routes=tx,sina,em window=[19000101,20500101] strict=True
+[日线] 尝试 route=tx symbol=sh601231
+[日线] 命中 route=tx symbol=sz002624 rows=3089                                                                                                                  
+[日线] 失败 route=tx symbol=sz002624 err=KeyError: "['volume'] not in index"
+[日线] 尝试 route=sina symbol=sz002624
+[日线] 命中 route=tx symbol=sh601179 rows=3885                                                                                                                  
+[日线] 失败 route=tx symbol=sh601179 err=KeyError: "['volume'] not in index"
+[日线] 尝试 route=sina symbol=sh601179
+ 69%|█████████████████████████████████████████████████████████████████████████████████████▏                                     | 18/26 [00:06<00:02,  2.92it/s][日线] 命中 route=sina symbol=sz002624 rows=3089
+[候选] sz002624 src=akshare:sina bars=3089 -> cand liq=A avg5=3364375559.60 atr=5.52% gap=-1.82% obs=False
+[日线] 开始 symbol=sz300170 routes=tx,sina,em window=[19000101,20500101] strict=True
+[日线] 尝试 route=tx symbol=sz300170
+ 81%|███████████████████████████████████████████████████████████████████████████████████████████████████▉                       | 13/16 [00:04<00:00,  3.05it/s][日线] 命中 route=sina symbol=sh601179 rows=3885
+  0%|                                                                                                                                    | 0/16 [00:00<?, ?it/s][候选] sh601179 src=akshare:sina bars=3885 -> cand liq=A avg5=2562934389.00 atr=5.88% gap=-1.21% obs=False
+[日线] 开始 symbol=sh688343 routes=tx,sina,em window=[19000101,20500101] strict=True
+[日线] 尝试 route=tx symbol=sh688343
+[日线] 命中 route=tx symbol=sh601398 rows=4672                                                                                                                  
+[日线] 失败 route=tx symbol=sh601398 err=KeyError: "['volume'] not in index"
+[日线] 尝试 route=sina symbol=sh601398
+ 20%|████████████████████████▊                                                                                                   | 3/15 [00:00<00:03,  3.04it/s][日线] 命中 route=sina symbol=sh601398 rows=4672
+ 94%|███████████████████████████████████████████████████████████████████████████████████████████████████████████████████▎       | 15/16 [00:04<00:00,  3.01it/s][候选] sh601398 src=akshare:sina bars=4672 -> cand liq=B avg5=1744160518.80 atr=1.64% gap=0.14% obs=False
+[日线] 开始 symbol=sh601288 routes=tx,sina,em window=[19000101,20500101] strict=True
+[日线] 尝试 route=tx symbol=sh601288
+[日线] 命中 route=tx symbol=sz300223 rows=3330                                                                                                                  
+ 19%|███████████████████████▎                                                                                                    | 3/16 [00:00<00:04,  3.16it/s][日线] 失败 route=tx symbol=sz300223 err=KeyError: "['volume'] not in index"
+[日线] 尝试 route=sina symbol=sz300223
+ 25%|███████████████████████████████                                                                                             | 4/16 [00:01<00:03,  3.01it/s][日线] 命中 route=sina symbol=sz300223 rows=3330
+[候选] sz300223 src=akshare:sina bars=3330 -> cand liq=A avg5=2239417542.40 atr=6.14% gap=-0.79% obs=False
+ 12%|██████████████▌                                                                                                             | 2/17 [00:00<00:04,  3.56it/s][日线] 开始 symbol=sh601212 routes=tx,sina,em window=[19000101,20500101] strict=True
+[日线] 尝试 route=tx symbol=sh601212
+[日线] 命中 route=tx symbol=sh688343 rows=697                                                                                                                   
+[日线] 失败 route=tx symbol=sh688343 err=KeyError: "['volume'] not in index"
+[日线] 尝试 route=sina symbol=sh688343
+ 41%|██████████████████████████████████████████████████▉                                                                        | 12/29 [00:04<00:05,  2.94it/s][日线] 命中 route=sina symbol=sh688343 rows=697
+ 31%|██████████████████████████████████████▊                                                                                     | 5/16 [00:01<00:03,  3.00it/s][候选] sh688343 src=akshare:sina bars=697 -> cand liq=B avg5=1533134280.60 atr=5.77% gap=-0.84% obs=False
+[日线] 开始 symbol=sz300277 routes=tx,sina,em window=[19000101,20500101] strict=True
+[日线] 尝试 route=tx symbol=sz300277
+[日线] 命中 route=tx symbol=sz000725 rows=5958                                                                                                                  
+[日线] 失败 route=tx symbol=sz000725 err=KeyError: "['volume'] not in index"
+[日线] 尝试 route=sina symbol=sz000725
+ 40%|█████████████████████████████████████████████████▌                                                                          | 4/10 [00:01<00:02,  2.97it/s][日线] 命中 route=sina symbol=sz000725 rows=5958
+[候选] sz000725 src=akshare:sina bars=5958 -> cand liq=A avg5=2063869343.00 atr=2.45% gap=-0.47% obs=False
+[并行] 进度 150/200，候选=149，否决=1，观察=57，跳过=0｜路由命中 tx=0 sina=150 em=0 other=0
+[日线] 开始 symbol=sh688313 routes=tx,sina,em window=[19000101,20500101] strict=True
+[日线] 尝试 route=tx symbol=sh688313
+ 60%|██████████████████████████████████████████████████████████████████████████▍                                                 | 6/10 [00:02<00:01,  2.03it/s][日线] 命中 route=tx symbol=sh600711 rows=6800
+[日线] 失败 route=tx symbol=sh600711 err=KeyError: "['volume'] not in index"
+[日线] 尝试 route=sina symbol=sh600711
+ 70%|██████████████████████████████████████████████████████████████████████████████████████▊                                     | 7/10 [00:02<00:01,  2.26it/s][日线] 命中 route=sina symbol=sh600711 rows=6800
+ 44%|██████████████████████████████████████████████████████▎                                                                     | 7/16 [00:02<00:03,  2.41it/s][候选] sh600711 src=akshare:sina bars=6800 -> cand liq=A avg5=2191992162.80 atr=6.16% gap=-2.53% obs=True
+[日线] 开始 symbol=sz002455 routes=tx,sina,em window=[19000101,20500101] strict=True
+[日线] 尝试 route=tx symbol=sz002455
+ 90%|███████████████████████████████████████████████████████████████████████████████████████████████████████████████▌            | 9/10 [00:03<00:00,  2.63it/s][日线] 命中 route=tx symbol=sh601231 rows=3384
+[日线] 失败 route=tx symbol=sh601231 err=KeyError: "['volume'] not in index"
+[日线] 尝试 route=sina symbol=sh601231
+ 12%|██████████████▌                                                                                                             | 2/17 [00:00<00:04,  3.37it/s][日线] 命中 route=sina symbol=sh601231 rows=3384
+ 71%|█████████████████████████████████████████████████████████████████████████████████████████▎                                   | 5/7 [00:02<00:00,  2.58it/s][候选] sh601231 src=akshare:sina bars=3384 -> cand liq=A avg5=2204214209.80 atr=6.16% gap=-0.19% obs=True
+[日线] 开始 symbol=sz300454 routes=tx,sina,em window=[19000101,20500101] strict=True
+[日线] 尝试 route=tx symbol=sz300454
+[日线] 命中 route=tx symbol=sh601212 rows=2147                                                                                                                  
+[日线] 失败 route=tx symbol=sh601212 err=KeyError: "['volume'] not in index"
+[日线] 尝试 route=sina symbol=sh601212
+ 76%|██████████████████████████████████████████████████████████████████████████████████████████████                             | 13/17 [00:04<00:01,  2.67it/s][日线] 命中 route=sina symbol=sh601212 rows=2147
+[候选] sh601212 src=akshare:sina bars=2147 -> cand liq=A avg5=2790086906.00 atr=8.83% gap=-4.57% obs=True
+[日线] 开始 symbol=sh600580 routes=tx,sina,em window=[19000101,20500101] strict=True
+[日线] 尝试 route=tx symbol=sh600580
+ 24%|█████████████████████████████▏                                                                                              | 4/17 [00:01<00:04,  2.76it/s][日线] 命中 route=tx symbol=sh688313 rows=1329
+[日线] 失败 route=tx symbol=sh688313 err=KeyError: "['volume'] not in index"
+[日线] 尝试 route=sina symbol=sh688313
+[日线] 命中 route=tx symbol=sz300170 rows=3583                                                                                                                  
+[日线] 失败 route=tx symbol=sz300170 err=KeyError: "['volume'] not in index"
+[日线] 尝试 route=sina symbol=sz300170
+ 75%|████████████████████████████████████████████████████████████████████████████████████████████▎                              | 12/16 [00:04<00:01,  2.54it/s][日线] 命中 route=sina symbol=sh688313 rows=1329
+ 83%|█████████████████████████████████████████████████████████████████████████████████████████████████████▊                     | 24/29 [00:08<00:01,  2.56it/s][候选] sh688313 src=akshare:sina bars=1329 -> cand liq=A avg5=2480122126.40 atr=6.93% gap=-1.90% obs=False
+ 29%|████████████████████████████████████▍                                                                                       | 5/17 [00:01<00:04,  2.86it/s][日线] 开始 symbol=sh688099 routes=tx,sina,em window=[19000101,20500101] strict=True
+[日线] 尝试 route=tx symbol=sh688099
+ 88%|████████████████████████████████████████████████████████████████████████████████████████████████████████████▌              | 15/17 [00:05<00:00,  2.58it/s][日线] 命中 route=sina symbol=sz300170 rows=3583
+[候选] sz300170 src=akshare:sina bars=3583 -> cand liq=A avg5=2189894341.80 atr=6.62% gap=-1.61% obs=False
+  0%|                                                                                                                                     | 0/8 [00:00<?, ?it/s][日线] 开始 symbol=sz000592 routes=tx,sina,em window=[19000101,20500101] strict=True
+[日线] 尝试 route=tx symbol=sz000592
+[日线] 命中 route=tx symbol=sh601288 rows=3784                                                                                                                  
+[日线] 失败 route=tx symbol=sh601288 err=KeyError: "['volume'] not in index"
+[日线] 尝试 route=sina symbol=sh601288
+ 38%|██████████████████████████████████████████████▉                                                                              | 3/8 [00:00<00:01,  3.21it/s][日线] 命中 route=sina symbol=sh601288 rows=3784
+  6%|████████                                                                                                                    | 2/31 [00:00<00:09,  3.13it/s][候选] sh601288 src=akshare:sina bars=3784 -> cand liq=A avg5=2318789495.20 atr=2.25% gap=0.30% obs=False
+[日线] 开始 symbol=sz002261 routes=tx,sina,em window=[19000101,20500101] strict=True
+[日线] 尝试 route=tx symbol=sz002261
+[日线] 命中 route=tx symbol=sz300277 rows=3379                                                                                                                  
+[日线] 失败 route=tx symbol=sz300277 err=KeyError: "['volume'] not in index"
+[日线] 尝试 route=sina symbol=sz300277
+ 59%|████████████████████████████████████████████████████████████████████████▎                                                  | 10/17 [00:03<00:02,  2.91it/s][日线] 命中 route=sina symbol=sz300277 rows=3379
+ 24%|█████████████████████████████▊                                                                                              | 6/25 [00:02<00:06,  2.89it/s][候选] sz300277 src=akshare:sina bars=3379 -> cand liq=B avg5=1662368127.60 atr=7.68% gap=-1.76% obs=False
+ 62%|██████████████████████████████████████████████████████████████████████████████▏                                              | 5/8 [00:01<00:00,  3.04it/s][日线] 开始 symbol=sz300033 routes=tx,sina,em window=[19000101,20500101] strict=True
+[日线] 尝试 route=tx symbol=sz300033
+[日线] 命中 route=tx symbol=sz000815 rows=6268
+[日线] 失败 route=tx symbol=sz000815 err=KeyError: "['volume'] not in index"
+[日线] 尝试 route=sina symbol=sz000815
+ 16%|████████████████████                                                                                                        | 5/31 [00:01<00:09,  2.83it/s][日线] 命中 route=sina symbol=sz000815 rows=6268
+  6%|██████▉                                                                                                                     | 1/18 [00:00<00:04,  4.21it/s][候选] sz000815 src=akshare:sina bars=6268 -> cand liq=B avg5=1975208778.60 atr=5.80% gap=-1.15% obs=False
+[日线] 开始 symbol=sh600547 routes=tx,sina,em window=[19000101,20500101] strict=True
+[日线] 尝试 route=tx symbol=sh600547
+[日线] 命中 route=tx symbol=sz300454 rows=1885                                                                                                                  
+[日线] 失败 route=tx symbol=sz300454 err=KeyError: "['volume'] not in index"
+[日线] 尝试 route=sina symbol=sz300454
+ 11%|█████████████▊                                                                                                              | 2/18 [00:00<00:04,  3.39it/s][日线] 命中 route=sina symbol=sz300454 rows=1885
+ 21%|██████████████████████████                                                                                                  | 4/19 [00:01<00:04,  3.02it/s][候选] sz300454 src=akshare:sina bars=1885 -> cand liq=A avg5=2031775715.80 atr=6.59% gap=-1.97% obs=False
+[日线] 开始 symbol=sz002129 routes=tx,sina,em window=[19000101,20500101] strict=True
+[日线] 尝试 route=tx symbol=sz002129
+[日线] 命中 route=tx symbol=sh688099 rows=1583                                                                                                                  
+[日线] 失败 route=tx symbol=sh688099 err=KeyError: "['volume'] not in index"
+[日线] 尝试 route=sina symbol=sh688099
+ 26%|████████████████████████████████▋                                                                                           | 5/19 [00:01<00:04,  2.96it/s][日线] 命中 route=sina symbol=sh688099 rows=1583
+[候选] sh688099 src=akshare:sina bars=1583 -> cand liq=B avg5=1356752112.20 atr=4.37% gap=0.31% obs=False
+[并行] 进度 160/200，候选=159，否决=1，观察=60，跳过=0｜路由命中 tx=0 sina=160 em=0 other=0
+[日线] 开始 symbol=sh600362 routes=tx,sina,em window=[19000101,20500101] strict=True
+[日线] 尝试 route=tx symbol=sh600362
+[日线] 命中 route=tx symbol=sz002455 rows=3725                                                                                                                  
+[日线] 失败 route=tx symbol=sz002455 err=KeyError: "['volume'] not in index"
+[日线] 尝试 route=sina symbol=sz002455
+ 47%|██████████████████████████████████████████████████████████▋                                                                 | 9/19 [00:03<00:03,  2.89it/s][日线] 命中 route=sina symbol=sz002455 rows=3725
+[候选] sz002455 src=akshare:sina bars=3725 -> cand liq=B avg5=1452148067.80 atr=5.99% gap=0.28% obs=False
+[日线] 开始 symbol=sz300724 routes=tx,sina,em window=[19000101,20500101] strict=True
+[日线] 尝试 route=tx symbol=sz300724
+[日线] 命中 route=tx symbol=sz300724 rows=1824                                                                                                                  
+[日线] 失败 route=tx symbol=sz300724 err=KeyError: "['volume'] not in index"
+[日线] 尝试 route=sina symbol=sz300724
+[日线] 命中 route=tx symbol=sz002261 rows=4093                                                                                                                  
+[日线] 失败 route=tx symbol=sz002261 err=KeyError: "['volume'] not in index"
+[日线] 尝试 route=sina symbol=sz002261
+[日线] 命中 route=sina symbol=sz300724 rows=1824
+[候选] sz300724 src=akshare:sina bars=1824 -> cand liq=A avg5=3207283601.40 atr=7.09% gap=-0.94% obs=False
+[日线] 开始 symbol=sz002361 routes=tx,sina,em window=[19000101,20500101] strict=True
+[日线] 尝试 route=tx symbol=sz002361
+[日线] 命中 route=sina symbol=sz002261 rows=4093                                                                                                                
+[日线] 命中 route=tx symbol=sz300033 rows=3901
+[日线] 失败 route=tx symbol=sz300033 err=KeyError: "['volume'] not in index"
+[日线] 尝试 route=sina symbol=sz300033
+[候选] sz002261 src=akshare:sina bars=4093 -> cand liq=B avg5=1403628979.20 atr=3.24% gap=-0.15% obs=False
+[日线] 开始 symbol=sh600418 routes=tx,sina,em window=[19000101,20500101] strict=True
+[日线] 尝试 route=tx symbol=sh600418
+[日线] 命中 route=tx symbol=sh600580 rows=5613                                                                                                                  
+[日线] 失败 route=tx symbol=sh600580 err=KeyError: "['volume'] not in index"
+[日线] 尝试 route=sina symbol=sh600580
+  6%|███████▎                                                                                                                    | 1/17 [00:00<00:04,  3.49it/s][日线] 命中 route=sina symbol=sz300033 rows=3901
+[候选] sz300033 src=akshare:sina bars=3901 -> cand liq=A avg5=2091140719.40 atr=3.78% gap=0.26% obs=False
+  0%|                                                                                                                                    | 0/26 [00:00<?, ?it/s][日线] 开始 symbol=sh600977 routes=tx,sina,em window=[19000101,20500101] strict=True
+[日线] 尝试 route=tx symbol=sh600977
+ 75%|████████████████████████████████████████████████████████████████████████████████████████████▎                              | 18/24 [00:05<00:02,  2.91it/s][日线] 命中 route=sina symbol=sh600580 rows=5613
+ 12%|██████████████▌                                                                                                             | 2/17 [00:00<00:04,  3.27it/s][候选] sh600580 src=akshare:sina bars=5613 -> cand liq=B avg5=1641193828.40 atr=3.36% gap=-0.16% obs=False
+[日线] 开始 symbol=sh600183 routes=tx,sina,em window=[19000101,20500101] strict=True
+[日线] 尝试 route=tx symbol=sh600183
+[日线] 命中 route=tx symbol=sz002129 rows=4030                                                                                                                  
+[日线] 失败 route=tx symbol=sz002129 err=KeyError: "['volume'] not in index"
+[日线] 尝试 route=sina symbol=sz002129
+ 14%|█████████████████                                                                                                           | 4/29 [00:01<00:08,  2.96it/s][日线] 命中 route=sina symbol=sz002129 rows=4030
+ 23%|████████████████████████████▌                                                                                               | 6/26 [00:01<00:06,  3.10it/s][候选] sz002129 src=akshare:sina bars=4030 -> cand liq=A avg5=3896630300.80 atr=5.42% gap=-0.46% obs=False
+[日线] 开始 symbol=sh688031 routes=tx,sina,em window=[19000101,20500101] strict=True
+[日线] 尝试 route=tx symbol=sh688031
+[日线] 命中 route=tx symbol=sh600547 rows=5219                                                                                                                  
+[日线] 失败 route=tx symbol=sh600547 err=KeyError: "['volume'] not in index"
+[日线] 尝试 route=sina symbol=sh600547
+[日线] 命中 route=tx symbol=sz000592 rows=6524                                                                                                                  
+[日线] 失败 route=tx symbol=sz000592 err=KeyError: "['volume'] not in index"
+[日线] 尝试 route=sina symbol=sz000592
+[日线] 命中 route=sina symbol=sh600547 rows=5219
+ 24%|█████████████████████████████▉                                                                                              | 7/29 [00:02<00:07,  3.05it/s][候选] sh600547 src=akshare:sina bars=5219 -> cand liq=A avg5=2559263837.80 atr=6.33% gap=-2.71% obs=False
+ 73%|██████████████████████████████████████████████████████████████████████████████████████████▏                                 | 8/11 [00:02<00:01,  2.95it/s][日线] 开始 symbol=sz002931 routes=tx,sina,em window=[19000101,20500101] strict=True
+[日线] 尝试 route=tx symbol=sz002931
+ 28%|██████████████████████████████████▏                                                                                         | 8/29 [00:02<00:06,  3.04it/s][日线] 命中 route=sina symbol=sz000592 rows=6524
+ 82%|█████████████████████████████████████████████████████████████████████████████████████████████████████▍                      | 9/11 [00:03<00:00,  2.99it/s][候选] sz000592 src=akshare:sina bars=6524 -> cand liq=A avg5=2485294989.60 atr=8.13% gap=2.01% obs=True
+[日线] 开始 symbol=sz000333 routes=tx,sina,em window=[19000101,20500101] strict=True
+[日线] 尝试 route=tx symbol=sz000333
+[日线] 命中 route=tx symbol=sh688031 rows=811                                                                                                                   
+[日线] 失败 route=tx symbol=sh688031 err=KeyError: "['volume'] not in index"
+[日线] 尝试 route=sina symbol=sh688031
+[日线] 命中 route=tx symbol=sh600362 rows=5769                                                                                                                  
+[日线] 失败 route=tx symbol=sh600362 err=KeyError: "['volume'] not in index"
+[日线] 尝试 route=sina symbol=sh600362
+ 34%|██████████████████████████████████████████▍                                                                                | 10/29 [00:03<00:06,  3.08it/s][日线] 命中 route=sina symbol=sh688031 rows=811
+[候选] sh688031 src=akshare:sina bars=811 -> cand liq=B avg5=1100621497.20 atr=9.21% gap=-1.64% obs=True
+[日线] 开始 symbol=sz300014 routes=tx,sina,em window=[19000101,20500101] strict=True
+[日线] 尝试 route=tx symbol=sz300014
+[日线] 命中 route=tx symbol=sh600977 rows=2313                                                                                                                  
+[日线] 失败 route=tx symbol=sh600977 err=KeyError: "['volume'] not in index"
+[日线] 尝试 route=sina symbol=sh600977
+ 33%|█████████████████████████████████████████▋                                                                                   | 3/9 [00:00<00:01,  3.12it/s][日线] 命中 route=sina symbol=sh600362 rows=5769
+[候选] sh600362 src=akshare:sina bars=5769 -> cand liq=A avg5=2149516762.20 atr=6.26% gap=-2.35% obs=True
+[并行] 进度 170/200，候选=169，否决=1，观察=63，跳过=0｜路由命中 tx=0 sina=170 em=0 other=0
+[日线] 命中 route=sina symbol=sh600977 rows=2313
+[日线] 开始 symbol=sh688110 routes=tx,sina,em window=[19000101,20500101] strict=True
+[日线] 尝试 route=tx symbol=sh688110
+  0%|                                                                                                                                    | 0/18 [00:00<?, ?it/s][候选] sh600977 src=akshare:sina bars=2313 -> cand liq=A avg5=2489997787.80 atr=5.70% gap=-0.62% obs=False
+[日线] 开始 symbol=sh600276 routes=tx,sina,em window=[19000101,20500101] strict=True
+[日线] 尝试 route=tx symbol=sh600276
+ 43%|█████████████████████████████████████████████████████▏                                                                      | 6/14 [00:01<00:02,  3.00it/s][日线] 命中 route=tx symbol=sz002361 rows=3775
+[日线] 失败 route=tx symbol=sz002361 err=KeyError: "['volume'] not in index"
+[日线] 尝试 route=sina symbol=sz002361
+ 65%|████████████████████████████████████████████████████████████████████████████████▍                                          | 17/26 [00:05<00:03,  2.88it/s][日线] 命中 route=sina symbol=sz002361 rows=3775
+ 89%|███████████████████████████████████████████████████████████████████████████████████████████████████████████████              | 8/9 [00:02<00:00,  3.10it/s][候选] sz002361 src=akshare:sina bars=3775 -> cand liq=A avg5=3363525765.00 atr=9.52% gap=1.13% obs=True
+[日线] 开始 symbol=sh600584 routes=tx,sina,em window=[19000101,20500101] strict=True
+[日线] 尝试 route=tx symbol=sh600584
+ 69%|█████████████████████████████████████████████████████████████████████████████████████▏                                     | 18/26 [00:05<00:02,  2.89it/s][日线] 命中 route=tx symbol=sz002931 rows=1892
+[日线] 失败 route=tx symbol=sz002931 err=KeyError: "['volume'] not in index"
+[日线] 尝试 route=sina symbol=sz002931
+ 57%|██████████████████████████████████████████████████████████████████████▊                                                     | 8/14 [00:02<00:02,  2.94it/s][日线] 命中 route=tx symbol=sh688110 rows=1012
+[日线] 失败 route=tx symbol=sh688110 err=KeyError: "['volume'] not in index"
+[日线] 尝试 route=sina symbol=sh688110
+  4%|█████▏                                                                                                                      | 1/24 [00:00<00:06,  3.64it/s][日线] 命中 route=sina symbol=sz002931 rows=1892
+ 22%|███████████████████████████▌                                                                                                | 6/27 [00:01<00:06,  3.04it/s][候选] sz002931 src=akshare:sina bars=1892 -> cand liq=A avg5=2417813833.40 atr=8.23% gap=0.06% obs=True
+ 73%|█████████████████████████████████████████████████████████████████████████████████████████▉                                 | 19/26 [00:06<00:02,  2.98it/s][日线] 开始 symbol=sh600372 routes=tx,sina,em window=[19000101,20500101] strict=True
+[日线] 尝试 route=tx symbol=sh600372
+[日线] 命中 route=sina symbol=sh688110 rows=1012
+[候选] sh688110 src=akshare:sina bars=1012 -> cand liq=A avg5=2196830919.20 atr=5.67% gap=-0.80% obs=False
+[日线] 开始 symbol=sz002594 routes=tx,sina,em window=[19000101,20500101] strict=True
+[日线] 尝试 route=tx symbol=sz002594
+ 31%|██████████████████████████████████████▊                                                                                     | 5/16 [00:01<00:03,  3.09it/s][日线] 命中 route=tx symbol=sz000333 rows=2955
+[日线] 失败 route=tx symbol=sz000333 err=KeyError: "['volume'] not in index"
+[日线] 尝试 route=sina symbol=sz000333
+ 38%|██████████████████████████████████████████████▌                                                                             | 6/16 [00:01<00:03,  3.07it/s][日线] 命中 route=sina symbol=sz000333 rows=2955
+[候选] sz000333 src=akshare:sina bars=2955 -> cand liq=A avg5=2038073035.00 atr=1.72% gap=-0.36% obs=False
+[日线] 开始 symbol=sz000960 routes=tx,sina,em window=[19000101,20500101] strict=True
+[日线] 尝试 route=tx symbol=sz000960
+[日线] 命中 route=tx symbol=sh600418 rows=5761                                                                                                                  
+[日线] 失败 route=tx symbol=sh600418 err=KeyError: "['volume'] not in index"
+[日线] 尝试 route=sina symbol=sh600418
+ 31%|██████████████████████████████████████▏                                                                                     | 8/26 [00:02<00:05,  3.04it/s][日线] 命中 route=sina symbol=sh600418 rows=5761
+[候选] sh600418 src=akshare:sina bars=5761 -> cand liq=A avg5=3407490590.00 atr=3.63% gap=-0.98% obs=True
+ 90%|██████████████████████████████████████████████████████████████████████████████████████████████████████████████▎            | 26/29 [00:08<00:00,  3.01it/s][日线] 开始 symbol=sz300188 routes=tx,sina,em window=[19000101,20500101] strict=True
+[日线] 尝试 route=tx symbol=sz300188
+[日线] 命中 route=tx symbol=sz300014 rows=3899                                                                                                                  
+[日线] 失败 route=tx symbol=sz300014 err=KeyError: "['volume'] not in index"
+[日线] 尝试 route=sina symbol=sz300014
+[日线] 命中 route=tx symbol=sh600183 rows=6533                                                                                                                  
+[日线] 失败 route=tx symbol=sh600183 err=KeyError: "['volume'] not in index"
+[日线] 尝试 route=sina symbol=sh600183
+[日线] 命中 route=sina symbol=sz300014 rows=3899
+[候选] sz300014 src=akshare:sina bars=3899 -> cand liq=A avg5=2182260091.00 atr=3.80% gap=-0.12% obs=False
+[日线] 开始 symbol=sz000063 routes=tx,sina,em window=[19000101,20500101] strict=True
+[日线] 尝试 route=tx symbol=sz000063
+ 70%|██████████████████████████████████████████████████████████████████████████████████████▌                                    | 19/27 [00:06<00:02,  2.86it/s][日线] 命中 route=sina symbol=sh600183 rows=6533
+[候选] sh600183 src=akshare:sina bars=6533 -> cand liq=A avg5=2610851457.00 atr=5.35% gap=-1.23% obs=False
+[日线] 开始 symbol=sz300115 routes=tx,sina,em window=[19000101,20500101] strict=True
+[日线] 尝试 route=tx symbol=sz300115
+ 33%|█████████████████████████████████████████▎                                                                                  | 9/27 [00:03<00:06,  2.81it/s][日线] 命中 route=tx symbol=sz002594 rows=3544
+[日线] 失败 route=tx symbol=sz002594 err=KeyError: "['volume'] not in index"
+[日线] 尝试 route=sina symbol=sz002594
+ 37%|█████████████████████████████████████████████▌                                                                             | 10/27 [00:03<00:06,  2.82it/s][日线] 命中 route=sina symbol=sz002594 rows=3544
+ 24%|█████████████████████████████▏                                                                                              | 4/17 [00:01<00:03,  3.30it/s][候选] sz002594 src=akshare:sina bars=3544 -> cand liq=A avg5=2408385887.40 atr=2.02% gap=-1.22% obs=False
+[日线] 开始 symbol=sh603629 routes=tx,sina,em window=[19000101,20500101] strict=True
+[日线] 尝试 route=tx symbol=sh603629
+ 77%|██████████████████████████████████████████████████████████████████████████████████████████████▌                            | 20/26 [00:06<00:02,  2.78it/s][日线] 命中 route=tx symbol=sh600276 rows=6099
+[日线] 失败 route=tx symbol=sh600276 err=KeyError: "['volume'] not in index"
+[日线] 尝试 route=sina symbol=sh600276
+ 81%|███████████████████████████████████████████████████████████████████████████████████████████████████▎                       | 21/26 [00:07<00:01,  2.66it/s][日线] 命中 route=sina symbol=sh600276 rows=6099
+[候选] sh600276 src=akshare:sina bars=6099 -> cand liq=A avg5=2666481478.20 atr=2.41% gap=0.03% obs=False
+[并行] 进度 180/200，候选=179，否决=1，观察=66，跳过=0｜路由命中 tx=0 sina=180 em=0 other=0
+[日线] 开始 symbol=sh688270 routes=tx,sina,em window=[19000101,20500101] strict=True
+[日线] 尝试 route=tx symbol=sh688270
+  0%|                                                                                                                                     | 0/5 [00:00<?, ?it/s][日线] 命中 route=tx symbol=sh600584 rows=5209
+[日线] 失败 route=tx symbol=sh600584 err=KeyError: "['volume'] not in index"
+[日线] 尝试 route=sina symbol=sh600584
+ 94%|███████████████████████████████████████████████████████████████████████████████████████████████████████████████████▎       | 15/16 [00:04<00:00,  2.97it/s][日线] 命中 route=sina symbol=sh600584 rows=5209
+ 20%|█████████████████████████                                                                                                    | 1/5 [00:00<00:01,  3.48it/s][候选] sh600584 src=akshare:sina bars=5209 -> cand liq=A avg5=2289607354.60 atr=4.22% gap=-1.35% obs=False
+[日线] 开始 symbol=sz000988 routes=tx,sina,em window=[19000101,20500101] strict=True
+[日线] 尝试 route=tx symbol=sz000988
+  0%|                                                                                                                                    | 0/27 [00:00<?, ?it/s][日线] 命中 route=tx symbol=sz300188 rows=3525
+[日线] 失败 route=tx symbol=sz300188 err=KeyError: "['volume'] not in index"
+[日线] 尝试 route=sina symbol=sz300188
+ 89%|███████████████████████████████████████████████████████████████████████████████████████████████████████████████              | 8/9 [00:02<00:00,  3.01it/s][日线] 命中 route=sina symbol=sz300188 rows=3525
+ 67%|██████████████████████████████████████████████████████████████████████████████████                                         | 18/27 [00:06<00:03,  2.78it/s][候选] sz300188 src=akshare:sina bars=3525 -> cand liq=B avg5=1119055928.80 atr=4.88% gap=3.38% obs=True
+[日线] 开始 symbol=sz002353 routes=tx,sina,em window=[19000101,20500101] strict=True
+[日线] 尝试 route=tx symbol=sz002353
+[日线] 命中 route=tx symbol=sh603629 rows=1734                                                                                                                  
+[日线] 失败 route=tx symbol=sh603629 err=KeyError: "['volume'] not in index"
+[日线] 尝试 route=sina symbol=sh603629
+  6%|███████▎                                                                                                                    | 1/17 [00:00<00:04,  3.29it/s][日线] 命中 route=tx symbol=sh600372 rows=5474
+[日线] 失败 route=tx symbol=sh600372 err=KeyError: "['volume'] not in index"
+[日线] 尝试 route=sina symbol=sh600372
+ 11%|█████████████▊                                                                                                              | 3/27 [00:00<00:07,  3.22it/s][日线] 命中 route=sina symbol=sh603629 rows=1734
+[候选] sh603629 src=akshare:sina bars=1734 -> cand liq=A avg5=2374066263.80 atr=6.05% gap=0.27% obs=False
+[日线] 开始 symbol=sz002491 routes=tx,sina,em window=[19000101,20500101] strict=True
+[日线] 尝试 route=tx symbol=sz002491
+[日线] 命中 route=tx symbol=sh688270 rows=982                                                                                                                   
+[日线] 失败 route=tx symbol=sh688270 err=KeyError: "['volume'] not in index"
+[日线] 尝试 route=sina symbol=sh688270
+ 53%|█████████████████████████████████████████████████████████████████▌                                                         | 16/30 [00:05<00:04,  2.86it/s][日线] 命中 route=sina symbol=sh600372 rows=5474
+ 15%|██████████████████▎                                                                                                         | 4/27 [00:01<00:07,  3.00it/s][候选] sh600372 src=akshare:sina bars=5474 -> cand liq=B avg5=1126612396.80 atr=4.44% gap=-0.83% obs=False
+[日线] 开始 symbol=sz300624 routes=tx,sina,em window=[19000101,20500101] strict=True
+[日线] 尝试 route=tx symbol=sz300624
+[日线] 命中 route=sina symbol=sh688270 rows=982
+[候选] sh688270 src=akshare:sina bars=982 -> cand liq=A avg5=2320817015.00 atr=8.50% gap=0.31% obs=True
+[日线] 开始 symbol=sz000831 routes=tx,sina,em window=[19000101,20500101] strict=True
+[日线] 尝试 route=tx symbol=sz000831
+ 81%|████████████████████████████████████████████████████████████████████████████████████████████████████▏                      | 22/27 [00:07<00:01,  2.78it/s][日线] 命中 route=tx symbol=sz300115 rows=3718
+[日线] 失败 route=tx symbol=sz300115 err=KeyError: "['volume'] not in index"
+[日线] 尝试 route=sina symbol=sz300115
+ 22%|███████████████████████████▌                                                                                                | 6/27 [00:01<00:07,  2.86it/s][日线] 命中 route=sina symbol=sz300115 rows=3718
+[候选] sz300115 src=akshare:sina bars=3718 -> cand liq=A avg5=2090732975.80 atr=4.97% gap=0.00% obs=False
+[日线] 开始 symbol=sz300450 routes=tx,sina,em window=[19000101,20500101] strict=True
+[日线] 尝试 route=tx symbol=sz300450
+[日线] 命中 route=tx symbol=sz000960 rows=6145                                                                                                                  
+[日线] 失败 route=tx symbol=sz000960 err=KeyError: "['volume'] not in index"
+[日线] 尝试 route=sina symbol=sz000960
+ 44%|██████████████████████████████████████████████████████▋                                                                    | 12/27 [00:03<00:05,  2.96it/s][日线] 命中 route=sina symbol=sz000960 rows=6145
+ 53%|█████████████████████████████████████████████████████████████████▋                                                          | 9/17 [00:02<00:02,  2.89it/s][候选] sz000960 src=akshare:sina bars=6145 -> cand liq=B avg5=1770156131.80 atr=6.68% gap=-3.21% obs=True
+[日线] 开始 symbol=sh688223 routes=tx,sina,em window=[19000101,20500101] strict=True
+[日线] 尝试 route=tx symbol=sh688223
+[日线] 命中 route=tx symbol=sz300624 rows=1950                                                                                                                  
+[日线] 失败 route=tx symbol=sz300624 err=KeyError: "['volume'] not in index"
+[日线] 尝试 route=sina symbol=sz300624
+ 40%|██████████████████████████████████████████████████                                                                           | 2/5 [00:01<00:01,  2.03it/s][日线] 命中 route=sina symbol=sz300624 rows=1950
+[候选] sz300624 src=akshare:sina bars=1950 -> cand liq=A avg5=2859120689.20 atr=7.05% gap=-1.31% obs=False
+[日线] 开始 symbol=sz000807 routes=tx,sina,em window=[19000101,20500101] strict=True
+[日线] 尝试 route=tx symbol=sz000807
+ 92%|████████████████████████████████████████████████████████████████████████████████████████████████████████████████▊          | 11/12 [00:03<00:00,  2.60it/s][日线] 命中 route=tx symbol=sz000063 rows=6692
+[日线] 失败 route=tx symbol=sz000063 err=KeyError: "['volume'] not in index"
+[日线] 尝试 route=sina symbol=sz000063
+[日线] 命中 route=tx symbol=sh688223 rows=983                                                                                                                   
+[日线] 失败 route=tx symbol=sh688223 err=KeyError: "['volume'] not in index"
+[日线] 尝试 route=sina symbol=sh688223
+[日线] 命中 route=tx symbol=sz300450 rows=2467                                                                                                                  
+[日线] 失败 route=tx symbol=sz300450 err=KeyError: "['volume'] not in index"
+[日线] 尝试 route=sina symbol=sz300450
+ 94%|███████████████████████████████████████████████████████████████████████████████████████████████████████████████████▊       | 16/17 [00:06<00:00,  2.58it/s][日线] 命中 route=sina symbol=sh688223 rows=983
+[候选] sh688223 src=akshare:sina bars=983 -> cand liq=A avg5=3123409957.80 atr=7.72% gap=-1.62% obs=False
+ 10%|████████████▊                                                                                                               | 3/29 [00:01<00:09,  2.86it/s][日线] 开始 symbol=sh688702 routes=tx,sina,em window=[19000101,20500101] strict=True
+[日线] 尝试 route=tx symbol=sh688702
+[日线] 命中 route=sina symbol=sz000063 rows=6692
+[候选] sz000063 src=akshare:sina bars=6692 -> cand liq=A avg5=2366662195.40 atr=2.81% gap=-0.88% obs=False
+[并行] 进度 190/200，候选=189，否决=1，观察=69，跳过=0｜路由命中 tx=0 sina=190 em=0 other=0
+[日线] 开始 symbol=sh600884 routes=tx,sina,em window=[19000101,20500101] strict=True
+[日线] 尝试 route=tx symbol=sh600884
+ 48%|███████████████████████████████████████████████████████████▍                                                               | 14/29 [00:05<00:05,  2.54it/s][日线] 命中 route=sina symbol=sz300450 rows=2467
+  0%|                                                                                                                                     | 0/4 [00:00<?, ?it/s][候选] sz300450 src=akshare:sina bars=2467 -> cand liq=A avg5=2885576759.00 atr=5.25% gap=-0.45% obs=False
+ 70%|██████████████████████████████████████████████████████████████████████████████████████▌                                    | 19/27 [00:06<00:03,  2.53it/s][日线] 开始 symbol=sh600759 routes=tx,sina,em window=[19000101,20500101] strict=True
+[日线] 尝试 route=tx symbol=sh600759
+[日线] 命中 route=tx symbol=sz002353 rows=3773                                                                                                                  
+[日线] 失败 route=tx symbol=sz002353 err=KeyError: "['volume'] not in index"
+[日线] 尝试 route=sina symbol=sz002353
+[日线] 命中 route=tx symbol=sz002491 rows=3483                                                                                                                  
+[日线] 失败 route=tx symbol=sz002491 err=KeyError: "['volume'] not in index"
+[日线] 尝试 route=sina symbol=sz002491
+ 74%|███████████████████████████████████████████████████████████████████████████████████████████                                | 20/27 [00:07<00:02,  2.65it/s][日线] 命中 route=sina symbol=sz002353 rows=3773
+[候选] sz002353 src=akshare:sina bars=3773 -> cand liq=B avg5=1789634115.20 atr=6.02% gap=-4.79% obs=True
+[日线] 开始 symbol=sh600900 routes=tx,sina,em window=[19000101,20500101] strict=True
+[日线] 尝试 route=tx symbol=sh600900
+  3%|████                                                                                                                        | 1/31 [00:00<00:06,  4.46it/s][日线] 命中 route=sina symbol=sz002491 rows=3483
+ 50%|██████████████████████████████████████████████████████████████▌                                                              | 2/4 [00:00<00:00,  3.43it/s][候选] sz002491 src=akshare:sina bars=3483 -> cand liq=A avg5=2107314165.80 atr=7.90% gap=-2.82% obs=False
+[日线] 命中 route=tx symbol=sh688702 rows=586                                                                                                                   
+[日线] 失败 route=tx symbol=sh688702 err=KeyError: "['volume'] not in index"
+[日线] 尝试 route=sina symbol=sh688702
+ 85%|████████████████████████████████████████████████████████████████████████████████████████████████████████▊                  | 23/27 [00:08<00:01,  2.91it/s][日线] 命中 route=sina symbol=sh688702 rows=586
+[候选] sh688702 src=akshare:sina bars=586 -> cand liq=B avg5=1205070550.80 atr=6.98% gap=-0.43% obs=True
+[日线] 命中 route=tx symbol=sz000988 rows=6155                                                                                                                  
+[日线] 失败 route=tx symbol=sz000988 err=KeyError: "['volume'] not in index"
+[日线] 尝试 route=sina symbol=sz000988
+ 29%|████████████████████████████████████                                                                                        | 9/31 [00:02<00:07,  3.07it/s][日线] 命中 route=sina symbol=sz000988 rows=6155
+[候选] sz000988 src=akshare:sina bars=6155 -> cand liq=A avg5=2678192911.20 atr=4.13% gap=-1.23% obs=False
+ 54%|██████████████████████████████████████████████████████████████████▋                                                        | 13/24 [00:04<00:03,  3.12it/s][日线] 命中 route=tx symbol=sz000831 rows=6112
+[日线] 失败 route=tx symbol=sz000831 err=KeyError: "['volume'] not in index"
+[日线] 尝试 route=sina symbol=sz000831
+ 52%|███████████████████████████████████████████████████████████████▍                                                           | 16/31 [00:04<00:04,  3.25it/s][日线] 命中 route=sina symbol=sz000831 rows=6112
+ 69%|████████████████████████████████████████████████████████████████████████████████████▊                                      | 20/29 [00:06<00:02,  3.35it/s][候选] sz000831 src=akshare:sina bars=6112 -> cand liq=A avg5=2554379828.60 atr=5.20% gap=-2.07% obs=False
+[日线] 命中 route=tx symbol=sz000807 rows=6572                                                                                                                  
+[日线] 失败 route=tx symbol=sz000807 err=KeyError: "['volume'] not in index"
+[日线] 尝试 route=sina symbol=sz000807
+[日线] 命中 route=tx symbol=sh600900 rows=4981                                                                                                                  
+[日线] 失败 route=tx symbol=sh600900 err=KeyError: "['volume'] not in index"
+[日线] 尝试 route=sina symbol=sh600900
+ 84%|███████████████████████████████████████████████████████████████████████████████████████████████████████▏                   | 26/31 [00:08<00:01,  3.35it/s][日线] 命中 route=sina symbol=sz000807 rows=6572
+[候选] sz000807 src=akshare:sina bars=6572 -> cand liq=B avg5=1372122961.20 atr=5.29% gap=-1.34% obs=True
+[日线] 命中 route=sina symbol=sh600900 rows=4981
+[候选] sh600900 src=akshare:sina bars=4981 -> cand liq=B avg5=1695525896.60 atr=1.30% gap=0.04% obs=False
+[日线] 命中 route=tx symbol=sh600759 rows=5975                                                                                                                  
+[日线] 失败 route=tx symbol=sh600759 err=KeyError: "['volume'] not in index"
+[日线] 尝试 route=sina symbol=sh600759
+[日线] 命中 route=tx symbol=sh600884 rows=7187                                                                                                                  
+[日线] 失败 route=tx symbol=sh600884 err=KeyError: "['volume'] not in index"
+[日线] 尝试 route=sina symbol=sh600884
+[日线] 命中 route=sina symbol=sh600759 rows=6016
+[候选] sh600759 src=akshare:sina bars=6016 -> cand liq=A avg5=3090558317.40 atr=8.52% gap=-1.96% obs=True
+[日线] 命中 route=sina symbol=sh600884 rows=7187
+[候选] sh600884 src=akshare:sina bars=7187 -> cand liq=A avg5=2915493523.20 atr=4.89% gap=-0.35% obs=False
+[并行] 进度 200/200，候选=199，否决=1，观察=73，跳过=0｜路由命中 tx=0 sina=200 em=0 other=0
+[汇总] 候选=199 否决=1 观察=73 跳过=0｜路由命中 tx=0 sina=200 em=0 other=0
+[日线] 开始 symbol=sz002969 routes=tx,sina,em window=[19000101,20500101] strict=True
+[日线] 尝试 route=tx symbol=sz002969
+[日线] 命中 route=tx symbol=sz002969 rows=1494                                                                                                                  
+[日线] 失败 route=tx symbol=sz002969 err=KeyError: "['volume'] not in index"
+[日线] 尝试 route=sina symbol=sz002969
+[日线] 命中 route=sina symbol=sz002969 rows=1494
+[日线] 开始 symbol=sz002931 routes=tx,sina,em window=[19000101,20500101] strict=True
+[日线] 尝试 route=tx symbol=sz002931
+[日线] 命中 route=tx symbol=sz002931 rows=1892                                                                                                                  
+[日线] 失败 route=tx symbol=sz002931 err=KeyError: "['volume'] not in index"
+[日线] 尝试 route=sina symbol=sz002931
+[日线] 命中 route=sina symbol=sz002931 rows=1892
+[日线] 开始 symbol=sz002455 routes=tx,sina,em window=[19000101,20500101] strict=True
+[日线] 尝试 route=tx symbol=sz002455
+[日线] 命中 route=tx symbol=sz002455 rows=3725                                                                                                                  
+[日线] 失败 route=tx symbol=sz002455 err=KeyError: "['volume'] not in index"
+[日线] 尝试 route=sina symbol=sz002455
+[日线] 命中 route=sina symbol=sz002455 rows=3725
+[日线] 开始 symbol=sh601869 routes=tx,sina,em window=[19000101,20500101] strict=True
+[日线] 尝试 route=tx symbol=sh601869
+[日线] 命中 route=tx symbol=sh601869 rows=1839                                                                                                                  
+[日线] 失败 route=tx symbol=sh601869 err=KeyError: "['volume'] not in index"
+[日线] 尝试 route=sina symbol=sh601869
+[日线] 命中 route=sina symbol=sh601869 rows=1839
+[日线] 开始 symbol=sh603629 routes=tx,sina,em window=[19000101,20500101] strict=True
+[日线] 尝试 route=tx symbol=sh603629
+[日线] 命中 route=tx symbol=sh603629 rows=1734                                                                                                                  
+[日线] 失败 route=tx symbol=sh603629 err=KeyError: "['volume'] not in index"
+[日线] 尝试 route=sina symbol=sh603629
+[日线] 命中 route=sina symbol=sh603629 rows=1734
+[日线] 开始 symbol=sz002842 routes=tx,sina,em window=[19000101,20500101] strict=True
+[日线] 尝试 route=tx symbol=sz002842
+[日线] 命中 route=tx symbol=sz002842 rows=2200                                                                                                                  
+[日线] 失败 route=tx symbol=sz002842 err=KeyError: "['volume'] not in index"
+[日线] 尝试 route=sina symbol=sz002842
+[日线] 命中 route=sina symbol=sz002842 rows=2200
+[日线] 开始 symbol=sz300017 routes=tx,sina,em window=[19000101,20500101] strict=True
+[日线] 尝试 route=tx symbol=sz300017
+[日线] 命中 route=tx symbol=sz300017 rows=3907                                                                                                                  
+[日线] 失败 route=tx symbol=sz300017 err=KeyError: "['volume'] not in index"
+[日线] 尝试 route=sina symbol=sz300017
+[日线] 命中 route=sina symbol=sz300017 rows=3907
+[日线] 开始 symbol=sh603256 routes=tx,sina,em window=[19000101,20500101] strict=True
+[日线] 尝试 route=tx symbol=sh603256
+[日线] 命中 route=tx symbol=sh603256 rows=1597                                                                                                                  
+[日线] 失败 route=tx symbol=sh603256 err=KeyError: "['volume'] not in index"
+[日线] 尝试 route=sina symbol=sh603256
+[日线] 命中 route=sina symbol=sh603256 rows=1597
+[日线] 开始 symbol=sz002506 routes=tx,sina,em window=[19000101,20500101] strict=True
+[日线] 尝试 route=tx symbol=sz002506
+[日线] 命中 route=tx symbol=sz002506 rows=3295                                                                                                                  
+[日线] 失败 route=tx symbol=sz002506 err=KeyError: "['volume'] not in index"
+[日线] 尝试 route=sina symbol=sz002506
+[日线] 命中 route=sina symbol=sz002506 rows=3295
+[日线] 开始 symbol=sz002491 routes=tx,sina,em window=[19000101,20500101] strict=True
+[日线] 尝试 route=tx symbol=sz002491
+[日线] 命中 route=tx symbol=sz002491 rows=3483                                                                                                                  
+[日线] 失败 route=tx symbol=sz002491 err=KeyError: "['volume'] not in index"
+[日线] 尝试 route=sina symbol=sz002491
+[日线] 命中 route=sina symbol=sz002491 rows=3483
+[日线] 开始 symbol=sh600487 routes=tx,sina,em window=[19000101,20500101] strict=True
+[日线] 尝试 route=tx symbol=sh600487
+[日线] 命中 route=tx symbol=sh600487 rows=5282                                                                                                                  
+[日线] 失败 route=tx symbol=sh600487 err=KeyError: "['volume'] not in index"
+[日线] 尝试 route=sina symbol=sh600487
+[日线] 命中 route=sina symbol=sh600487 rows=5282
+[日线] 开始 symbol=sz300394 routes=tx,sina,em window=[19000101,20500101] strict=True
+[日线] 尝试 route=tx symbol=sz300394
+[日线] 命中 route=tx symbol=sz300394 rows=2661                                                                                                                  
+[日线] 失败 route=tx symbol=sz300394 err=KeyError: "['volume'] not in index"
+[日线] 尝试 route=sina symbol=sz300394
+[日线] 命中 route=sina symbol=sz300394 rows=2661
+[日线] 开始 symbol=sz002378 routes=tx,sina,em window=[19000101,20500101] strict=True
+[日线] 尝试 route=tx symbol=sz002378
+[日线] 命中 route=tx symbol=sz002378 rows=3824                                                                                                                  
+[日线] 失败 route=tx symbol=sz002378 err=KeyError: "['volume'] not in index"
+[日线] 尝试 route=sina symbol=sz002378
+[日线] 命中 route=sina symbol=sz002378 rows=3824
+[日线] 开始 symbol=sz301526 routes=tx,sina,em window=[19000101,20500101] strict=True
+[日线] 尝试 route=tx symbol=sz301526
+[日线] 命中 route=tx symbol=sz301526 rows=519                                                                                                                   
+[日线] 失败 route=tx symbol=sz301526 err=KeyError: "['volume'] not in index"
+[日线] 尝试 route=sina symbol=sz301526
+[日线] 命中 route=sina symbol=sz301526 rows=519
+[日线] 开始 symbol=sz002155 routes=tx,sina,em window=[19000101,20500101] strict=True
+[日线] 尝试 route=tx symbol=sz002155
+[日线] 命中 route=tx symbol=sz002155 rows=4408                                                                                                                  
+[日线] 失败 route=tx symbol=sz002155 err=KeyError: "['volume'] not in index"
+[日线] 尝试 route=sina symbol=sz002155
+[日线] 命中 route=sina symbol=sz002155 rows=4408
+[日线] 开始 symbol=sz002009 routes=tx,sina,em window=[19000101,20500101] strict=True
+[日线] 尝试 route=tx symbol=sz002009
+[日线] 命中 route=tx symbol=sz002009 rows=5066                                                                                                                  
+[日线] 失败 route=tx symbol=sz002009 err=KeyError: "['volume'] not in index"
+[日线] 尝试 route=sina symbol=sz002009
+[日线] 命中 route=sina symbol=sz002009 rows=5066
+[日线] 开始 symbol=sh601615 routes=tx,sina,em window=[19000101,20500101] strict=True
+[日线] 尝试 route=tx symbol=sh601615
+[日线] 命中 route=tx symbol=sh601615 rows=1706                                                                                                                  
+[日线] 失败 route=tx symbol=sh601615 err=KeyError: "['volume'] not in index"
+[日线] 尝试 route=sina symbol=sh601615
+[日线] 命中 route=sina symbol=sh601615 rows=1706
+[日线] 开始 symbol=sz300139 routes=tx,sina,em window=[19000101,20500101] strict=True
+[日线] 尝试 route=tx symbol=sz300139
+[日线] 命中 route=tx symbol=sz300139 rows=3695                                                                                                                  
+[日线] 失败 route=tx symbol=sz300139 err=KeyError: "['volume'] not in index"
+[日线] 尝试 route=sina symbol=sz300139
+[日线] 命中 route=sina symbol=sz300139 rows=3695
+[日线] 开始 symbol=sz000070 routes=tx,sina,em window=[19000101,20500101] strict=True
+[日线] 尝试 route=tx symbol=sz000070
+[日线] 命中 route=tx symbol=sz000070 rows=5995                                                                                                                  
+[日线] 失败 route=tx symbol=sz000070 err=KeyError: "['volume'] not in index"
+[日线] 尝试 route=sina symbol=sz000070
+[日线] 命中 route=sina symbol=sz000070 rows=5995
+[日线] 开始 symbol=sz300757 routes=tx,sina,em window=[19000101,20500101] strict=True
+[日线] 尝试 route=tx symbol=sz300757
+[日线] 命中 route=tx symbol=sz300757 rows=1705                                                                                                                  
+[日线] 失败 route=tx symbol=sz300757 err=KeyError: "['volume'] not in index"
+[日线] 尝试 route=sina symbol=sz300757
+[日线] 命中 route=sina symbol=sz300757 rows=1705
+[日线] 开始 symbol=sz001330 routes=tx,sina,em window=[19000101,20500101] strict=True
+[日线] 尝试 route=tx symbol=sz001330
+[日线] 命中 route=tx symbol=sz001330 rows=848                                                                                                                   
+[日线] 失败 route=tx symbol=sz001330 err=KeyError: "['volume'] not in index"
+[日线] 尝试 route=sina symbol=sz001330
+[日线] 命中 route=sina symbol=sz001330 rows=848
+[日线] 开始 symbol=sh600397 routes=tx,sina,em window=[19000101,20500101] strict=True
+[日线] 尝试 route=tx symbol=sh600397
+[日线] 命中 route=tx symbol=sh600397 rows=5559
+[日线] 失败 route=tx symbol=sh600397 err=KeyError: "['volume'] not in index"
+[日线] 尝试 route=sina symbol=sh600397
+[日线] 命中 route=sina symbol=sh600397 rows=5559
+[日线] 开始 symbol=sz300251 routes=tx,sina,em window=[19000101,20500101] strict=True
+[日线] 尝试 route=tx symbol=sz300251
+[日线] 命中 route=tx symbol=sz300251 rows=3415
+[日线] 失败 route=tx symbol=sz300251 err=KeyError: "['volume'] not in index"
+[日线] 尝试 route=sina symbol=sz300251
+[日线] 命中 route=sina symbol=sz300251 rows=3415
+[日线] 开始 symbol=sh600759 routes=tx,sina,em window=[19000101,20500101] strict=True
+[日线] 尝试 route=tx symbol=sh600759
+[日线] 命中 route=tx symbol=sh600759 rows=5975                                                                                                                  
+[日线] 失败 route=tx symbol=sh600759 err=KeyError: "['volume'] not in index"
+[日线] 尝试 route=sina symbol=sh600759
+[日线] 命中 route=sina symbol=sh600759 rows=6016
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
