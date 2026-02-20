@@ -5,7 +5,7 @@
     "grade": "D",
     "reasons": [
       "全市场均值涨跌幅=-0.66%",
-      "上涨占比=28.09%"
+      "上涨占比=28.13%"
     ],
     "recovery_conditions": [
       "上涨家数占比>55%",
@@ -13,8 +13,8 @@
     ],
     "raw": {
       "breadth": {
-        "mean_chg": -0.6605777858836404,
-        "up_ratio": 0.28086813788072224
+        "mean_chg": -0.6617406392694065,
+        "up_ratio": 0.28127853881278536
       }
     }
   },
@@ -36,7 +36,7 @@
   ],
   "candidate_pool": [
     {
-      "symbol": "sz002969",
+      "symbol": "002969",
       "name": "嘉美包装",
       "industry": null,
       "source_reason": "动态候选",
@@ -370,7 +370,7 @@
       }
     },
     {
-      "symbol": "sz002931",
+      "symbol": "002931",
       "name": "锋龙股份",
       "industry": null,
       "source_reason": "动态候选",
@@ -706,7 +706,7 @@
       }
     },
     {
-      "symbol": "sz002455",
+      "symbol": "002455",
       "name": "百川股份",
       "industry": null,
       "source_reason": "动态候选",
@@ -1040,7 +1040,7 @@
       }
     },
     {
-      "symbol": "sh601869",
+      "symbol": "601869",
       "name": "长飞光纤",
       "industry": null,
       "source_reason": "动态候选",
@@ -1374,7 +1374,7 @@
       }
     },
     {
-      "symbol": "sh603629",
+      "symbol": "603629",
       "name": "利通电子",
       "industry": null,
       "source_reason": "动态候选",
@@ -1708,7 +1708,7 @@
       }
     },
     {
-      "symbol": "sz002842",
+      "symbol": "002842",
       "name": "翔鹭钨业",
       "industry": null,
       "source_reason": "动态候选",
@@ -2042,7 +2042,7 @@
       }
     },
     {
-      "symbol": "sz300017",
+      "symbol": "300017",
       "name": "网宿科技",
       "industry": null,
       "source_reason": "动态候选",
@@ -2376,7 +2376,7 @@
       }
     },
     {
-      "symbol": "sh603256",
+      "symbol": "603256",
       "name": "宏和科技",
       "industry": null,
       "source_reason": "动态候选",
@@ -2712,7 +2712,7 @@
       }
     },
     {
-      "symbol": "sz002506",
+      "symbol": "002506",
       "name": "协鑫集成",
       "industry": null,
       "source_reason": "动态候选",
@@ -3048,7 +3048,7 @@
       }
     },
     {
-      "symbol": "sz002491",
+      "symbol": "002491",
       "name": "通鼎互联",
       "industry": null,
       "source_reason": "动态候选",
@@ -3382,7 +3382,7 @@
       }
     },
     {
-      "symbol": "sh600487",
+      "symbol": "600487",
       "name": "亨通光电",
       "industry": null,
       "source_reason": "动态候选",
@@ -3718,7 +3718,7 @@
       }
     },
     {
-      "symbol": "sz300394",
+      "symbol": "300394",
       "name": "天孚通信",
       "industry": null,
       "source_reason": "动态候选",
@@ -4052,7 +4052,7 @@
       }
     },
     {
-      "symbol": "sz002378",
+      "symbol": "002378",
       "name": "章源钨业",
       "industry": null,
       "source_reason": "动态候选",
@@ -4389,7 +4389,7 @@
       }
     },
     {
-      "symbol": "sz301526",
+      "symbol": "301526",
       "name": "国际复材",
       "industry": null,
       "source_reason": "动态候选",
@@ -4725,7 +4725,7 @@
       }
     },
     {
-      "symbol": "sz002155",
+      "symbol": "002155",
       "name": "湖南黄金",
       "industry": null,
       "source_reason": "动态候选",
@@ -5059,7 +5059,7 @@
       }
     },
     {
-      "symbol": "sz002009",
+      "symbol": "002009",
       "name": "天奇股份",
       "industry": null,
       "source_reason": "动态候选",
@@ -5395,7 +5395,7 @@
       }
     },
     {
-      "symbol": "sh601615",
+      "symbol": "601615",
       "name": "明阳智能",
       "industry": null,
       "source_reason": "动态候选",
@@ -5729,7 +5729,7 @@
       }
     },
     {
-      "symbol": "sz300139",
+      "symbol": "300139",
       "name": "晓程科技",
       "industry": null,
       "source_reason": "动态候选",
@@ -6066,7 +6066,7 @@
       }
     },
     {
-      "symbol": "sz000070",
+      "symbol": "000070",
       "name": "特发信息",
       "industry": null,
       "source_reason": "动态候选",
@@ -6400,7 +6400,7 @@
       }
     },
     {
-      "symbol": "sz300757",
+      "symbol": "300757",
       "name": "罗博特科",
       "industry": null,
       "source_reason": "动态候选",
@@ -6734,7 +6734,7 @@
       }
     },
     {
-      "symbol": "sz001330",
+      "symbol": "001330",
       "name": "博纳影业",
       "industry": null,
       "source_reason": "动态候选",
@@ -7068,7 +7068,7 @@
       }
     },
     {
-      "symbol": "sh600397",
+      "symbol": "600397",
       "name": "江钨装备",
       "industry": null,
       "source_reason": "动态候选",
@@ -7405,7 +7405,7 @@
       }
     },
     {
-      "symbol": "sz300251",
+      "symbol": "300251",
       "name": "光线传媒",
       "industry": null,
       "source_reason": "动态候选",
@@ -7739,7 +7739,7 @@
       }
     },
     {
-      "symbol": "sh600759",
+      "symbol": "600759",
       "name": "洲际油气",
       "industry": null,
       "source_reason": "动态候选",
@@ -8075,7 +8075,7 @@
       }
     },
     {
-      "symbol": "sh688766",
+      "symbol": "688766",
       "name": "普冉股份",
       "industry": null,
       "source_reason": "动态候选",
@@ -8411,7 +8411,7 @@
       }
     },
     {
-      "symbol": "sz000657",
+      "symbol": "000657",
       "name": "中钨高新",
       "industry": null,
       "source_reason": "动态候选",
@@ -8745,7 +8745,7 @@
       }
     },
     {
-      "symbol": "sh688521",
+      "symbol": "688521",
       "name": "芯原股份",
       "industry": null,
       "source_reason": "动态候选",
@@ -9081,7 +9081,7 @@
       }
     },
     {
-      "symbol": "sh600176",
+      "symbol": "600176",
       "name": "中国巨石",
       "industry": null,
       "source_reason": "动态候选",
@@ -9417,7 +9417,7 @@
       }
     },
     {
-      "symbol": "sh601231",
+      "symbol": "601231",
       "name": "环旭电子",
       "industry": null,
       "source_reason": "动态候选",
@@ -9753,7 +9753,7 @@
       }
     },
     {
-      "symbol": "sh600522",
+      "symbol": "600522",
       "name": "中天科技",
       "industry": null,
       "source_reason": "动态候选",
@@ -10089,7 +10089,7 @@
       }
     },
     {
-      "symbol": "sz000338",
+      "symbol": "000338",
       "name": "潍柴动力",
       "industry": null,
       "source_reason": "动态候选",
@@ -10423,7 +10423,7 @@
       }
     },
     {
-      "symbol": "sz300277",
+      "symbol": "300277",
       "name": "海联讯",
       "industry": null,
       "source_reason": "动态候选",
@@ -10757,7 +10757,7 @@
       }
     },
     {
-      "symbol": "sh600330",
+      "symbol": "600330",
       "name": "天通股份",
       "industry": null,
       "source_reason": "动态候选",
@@ -11091,7 +11091,7 @@
       }
     },
     {
-      "symbol": "sz002716",
+      "symbol": "002716",
       "name": "湖南白银",
       "industry": null,
       "source_reason": "动态候选",
@@ -11427,7 +11427,7 @@
       }
     },
     {
-      "symbol": "sh601212",
+      "symbol": "601212",
       "name": "白银有色",
       "industry": null,
       "source_reason": "动态候选",
@@ -11763,7 +11763,7 @@
       }
     },
     {
-      "symbol": "sh688223",
+      "symbol": "688223",
       "name": "晶科能源",
       "industry": null,
       "source_reason": "动态候选",
@@ -12097,7 +12097,7 @@
       }
     },
     {
-      "symbol": "sz300570",
+      "symbol": "300570",
       "name": "太辰光",
       "industry": null,
       "source_reason": "动态候选",
@@ -12431,7 +12431,7 @@
       }
     },
     {
-      "symbol": "sz300751",
+      "symbol": "300751",
       "name": "迈为股份",
       "industry": null,
       "source_reason": "动态候选",
@@ -12767,8 +12767,8 @@
       }
     },
     {
-      "symbol": "sh688158",
-      "name": "优刻得",
+      "symbol": "688158",
+      "name": "优刻得-W",
       "industry": null,
       "source_reason": "动态候选",
       "liquidity": {
@@ -13101,7 +13101,7 @@
       }
     },
     {
-      "symbol": "sz300182",
+      "symbol": "300182",
       "name": "捷成股份",
       "industry": null,
       "source_reason": "动态候选",
@@ -13435,7 +13435,7 @@
       }
     },
     {
-      "symbol": "sz300548",
+      "symbol": "300548",
       "name": "长芯博创",
       "industry": null,
       "source_reason": "动态候选",
@@ -13771,7 +13771,7 @@
       }
     },
     {
-      "symbol": "sz300666",
+      "symbol": "300666",
       "name": "江丰电子",
       "industry": null,
       "source_reason": "动态候选",
@@ -14107,7 +14107,7 @@
       }
     },
     {
-      "symbol": "sz002129",
+      "symbol": "002129",
       "name": "TCL中环",
       "industry": null,
       "source_reason": "动态候选",
@@ -14441,7 +14441,7 @@
       }
     },
     {
-      "symbol": "sh688008",
+      "symbol": "688008",
       "name": "澜起科技",
       "industry": null,
       "source_reason": "动态候选",
@@ -14775,7 +14775,7 @@
       }
     },
     {
-      "symbol": "sz301018",
+      "symbol": "301018",
       "name": "申菱环境",
       "industry": null,
       "source_reason": "动态候选",
@@ -15111,7 +15111,7 @@
       }
     },
     {
-      "symbol": "sz300846",
+      "symbol": "300846",
       "name": "首都在线",
       "industry": null,
       "source_reason": "动态候选",
@@ -15447,7 +15447,7 @@
       }
     },
     {
-      "symbol": "sz002429",
+      "symbol": "002429",
       "name": "兆驰股份",
       "industry": null,
       "source_reason": "动态候选",
@@ -15781,7 +15781,7 @@
       }
     },
     {
-      "symbol": "sh600875",
+      "symbol": "600875",
       "name": "东方电气",
       "industry": null,
       "source_reason": "动态候选",
@@ -16115,7 +16115,7 @@
       }
     },
     {
-      "symbol": "sz000815",
+      "symbol": "000815",
       "name": "美利云",
       "industry": null,
       "source_reason": "动态候选",
@@ -16449,7 +16449,7 @@
       }
     },
     {
-      "symbol": "sh600589",
+      "symbol": "600589",
       "name": "大位科技",
       "industry": null,
       "source_reason": "动态候选",
@@ -16786,7 +16786,7 @@
       }
     },
     {
-      "symbol": "sh600392",
+      "symbol": "600392",
       "name": "盛和资源",
       "industry": null,
       "source_reason": "动态候选",
@@ -17122,7 +17122,7 @@
       }
     },
     {
-      "symbol": "sz000738",
+      "symbol": "000738",
       "name": "航发控制",
       "industry": null,
       "source_reason": "动态候选",
@@ -17456,7 +17456,7 @@
       }
     },
     {
-      "symbol": "sz300620",
+      "symbol": "300620",
       "name": "光库科技",
       "industry": null,
       "source_reason": "动态候选",
@@ -17790,7 +17790,7 @@
       }
     },
     {
-      "symbol": "sh600893",
+      "symbol": "600893",
       "name": "航发动力",
       "industry": null,
       "source_reason": "动态候选",
@@ -18124,7 +18124,7 @@
       }
     },
     {
-      "symbol": "sz002353",
+      "symbol": "002353",
       "name": "杰瑞股份",
       "industry": null,
       "source_reason": "动态候选",
@@ -18460,7 +18460,7 @@
       }
     },
     {
-      "symbol": "sz002080",
+      "symbol": "002080",
       "name": "中材科技",
       "industry": null,
       "source_reason": "动态候选",
@@ -18796,7 +18796,7 @@
       }
     },
     {
-      "symbol": "sz002624",
+      "symbol": "002624",
       "name": "完美世界",
       "industry": null,
       "source_reason": "动态候选",
@@ -19130,7 +19130,7 @@
       }
     },
     {
-      "symbol": "sh600986",
+      "symbol": "600986",
       "name": "浙文互联",
       "industry": null,
       "source_reason": "动态候选",
@@ -19466,7 +19466,7 @@
       }
     },
     {
-      "symbol": "sz300166",
+      "symbol": "300166",
       "name": "东方国信",
       "industry": null,
       "source_reason": "动态候选",
@@ -19800,7 +19800,7 @@
       }
     },
     {
-      "symbol": "sh603533",
+      "symbol": "603533",
       "name": "掌阅科技",
       "industry": null,
       "source_reason": "动态候选",
@@ -20137,7 +20137,7 @@
       }
     },
     {
-      "symbol": "sz300857",
+      "symbol": "300857",
       "name": "协创数据",
       "industry": null,
       "source_reason": "动态候选",
@@ -20473,7 +20473,7 @@
       }
     },
     {
-      "symbol": "sz300065",
+      "symbol": "300065",
       "name": "海兰信",
       "industry": null,
       "source_reason": "动态候选",
@@ -20809,7 +20809,7 @@
       }
     },
     {
-      "symbol": "sz000630",
+      "symbol": "000630",
       "name": "铜陵有色",
       "industry": null,
       "source_reason": "动态候选",
@@ -21143,7 +21143,7 @@
       }
     },
     {
-      "symbol": "sh600549",
+      "symbol": "600549",
       "name": "厦门钨业",
       "industry": null,
       "source_reason": "动态候选",
@@ -21479,7 +21479,7 @@
       }
     },
     {
-      "symbol": "sz002008",
+      "symbol": "002008",
       "name": "大族激光",
       "industry": null,
       "source_reason": "动态候选",
@@ -21815,8 +21815,8 @@
       }
     },
     {
-      "symbol": "sh688702",
-      "name": "盛科通信",
+      "symbol": "688702",
+      "name": "盛科通信-U",
       "industry": null,
       "source_reason": "动态候选",
       "liquidity": {
@@ -22151,7 +22151,7 @@
       }
     },
     {
-      "symbol": "sz002185",
+      "symbol": "002185",
       "name": "华天科技",
       "industry": null,
       "source_reason": "动态候选",
@@ -22485,7 +22485,7 @@
       }
     },
     {
-      "symbol": "sz300369",
+      "symbol": "300369",
       "name": "绿盟科技",
       "industry": null,
       "source_reason": "动态候选",
@@ -22821,7 +22821,7 @@
       }
     },
     {
-      "symbol": "sh603881",
+      "symbol": "603881",
       "name": "数据港",
       "industry": null,
       "source_reason": "动态候选",
@@ -23155,7 +23155,7 @@
       }
     },
     {
-      "symbol": "sh600489",
+      "symbol": "600489",
       "name": "中金黄金",
       "industry": null,
       "source_reason": "动态候选",
@@ -23489,7 +23489,7 @@
       }
     },
     {
-      "symbol": "sz300383",
+      "symbol": "300383",
       "name": "光环新网",
       "industry": null,
       "source_reason": "动态候选",
@@ -23823,7 +23823,7 @@
       }
     },
     {
-      "symbol": "sh600418",
+      "symbol": "600418",
       "name": "江淮汽车",
       "industry": null,
       "source_reason": "动态候选",
@@ -24159,7 +24159,7 @@
       }
     },
     {
-      "symbol": "sh600673",
+      "symbol": "600673",
       "name": "东阳光",
       "industry": null,
       "source_reason": "动态候选",
@@ -24495,7 +24495,7 @@
       }
     },
     {
-      "symbol": "sh600977",
+      "symbol": "600977",
       "name": "中国电影",
       "industry": null,
       "source_reason": "动态候选",
@@ -24829,7 +24829,7 @@
       }
     },
     {
-      "symbol": "sh601179",
+      "symbol": "601179",
       "name": "中国西电",
       "industry": null,
       "source_reason": "动态候选",
@@ -25163,7 +25163,7 @@
       }
     },
     {
-      "symbol": "sz300567",
+      "symbol": "300567",
       "name": "精测电子",
       "industry": null,
       "source_reason": "动态候选",
@@ -25499,7 +25499,7 @@
       }
     },
     {
-      "symbol": "sz002812",
+      "symbol": "002812",
       "name": "恩捷股份",
       "industry": null,
       "source_reason": "动态候选",
@@ -25833,7 +25833,7 @@
       }
     },
     {
-      "symbol": "sh688017",
+      "symbol": "688017",
       "name": "绿的谐波",
       "industry": null,
       "source_reason": "动态候选",
@@ -26169,7 +26169,7 @@
       }
     },
     {
-      "symbol": "sh603667",
+      "symbol": "603667",
       "name": "五洲新春",
       "industry": null,
       "source_reason": "动态候选",
@@ -26505,7 +26505,7 @@
       }
     },
     {
-      "symbol": "sz002131",
+      "symbol": "002131",
       "name": "利欧股份",
       "industry": null,
       "source_reason": "动态候选",
@@ -26839,7 +26839,7 @@
       }
     },
     {
-      "symbol": "sz002156",
+      "symbol": "002156",
       "name": "通富微电",
       "industry": null,
       "source_reason": "动态候选",
@@ -27173,7 +27173,7 @@
       }
     },
     {
-      "symbol": "sh603986",
+      "symbol": "603986",
       "name": "兆易创新",
       "industry": null,
       "source_reason": "动态候选",
@@ -27509,7 +27509,7 @@
       }
     },
     {
-      "symbol": "sh601872",
+      "symbol": "601872",
       "name": "招商轮船",
       "industry": null,
       "source_reason": "动态候选",
@@ -27845,7 +27845,7 @@
       }
     },
     {
-      "symbol": "sz002149",
+      "symbol": "002149",
       "name": "西部材料",
       "industry": null,
       "source_reason": "动态候选",
@@ -28181,7 +28181,7 @@
       }
     },
     {
-      "symbol": "sh600309",
+      "symbol": "600309",
       "name": "万华化学",
       "industry": null,
       "source_reason": "动态候选",
@@ -28515,7 +28515,7 @@
       }
     },
     {
-      "symbol": "sh600884",
+      "symbol": "600884",
       "name": "杉杉股份",
       "industry": null,
       "source_reason": "动态候选",
@@ -28849,7 +28849,7 @@
       }
     },
     {
-      "symbol": "sz301171",
+      "symbol": "301171",
       "name": "易点天下",
       "industry": null,
       "source_reason": "动态候选",
@@ -29185,7 +29185,7 @@
       }
     },
     {
-      "symbol": "sh688110",
+      "symbol": "688110",
       "name": "东芯股份",
       "industry": null,
       "source_reason": "动态候选",
@@ -29519,7 +29519,7 @@
       }
     },
     {
-      "symbol": "sz002467",
+      "symbol": "002467",
       "name": "二六三",
       "industry": null,
       "source_reason": "动态候选",
@@ -29853,7 +29853,7 @@
       }
     },
     {
-      "symbol": "sz300724",
+      "symbol": "300724",
       "name": "捷佳伟创",
       "industry": null,
       "source_reason": "动态候选",
@@ -30187,7 +30187,7 @@
       }
     },
     {
-      "symbol": "sh601857",
+      "symbol": "601857",
       "name": "中国石油",
       "industry": null,
       "source_reason": "动态候选",
@@ -30521,7 +30521,7 @@
       }
     },
     {
-      "symbol": "sh600111",
+      "symbol": "600111",
       "name": "北方稀土",
       "industry": null,
       "source_reason": "动态候选",
@@ -30855,7 +30855,7 @@
       }
     },
     {
-      "symbol": "sh688525",
+      "symbol": "688525",
       "name": "佰维存储",
       "industry": null,
       "source_reason": "动态候选",
@@ -31191,7 +31191,7 @@
       }
     },
     {
-      "symbol": "sz300738",
+      "symbol": "300738",
       "name": "奥飞数据",
       "industry": null,
       "source_reason": "动态候选",
@@ -31525,7 +31525,7 @@
       }
     },
     {
-      "symbol": "sz300364",
+      "symbol": "300364",
       "name": "中文在线",
       "industry": null,
       "source_reason": "动态候选",
@@ -31861,7 +31861,7 @@
       }
     },
     {
-      "symbol": "sz300102",
+      "symbol": "300102",
       "name": "乾照光电",
       "industry": null,
       "source_reason": "动态候选",
@@ -32198,8 +32198,8 @@
       }
     },
     {
-      "symbol": "sh688343",
-      "name": "云天励飞",
+      "symbol": "688343",
+      "name": "云天励飞-U",
       "industry": null,
       "source_reason": "动态候选",
       "liquidity": {
@@ -32532,7 +32532,7 @@
       }
     },
     {
-      "symbol": "sz300766",
+      "symbol": "300766",
       "name": "每日互动",
       "industry": null,
       "source_reason": "动态候选",
@@ -32866,7 +32866,7 @@
       }
     },
     {
-      "symbol": "sz000831",
+      "symbol": "000831",
       "name": "中国稀土",
       "industry": null,
       "source_reason": "动态候选",
@@ -33200,7 +33200,7 @@
       }
     },
     {
-      "symbol": "sz000021",
+      "symbol": "000021",
       "name": "深科技",
       "industry": null,
       "source_reason": "动态候选",
@@ -33536,7 +33536,7 @@
       }
     },
     {
-      "symbol": "sz002837",
+      "symbol": "002837",
       "name": "英维克",
       "industry": null,
       "source_reason": "动态候选",
@@ -33872,7 +33872,7 @@
       }
     },
     {
-      "symbol": "sh600584",
+      "symbol": "600584",
       "name": "长电科技",
       "industry": null,
       "source_reason": "动态候选",
@@ -34206,7 +34206,7 @@
       }
     },
     {
-      "symbol": "sh601888",
+      "symbol": "601888",
       "name": "中国中免",
       "industry": null,
       "source_reason": "动态候选",
@@ -34540,7 +34540,7 @@
       }
     },
     {
-      "symbol": "sh688041",
+      "symbol": "688041",
       "name": "海光信息",
       "industry": null,
       "source_reason": "动态候选",
@@ -34876,7 +34876,7 @@
       }
     },
     {
-      "symbol": "sh600089",
+      "symbol": "600089",
       "name": "特变电工",
       "industry": null,
       "source_reason": "动态候选",
@@ -35210,7 +35210,7 @@
       }
     },
     {
-      "symbol": "sz300750",
+      "symbol": "300750",
       "name": "宁德时代",
       "industry": null,
       "source_reason": "动态候选",
@@ -35544,7 +35544,7 @@
       }
     },
     {
-      "symbol": "sz300223",
+      "symbol": "300223",
       "name": "北京君正",
       "industry": null,
       "source_reason": "动态候选",
@@ -35878,7 +35878,7 @@
       }
     },
     {
-      "symbol": "sz002340",
+      "symbol": "002340",
       "name": "格林美",
       "industry": null,
       "source_reason": "动态候选",
@@ -36212,7 +36212,7 @@
       }
     },
     {
-      "symbol": "sz000833",
+      "symbol": "000833",
       "name": "粤桂股份",
       "industry": null,
       "source_reason": "动态候选",
@@ -36548,7 +36548,7 @@
       }
     },
     {
-      "symbol": "sh600372",
+      "symbol": "600372",
       "name": "中航机载",
       "industry": null,
       "source_reason": "动态候选",
@@ -36882,7 +36882,7 @@
       }
     },
     {
-      "symbol": "sz000333",
+      "symbol": "000333",
       "name": "美的集团",
       "industry": null,
       "source_reason": "动态候选",
@@ -37216,7 +37216,7 @@
       }
     },
     {
-      "symbol": "sh688347",
+      "symbol": "688347",
       "name": "华虹公司",
       "industry": null,
       "source_reason": "动态候选",
@@ -37550,7 +37550,7 @@
       }
     },
     {
-      "symbol": "sz300395",
+      "symbol": "300395",
       "name": "菲利华",
       "industry": null,
       "source_reason": "动态候选",
@@ -37884,7 +37884,7 @@
       }
     },
     {
-      "symbol": "sh601899",
+      "symbol": "601899",
       "name": "紫金矿业",
       "industry": null,
       "source_reason": "动态候选",
@@ -38220,7 +38220,7 @@
       }
     },
     {
-      "symbol": "sh688313",
+      "symbol": "688313",
       "name": "仕佳光子",
       "industry": null,
       "source_reason": "动态候选",
@@ -38554,7 +38554,7 @@
       }
     },
     {
-      "symbol": "sz000559",
+      "symbol": "000559",
       "name": "万向钱潮",
       "industry": null,
       "source_reason": "动态候选",
@@ -38888,7 +38888,7 @@
       }
     },
     {
-      "symbol": "sh600410",
+      "symbol": "600410",
       "name": "华胜天成",
       "industry": null,
       "source_reason": "动态候选",
@@ -39224,7 +39224,7 @@
       }
     },
     {
-      "symbol": "sz000426",
+      "symbol": "000426",
       "name": "兴业银锡",
       "industry": null,
       "source_reason": "动态候选",
@@ -39558,7 +39558,7 @@
       }
     },
     {
-      "symbol": "sh600010",
+      "symbol": "600010",
       "name": "包钢股份",
       "industry": null,
       "source_reason": "动态候选",
@@ -39892,7 +39892,7 @@
       }
     },
     {
-      "symbol": "sz300008",
+      "symbol": "300008",
       "name": "天海防务",
       "industry": null,
       "source_reason": "动态候选",
@@ -40226,7 +40226,7 @@
       }
     },
     {
-      "symbol": "sh601318",
+      "symbol": "601318",
       "name": "中国平安",
       "industry": null,
       "source_reason": "动态候选",
@@ -40560,7 +40560,7 @@
       }
     },
     {
-      "symbol": "sz300058",
+      "symbol": "300058",
       "name": "蓝色光标",
       "industry": null,
       "source_reason": "动态候选",
@@ -40896,7 +40896,7 @@
       }
     },
     {
-      "symbol": "sh600547",
+      "symbol": "600547",
       "name": "山东黄金",
       "industry": null,
       "source_reason": "动态候选",
@@ -41230,7 +41230,7 @@
       }
     },
     {
-      "symbol": "sh601012",
+      "symbol": "601012",
       "name": "隆基绿能",
       "industry": null,
       "source_reason": "动态候选",
@@ -41564,7 +41564,7 @@
       }
     },
     {
-      "symbol": "sz301217",
+      "symbol": "301217",
       "name": "铜冠铜箔",
       "industry": null,
       "source_reason": "动态候选",
@@ -41900,8 +41900,8 @@
       }
     },
     {
-      "symbol": "sh688031",
-      "name": "星环科技",
+      "symbol": "688031",
+      "name": "星环科技-U",
       "industry": null,
       "source_reason": "动态候选",
       "liquidity": {
@@ -42237,7 +42237,7 @@
       }
     },
     {
-      "symbol": "sz300136",
+      "symbol": "300136",
       "name": "信维通信",
       "industry": null,
       "source_reason": "动态候选",
@@ -42573,7 +42573,7 @@
       }
     },
     {
-      "symbol": "sz000066",
+      "symbol": "000066",
       "name": "中国长城",
       "industry": null,
       "source_reason": "动态候选",
@@ -42907,7 +42907,7 @@
       }
     },
     {
-      "symbol": "sz000858",
+      "symbol": "000858",
       "name": "五 粮 液",
       "industry": null,
       "source_reason": "动态候选",
@@ -43241,7 +43241,7 @@
       }
     },
     {
-      "symbol": "sh603259",
+      "symbol": "603259",
       "name": "药明康德",
       "industry": null,
       "source_reason": "动态候选",
@@ -43575,7 +43575,7 @@
       }
     },
     {
-      "symbol": "sz300604",
+      "symbol": "300604",
       "name": "长川科技",
       "industry": null,
       "source_reason": "动态候选",
@@ -43909,7 +43909,7 @@
       }
     },
     {
-      "symbol": "sh600150",
+      "symbol": "600150",
       "name": "中国船舶",
       "industry": null,
       "source_reason": "动态候选",
@@ -44243,7 +44243,7 @@
       }
     },
     {
-      "symbol": "sh600030",
+      "symbol": "600030",
       "name": "中信证券",
       "industry": null,
       "source_reason": "动态候选",
@@ -44577,7 +44577,7 @@
       }
     },
     {
-      "symbol": "sh600498",
+      "symbol": "600498",
       "name": "烽火通信",
       "industry": null,
       "source_reason": "动态候选",
@@ -44911,7 +44911,7 @@
       }
     },
     {
-      "symbol": "sz300188",
+      "symbol": "300188",
       "name": "国投智能",
       "industry": null,
       "source_reason": "动态候选",
@@ -45247,7 +45247,7 @@
       }
     },
     {
-      "symbol": "sh600900",
+      "symbol": "600900",
       "name": "长江电力",
       "industry": null,
       "source_reason": "动态候选",
@@ -45581,7 +45581,7 @@
       }
     },
     {
-      "symbol": "sh603019",
+      "symbol": "603019",
       "name": "中科曙光",
       "industry": null,
       "source_reason": "动态候选",
@@ -45915,7 +45915,7 @@
       }
     },
     {
-      "symbol": "sh600036",
+      "symbol": "600036",
       "name": "招商银行",
       "industry": null,
       "source_reason": "动态候选",
@@ -46249,7 +46249,7 @@
       }
     },
     {
-      "symbol": "sz001309",
+      "symbol": "001309",
       "name": "德明利",
       "industry": null,
       "source_reason": "动态候选",
@@ -46583,7 +46583,7 @@
       }
     },
     {
-      "symbol": "sz002384",
+      "symbol": "002384",
       "name": "东山精密",
       "industry": null,
       "source_reason": "动态候选",
@@ -46919,7 +46919,7 @@
       }
     },
     {
-      "symbol": "sz301308",
+      "symbol": "301308",
       "name": "江波龙",
       "industry": null,
       "source_reason": "动态候选",
@@ -47253,7 +47253,7 @@
       }
     },
     {
-      "symbol": "sh600183",
+      "symbol": "600183",
       "name": "生益科技",
       "industry": null,
       "source_reason": "动态候选",
@@ -47587,7 +47587,7 @@
       }
     },
     {
-      "symbol": "sz300450",
+      "symbol": "300450",
       "name": "先导智能",
       "industry": null,
       "source_reason": "动态候选",
@@ -47921,7 +47921,7 @@
       }
     },
     {
-      "symbol": "sh603993",
+      "symbol": "603993",
       "name": "洛阳钼业",
       "industry": null,
       "source_reason": "动态候选",
@@ -48257,7 +48257,7 @@
       }
     },
     {
-      "symbol": "sz300418",
+      "symbol": "300418",
       "name": "昆仑万维",
       "industry": null,
       "source_reason": "动态候选",
@@ -48591,7 +48591,7 @@
       }
     },
     {
-      "symbol": "sh601360",
+      "symbol": "601360",
       "name": "三六零",
       "industry": null,
       "source_reason": "动态候选",
@@ -48925,7 +48925,7 @@
       }
     },
     {
-      "symbol": "sh688012",
+      "symbol": "688012",
       "name": "中微公司",
       "industry": null,
       "source_reason": "动态候选",
@@ -49261,7 +49261,7 @@
       }
     },
     {
-      "symbol": "sz300502",
+      "symbol": "300502",
       "name": "新易盛",
       "industry": null,
       "source_reason": "动态候选",
@@ -49595,7 +49595,7 @@
       }
     },
     {
-      "symbol": "sz002463",
+      "symbol": "002463",
       "name": "沪电股份",
       "industry": null,
       "source_reason": "动态候选",
@@ -49931,7 +49931,7 @@
       }
     },
     {
-      "symbol": "sh600105",
+      "symbol": "600105",
       "name": "永鼎股份",
       "industry": null,
       "source_reason": "动态候选",
@@ -50265,7 +50265,7 @@
       }
     },
     {
-      "symbol": "sz002709",
+      "symbol": "002709",
       "name": "天赐材料",
       "industry": null,
       "source_reason": "动态候选",
@@ -50599,7 +50599,7 @@
       }
     },
     {
-      "symbol": "sh601600",
+      "symbol": "601600",
       "name": "中国铝业",
       "industry": null,
       "source_reason": "动态候选",
@@ -50933,7 +50933,7 @@
       }
     },
     {
-      "symbol": "sz000960",
+      "symbol": "000960",
       "name": "锡业股份",
       "industry": null,
       "source_reason": "动态候选",
@@ -51269,7 +51269,7 @@
       }
     },
     {
-      "symbol": "sz002371",
+      "symbol": "002371",
       "name": "北方华创",
       "industry": null,
       "source_reason": "动态候选",
@@ -51605,7 +51605,7 @@
       }
     },
     {
-      "symbol": "sz300454",
+      "symbol": "300454",
       "name": "深信服",
       "industry": null,
       "source_reason": "动态候选",
@@ -51939,7 +51939,7 @@
       }
     },
     {
-      "symbol": "sz000807",
+      "symbol": "000807",
       "name": "云铝股份",
       "industry": null,
       "source_reason": "动态候选",
@@ -52275,7 +52275,7 @@
       }
     },
     {
-      "symbol": "sz000725",
+      "symbol": "000725",
       "name": "京东方Ａ",
       "industry": null,
       "source_reason": "动态候选",
@@ -52609,7 +52609,7 @@
       }
     },
     {
-      "symbol": "sh603799",
+      "symbol": "603799",
       "name": "华友钴业",
       "industry": null,
       "source_reason": "动态候选",
@@ -52943,7 +52943,7 @@
       }
     },
     {
-      "symbol": "sh688270",
+      "symbol": "688270",
       "name": "臻镭科技",
       "industry": null,
       "source_reason": "动态候选",
@@ -53279,7 +53279,7 @@
       }
     },
     {
-      "symbol": "sz300014",
+      "symbol": "300014",
       "name": "亿纬锂能",
       "industry": null,
       "source_reason": "动态候选",
@@ -53613,7 +53613,7 @@
       }
     },
     {
-      "symbol": "sh600711",
+      "symbol": "600711",
       "name": "盛屯矿业",
       "industry": null,
       "source_reason": "动态候选",
@@ -53949,7 +53949,7 @@
       }
     },
     {
-      "symbol": "sz002594",
+      "symbol": "002594",
       "name": "比亚迪",
       "industry": null,
       "source_reason": "动态候选",
@@ -54283,7 +54283,7 @@
       }
     },
     {
-      "symbol": "sh688629",
+      "symbol": "688629",
       "name": "华丰科技",
       "industry": null,
       "source_reason": "动态候选",
@@ -54620,7 +54620,7 @@
       }
     },
     {
-      "symbol": "sz300624",
+      "symbol": "300624",
       "name": "万兴科技",
       "industry": null,
       "source_reason": "动态候选",
@@ -54954,7 +54954,7 @@
       }
     },
     {
-      "symbol": "sh601398",
+      "symbol": "601398",
       "name": "工商银行",
       "industry": null,
       "source_reason": "动态候选",
@@ -55288,7 +55288,7 @@
       }
     },
     {
-      "symbol": "sh600580",
+      "symbol": "600580",
       "name": "卧龙电驱",
       "industry": null,
       "source_reason": "动态候选",
@@ -55622,7 +55622,7 @@
       }
     },
     {
-      "symbol": "sz300476",
+      "symbol": "300476",
       "name": "胜宏科技",
       "industry": null,
       "source_reason": "动态候选",
@@ -55956,7 +55956,7 @@
       }
     },
     {
-      "symbol": "sh600362",
+      "symbol": "600362",
       "name": "江西铜业",
       "industry": null,
       "source_reason": "动态候选",
@@ -56292,7 +56292,7 @@
       }
     },
     {
-      "symbol": "sz002050",
+      "symbol": "002050",
       "name": "三花智控",
       "industry": null,
       "source_reason": "动态候选",
@@ -56626,7 +56626,7 @@
       }
     },
     {
-      "symbol": "sz002400",
+      "symbol": "002400",
       "name": "省广集团",
       "industry": null,
       "source_reason": "动态候选",
@@ -56960,7 +56960,7 @@
       }
     },
     {
-      "symbol": "sz300059",
+      "symbol": "300059",
       "name": "东方财富",
       "industry": null,
       "source_reason": "动态候选",
@@ -57294,7 +57294,7 @@
       }
     },
     {
-      "symbol": "sz300115",
+      "symbol": "300115",
       "name": "长盈精密",
       "industry": null,
       "source_reason": "动态候选",
@@ -57628,7 +57628,7 @@
       }
     },
     {
-      "symbol": "sz300274",
+      "symbol": "300274",
       "name": "阳光电源",
       "industry": null,
       "source_reason": "动态候选",
@@ -57962,7 +57962,7 @@
       }
     },
     {
-      "symbol": "sh603000",
+      "symbol": "603000",
       "name": "人民网",
       "industry": null,
       "source_reason": "动态候选",
@@ -58298,7 +58298,7 @@
       }
     },
     {
-      "symbol": "sz002759",
+      "symbol": "002759",
       "name": "天际股份",
       "industry": null,
       "source_reason": "动态候选",
@@ -58632,7 +58632,7 @@
       }
     },
     {
-      "symbol": "sh688981",
+      "symbol": "688981",
       "name": "中芯国际",
       "industry": null,
       "source_reason": "动态候选",
@@ -58966,7 +58966,7 @@
       }
     },
     {
-      "symbol": "sz000063",
+      "symbol": "000063",
       "name": "中兴通讯",
       "industry": null,
       "source_reason": "动态候选",
@@ -59300,7 +59300,7 @@
       }
     },
     {
-      "symbol": "sz000988",
+      "symbol": "000988",
       "name": "华工科技",
       "industry": null,
       "source_reason": "动态候选",
@@ -59634,7 +59634,7 @@
       }
     },
     {
-      "symbol": "sh688099",
+      "symbol": "688099",
       "name": "晶晨股份",
       "industry": null,
       "source_reason": "动态候选",
@@ -59968,7 +59968,7 @@
       }
     },
     {
-      "symbol": "sh600276",
+      "symbol": "600276",
       "name": "恒瑞医药",
       "industry": null,
       "source_reason": "动态候选",
@@ -60302,7 +60302,7 @@
       }
     },
     {
-      "symbol": "sz002475",
+      "symbol": "002475",
       "name": "立讯精密",
       "industry": null,
       "source_reason": "动态候选",
@@ -60636,7 +60636,7 @@
       }
     },
     {
-      "symbol": "sz002230",
+      "symbol": "002230",
       "name": "科大讯飞",
       "industry": null,
       "source_reason": "动态候选",
@@ -60970,7 +60970,7 @@
       }
     },
     {
-      "symbol": "sz000681",
+      "symbol": "000681",
       "name": "视觉中国",
       "industry": null,
       "source_reason": "动态候选",
@@ -61306,7 +61306,7 @@
       }
     },
     {
-      "symbol": "sz000977",
+      "symbol": "000977",
       "name": "浪潮信息",
       "industry": null,
       "source_reason": "动态候选",
@@ -61640,7 +61640,7 @@
       }
     },
     {
-      "symbol": "sh601138",
+      "symbol": "601138",
       "name": "工业富联",
       "industry": null,
       "source_reason": "动态候选",
@@ -61974,7 +61974,7 @@
       }
     },
     {
-      "symbol": "sz002261",
+      "symbol": "002261",
       "name": "拓维信息",
       "industry": null,
       "source_reason": "动态候选",
@@ -62308,7 +62308,7 @@
       }
     },
     {
-      "symbol": "sz002519",
+      "symbol": "002519",
       "name": "银河电子",
       "industry": null,
       "source_reason": "动态候选",
@@ -62644,7 +62644,7 @@
       }
     },
     {
-      "symbol": "sh601288",
+      "symbol": "601288",
       "name": "农业银行",
       "industry": null,
       "source_reason": "动态候选",
@@ -62978,7 +62978,7 @@
       }
     },
     {
-      "symbol": "sz300033",
+      "symbol": "300033",
       "name": "同花顺",
       "industry": null,
       "source_reason": "动态候选",
@@ -63312,7 +63312,7 @@
       }
     },
     {
-      "symbol": "sz300456",
+      "symbol": "300456",
       "name": "赛微电子",
       "industry": null,
       "source_reason": "动态候选",
@@ -63646,7 +63646,7 @@
       }
     },
     {
-      "symbol": "sh600879",
+      "symbol": "600879",
       "name": "航天电子",
       "industry": null,
       "source_reason": "动态候选",
@@ -63980,7 +63980,7 @@
       }
     },
     {
-      "symbol": "sz300170",
+      "symbol": "300170",
       "name": "汉得信息",
       "industry": null,
       "source_reason": "动态候选",
@@ -64314,7 +64314,7 @@
       }
     },
     {
-      "symbol": "sz002195",
+      "symbol": "002195",
       "name": "岩山科技",
       "industry": null,
       "source_reason": "动态候选",
@@ -64648,7 +64648,7 @@
       }
     },
     {
-      "symbol": "sz000547",
+      "symbol": "000547",
       "name": "航天发展",
       "industry": null,
       "source_reason": "动态候选",
@@ -64982,7 +64982,7 @@
       }
     },
     {
-      "symbol": "sz002361",
+      "symbol": "002361",
       "name": "神剑股份",
       "industry": null,
       "source_reason": "动态候选",
@@ -65318,7 +65318,7 @@
       }
     },
     {
-      "symbol": "sz300475",
+      "symbol": "300475",
       "name": "香农芯创",
       "industry": null,
       "source_reason": "动态候选",
@@ -65652,7 +65652,7 @@
       }
     },
     {
-      "symbol": "sz002202",
+      "symbol": "002202",
       "name": "金风科技",
       "industry": null,
       "source_reason": "动态候选",
@@ -65986,7 +65986,7 @@
       }
     },
     {
-      "symbol": "sh600118",
+      "symbol": "600118",
       "name": "中国卫星",
       "industry": null,
       "source_reason": "动态候选",
@@ -66320,7 +66320,7 @@
       }
     },
     {
-      "symbol": "sz000592",
+      "symbol": "000592",
       "name": "平潭发展",
       "industry": null,
       "source_reason": "动态候选",
@@ -66659,7 +66659,7 @@
   ],
   "picks": [
     {
-      "symbol": "sz002969",
+      "symbol": "002969",
       "theme": "概念-阿尔茨海默概念",
       "flags": {
         "must_observe_only": false,
@@ -66719,7 +66719,7 @@
       }
     },
     {
-      "symbol": "sz002931",
+      "symbol": "002931",
       "theme": "概念-阿尔茨海默概念",
       "flags": {
         "must_observe_only": true,
@@ -66781,7 +66781,7 @@
       }
     },
     {
-      "symbol": "sz002455",
+      "symbol": "002455",
       "theme": "概念-阿尔茨海默概念",
       "flags": {
         "must_observe_only": false,
@@ -66851,829 +66851,824 @@
     "timing": {},
     "sources": [
       {
-        "symbol": "sz002969",
+        "symbol": "002969",
         "data_source": "provider"
       },
       {
-        "symbol": "sz002931",
+        "symbol": "002931",
         "data_source": "provider"
       },
       {
-        "symbol": "sz002455",
+        "symbol": "002455",
         "data_source": "provider"
       },
       {
-        "symbol": "sh601869",
+        "symbol": "601869",
         "data_source": "provider"
       },
       {
-        "symbol": "sh603629",
+        "symbol": "603629",
         "data_source": "provider"
       },
       {
-        "symbol": "sz002842",
+        "symbol": "002842",
         "data_source": "provider"
       },
       {
-        "symbol": "sz300017",
+        "symbol": "300017",
         "data_source": "provider"
       },
       {
-        "symbol": "sh603256",
+        "symbol": "603256",
         "data_source": "provider"
       },
       {
-        "symbol": "sz002506",
+        "symbol": "002506",
         "data_source": "provider"
       },
       {
-        "symbol": "sz002491",
+        "symbol": "002491",
         "data_source": "provider"
       },
       {
-        "symbol": "sh600487",
+        "symbol": "600487",
         "data_source": "provider"
       },
       {
-        "symbol": "sz300394",
+        "symbol": "300394",
         "data_source": "provider"
       },
       {
-        "symbol": "sz002378",
+        "symbol": "002378",
         "data_source": "provider"
       },
       {
-        "symbol": "sz301526",
+        "symbol": "301526",
         "data_source": "provider"
       },
       {
-        "symbol": "sz002155",
+        "symbol": "002155",
         "data_source": "provider"
       },
       {
-        "symbol": "sz002009",
+        "symbol": "002009",
         "data_source": "provider"
       },
       {
-        "symbol": "sh601615",
+        "symbol": "601615",
         "data_source": "provider"
       },
       {
-        "symbol": "sz300139",
+        "symbol": "300139",
         "data_source": "provider"
       },
       {
-        "symbol": "sz000070",
+        "symbol": "000070",
         "data_source": "provider"
       },
       {
-        "symbol": "sz300757",
+        "symbol": "300757",
         "data_source": "provider"
       },
       {
-        "symbol": "sz001330",
+        "symbol": "001330",
         "data_source": "provider"
       },
       {
-        "symbol": "sh600397",
+        "symbol": "600397",
         "data_source": "provider"
       },
       {
-        "symbol": "sz300251",
+        "symbol": "300251",
         "data_source": "provider"
       },
       {
-        "symbol": "sh600759",
+        "symbol": "600759",
         "data_source": "provider"
       },
       {
-        "symbol": "sh688766",
+        "symbol": "688766",
         "data_source": "provider"
       },
       {
-        "symbol": "sz000657",
+        "symbol": "000657",
         "data_source": "provider"
       },
       {
-        "symbol": "sh688521",
+        "symbol": "688521",
         "data_source": "provider"
       },
       {
-        "symbol": "sh600176",
+        "symbol": "600176",
         "data_source": "provider"
       },
       {
-        "symbol": "sh601231",
+        "symbol": "601231",
         "data_source": "provider"
       },
       {
-        "symbol": "sh600522",
+        "symbol": "600522",
         "data_source": "provider"
       },
       {
-        "symbol": "sz000338",
+        "symbol": "000338",
         "data_source": "provider"
       },
       {
-        "symbol": "sz300277",
+        "symbol": "300277",
         "data_source": "provider"
       },
       {
-        "symbol": "sh600330",
+        "symbol": "600330",
         "data_source": "provider"
       },
       {
-        "symbol": "sz002716",
+        "symbol": "002716",
         "data_source": "provider"
       },
       {
-        "symbol": "sh601212",
+        "symbol": "601212",
         "data_source": "provider"
       },
       {
-        "symbol": "sh688223",
+        "symbol": "688223",
         "data_source": "provider"
       },
       {
-        "symbol": "sz300570",
+        "symbol": "300570",
         "data_source": "provider"
       },
       {
-        "symbol": "sz300751",
+        "symbol": "300751",
         "data_source": "provider"
       },
       {
-        "symbol": "sh688158",
+        "symbol": "688158",
         "data_source": "provider"
       },
       {
-        "symbol": "sz300182",
+        "symbol": "300182",
         "data_source": "provider"
       },
       {
-        "symbol": "sz300548",
+        "symbol": "300548",
         "data_source": "provider"
       },
       {
-        "symbol": "sz300666",
+        "symbol": "300666",
         "data_source": "provider"
       },
       {
-        "symbol": "sz002129",
+        "symbol": "002129",
         "data_source": "provider"
       },
       {
-        "symbol": "sh688008",
+        "symbol": "688008",
         "data_source": "provider"
       },
       {
-        "symbol": "sz301018",
+        "symbol": "301018",
         "data_source": "provider"
       },
       {
-        "symbol": "sz300846",
+        "symbol": "300846",
         "data_source": "provider"
       },
       {
-        "symbol": "sz002429",
+        "symbol": "002429",
         "data_source": "provider"
       },
       {
-        "symbol": "sh600875",
+        "symbol": "600875",
         "data_source": "provider"
       },
       {
-        "symbol": "sz000815",
+        "symbol": "000815",
         "data_source": "provider"
       },
       {
-        "symbol": "sh600589",
+        "symbol": "600589",
         "data_source": "provider"
       },
       {
-        "symbol": "sh600392",
+        "symbol": "600392",
         "data_source": "provider"
       },
       {
-        "symbol": "sz000738",
+        "symbol": "000738",
         "data_source": "provider"
       },
       {
-        "symbol": "sz300620",
+        "symbol": "300620",
         "data_source": "provider"
       },
       {
-        "symbol": "sh600893",
+        "symbol": "600893",
         "data_source": "provider"
       },
       {
-        "symbol": "sz002353",
+        "symbol": "002353",
         "data_source": "provider"
       },
       {
-        "symbol": "sz002080",
+        "symbol": "002080",
         "data_source": "provider"
       },
       {
-        "symbol": "sz002624",
+        "symbol": "002624",
         "data_source": "provider"
       },
       {
-        "symbol": "sh600986",
+        "symbol": "600986",
         "data_source": "provider"
       },
       {
-        "symbol": "sz300166",
+        "symbol": "300166",
         "data_source": "provider"
       },
       {
-        "symbol": "sh603533",
+        "symbol": "603533",
         "data_source": "provider"
       },
       {
-        "symbol": "sz300857",
+        "symbol": "300857",
         "data_source": "provider"
       },
       {
-        "symbol": "sz300065",
+        "symbol": "300065",
         "data_source": "provider"
       },
       {
-        "symbol": "sz000630",
+        "symbol": "000630",
         "data_source": "provider"
       },
       {
-        "symbol": "sh600549",
+        "symbol": "600549",
         "data_source": "provider"
       },
       {
-        "symbol": "sz002008",
+        "symbol": "002008",
         "data_source": "provider"
       },
       {
-        "symbol": "sh688702",
+        "symbol": "688702",
         "data_source": "provider"
       },
       {
-        "symbol": "sz002185",
+        "symbol": "002185",
         "data_source": "provider"
       },
       {
-        "symbol": "sz300369",
+        "symbol": "300369",
         "data_source": "provider"
       },
       {
-        "symbol": "sh603881",
+        "symbol": "603881",
         "data_source": "provider"
       },
       {
-        "symbol": "sh600489",
+        "symbol": "600489",
         "data_source": "provider"
       },
       {
-        "symbol": "sz300383",
+        "symbol": "300383",
         "data_source": "provider"
       },
       {
-        "symbol": "sh600418",
+        "symbol": "600418",
         "data_source": "provider"
       },
       {
-        "symbol": "sh600673",
+        "symbol": "600673",
         "data_source": "provider"
       },
       {
-        "symbol": "sh600977",
+        "symbol": "600977",
         "data_source": "provider"
       },
       {
-        "symbol": "sh601179",
+        "symbol": "601179",
         "data_source": "provider"
       },
       {
-        "symbol": "sz300567",
+        "symbol": "300567",
         "data_source": "provider"
       },
       {
-        "symbol": "sz002812",
+        "symbol": "002812",
         "data_source": "provider"
       },
       {
-        "symbol": "sh688017",
+        "symbol": "688017",
         "data_source": "provider"
       },
       {
-        "symbol": "sh603667",
+        "symbol": "603667",
         "data_source": "provider"
       },
       {
-        "symbol": "sz002131",
+        "symbol": "002131",
         "data_source": "provider"
       },
       {
-        "symbol": "sz002156",
+        "symbol": "002156",
         "data_source": "provider"
       },
       {
-        "symbol": "sh603986",
+        "symbol": "603986",
         "data_source": "provider"
       },
       {
-        "symbol": "sh601872",
+        "symbol": "601872",
         "data_source": "provider"
       },
       {
-        "symbol": "sz002149",
+        "symbol": "002149",
         "data_source": "provider"
       },
       {
-        "symbol": "sh600309",
+        "symbol": "600309",
         "data_source": "provider"
       },
       {
-        "symbol": "sh600884",
+        "symbol": "600884",
         "data_source": "provider"
       },
       {
-        "symbol": "sz301171",
+        "symbol": "301171",
         "data_source": "provider"
       },
       {
-        "symbol": "sh688110",
+        "symbol": "688110",
         "data_source": "provider"
       },
       {
-        "symbol": "sz002467",
+        "symbol": "002467",
         "data_source": "provider"
       },
       {
-        "symbol": "sz300724",
+        "symbol": "300724",
         "data_source": "provider"
       },
       {
-        "symbol": "sh601857",
+        "symbol": "601857",
         "data_source": "provider"
       },
       {
-        "symbol": "sh600111",
+        "symbol": "600111",
         "data_source": "provider"
       },
       {
-        "symbol": "sh688525",
+        "symbol": "688525",
         "data_source": "provider"
       },
       {
-        "symbol": "sz300738",
+        "symbol": "300738",
         "data_source": "provider"
       },
       {
-        "symbol": "sz300364",
+        "symbol": "300364",
         "data_source": "provider"
       },
       {
-        "symbol": "sz300102",
+        "symbol": "300102",
         "data_source": "provider"
       },
       {
-        "symbol": "sh688343",
+        "symbol": "688343",
         "data_source": "provider"
       },
       {
-        "symbol": "sz300766",
+        "symbol": "300766",
         "data_source": "provider"
       },
       {
-        "symbol": "sz000831",
+        "symbol": "000831",
         "data_source": "provider"
       },
       {
-        "symbol": "sz000021",
+        "symbol": "000021",
         "data_source": "provider"
       },
       {
-        "symbol": "sz002837",
+        "symbol": "002837",
         "data_source": "provider"
       },
       {
-        "symbol": "sh600584",
+        "symbol": "600584",
         "data_source": "provider"
       },
       {
-        "symbol": "sh601888",
+        "symbol": "601888",
         "data_source": "provider"
       },
       {
-        "symbol": "sh688041",
+        "symbol": "688041",
         "data_source": "provider"
       },
       {
-        "symbol": "sh600089",
+        "symbol": "600089",
         "data_source": "provider"
       },
       {
-        "symbol": "sz300750",
+        "symbol": "300750",
         "data_source": "provider"
       },
       {
-        "symbol": "sz300223",
+        "symbol": "300223",
         "data_source": "provider"
       },
       {
-        "symbol": "sz002340",
+        "symbol": "002340",
         "data_source": "provider"
       },
       {
-        "symbol": "sz000833",
+        "symbol": "000833",
         "data_source": "provider"
       },
       {
-        "symbol": "sh600372",
+        "symbol": "600372",
         "data_source": "provider"
       },
       {
-        "symbol": "sz000333",
+        "symbol": "000333",
         "data_source": "provider"
       },
       {
-        "symbol": "sh688347",
+        "symbol": "688347",
         "data_source": "provider"
       },
       {
-        "symbol": "sz300395",
+        "symbol": "300395",
         "data_source": "provider"
       },
       {
-        "symbol": "sh601899",
+        "symbol": "601899",
         "data_source": "provider"
       },
       {
-        "symbol": "sh688313",
+        "symbol": "688313",
         "data_source": "provider"
       },
       {
-        "symbol": "sz000559",
+        "symbol": "000559",
         "data_source": "provider"
       },
       {
-        "symbol": "sh600410",
+        "symbol": "600410",
         "data_source": "provider"
       },
       {
-        "symbol": "sz000426",
+        "symbol": "000426",
         "data_source": "provider"
       },
       {
-        "symbol": "sh600010",
+        "symbol": "600010",
         "data_source": "provider"
       },
       {
-        "symbol": "sz300008",
+        "symbol": "300008",
         "data_source": "provider"
       },
       {
-        "symbol": "sh601318",
+        "symbol": "601318",
         "data_source": "provider"
       },
       {
-        "symbol": "sz300058",
+        "symbol": "300058",
         "data_source": "provider"
       },
       {
-        "symbol": "sh600547",
+        "symbol": "600547",
         "data_source": "provider"
       },
       {
-        "symbol": "sh601012",
+        "symbol": "601012",
         "data_source": "provider"
       },
       {
-        "symbol": "sz301217",
+        "symbol": "301217",
         "data_source": "provider"
       },
       {
-        "symbol": "sh688031",
+        "symbol": "688031",
         "data_source": "provider"
       },
       {
-        "symbol": "sz300136",
+        "symbol": "300136",
         "data_source": "provider"
       },
       {
-        "symbol": "sz000066",
+        "symbol": "000066",
         "data_source": "provider"
       },
       {
-        "symbol": "sz000858",
+        "symbol": "000858",
         "data_source": "provider"
       },
       {
-        "symbol": "sh603259",
+        "symbol": "603259",
         "data_source": "provider"
       },
       {
-        "symbol": "sz300604",
+        "symbol": "300604",
         "data_source": "provider"
       },
       {
-        "symbol": "sh600150",
+        "symbol": "600150",
         "data_source": "provider"
       },
       {
-        "symbol": "sh600030",
+        "symbol": "600030",
         "data_source": "provider"
       },
       {
-        "symbol": "sh600498",
+        "symbol": "600498",
         "data_source": "provider"
       },
       {
-        "symbol": "sz300188",
+        "symbol": "300188",
         "data_source": "provider"
       },
       {
-        "symbol": "sh600900",
+        "symbol": "600900",
         "data_source": "provider"
       },
       {
-        "symbol": "sh603019",
+        "symbol": "603019",
         "data_source": "provider"
       },
       {
-        "symbol": "sh600036",
+        "symbol": "600036",
         "data_source": "provider"
       },
       {
-        "symbol": "sz001309",
+        "symbol": "001309",
         "data_source": "provider"
       },
       {
-        "symbol": "sz002384",
+        "symbol": "002384",
         "data_source": "provider"
       },
       {
-        "symbol": "sz301308",
+        "symbol": "301308",
         "data_source": "provider"
       },
       {
-        "symbol": "sh600183",
+        "symbol": "600183",
         "data_source": "provider"
       },
       {
-        "symbol": "sz300450",
+        "symbol": "300450",
         "data_source": "provider"
       },
       {
-        "symbol": "sh603993",
+        "symbol": "603993",
         "data_source": "provider"
       },
       {
-        "symbol": "sz300418",
+        "symbol": "300418",
         "data_source": "provider"
       },
       {
-        "symbol": "sh601360",
+        "symbol": "601360",
         "data_source": "provider"
       },
       {
-        "symbol": "sh688012",
+        "symbol": "688012",
         "data_source": "provider"
       },
       {
-        "symbol": "sz300502",
+        "symbol": "300502",
         "data_source": "provider"
       },
       {
-        "symbol": "sz002463",
+        "symbol": "002463",
         "data_source": "provider"
       },
       {
-        "symbol": "sh600105",
+        "symbol": "600105",
         "data_source": "provider"
       },
       {
-        "symbol": "sz002709",
+        "symbol": "002709",
         "data_source": "provider"
       },
       {
-        "symbol": "sh601600",
+        "symbol": "601600",
         "data_source": "provider"
       },
       {
-        "symbol": "sz000960",
+        "symbol": "000960",
         "data_source": "provider"
       },
       {
-        "symbol": "sz002371",
+        "symbol": "002371",
         "data_source": "provider"
       },
       {
-        "symbol": "sz300454",
+        "symbol": "300454",
         "data_source": "provider"
       },
       {
-        "symbol": "sz000807",
+        "symbol": "000807",
         "data_source": "provider"
       },
       {
-        "symbol": "sz000725",
+        "symbol": "000725",
         "data_source": "provider"
       },
       {
-        "symbol": "sh603799",
+        "symbol": "603799",
         "data_source": "provider"
       },
       {
-        "symbol": "sh688270",
+        "symbol": "688270",
         "data_source": "provider"
       },
       {
-        "symbol": "sz300014",
+        "symbol": "300014",
         "data_source": "provider"
       },
       {
-        "symbol": "sh600711",
+        "symbol": "600711",
         "data_source": "provider"
       },
       {
-        "symbol": "sz002594",
+        "symbol": "002594",
         "data_source": "provider"
       },
       {
-        "symbol": "sh688629",
+        "symbol": "688629",
         "data_source": "provider"
       },
       {
-        "symbol": "sz300624",
+        "symbol": "300624",
         "data_source": "provider"
       },
       {
-        "symbol": "sh601398",
+        "symbol": "601398",
         "data_source": "provider"
       },
       {
-        "symbol": "sh600580",
+        "symbol": "600580",
         "data_source": "provider"
       },
       {
-        "symbol": "sz300476",
+        "symbol": "300476",
         "data_source": "provider"
       },
       {
-        "symbol": "sh600362",
+        "symbol": "600362",
         "data_source": "provider"
       },
       {
-        "symbol": "sz002050",
+        "symbol": "002050",
         "data_source": "provider"
       },
       {
-        "symbol": "sz002400",
+        "symbol": "002400",
         "data_source": "provider"
       },
       {
-        "symbol": "sz300059",
+        "symbol": "300059",
         "data_source": "provider"
       },
       {
-        "symbol": "sz300115",
+        "symbol": "300115",
         "data_source": "provider"
       },
       {
-        "symbol": "sz300274",
+        "symbol": "300274",
         "data_source": "provider"
       },
       {
-        "symbol": "sh603000",
+        "symbol": "603000",
         "data_source": "provider"
       },
       {
-        "symbol": "sz002759",
+        "symbol": "002759",
         "data_source": "provider"
       },
       {
-        "symbol": "sh688981",
+        "symbol": "688981",
         "data_source": "provider"
       },
       {
-        "symbol": "sz000063",
+        "symbol": "000063",
         "data_source": "provider"
       },
       {
-        "symbol": "sz000988",
+        "symbol": "000988",
         "data_source": "provider"
       },
       {
-        "symbol": "sh688099",
+        "symbol": "688099",
         "data_source": "provider"
       },
       {
-        "symbol": "sh600276",
+        "symbol": "600276",
         "data_source": "provider"
       },
       {
-        "symbol": "sz002475",
+        "symbol": "002475",
         "data_source": "provider"
       },
       {
-        "symbol": "sz002230",
+        "symbol": "002230",
         "data_source": "provider"
       },
       {
-        "symbol": "sz000681",
+        "symbol": "000681",
         "data_source": "provider"
       },
       {
-        "symbol": "sz000977",
+        "symbol": "000977",
         "data_source": "provider"
       },
       {
-        "symbol": "sh601138",
+        "symbol": "601138",
         "data_source": "provider"
       },
       {
-        "symbol": "sz002261",
+        "symbol": "002261",
         "data_source": "provider"
       },
       {
-        "symbol": "sz002519",
+        "symbol": "002519",
         "data_source": "provider"
       },
       {
-        "symbol": "sh601288",
+        "symbol": "601288",
         "data_source": "provider"
       },
       {
-        "symbol": "sz300033",
+        "symbol": "300033",
         "data_source": "provider"
       },
       {
-        "symbol": "sz300456",
+        "symbol": "300456",
         "data_source": "provider"
       },
       {
-        "symbol": "sh600879",
+        "symbol": "600879",
         "data_source": "provider"
       },
       {
-        "symbol": "sz300170",
+        "symbol": "300170",
         "data_source": "provider"
       },
       {
-        "symbol": "sz002195",
+        "symbol": "002195",
         "data_source": "provider"
       },
       {
-        "symbol": "sz000547",
+        "symbol": "000547",
         "data_source": "provider"
       },
       {
-        "symbol": "sz002361",
+        "symbol": "002361",
         "data_source": "provider"
       },
       {
-        "symbol": "sz300475",
+        "symbol": "300475",
         "data_source": "provider"
       },
       {
-        "symbol": "sz002202",
+        "symbol": "002202",
         "data_source": "provider"
       },
       {
-        "symbol": "sh600118",
+        "symbol": "600118",
         "data_source": "provider"
       },
       {
-        "symbol": "sz000592",
+        "symbol": "000592",
         "data_source": "provider"
       }
     ],
     "failures": [
       {
-        "symbol": "sh688818",
+        "symbol": "688818",
         "reason": "LOW_LIQ_HARD",
         "amount_5d_avg": 0.0
       }
     ],
     "snapshot": {
-      "source": "akshare:sina",
+      "source": "akshare:em",
       "cache": null,
       "fallback": false,
       "fallback_reason": null,
       "stale": false,
       "missing": false,
-      "elapsed_sec": 32.38,
+      "elapsed_sec": 69.7,
       "cache_age_sec": null,
       "skipped_routes": [],
       "attempts": [
         {
           "source": "akshare:em",
-          "ok": false,
-          "err": "ConnectionError: ('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))"
-        },
-        {
-          "source": "akshare:sina",
           "ok": true,
-          "rows": 5483
+          "rows": 5810
         }
       ]
     },
@@ -67687,18 +67682,7 @@
       "candidates_out_count": 199,
       "daily_attempts_sample": [
         {
-          "symbol": "sz300394",
-          "src": "akshare:sina",
-          "attempts": [
-            {
-              "route": "sina",
-              "ok": true,
-              "rows": 2661
-            }
-          ]
-        },
-        {
-          "symbol": "sz300251",
+          "symbol": "300251",
           "src": "akshare:sina",
           "attempts": [
             {
@@ -67709,62 +67693,7 @@
           ]
         },
         {
-          "symbol": "sz300058",
-          "src": "akshare:sina",
-          "attempts": [
-            {
-              "route": "sina",
-              "ok": true,
-              "rows": 3674
-            }
-          ]
-        },
-        {
-          "symbol": "sh601899",
-          "src": "akshare:sina",
-          "attempts": [
-            {
-              "route": "sina",
-              "ok": true,
-              "rows": 4286
-            }
-          ]
-        },
-        {
-          "symbol": "sz300017",
-          "src": "akshare:sina",
-          "attempts": [
-            {
-              "route": "sina",
-              "ok": true,
-              "rows": 3907
-            }
-          ]
-        },
-        {
-          "symbol": "sz002131",
-          "src": "akshare:sina",
-          "attempts": [
-            {
-              "route": "sina",
-              "ok": true,
-              "rows": 4207
-            }
-          ]
-        },
-        {
-          "symbol": "sz300502",
-          "src": "akshare:sina",
-          "attempts": [
-            {
-              "route": "sina",
-              "ok": true,
-              "rows": 2420
-            }
-          ]
-        },
-        {
-          "symbol": "sh600589",
+          "symbol": "600589",
           "src": "akshare:sina",
           "attempts": [
             {
@@ -67775,40 +67704,73 @@
           ]
         },
         {
-          "symbol": "sz002837",
+          "symbol": "300394",
           "src": "akshare:sina",
           "attempts": [
             {
               "route": "sina",
               "ok": true,
-              "rows": 2142
+              "rows": 2661
             }
           ]
         },
         {
-          "symbol": "sz300750",
+          "symbol": "601899",
           "src": "akshare:sina",
           "attempts": [
             {
               "route": "sina",
               "ok": true,
-              "rows": 1867
+              "rows": 4286
             }
           ]
         },
         {
-          "symbol": "sz300274",
+          "symbol": "300502",
           "src": "akshare:sina",
           "attempts": [
             {
               "route": "sina",
               "ok": true,
-              "rows": 3445
+              "rows": 2420
             }
           ]
         },
         {
-          "symbol": "sh603986",
+          "symbol": "300058",
+          "src": "akshare:sina",
+          "attempts": [
+            {
+              "route": "sina",
+              "ok": true,
+              "rows": 3674
+            }
+          ]
+        },
+        {
+          "symbol": "002131",
+          "src": "akshare:sina",
+          "attempts": [
+            {
+              "route": "sina",
+              "ok": true,
+              "rows": 4207
+            }
+          ]
+        },
+        {
+          "symbol": "300017",
+          "src": "akshare:sina",
+          "attempts": [
+            {
+              "route": "sina",
+              "ok": true,
+              "rows": 3907
+            }
+          ]
+        },
+        {
+          "symbol": "603986",
           "src": "akshare:sina",
           "attempts": [
             {
@@ -67819,40 +67781,18 @@
           ]
         },
         {
-          "symbol": "sz002050",
+          "symbol": "002837",
           "src": "akshare:sina",
           "attempts": [
             {
               "route": "sina",
               "ok": true,
-              "rows": 4805
+              "rows": 2142
             }
           ]
         },
         {
-          "symbol": "sz300182",
-          "src": "akshare:sina",
-          "attempts": [
-            {
-              "route": "sina",
-              "ok": true,
-              "rows": 3487
-            }
-          ]
-        },
-        {
-          "symbol": "sz000021",
-          "src": "akshare:sina",
-          "attempts": [
-            {
-              "route": "sina",
-              "ok": true,
-              "rows": 7668
-            }
-          ]
-        },
-        {
-          "symbol": "sz300418",
+          "symbol": "300418",
           "src": "akshare:sina",
           "attempts": [
             {
@@ -67863,29 +67803,62 @@
           ]
         },
         {
-          "symbol": "sh600111",
+          "symbol": "002050",
           "src": "akshare:sina",
           "attempts": [
             {
               "route": "sina",
               "ok": true,
-              "rows": 6828
+              "rows": 4805
             }
           ]
         },
         {
-          "symbol": "sz300364",
+          "symbol": "300274",
           "src": "akshare:sina",
           "attempts": [
             {
               "route": "sina",
               "ok": true,
-              "rows": 2531
+              "rows": 3445
             }
           ]
         },
         {
-          "symbol": "sh603993",
+          "symbol": "300750",
+          "src": "akshare:sina",
+          "attempts": [
+            {
+              "route": "sina",
+              "ok": true,
+              "rows": 1867
+            }
+          ]
+        },
+        {
+          "symbol": "300182",
+          "src": "akshare:sina",
+          "attempts": [
+            {
+              "route": "sina",
+              "ok": true,
+              "rows": 3487
+            }
+          ]
+        },
+        {
+          "symbol": "000021",
+          "src": "akshare:sina",
+          "attempts": [
+            {
+              "route": "sina",
+              "ok": true,
+              "rows": 7668
+            }
+          ]
+        },
+        {
+          "symbol": "603993",
           "src": "akshare:sina",
           "attempts": [
             {
@@ -67896,18 +67869,29 @@
           ]
         },
         {
-          "symbol": "sh600487",
+          "symbol": "600111",
           "src": "akshare:sina",
           "attempts": [
             {
               "route": "sina",
               "ok": true,
-              "rows": 5282
+              "rows": 6828
             }
           ]
         },
         {
-          "symbol": "sh600089",
+          "symbol": "300364",
+          "src": "akshare:sina",
+          "attempts": [
+            {
+              "route": "sina",
+              "ok": true,
+              "rows": 2531
+            }
+          ]
+        },
+        {
+          "symbol": "600089",
           "src": "akshare:sina",
           "attempts": [
             {
@@ -67918,7 +67902,7 @@
           ]
         },
         {
-          "symbol": "sz300065",
+          "symbol": "300065",
           "src": "akshare:sina",
           "attempts": [
             {
@@ -67929,7 +67913,7 @@
           ]
         },
         {
-          "symbol": "sz002475",
+          "symbol": "002475",
           "src": "akshare:sina",
           "attempts": [
             {
@@ -67940,40 +67924,18 @@
           ]
         },
         {
-          "symbol": "sh600410",
+          "symbol": "600487",
           "src": "akshare:sina",
           "attempts": [
             {
               "route": "sina",
               "ok": true,
-              "rows": 5151
+              "rows": 5282
             }
           ]
         },
         {
-          "symbol": "sz002371",
-          "src": "akshare:sina",
-          "attempts": [
-            {
-              "route": "sina",
-              "ok": true,
-              "rows": 3788
-            }
-          ]
-        },
-        {
-          "symbol": "sh601318",
-          "src": "akshare:sina",
-          "attempts": [
-            {
-              "route": "sina",
-              "ok": true,
-              "rows": 4546
-            }
-          ]
-        },
-        {
-          "symbol": "sh688521",
+          "symbol": "688521",
           "src": "akshare:sina",
           "attempts": [
             {
@@ -67984,7 +67946,51 @@
           ]
         },
         {
-          "symbol": "sh600893",
+          "symbol": "600410",
+          "src": "akshare:sina",
+          "attempts": [
+            {
+              "route": "sina",
+              "ok": true,
+              "rows": 5151
+            }
+          ]
+        },
+        {
+          "symbol": "002371",
+          "src": "akshare:sina",
+          "attempts": [
+            {
+              "route": "sina",
+              "ok": true,
+              "rows": 3788
+            }
+          ]
+        },
+        {
+          "symbol": "601318",
+          "src": "akshare:sina",
+          "attempts": [
+            {
+              "route": "sina",
+              "ok": true,
+              "rows": 4546
+            }
+          ]
+        },
+        {
+          "symbol": "002506",
+          "src": "akshare:sina",
+          "attempts": [
+            {
+              "route": "sina",
+              "ok": true,
+              "rows": 3295
+            }
+          ]
+        },
+        {
+          "symbol": "600893",
           "src": "akshare:sina",
           "attempts": [
             {
@@ -67995,7 +68001,7 @@
           ]
         },
         {
-          "symbol": "sz300548",
+          "symbol": "300548",
           "src": "akshare:sina",
           "attempts": [
             {
@@ -68004,21 +68010,10 @@
               "rows": 2270
             }
           ]
-        },
-        {
-          "symbol": "sz002506",
-          "src": "akshare:sina",
-          "attempts": [
-            {
-              "route": "sina",
-              "ok": true,
-              "rows": 3295
-            }
-          ]
         }
       ]
     }
   },
   "tradeable": true,
   "message": "generated 3 picks"
-}
+}}

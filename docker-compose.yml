@@ -42,3 +42,11 @@ services:
 
     ports:
       - "8000:8000"
+
+  web:
+    build:
+      context: ./frontend
+    depends_on:
+      - gp
+    ports:
+      - "8080:80"

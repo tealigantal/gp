@@ -1,40 +1,145 @@
-## 项目概览
-对话式 A 股策略与推荐助手（DeepSeek + 真实数据链路）。支持多轮会话、意图识别、荐股与结构化结果，强调“真实数据优先，不做合成降级”。
+## gp_assistant（对话式 A 股策略与推荐助手）
+DeepSeek + 真实数据链路，支持多轮对话、意图识别、荐股与结构化结果；新增同源友好的 `/api` 前缀和轻量前端 SPA。
 
-核心能力：
-- 数据提供层：AkShare 多线路回退（TX→Sina→EastMoney），本地 Parquet（可选）。
-- 市场环境：基于全市场快照的分层（A/B/C/D）与基础统计。
-- 候选与主线：动态候选池、行业/概念主线约束、风险与分散度控制。
-- 工具与接口：命令行工具、交互式聊天，FastAPI HTTP 服务。
+核心能力
+- 数据链路：AkShare 多线路回退（Sina/EM/Tx），严格真实优先；可落盘结果
+- 引擎要点：全市场快照→环境分层→主线约束→候选打分→冠军策略与关键带
+- 服务形态：命令行、FastAPI HTTP、前端 SPA（React）
 
----
-
-## 快速开始
-方式一：Docker（推荐）
-- 构建镜像：`docker compose build --no-cache`
-- 启动服务：`docker compose up -d`
-- 健康检查：`curl http://127.0.0.1:8000/health`
-- 如国内网络构建较慢，可在 `.env` 中设置 `PIP_INDEX_URL`（如清华/阿里镜像）。修改镜像源后建议使用 `docker compose build --no-cache` 确保生效。
-
-方式二：本地运行
-- 要求：Python 3.10+（推荐 3.11）
-- 安装依赖：`pip install -r requirements.txt`
-- 让源码包可导入（两选一）：
-  - `pip install -e .`（基于 `pyproject.toml`）
-  - 或设置 `PYTHONPATH` 指向 `src`（本仓含 `sitecustomize.py` 自动加入 `src`）
+目录结构（摘）
+- 代码与服务：`src/gp_assistant`
+- 前端工程：`frontend/`
+- 运行产物：`store/`（含 `store/recommend/*.json`）
+- 配置示例：`.env.example`
 
 ---
 
-## 使用方式
-交互聊天（REPL）
-- 本地：`python -m gp_assistant chat`
-- Docker：`docker compose run --rm -it gp python -m gp_assistant chat`
-- 单次输出 JSON：`python -m gp_assistant chat --once "给我推荐3只低位放量"`
+## 一键启动（最小步骤）
+本地后端 + 前端开发（推荐，用于联调）
+1) 后端（端口 8000）
+   - Python 3.10+
+   - `pip install -r requirements.txt`
+   - `uvicorn gp_assistant.server.app:app --host 0.0.0.0 --port 8000`
+   - 健康检查：`curl http://127.0.0.1:8000/api/health`
+2) 前端（端口 5173）
+   - `cd frontend && npm i && npm run dev`
+   - 访问 `http://localhost:5173`（Vite 已代理 `/api -> http://localhost:8000`）
 
-HTTP API（FastAPI）
-- POST `/chat`：`{"message":"给我推荐3只主板低位"}`
-- POST `/recommend`：`{"universe":"symbols","symbols":["600519","000333"],"topk":3}`
-- GET `/health`：查看服务与 Provider 状态
+Docker（全栈：前端 + 后端）
+- 一键启动：`docker compose up --build -d`
+- 首次构建会同时打包前端（Node 构建）与后端（Uvicorn）
+- 访问前端：`http://localhost:8080`
+- 健康检查（直连后端）：`curl http://127.0.0.1:8000/api/health`
+
+生产构建与部署（同源方案）
+- 前端构建：`cd frontend && npm run build`（产物在 `frontend/dist`）
+- 同源部署建议：
+  - 静态资源托管 `/`（拷贝 `frontend/dist`）
+  - `/api` 反代到 FastAPI（端口 8000）
+  - Nginx 示例：`location /api { proxy_pass http://backend:8000; }`；`location / { root /usr/share/nginx/html; try_files $uri /index.html; }`
+
+---
+
+## 后端 HTTP API（新旧兼容）
+新接口（统一前缀，供前端使用）
+- POST `/api/chat`
+- POST `/api/recommend`（支持 `detail: compact|full`，默认 `compact`）
+- GET  `/api/health`
+- 可选增强：
+  - GET `/api/ohlcv/{symbol}?start=YYYY-MM-DD&end=YYYY-MM-DD&limit=800` → `{symbol, meta, bars[]}`
+  - GET `/api/recommend/{date}` → 读取 `store/recommend/{date}.json`
+
+旧接口（保留且行为一致，默认 `detail=compact`）
+- POST `/chat`、POST `/recommend`、GET `/health`
+
+轻量输出（detail=compact）
+- 仅保留：as_of, timezone, env, themes, picks, tradeable, message, execution_checklist, disclaimer；
+- debug 仅保留：degraded / degrade_reasons / advisories；
+- `detail=full` 输出完整 payload。
+
+可选 CORS（默认关闭）
+- 设置环境变量 `GP_CORS_ORIGINS=http://localhost:5173,https://your.site` 开启跨域；未设置则不启用。
+
+---
+
+## 前端（React + Vite + AntD + React Query + ECharts）
+开发模式（联调）
+- `cd frontend && cp .env.example .env && npm i && npm run dev`
+- 打开 `http://localhost:5173`，页面：
+  - `/recommend`：参数表单（topk/universe/symbols/risk_profile/detail），展示 tradeable 与 env.grade，降级原因 Alert，Picks 表格（symbol/theme/strategy/bands/actions）
+  - `/chat`：持久化会话，触发推荐时可跳转 `/recommend`
+  - `/health`：Provider/LLM/time
+
+生产构建
+- `cd frontend && npm run build` → `frontend/dist`
+- 配置同源反代 `/api`，避免跨域与 Cookie/鉴权复杂度。
+
+---
+
+## 常用命令（冒烟）
+健康检查
+- `curl http://127.0.0.1:8000/api/health`
+
+对话
+- `curl -X POST http://127.0.0.1:8000/api/chat -H "Content-Type: application/json" -d '{"session_id":null,"message":"荐股 topk=3"}'`
+
+推荐（轻量）
+- `curl -X POST http://127.0.0.1:8000/api/recommend -H "Content-Type: application/json" -d '{"topk":3,"universe":"auto","risk_profile":"normal","detail":"compact"}'`
+
+K 线（可选）
+- `curl 'http://127.0.0.1:8000/api/ohlcv/600519?start=2024-01-01&limit=120'`
+
+历史推荐（可选）
+- `curl 'http://127.0.0.1:8000/api/recommend/2024-02-01'`
+
+---
+
+## 接口参数说明（中文）
+POST `/api/recommend` Body
+- topk: 返回候选数量（默认 3）。建议 1–10。
+- universe: 股票池来源。`auto`（默认，从全市场动态筛）| `symbols`（只在给定列表内评估）。
+- symbols: 当 `universe=symbols` 时生效，证券代码数组，如 `["600519","000333"]`。
+- risk_profile: 风险偏好。`normal`（默认）| `conservative` | `aggressive`（仅作为说明性参数，不改变核心数据链路）。
+- detail: 输出详略。`compact`（默认，轻量字段集）| `full`（完整结果，适合调试或导出）。
+- date: 可选，指定交易日（默认使用最新交易日）。
+
+POST `/api/chat` Body
+- session_id: 会话 ID，可空。为空时后端自动生成并回传，用于多轮对话。
+- message: 用户输入文本，如“给我推荐 3 只低位放量”。
+
+GET `/api/ohlcv/{symbol}` Params（可选增强）
+- start: 开始日期（YYYY-MM-DD）。
+- end: 结束日期（YYYY-MM-DD）。
+- limit: 只返回尾部最近 N 根 K 线（默认 800）。
+
+返回结构要点
+- env.grade: 市场环境分层 A/B/C/D。
+- picks[].champion.strategy: 每只标的的“冠军策略”。
+- picks[].trade_plan.bands: 关键带位 S1/S2/R1/R2（若策略未给出，则回退为筹码带）。
+- debug.degraded/degrade_reasons: 数据链路降级标记与原因代码（仅诊断用）。
+
+---
+
+## 关键文件
+src/gp_assistant/server/app.py
+src/gp_assistant/server/models.py
+frontend/vite.config.ts
+frontend/.env.example
+
+---
+
+## 引擎简介（概览）
+- 候选池：剔除 ST/退/新股≤`GP_NEW_STOCK_DAYS`、价格区间 `[GP_PRICE_MIN, GP_PRICE_MAX]`，基于全市场快照按成交额取前 `GP_DYNAMIC_POOL_SIZE`
+- 主线约束：仅在行业/概念 TopN 内选取
+- 环境分层：A/B/C/D 并给出恢复条件
+- 冠军策略与关键带：为每只标的挑选策略冠军与 S1/S2/R1/R2 执行带
+
+更多细节见代码与注释（策略库与指标、降级与可观测性等）。
+
+---
+
+## License
+MIT，详见 `LICENSE`。
 
 工具/脚本（Windows PowerShell 示例）
 - 在线日线（严格真实数据）

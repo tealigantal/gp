@@ -8,6 +8,11 @@ venv/
 .mypy_cache/
 .ruff_cache/
 
+# Node / frontend
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+
 # Data/outputs
 data/
 universe/
@@ -20,3 +25,6 @@ results/
 # Local secrets (do not commit)
 local_secrets.py
 configs/config.yaml
+
+# Logs
+*.log

@@ -2,829 +2,824 @@
   "timing": {},
   "sources": [
     {
-      "symbol": "sz002969",
+      "symbol": "002969",
       "data_source": "provider"
     },
     {
-      "symbol": "sz002931",
+      "symbol": "002931",
       "data_source": "provider"
     },
     {
-      "symbol": "sz002455",
+      "symbol": "002455",
       "data_source": "provider"
     },
     {
-      "symbol": "sh601869",
+      "symbol": "601869",
       "data_source": "provider"
     },
     {
-      "symbol": "sh603629",
+      "symbol": "603629",
       "data_source": "provider"
     },
     {
-      "symbol": "sz002842",
+      "symbol": "002842",
       "data_source": "provider"
     },
     {
-      "symbol": "sz300017",
+      "symbol": "300017",
       "data_source": "provider"
     },
     {
-      "symbol": "sh603256",
+      "symbol": "603256",
       "data_source": "provider"
     },
     {
-      "symbol": "sz002506",
+      "symbol": "002506",
       "data_source": "provider"
     },
     {
-      "symbol": "sz002491",
+      "symbol": "002491",
       "data_source": "provider"
     },
     {
-      "symbol": "sh600487",
+      "symbol": "600487",
       "data_source": "provider"
     },
     {
-      "symbol": "sz300394",
+      "symbol": "300394",
       "data_source": "provider"
     },
     {
-      "symbol": "sz002378",
+      "symbol": "002378",
       "data_source": "provider"
     },
     {
-      "symbol": "sz301526",
+      "symbol": "301526",
       "data_source": "provider"
     },
     {
-      "symbol": "sz002155",
+      "symbol": "002155",
       "data_source": "provider"
     },
     {
-      "symbol": "sz002009",
+      "symbol": "002009",
       "data_source": "provider"
     },
     {
-      "symbol": "sh601615",
+      "symbol": "601615",
       "data_source": "provider"
     },
     {
-      "symbol": "sz300139",
+      "symbol": "300139",
       "data_source": "provider"
     },
     {
-      "symbol": "sz000070",
+      "symbol": "000070",
       "data_source": "provider"
     },
     {
-      "symbol": "sz300757",
+      "symbol": "300757",
       "data_source": "provider"
     },
     {
-      "symbol": "sz001330",
+      "symbol": "001330",
       "data_source": "provider"
     },
     {
-      "symbol": "sh600397",
+      "symbol": "600397",
       "data_source": "provider"
     },
     {
-      "symbol": "sz300251",
+      "symbol": "300251",
       "data_source": "provider"
     },
     {
-      "symbol": "sh600759",
+      "symbol": "600759",
       "data_source": "provider"
     },
     {
-      "symbol": "sh688766",
+      "symbol": "688766",
       "data_source": "provider"
     },
     {
-      "symbol": "sz000657",
+      "symbol": "000657",
       "data_source": "provider"
     },
     {
-      "symbol": "sh688521",
+      "symbol": "688521",
       "data_source": "provider"
     },
     {
-      "symbol": "sh600176",
+      "symbol": "600176",
       "data_source": "provider"
     },
     {
-      "symbol": "sh601231",
+      "symbol": "601231",
       "data_source": "provider"
     },
     {
-      "symbol": "sh600522",
+      "symbol": "600522",
       "data_source": "provider"
     },
     {
-      "symbol": "sz000338",
+      "symbol": "000338",
       "data_source": "provider"
     },
     {
-      "symbol": "sz300277",
+      "symbol": "300277",
       "data_source": "provider"
     },
     {
-      "symbol": "sh600330",
+      "symbol": "600330",
       "data_source": "provider"
     },
     {
-      "symbol": "sz002716",
+      "symbol": "002716",
       "data_source": "provider"
     },
     {
-      "symbol": "sh601212",
+      "symbol": "601212",
       "data_source": "provider"
     },
     {
-      "symbol": "sh688223",
+      "symbol": "688223",
       "data_source": "provider"
     },
     {
-      "symbol": "sz300570",
+      "symbol": "300570",
       "data_source": "provider"
     },
     {
-      "symbol": "sz300751",
+      "symbol": "300751",
       "data_source": "provider"
     },
     {
-      "symbol": "sh688158",
+      "symbol": "688158",
       "data_source": "provider"
     },
     {
-      "symbol": "sz300182",
+      "symbol": "300182",
       "data_source": "provider"
     },
     {
-      "symbol": "sz300548",
+      "symbol": "300548",
       "data_source": "provider"
     },
     {
-      "symbol": "sz300666",
+      "symbol": "300666",
       "data_source": "provider"
     },
     {
-      "symbol": "sz002129",
+      "symbol": "002129",
       "data_source": "provider"
     },
     {
-      "symbol": "sh688008",
+      "symbol": "688008",
       "data_source": "provider"
     },
     {
-      "symbol": "sz301018",
+      "symbol": "301018",
       "data_source": "provider"
     },
     {
-      "symbol": "sz300846",
+      "symbol": "300846",
       "data_source": "provider"
     },
     {
-      "symbol": "sz002429",
+      "symbol": "002429",
       "data_source": "provider"
     },
     {
-      "symbol": "sh600875",
+      "symbol": "600875",
       "data_source": "provider"
     },
     {
-      "symbol": "sz000815",
+      "symbol": "000815",
       "data_source": "provider"
     },
     {
-      "symbol": "sh600589",
+      "symbol": "600589",
       "data_source": "provider"
     },
     {
-      "symbol": "sh600392",
+      "symbol": "600392",
       "data_source": "provider"
     },
     {
-      "symbol": "sz000738",
+      "symbol": "000738",
       "data_source": "provider"
     },
     {
-      "symbol": "sz300620",
+      "symbol": "300620",
       "data_source": "provider"
     },
     {
-      "symbol": "sh600893",
+      "symbol": "600893",
       "data_source": "provider"
     },
     {
-      "symbol": "sz002353",
+      "symbol": "002353",
       "data_source": "provider"
     },
     {
-      "symbol": "sz002080",
+      "symbol": "002080",
       "data_source": "provider"
     },
     {
-      "symbol": "sz002624",
+      "symbol": "002624",
       "data_source": "provider"
     },
     {
-      "symbol": "sh600986",
+      "symbol": "600986",
       "data_source": "provider"
     },
     {
-      "symbol": "sz300166",
+      "symbol": "300166",
       "data_source": "provider"
     },
     {
-      "symbol": "sh603533",
+      "symbol": "603533",
       "data_source": "provider"
     },
     {
-      "symbol": "sz300857",
+      "symbol": "300857",
       "data_source": "provider"
     },
     {
-      "symbol": "sz300065",
+      "symbol": "300065",
       "data_source": "provider"
     },
     {
-      "symbol": "sz000630",
+      "symbol": "000630",
       "data_source": "provider"
     },
     {
-      "symbol": "sh600549",
+      "symbol": "600549",
       "data_source": "provider"
     },
     {
-      "symbol": "sz002008",
+      "symbol": "002008",
       "data_source": "provider"
     },
     {
-      "symbol": "sh688702",
+      "symbol": "688702",
       "data_source": "provider"
     },
     {
-      "symbol": "sz002185",
+      "symbol": "002185",
       "data_source": "provider"
     },
     {
-      "symbol": "sz300369",
+      "symbol": "300369",
       "data_source": "provider"
     },
     {
-      "symbol": "sh603881",
+      "symbol": "603881",
       "data_source": "provider"
     },
     {
-      "symbol": "sh600489",
+      "symbol": "600489",
       "data_source": "provider"
     },
     {
-      "symbol": "sz300383",
+      "symbol": "300383",
       "data_source": "provider"
     },
     {
-      "symbol": "sh600418",
+      "symbol": "600418",
       "data_source": "provider"
     },
     {
-      "symbol": "sh600673",
+      "symbol": "600673",
       "data_source": "provider"
     },
     {
-      "symbol": "sh600977",
+      "symbol": "600977",
       "data_source": "provider"
     },
     {
-      "symbol": "sh601179",
+      "symbol": "601179",
       "data_source": "provider"
     },
     {
-      "symbol": "sz300567",
+      "symbol": "300567",
       "data_source": "provider"
     },
     {
-      "symbol": "sz002812",
+      "symbol": "002812",
       "data_source": "provider"
     },
     {
-      "symbol": "sh688017",
+      "symbol": "688017",
       "data_source": "provider"
     },
     {
-      "symbol": "sh603667",
+      "symbol": "603667",
       "data_source": "provider"
     },
     {
-      "symbol": "sz002131",
+      "symbol": "002131",
       "data_source": "provider"
     },
     {
-      "symbol": "sz002156",
+      "symbol": "002156",
       "data_source": "provider"
     },
     {
-      "symbol": "sh603986",
+      "symbol": "603986",
       "data_source": "provider"
     },
     {
-      "symbol": "sh601872",
+      "symbol": "601872",
       "data_source": "provider"
     },
     {
-      "symbol": "sz002149",
+      "symbol": "002149",
       "data_source": "provider"
     },
     {
-      "symbol": "sh600309",
+      "symbol": "600309",
       "data_source": "provider"
     },
     {
-      "symbol": "sh600884",
+      "symbol": "600884",
       "data_source": "provider"
     },
     {
-      "symbol": "sz301171",
+      "symbol": "301171",
       "data_source": "provider"
     },
     {
-      "symbol": "sh688110",
+      "symbol": "688110",
       "data_source": "provider"
     },
     {
-      "symbol": "sz002467",
+      "symbol": "002467",
       "data_source": "provider"
     },
     {
-      "symbol": "sz300724",
+      "symbol": "300724",
       "data_source": "provider"
     },
     {
-      "symbol": "sh601857",
+      "symbol": "601857",
       "data_source": "provider"
     },
     {
-      "symbol": "sh600111",
+      "symbol": "600111",
       "data_source": "provider"
     },
     {
-      "symbol": "sh688525",
+      "symbol": "688525",
       "data_source": "provider"
     },
     {
-      "symbol": "sz300738",
+      "symbol": "300738",
       "data_source": "provider"
     },
     {
-      "symbol": "sz300364",
+      "symbol": "300364",
       "data_source": "provider"
     },
     {
-      "symbol": "sz300102",
+      "symbol": "300102",
       "data_source": "provider"
     },
     {
-      "symbol": "sh688343",
+      "symbol": "688343",
       "data_source": "provider"
     },
     {
-      "symbol": "sz300766",
+      "symbol": "300766",
       "data_source": "provider"
     },
     {
-      "symbol": "sz000831",
+      "symbol": "000831",
       "data_source": "provider"
     },
     {
-      "symbol": "sz000021",
+      "symbol": "000021",
       "data_source": "provider"
     },
     {
-      "symbol": "sz002837",
+      "symbol": "002837",
       "data_source": "provider"
     },
     {
-      "symbol": "sh600584",
+      "symbol": "600584",
       "data_source": "provider"
     },
     {
-      "symbol": "sh601888",
+      "symbol": "601888",
       "data_source": "provider"
     },
     {
-      "symbol": "sh688041",
+      "symbol": "688041",
       "data_source": "provider"
     },
     {
-      "symbol": "sh600089",
+      "symbol": "600089",
       "data_source": "provider"
     },
     {
-      "symbol": "sz300750",
+      "symbol": "300750",
       "data_source": "provider"
     },
     {
-      "symbol": "sz300223",
+      "symbol": "300223",
       "data_source": "provider"
     },
     {
-      "symbol": "sz002340",
+      "symbol": "002340",
       "data_source": "provider"
     },
     {
-      "symbol": "sz000833",
+      "symbol": "000833",
       "data_source": "provider"
     },
     {
-      "symbol": "sh600372",
+      "symbol": "600372",
       "data_source": "provider"
     },
     {
-      "symbol": "sz000333",
+      "symbol": "000333",
       "data_source": "provider"
     },
     {
-      "symbol": "sh688347",
+      "symbol": "688347",
       "data_source": "provider"
     },
     {
-      "symbol": "sz300395",
+      "symbol": "300395",
       "data_source": "provider"
     },
     {
-      "symbol": "sh601899",
+      "symbol": "601899",
       "data_source": "provider"
     },
     {
-      "symbol": "sh688313",
+      "symbol": "688313",
       "data_source": "provider"
     },
     {
-      "symbol": "sz000559",
+      "symbol": "000559",
       "data_source": "provider"
     },
     {
-      "symbol": "sh600410",
+      "symbol": "600410",
       "data_source": "provider"
     },
     {
-      "symbol": "sz000426",
+      "symbol": "000426",
       "data_source": "provider"
     },
     {
-      "symbol": "sh600010",
+      "symbol": "600010",
       "data_source": "provider"
     },
     {
-      "symbol": "sz300008",
+      "symbol": "300008",
       "data_source": "provider"
     },
     {
-      "symbol": "sh601318",
+      "symbol": "601318",
       "data_source": "provider"
     },
     {
-      "symbol": "sz300058",
+      "symbol": "300058",
       "data_source": "provider"
     },
     {
-      "symbol": "sh600547",
+      "symbol": "600547",
       "data_source": "provider"
     },
     {
-      "symbol": "sh601012",
+      "symbol": "601012",
       "data_source": "provider"
     },
     {
-      "symbol": "sz301217",
+      "symbol": "301217",
       "data_source": "provider"
     },
     {
-      "symbol": "sh688031",
+      "symbol": "688031",
       "data_source": "provider"
     },
     {
-      "symbol": "sz300136",
+      "symbol": "300136",
       "data_source": "provider"
     },
     {
-      "symbol": "sz000066",
+      "symbol": "000066",
       "data_source": "provider"
     },
     {
-      "symbol": "sz000858",
+      "symbol": "000858",
       "data_source": "provider"
     },
     {
-      "symbol": "sh603259",
+      "symbol": "603259",
       "data_source": "provider"
     },
     {
-      "symbol": "sz300604",
+      "symbol": "300604",
       "data_source": "provider"
     },
     {
-      "symbol": "sh600150",
+      "symbol": "600150",
       "data_source": "provider"
     },
     {
-      "symbol": "sh600030",
+      "symbol": "600030",
       "data_source": "provider"
     },
     {
-      "symbol": "sh600498",
+      "symbol": "600498",
       "data_source": "provider"
     },
     {
-      "symbol": "sz300188",
+      "symbol": "300188",
       "data_source": "provider"
     },
     {
-      "symbol": "sh600900",
+      "symbol": "600900",
       "data_source": "provider"
     },
     {
-      "symbol": "sh603019",
+      "symbol": "603019",
       "data_source": "provider"
     },
     {
-      "symbol": "sh600036",
+      "symbol": "600036",
       "data_source": "provider"
     },
     {
-      "symbol": "sz001309",
+      "symbol": "001309",
       "data_source": "provider"
     },
     {
-      "symbol": "sz002384",
+      "symbol": "002384",
       "data_source": "provider"
     },
     {
-      "symbol": "sz301308",
+      "symbol": "301308",
       "data_source": "provider"
     },
     {
-      "symbol": "sh600183",
+      "symbol": "600183",
       "data_source": "provider"
     },
     {
-      "symbol": "sz300450",
+      "symbol": "300450",
       "data_source": "provider"
     },
     {
-      "symbol": "sh603993",
+      "symbol": "603993",
       "data_source": "provider"
     },
     {
-      "symbol": "sz300418",
+      "symbol": "300418",
       "data_source": "provider"
     },
     {
-      "symbol": "sh601360",
+      "symbol": "601360",
       "data_source": "provider"
     },
     {
-      "symbol": "sh688012",
+      "symbol": "688012",
       "data_source": "provider"
     },
     {
-      "symbol": "sz300502",
+      "symbol": "300502",
       "data_source": "provider"
     },
     {
-      "symbol": "sz002463",
+      "symbol": "002463",
       "data_source": "provider"
     },
     {
-      "symbol": "sh600105",
+      "symbol": "600105",
       "data_source": "provider"
     },
     {
-      "symbol": "sz002709",
+      "symbol": "002709",
       "data_source": "provider"
     },
     {
-      "symbol": "sh601600",
+      "symbol": "601600",
       "data_source": "provider"
     },
     {
-      "symbol": "sz000960",
+      "symbol": "000960",
       "data_source": "provider"
     },
     {
-      "symbol": "sz002371",
+      "symbol": "002371",
       "data_source": "provider"
     },
     {
-      "symbol": "sz300454",
+      "symbol": "300454",
       "data_source": "provider"
     },
     {
-      "symbol": "sz000807",
+      "symbol": "000807",
       "data_source": "provider"
     },
     {
-      "symbol": "sz000725",
+      "symbol": "000725",
       "data_source": "provider"
     },
     {
-      "symbol": "sh603799",
+      "symbol": "603799",
       "data_source": "provider"
     },
     {
-      "symbol": "sh688270",
+      "symbol": "688270",
       "data_source": "provider"
     },
     {
-      "symbol": "sz300014",
+      "symbol": "300014",
       "data_source": "provider"
     },
     {
-      "symbol": "sh600711",
+      "symbol": "600711",
       "data_source": "provider"
     },
     {
-      "symbol": "sz002594",
+      "symbol": "002594",
       "data_source": "provider"
     },
     {
-      "symbol": "sh688629",
+      "symbol": "688629",
       "data_source": "provider"
     },
     {
-      "symbol": "sz300624",
+      "symbol": "300624",
       "data_source": "provider"
     },
     {
-      "symbol": "sh601398",
+      "symbol": "601398",
       "data_source": "provider"
     },
     {
-      "symbol": "sh600580",
+      "symbol": "600580",
       "data_source": "provider"
     },
     {
-      "symbol": "sz300476",
+      "symbol": "300476",
       "data_source": "provider"
     },
     {
-      "symbol": "sh600362",
+      "symbol": "600362",
       "data_source": "provider"
     },
     {
-      "symbol": "sz002050",
+      "symbol": "002050",
       "data_source": "provider"
     },
     {
-      "symbol": "sz002400",
+      "symbol": "002400",
       "data_source": "provider"
     },
     {
-      "symbol": "sz300059",
+      "symbol": "300059",
       "data_source": "provider"
     },
     {
-      "symbol": "sz300115",
+      "symbol": "300115",
       "data_source": "provider"
     },
     {
-      "symbol": "sz300274",
+      "symbol": "300274",
       "data_source": "provider"
     },
     {
-      "symbol": "sh603000",
+      "symbol": "603000",
       "data_source": "provider"
     },
     {
-      "symbol": "sz002759",
+      "symbol": "002759",
       "data_source": "provider"
     },
     {
-      "symbol": "sh688981",
+      "symbol": "688981",
       "data_source": "provider"
     },
     {
-      "symbol": "sz000063",
+      "symbol": "000063",
       "data_source": "provider"
     },
     {
-      "symbol": "sz000988",
+      "symbol": "000988",
       "data_source": "provider"
     },
     {
-      "symbol": "sh688099",
+      "symbol": "688099",
       "data_source": "provider"
     },
     {
-      "symbol": "sh600276",
+      "symbol": "600276",
       "data_source": "provider"
     },
     {
-      "symbol": "sz002475",
+      "symbol": "002475",
       "data_source": "provider"
     },
     {
-      "symbol": "sz002230",
+      "symbol": "002230",
       "data_source": "provider"
     },
     {
-      "symbol": "sz000681",
+      "symbol": "000681",
       "data_source": "provider"
     },
     {
-      "symbol": "sz000977",
+      "symbol": "000977",
       "data_source": "provider"
     },
     {
-      "symbol": "sh601138",
+      "symbol": "601138",
       "data_source": "provider"
     },
     {
-      "symbol": "sz002261",
+      "symbol": "002261",
       "data_source": "provider"
     },
     {
-      "symbol": "sz002519",
+      "symbol": "002519",
       "data_source": "provider"
     },
     {
-      "symbol": "sh601288",
+      "symbol": "601288",
       "data_source": "provider"
     },
     {
-      "symbol": "sz300033",
+      "symbol": "300033",
       "data_source": "provider"
     },
     {
-      "symbol": "sz300456",
+      "symbol": "300456",
       "data_source": "provider"
     },
     {
-      "symbol": "sh600879",
+      "symbol": "600879",
       "data_source": "provider"
     },
     {
-      "symbol": "sz300170",
+      "symbol": "300170",
       "data_source": "provider"
     },
     {
-      "symbol": "sz002195",
+      "symbol": "002195",
       "data_source": "provider"
     },
     {
-      "symbol": "sz000547",
+      "symbol": "000547",
       "data_source": "provider"
     },
     {
-      "symbol": "sz002361",
+      "symbol": "002361",
       "data_source": "provider"
     },
     {
-      "symbol": "sz300475",
+      "symbol": "300475",
       "data_source": "provider"
     },
     {
-      "symbol": "sz002202",
+      "symbol": "002202",
       "data_source": "provider"
     },
     {
-      "symbol": "sh600118",
+      "symbol": "600118",
       "data_source": "provider"
     },
     {
-      "symbol": "sz000592",
+      "symbol": "000592",
       "data_source": "provider"
     }
   ],
   "failures": [
     {
-      "symbol": "sh688818",
+      "symbol": "688818",
       "reason": "LOW_LIQ_HARD",
       "amount_5d_avg": 0.0
     }
   ],
   "snapshot": {
-    "source": "akshare:sina",
+    "source": "akshare:em",
     "cache": null,
     "fallback": false,
     "fallback_reason": null,
     "stale": false,
     "missing": false,
-    "elapsed_sec": 32.38,
+    "elapsed_sec": 69.7,
     "cache_age_sec": null,
     "skipped_routes": [],
     "attempts": [
       {
         "source": "akshare:em",
-        "ok": false,
-        "err": "ConnectionError: ('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))"
-      },
-      {
-        "source": "akshare:sina",
         "ok": true,
-        "rows": 5483
+        "rows": 5810
       }
     ]
   },
@@ -838,18 +833,7 @@
     "candidates_out_count": 199,
     "daily_attempts_sample": [
       {
-        "symbol": "sz300394",
-        "src": "akshare:sina",
-        "attempts": [
-          {
-            "route": "sina",
-            "ok": true,
-            "rows": 2661
-          }
-        ]
-      },
-      {
-        "symbol": "sz300251",
+        "symbol": "300251",
         "src": "akshare:sina",
         "attempts": [
           {
@@ -860,62 +844,7 @@
         ]
       },
       {
-        "symbol": "sz300058",
-        "src": "akshare:sina",
-        "attempts": [
-          {
-            "route": "sina",
-            "ok": true,
-            "rows": 3674
-          }
-        ]
-      },
-      {
-        "symbol": "sh601899",
-        "src": "akshare:sina",
-        "attempts": [
-          {
-            "route": "sina",
-            "ok": true,
-            "rows": 4286
-          }
-        ]
-      },
-      {
-        "symbol": "sz300017",
-        "src": "akshare:sina",
-        "attempts": [
-          {
-            "route": "sina",
-            "ok": true,
-            "rows": 3907
-          }
-        ]
-      },
-      {
-        "symbol": "sz002131",
-        "src": "akshare:sina",
-        "attempts": [
-          {
-            "route": "sina",
-            "ok": true,
-            "rows": 4207
-          }
-        ]
-      },
-      {
-        "symbol": "sz300502",
-        "src": "akshare:sina",
-        "attempts": [
-          {
-            "route": "sina",
-            "ok": true,
-            "rows": 2420
-          }
-        ]
-      },
-      {
-        "symbol": "sh600589",
+        "symbol": "600589",
         "src": "akshare:sina",
         "attempts": [
           {
@@ -926,40 +855,73 @@
         ]
       },
       {
-        "symbol": "sz002837",
+        "symbol": "300394",
         "src": "akshare:sina",
         "attempts": [
           {
             "route": "sina",
             "ok": true,
-            "rows": 2142
+            "rows": 2661
           }
         ]
       },
       {
-        "symbol": "sz300750",
+        "symbol": "601899",
         "src": "akshare:sina",
         "attempts": [
           {
             "route": "sina",
             "ok": true,
-            "rows": 1867
+            "rows": 4286
           }
         ]
       },
       {
-        "symbol": "sz300274",
+        "symbol": "300502",
         "src": "akshare:sina",
         "attempts": [
           {
             "route": "sina",
             "ok": true,
-            "rows": 3445
+            "rows": 2420
           }
         ]
       },
       {
-        "symbol": "sh603986",
+        "symbol": "300058",
+        "src": "akshare:sina",
+        "attempts": [
+          {
+            "route": "sina",
+            "ok": true,
+            "rows": 3674
+          }
+        ]
+      },
+      {
+        "symbol": "002131",
+        "src": "akshare:sina",
+        "attempts": [
+          {
+            "route": "sina",
+            "ok": true,
+            "rows": 4207
+          }
+        ]
+      },
+      {
+        "symbol": "300017",
+        "src": "akshare:sina",
+        "attempts": [
+          {
+            "route": "sina",
+            "ok": true,
+            "rows": 3907
+          }
+        ]
+      },
+      {
+        "symbol": "603986",
         "src": "akshare:sina",
         "attempts": [
           {
@@ -970,40 +932,18 @@
         ]
       },
       {
-        "symbol": "sz002050",
+        "symbol": "002837",
         "src": "akshare:sina",
         "attempts": [
           {
             "route": "sina",
             "ok": true,
-            "rows": 4805
+            "rows": 2142
           }
         ]
       },
       {
-        "symbol": "sz300182",
-        "src": "akshare:sina",
-        "attempts": [
-          {
-            "route": "sina",
-            "ok": true,
-            "rows": 3487
-          }
-        ]
-      },
-      {
-        "symbol": "sz000021",
-        "src": "akshare:sina",
-        "attempts": [
-          {
-            "route": "sina",
-            "ok": true,
-            "rows": 7668
-          }
-        ]
-      },
-      {
-        "symbol": "sz300418",
+        "symbol": "300418",
         "src": "akshare:sina",
         "attempts": [
           {
@@ -1014,29 +954,62 @@
         ]
       },
       {
-        "symbol": "sh600111",
+        "symbol": "002050",
         "src": "akshare:sina",
         "attempts": [
           {
             "route": "sina",
             "ok": true,
-            "rows": 6828
+            "rows": 4805
           }
         ]
       },
       {
-        "symbol": "sz300364",
+        "symbol": "300274",
         "src": "akshare:sina",
         "attempts": [
           {
             "route": "sina",
             "ok": true,
-            "rows": 2531
+            "rows": 3445
           }
         ]
       },
       {
-        "symbol": "sh603993",
+        "symbol": "300750",
+        "src": "akshare:sina",
+        "attempts": [
+          {
+            "route": "sina",
+            "ok": true,
+            "rows": 1867
+          }
+        ]
+      },
+      {
+        "symbol": "300182",
+        "src": "akshare:sina",
+        "attempts": [
+          {
+            "route": "sina",
+            "ok": true,
+            "rows": 3487
+          }
+        ]
+      },
+      {
+        "symbol": "000021",
+        "src": "akshare:sina",
+        "attempts": [
+          {
+            "route": "sina",
+            "ok": true,
+            "rows": 7668
+          }
+        ]
+      },
+      {
+        "symbol": "603993",
         "src": "akshare:sina",
         "attempts": [
           {
@@ -1047,18 +1020,29 @@
         ]
       },
       {
-        "symbol": "sh600487",
+        "symbol": "600111",
         "src": "akshare:sina",
         "attempts": [
           {
             "route": "sina",
             "ok": true,
-            "rows": 5282
+            "rows": 6828
           }
         ]
       },
       {
-        "symbol": "sh600089",
+        "symbol": "300364",
+        "src": "akshare:sina",
+        "attempts": [
+          {
+            "route": "sina",
+            "ok": true,
+            "rows": 2531
+          }
+        ]
+      },
+      {
+        "symbol": "600089",
         "src": "akshare:sina",
         "attempts": [
           {
@@ -1069,7 +1053,7 @@
         ]
       },
       {
-        "symbol": "sz300065",
+        "symbol": "300065",
         "src": "akshare:sina",
         "attempts": [
           {
@@ -1080,7 +1064,7 @@
         ]
       },
       {
-        "symbol": "sz002475",
+        "symbol": "002475",
         "src": "akshare:sina",
         "attempts": [
           {
@@ -1091,40 +1075,18 @@
         ]
       },
       {
-        "symbol": "sh600410",
+        "symbol": "600487",
         "src": "akshare:sina",
         "attempts": [
           {
             "route": "sina",
             "ok": true,
-            "rows": 5151
+            "rows": 5282
           }
         ]
       },
       {
-        "symbol": "sz002371",
-        "src": "akshare:sina",
-        "attempts": [
-          {
-            "route": "sina",
-            "ok": true,
-            "rows": 3788
-          }
-        ]
-      },
-      {
-        "symbol": "sh601318",
-        "src": "akshare:sina",
-        "attempts": [
-          {
-            "route": "sina",
-            "ok": true,
-            "rows": 4546
-          }
-        ]
-      },
-      {
-        "symbol": "sh688521",
+        "symbol": "688521",
         "src": "akshare:sina",
         "attempts": [
           {
@@ -1135,7 +1097,51 @@
         ]
       },
       {
-        "symbol": "sh600893",
+        "symbol": "600410",
+        "src": "akshare:sina",
+        "attempts": [
+          {
+            "route": "sina",
+            "ok": true,
+            "rows": 5151
+          }
+        ]
+      },
+      {
+        "symbol": "002371",
+        "src": "akshare:sina",
+        "attempts": [
+          {
+            "route": "sina",
+            "ok": true,
+            "rows": 3788
+          }
+        ]
+      },
+      {
+        "symbol": "601318",
+        "src": "akshare:sina",
+        "attempts": [
+          {
+            "route": "sina",
+            "ok": true,
+            "rows": 4546
+          }
+        ]
+      },
+      {
+        "symbol": "002506",
+        "src": "akshare:sina",
+        "attempts": [
+          {
+            "route": "sina",
+            "ok": true,
+            "rows": 3295
+          }
+        ]
+      },
+      {
+        "symbol": "600893",
         "src": "akshare:sina",
         "attempts": [
           {
@@ -1146,24 +1152,13 @@
         ]
       },
       {
-        "symbol": "sz300548",
+        "symbol": "300548",
         "src": "akshare:sina",
         "attempts": [
           {
             "route": "sina",
             "ok": true,
             "rows": 2270
-          }
-        ]
-      },
-      {
-        "symbol": "sz002506",
-        "src": "akshare:sina",
-        "attempts": [
-          {
-            "route": "sina",
-            "ok": true,
-            "rows": 3295
           }
         ]
       }
