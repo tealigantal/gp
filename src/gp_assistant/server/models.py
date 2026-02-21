@@ -69,3 +69,37 @@ class OHLCVResp(BaseModel):
     meta: Dict[str, Any] = Field(default_factory=dict)
     bars: List[OHLCVBar] = Field(default_factory=list)
 
+
+# --- Sync API (events) ---
+
+
+class EventOut(BaseModel):
+    id: str
+    conversation_id: str
+    seq: int
+    type: str
+    actor_id: str | None = None
+    created_at: str
+    data: Dict[str, Any] = Field(default_factory=dict)
+
+
+class SyncEventIn(BaseModel):
+    id: str
+    conversation_id: str
+    type: str
+    data: Dict[str, Any] = Field(default_factory=dict)
+    actor_id: str | None = None
+    created_at: str | None = None
+
+
+class SyncReq(BaseModel):
+    device_id: str
+    conv_cursors: Dict[str, int] = Field(default_factory=dict)
+    outbox_events: List[SyncEventIn] = Field(default_factory=list)
+
+
+class SyncResp(BaseModel):
+    ack: Dict[str, str] = Field(default_factory=dict)
+    deltas: Dict[str, List[EventOut]] = Field(default_factory=dict)
+    conversations_delta: List[Dict[str, Any]] = Field(default_factory=list)
+    user_settings_delta: List[Dict[str, Any]] = Field(default_factory=list)

@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1.6
 FROM python:3.11-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -12,12 +13,18 @@ ENV PIP_INDEX_URL=${PIP_INDEX_URL}
 
 WORKDIR /app
 
+# Install Python deps first (cacheable)
 COPY requirements.txt /app/requirements.txt
-RUN python -m pip install --upgrade pip setuptools wheel \
- && pip install -r /app/requirements.txt
+RUN --mount=type=cache,target=/root/.cache/pip \
+    PIP_NO_CACHE_DIR=0 python -m pip install --upgrade pip setuptools wheel \
+    && PIP_NO_CACHE_DIR=0 pip install -r /app/requirements.txt
 
-COPY . /app
-RUN pip install -e .
+# Copy only source and minimal metadata; avoid copying bulky folders
+COPY src/ /app/src/
+COPY pyproject.toml /app/pyproject.toml
+
+# Allow importing from src without editable install
+ENV PYTHONPATH=/app/src
 
 ENV TZ=Asia/Shanghai
 EXPOSE 8000

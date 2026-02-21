@@ -1,0 +1,43 @@
+# Exclude local virtualenvs and caches
+.venv/
+__pycache__/
+.pytest_cache/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+
+# VCS and IDE
+.git/
+.gitignore
+.idea/
+.vscode/
+*.swp
+
+# OS junk
+.DS_Store
+Thumbs.db
+
+# Large/local data not needed in image
+data/
+results/
+cache/
+store/
+universe/
+
+# Logs and temp files
+*.log
+tmp_*
+tmp/
+error.txt
+tmp_patch.txt
+tmp_patch_agent.txt
+tmp_agent_before.txt
+tmp_snip.txt
+
+# Frontend build artifacts (backend image doesn't need them)
+frontend/node_modules/
+frontend/dist/
+
+# Misc
+docker-compose.yml.bak

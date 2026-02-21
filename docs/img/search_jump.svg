@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1120" height="560" viewBox="0 0 1120 560">
+  <defs>
+    <style>
+      .title{font:600 22px system-ui,Arial,sans-serif;fill:#0b1f3a}
+      .text{font:14px system-ui,Arial,sans-serif;fill:#334}
+      .muted{fill:#798}
+      .box{fill:#fff;stroke:#e6eef7}
+      .btn{fill:#1677ff}
+      .line{stroke:#1677ff;stroke-width:2;marker-end:url(#arrow)}
+    </style>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6">
+      <polygon points="0,0 10,5 0,10" fill="#1677ff"/>
+    </marker>
+  </defs>
+  <rect fill="#f7f9fc" x="0" y="0" width="1120" height="560" rx="8"/>
+  <text class="title" x="32" y="48">搜索 → 精准定位到聊天</text>
+
+  <!-- search panel -->
+  <rect class="box" x="40" y="88" width="480" height="380" rx="12"/>
+  <rect class="box" x="60" y="110" width="360" height="36" rx="8"/>
+  <rect class="btn" x="430" y="110" width="70" height="36" rx="8"/>
+  <text x="448" y="132" font-size="14" fill="#fff">搜索</text>
+  <text class="muted" x="68" y="132">输入关键词…</text>
+  <text class="text" x="60" y="170">结果</text>
+  <rect class="box" x="60" y="188" width="440" height="64" rx="8"/>
+  <text class="text" x="76" y="212">会话: sess-xxxx</text>
+  <text class="text" x="76" y="232">… 片段预览 <tspan fill="#f5222d">高亮</tspan></text>
+
+  <!-- chat panel -->
+  <rect class="box" x="600" y="88" width="480" height="380" rx="12"/>
+  <text class="text" x="620" y="116">/chat?cid=…&amp;seq=…</text>
+  <rect class="box" x="620" y="140" width="440" height="300" rx="8"/>
+  <rect fill="#e6f4ff" x="640" y="180" width="320" height="44" rx="8"/>
+  <text class="text" x="652" y="206">锚定到包含关键词的消息</text>
+
+  <!-- arrow -->
+  <line class="line" x1="520" y1="220" x2="600" y2="220"/>
+</svg>
+

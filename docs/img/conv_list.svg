@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1120" height="560" viewBox="0 0 1120 560">
+  <defs>
+    <style>
+      .title{font:600 22px system-ui,Arial,sans-serif;fill:#0b1f3a}
+      .text{font:14px system-ui,Arial,sans-serif;fill:#334}
+      .muted{fill:#798}
+      .badge{fill:#f5222d}
+      .bg{fill:#f7f9fc}
+      .card{fill:#fff;stroke:#e6eef7}
+      .btn{fill:#1677ff}
+    </style>
+  </defs>
+  <rect class="bg" x="0" y="0" width="1120" height="560" rx="8"/>
+  <text class="title" x="32" y="48">会话 · 最近</text>
+  <rect class="card" x="24" y="68" width="1072" height="420" rx="10"/>
+
+  <!-- row 1 -->
+  <rect class="card" x="40" y="92" width="1040" height="60" rx="8"/>
+  <circle class="badge" cx="960" cy="122" r="14"/>
+  <text class="title" x="64" y="126" font-size="18">AI 概念回踩后放量</text>
+  <text class="muted" x="64" y="146">… 最近一条消息预览</text>
+  <text class="muted" x="1000" y="128">12:35</text>
+  <rect class="btn" x="1008" y="108" width="56" height="28" rx="6"/>
+  <text x="1026" y="127" font-size="13" fill="#fff">删除</text>
+
+  <!-- row 2 -->
+  <rect class="card" x="40" y="164" width="1040" height="60" rx="8"/>
+  <circle class="badge" cx="960" cy="194" r="14"/>
+  <text class="title" x="64" y="198" font-size="18">主线半导体 · 量能修复</text>
+  <text class="muted" x="64" y="218">… 最近一条消息预览</text>
+  <text class="muted" x="1000" y="200">11:58</text>
+  <rect class="btn" x="1008" y="180" width="56" height="28" rx="6"/>
+  <text x="1026" y="199" font-size="13" fill="#fff">删除</text>
+
+  <!-- action bar -->
+  <rect class="btn" x="912" y="500" width="96" height="36" rx="8"/>
+  <text x="932" y="524" font-size="14" fill="#fff">新建对话</text>
+  <rect class="btn" x="1016" y="500" width="80" height="36" rx="8" fill="#ff4d4f"/>
+  <text x="1030" y="524" font-size="14" fill="#fff">一键清理</text>
+</svg>
+

@@ -11,6 +11,7 @@ from typing import Any, Dict, List, Optional
 
 from ..core.config import load_config
 from ..core.paths import store_dir
+from . import event_store
 
 
 def _db_path() -> Path:
@@ -67,6 +68,13 @@ def ensure_session(session_id: Optional[str] = None) -> str:
         )
         conn.commit()
     conn.close()
+    # Also ensure conversation and participant in event store
+    try:
+        event_store.ensure_conversation(sid, title=sid, conv_type="chat")
+        event_store.ensure_participant(sid)
+    except Exception:
+        # do not fail chat if event store init has an issue
+        pass
     return sid
 
 
@@ -78,6 +86,13 @@ def append_message(session_id: str, role: str, content: str) -> None:
     )
     conn.commit()
     conn.close()
+    # Mirror into Event Log (best-effort)
+    try:
+        author_id = role or "user"
+        event_store.append_text_message(session_id, author_id=author_id, content=content)
+    except Exception:
+        # keep silent to avoid breaking legacy path
+        pass
 
 
 def load_history(session_id: str, limit: int = 50) -> List[Dict[str, Any]]:

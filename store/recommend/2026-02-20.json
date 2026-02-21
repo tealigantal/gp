@@ -1,0 +1,510 @@
+{
+  "as_of": "2026-02-20",
+  "timezone": "Asia/Shanghai",
+  "env": {
+    "grade": "D",
+    "reasons": [
+      "全市场均值涨跌幅=-0.66%",
+      "上涨占比=28.13%"
+    ],
+    "recovery_conditions": [
+      "上涨家数占比>55%",
+      "全市场均值涨跌幅>+0.3%"
+    ],
+    "raw": {
+      "breadth": {
+        "mean_chg": -0.6617406392694065,
+        "up_ratio": 0.28127853881278536
+      }
+    }
+  },
+  "themes": [
+    {
+      "name": "概念-阿尔茨海默概念",
+      "strength": "",
+      "evidence": [
+        "来源：概念板块排行"
+      ]
+    },
+    {
+      "name": "概念-AI PC",
+      "strength": "",
+      "evidence": [
+        "来源：概念板块排行"
+      ]
+    }
+  ],
+  "candidate_pool": [
+    {
+      "symbol": "000333",
+      "name": null,
+      "industry": null,
+      "source_reason": "动态候选",
+      "liquidity": {
+        "avg5_amount": 2038073035.0,
+        "grade": "A"
+      },
+      "atr_pct": 0.01724083656844473,
+      "gap_pct": -0.003634085213032482,
+      "pressure_flags": {
+        "near_ma20": false
+      },
+      "q_grade": "Q3",
+      "chip": {
+        "avg_cost": 54.6016822298066,
+        "profit_ratio": 0.9286689419795222,
+        "band_90_low": 26.825066666666665,
+        "band_90_high": 85.81898666666454,
+        "concentration_90": 0.9034129692832764,
+        "dist_to_90_high_pct": 0.07887516422160092,
+        "confidence": "medium",
+        "model_used": "B",
+        "sample_n": 2930
+      },
+      "indicators": {
+        "ma20": 78.26899999999999,
+        "slope20": 0.007329519494977327,
+        "atr_pct": 0.01724083656844473,
+        "gap_pct": -0.003634085213032482
+      },
+      "close": 79.05,
+      "flags": {
+        "must_observe_only": false,
+        "reasons": []
+      },
+      "strategies": {
+        "S1": {
+          "cv": {
+            "k": 5,
+            "win_rate_5d_mean": 0.5333333333333334,
+            "win_rate_5d_std": 0.03748392145018914,
+            "mean_return_5d_mean": 0.0027744748383818512,
+            "mean_return_5d_std": 0.0031168129048678665,
+            "drawdown_proxy_mean": -0.4063966128527169
+          },
+          "event": {
+            "k": 139,
+            "win_rate_2": 0.539568345323741,
+            "win_rate_5": 0.5323741007194245,
+            "win_rate_10": 0.5539568345323741,
+            "mean_return_2": 0.0019274442637835462,
+            "mean_return_5": 0.005123212521151943,
+            "mean_return_10": 0.003148729555060651,
+            "mdd10_proxy": -0.04075229563645945,
+            "sample_warning": false
+          }
+        },
+        "S2": {
+          "cv": {
+            "k": 5,
+            "win_rate_5d_mean": 0.5333333333333334,
+            "win_rate_5d_std": 0.03748392145018914,
+            "mean_return_5d_mean": 0.0027744748383818512,
+            "mean_return_5d_std": 0.0031168129048678665,
+            "drawdown_proxy_mean": -0.4063966128527169
+          },
+          "event": {
+            "k": 334,
+            "win_rate_2": 0.5239520958083832,
+            "win_rate_5": 0.5718562874251497,
+            "win_rate_10": 0.5778443113772455,
+            "mean_return_2": 0.0012551390583314544,
+            "mean_return_5": 0.008139422909577605,
+            "mean_return_10": 0.013567574377005759,
+            "mdd10_proxy": -0.031812328903007135,
+            "sample_warning": false
+          }
+        },
+        "S3": {
+          "cv": {
+            "k": 5,
+            "win_rate_5d_mean": 0.5333333333333334,
+            "win_rate_5d_std": 0.03748392145018914,
+            "mean_return_5d_mean": 0.0027744748383818512,
+            "mean_return_5d_std": 0.0031168129048678665,
+            "drawdown_proxy_mean": -0.4063966128527169
+          },
+          "event": {
+            "k": 98,
+            "win_rate_2": 0.5306122448979592,
+            "win_rate_5": 0.5612244897959183,
+            "win_rate_10": 0.47959183673469385,
+            "mean_return_2": 0.0005726128712241004,
+            "mean_return_5": 0.0015727131353851973,
+            "mean_return_10": 0.007425185300718178,
+            "mdd10_proxy": -0.02183207837248526,
+            "sample_warning": false
+          }
+        },
+        "S4": {
+          "cv": {
+            "k": 5,
+            "win_rate_5d_mean": 0.5333333333333334,
+            "win_rate_5d_std": 0.03748392145018914,
+            "mean_return_5d_mean": 0.0027744748383818512,
+            "mean_return_5d_std": 0.0031168129048678665,
+            "drawdown_proxy_mean": -0.4063966128527169
+          },
+          "event": {
+            "k": 123,
+            "win_rate_2": 0.5365853658536586,
+            "win_rate_5": 0.5609756097560976,
+            "win_rate_10": 0.5203252032520326,
+            "mean_return_2": 0.0007237617119067628,
+            "mean_return_5": 0.0047836893844978865,
+            "mean_return_10": 0.011714519796375581,
+            "mdd10_proxy": -0.03189734644838279,
+            "sample_warning": false
+          }
+        },
+        "S5": {
+          "cv": {
+            "k": 5,
+            "win_rate_5d_mean": 0.5333333333333334,
+            "win_rate_5d_std": 0.03748392145018914,
+            "mean_return_5d_mean": 0.0027744748383818512,
+            "mean_return_5d_std": 0.0031168129048678665,
+            "drawdown_proxy_mean": -0.4063966128527169
+          },
+          "event": {
+            "k": 155,
+            "win_rate_2": 0.5032258064516129,
+            "win_rate_5": 0.5096774193548387,
+            "win_rate_10": 0.5161290322580645,
+            "mean_return_2": -0.0005736170373427644,
+            "mean_return_5": -0.00981522675717238,
+            "mean_return_10": 0.00452208413864909,
+            "mdd10_proxy": -0.040944307277728596,
+            "sample_warning": false
+          }
+        },
+        "S6": {
+          "cv": {
+            "k": 5,
+            "win_rate_5d_mean": 0.5333333333333334,
+            "win_rate_5d_std": 0.03748392145018914,
+            "mean_return_5d_mean": 0.0027744748383818512,
+            "mean_return_5d_std": 0.0031168129048678665,
+            "drawdown_proxy_mean": -0.4063966128527169
+          },
+          "event": {
+            "k": 179,
+            "win_rate_2": 0.55,
+            "win_rate_5": 0.48333333333333334,
+            "win_rate_10": 0.5586592178770949,
+            "mean_return_2": -0.00030349126800266837,
+            "mean_return_5": -0.0007496899275902506,
+            "mean_return_10": 0.0033702820087662742,
+            "mdd10_proxy": -0.036052426152915686,
+            "sample_warning": false
+          }
+        },
+        "S7": {
+          "cv": {
+            "k": 5,
+            "win_rate_5d_mean": 0.5333333333333334,
+            "win_rate_5d_std": 0.03748392145018914,
+            "mean_return_5d_mean": 0.0027744748383818512,
+            "mean_return_5d_std": 0.0031168129048678665,
+            "drawdown_proxy_mean": -0.4063966128527169
+          },
+          "event": {
+            "k": 477,
+            "win_rate_2": 0.5270833333333333,
+            "win_rate_5": 0.5230125523012552,
+            "win_rate_10": 0.5303983228511531,
+            "mean_return_2": 0.0009273902409675055,
+            "mean_return_5": 0.0019894420905788197,
+            "mean_return_10": 0.004773799321543162,
+            "mdd10_proxy": -0.033843326971417,
+            "sample_warning": false
+          }
+        },
+        "S8": {
+          "cv": {
+            "k": 5,
+            "win_rate_5d_mean": 0.5333333333333334,
+            "win_rate_5d_std": 0.03748392145018914,
+            "mean_return_5d_mean": 0.0027744748383818512,
+            "mean_return_5d_std": 0.0031168129048678665,
+            "drawdown_proxy_mean": -0.4063966128527169
+          },
+          "event": {
+            "k": 249,
+            "win_rate_2": 0.4738955823293173,
+            "win_rate_5": 0.5261044176706827,
+            "win_rate_10": 0.5140562248995983,
+            "mean_return_2": -0.0021225998086291677,
+            "mean_return_5": 0.0018558140766212494,
+            "mean_return_10": -0.0008939822165576783,
+            "mdd10_proxy": -0.03915379088878322,
+            "sample_warning": false
+          }
+        },
+        "S9": {
+          "cv": {
+            "k": 5,
+            "win_rate_5d_mean": 0.5333333333333334,
+            "win_rate_5d_std": 0.03748392145018914,
+            "mean_return_5d_mean": 0.0027744748383818512,
+            "mean_return_5d_std": 0.0031168129048678665,
+            "drawdown_proxy_mean": -0.4063966128527169
+          },
+          "event": {
+            "k": 33,
+            "win_rate_2": 0.5757575757575758,
+            "win_rate_5": 0.45454545454545453,
+            "win_rate_10": 0.48484848484848486,
+            "mean_return_2": 0.006237817533961263,
+            "mean_return_5": 0.0012207732118541621,
+            "mean_return_10": 0.00787827424085721,
+            "mdd10_proxy": -0.03719631747809624,
+            "sample_warning": false
+          }
+        },
+        "S10": {
+          "cv": {
+            "k": 5,
+            "win_rate_5d_mean": 0.5333333333333334,
+            "win_rate_5d_std": 0.03748392145018914,
+            "mean_return_5d_mean": 0.0027744748383818512,
+            "mean_return_5d_std": 0.0031168129048678665,
+            "drawdown_proxy_mean": -0.4063966128527169
+          },
+          "event": {
+            "k": 62,
+            "win_rate_2": 0.5806451612903226,
+            "win_rate_5": 0.4838709677419355,
+            "win_rate_10": 0.4838709677419355,
+            "mean_return_2": -0.0018704831355574362,
+            "mean_return_5": 0.003957515881096541,
+            "mean_return_10": 0.004781635192188737,
+            "mdd10_proxy": -0.03791348841763064,
+            "sample_warning": false
+          }
+        },
+        "S11": {
+          "cv": {
+            "k": 5,
+            "win_rate_5d_mean": 0.5333333333333334,
+            "win_rate_5d_std": 0.03748392145018914,
+            "mean_return_5d_mean": 0.0027744748383818512,
+            "mean_return_5d_std": 0.0031168129048678665,
+            "drawdown_proxy_mean": -0.4063966128527169
+          },
+          "event": {
+            "k": 171,
+            "win_rate_2": 0.5146198830409356,
+            "win_rate_5": 0.5964912280701754,
+            "win_rate_10": 0.5614035087719298,
+            "mean_return_2": 0.002053053918845416,
+            "mean_return_5": 0.00998618994307761,
+            "mean_return_10": 0.012403262062993256,
+            "mdd10_proxy": -0.03194504611196766,
+            "sample_warning": false
+          }
+        },
+        "S12": {
+          "cv": {
+            "k": 5,
+            "win_rate_5d_mean": 0.5333333333333334,
+            "win_rate_5d_std": 0.03748392145018914,
+            "mean_return_5d_mean": 0.0027744748383818512,
+            "mean_return_5d_std": 0.0031168129048678665,
+            "drawdown_proxy_mean": -0.4063966128527169
+          },
+          "event": {
+            "k": 28,
+            "win_rate_2": 0.42857142857142855,
+            "win_rate_5": 0.42857142857142855,
+            "win_rate_10": 0.5,
+            "mean_return_2": -0.004628696289917847,
+            "mean_return_5": -0.00840667098844525,
+            "mean_return_10": -0.0137382481229076,
+            "mdd10_proxy": -0.0729089692961805,
+            "sample_warning": false
+          }
+        },
+        "S13": {
+          "cv": {
+            "k": 5,
+            "win_rate_5d_mean": 0.5333333333333334,
+            "win_rate_5d_std": 0.03748392145018914,
+            "mean_return_5d_mean": 0.0027744748383818512,
+            "mean_return_5d_std": 0.0031168129048678665,
+            "drawdown_proxy_mean": -0.4063966128527169
+          },
+          "event": {
+            "k": 1155,
+            "win_rate_2": 0.508182601205857,
+            "win_rate_5": 0.5181034482758621,
+            "win_rate_10": 0.5575757575757576,
+            "mean_return_2": 0.0006331783951080319,
+            "mean_return_5": 0.00035047820267205735,
+            "mean_return_10": 0.004930803427722766,
+            "mdd10_proxy": -0.034665161874882944,
+            "sample_warning": false
+          }
+        },
+        "S14": {
+          "cv": {
+            "k": 5,
+            "win_rate_5d_mean": 0.5333333333333334,
+            "win_rate_5d_std": 0.03748392145018914,
+            "mean_return_5d_mean": 0.0027744748383818512,
+            "mean_return_5d_std": 0.0031168129048678665,
+            "drawdown_proxy_mean": -0.4063966128527169
+          },
+          "event": {
+            "k": 216,
+            "win_rate_2": 0.47685185185185186,
+            "win_rate_5": 0.5416666666666666,
+            "win_rate_10": 0.5324074074074074,
+            "mean_return_2": 0.00016887994935624472,
+            "mean_return_5": 0.003722550333957062,
+            "mean_return_10": 0.006082657585563605,
+            "mdd10_proxy": -0.03304082208448985,
+            "sample_warning": false
+          }
+        }
+      }
+    }
+  ],
+  "picks": [
+    {
+      "symbol": "000333",
+      "theme": "概念-阿尔茨海默概念",
+      "flags": {
+        "must_observe_only": false,
+        "reasons": []
+      },
+      "chip": {
+        "avg_cost": 54.6016822298066,
+        "profit_ratio": 0.9286689419795222,
+        "band_90_low": 26.825066666666665,
+        "band_90_high": 85.81898666666454,
+        "concentration_90": 0.9034129692832764,
+        "dist_to_90_high_pct": 0.07887516422160092,
+        "confidence": "medium",
+        "model_used": "B",
+        "sample_n": 2930
+      },
+      "indicators": {
+        "ma20": 78.26899999999999,
+        "slope20": 0.007329519494977327,
+        "atr_pct": 0.01724083656844473,
+        "gap_pct": -0.003634085213032482
+      },
+      "champion": {
+        "strategy": "S1",
+        "cv": {
+          "k": 5,
+          "win_rate_5d_mean": 0.5333333333333334,
+          "win_rate_5d_std": 0.03748392145018914,
+          "mean_return_5d_mean": 0.0027744748383818512,
+          "mean_return_5d_std": 0.0031168129048678665,
+          "drawdown_proxy_mean": -0.4063966128527169
+        },
+        "score": 0.3332485670157381
+      },
+      "trade_plan": {
+        "bands": {
+          "S1": 74.4,
+          "S2": 78.20639344262294,
+          "R1": 81.81,
+          "R2": 83.4462,
+          "anchors": 78.20639344262294
+        },
+        "actions": {
+          "window_A": "关键带回收且不再创新低；量能不失控；满足≥2项则记录为承接",
+          "window_B": "收盘前站稳关键结构，回落不破；满足≥2项则视为转强；否则观望"
+        },
+        "invalidation": [
+          "放量不涨",
+          "频繁冲高回落",
+          "贴近压力带"
+        ],
+        "risk": {
+          "stop_loss": "收盘有效跌破支撑带",
+          "time_stop": "2-3日不强必走",
+          "no_averaging_down": true
+        }
+      }
+    }
+  ],
+  "execution_checklist": [
+    "1) 环境分层",
+    "2) 主线限制",
+    "3) 策略冠军与关键带"
+  ],
+  "disclaimer": "本内容仅供研究与教育，不构成任何投资建议或收益承诺；市场有风险，决策需独立承担",
+  "debug": {
+    "timing": {},
+    "sources": [
+      {
+        "symbol": "000333",
+        "data_source": "provider"
+      }
+    ],
+    "failures": [],
+    "snapshot": {
+      "source": "akshare:em",
+      "cache": null,
+      "fallback": false,
+      "fallback_reason": null,
+      "stale": false,
+      "missing": false,
+      "elapsed_sec": 65.36,
+      "cache_age_sec": null,
+      "skipped_routes": [],
+      "attempts": [
+        {
+          "source": "akshare:em",
+          "ok": true,
+          "rows": 5810
+        }
+      ]
+    },
+    "candidate_stats": {
+      "universe_in_count": 1,
+      "universe_after_filter_count": 1,
+      "bars_missing_count": 0,
+      "bars_too_short_count": 0,
+      "indicator_error_count": 0,
+      "skipped_symbols_sample": [],
+      "candidates_out_count": 1,
+      "daily_attempts_sample": [
+        {
+          "symbol": "000333",
+          "src": "akshare:sina",
+          "attempts": [
+            {
+              "route": "sina",
+              "ok": true,
+              "rows": 2955
+            }
+          ]
+        }
+      ]
+    },
+    "degraded": true,
+    "degrade_reasons": [
+      {
+        "reason_code": "UNIVERSE_TOO_SMALL",
+        "detail": {
+          "count": 1,
+          "min": 50
+        }
+      },
+      {
+        "reason_code": "CANDIDATE_TOO_SMALL",
+        "detail": {
+          "count": 1,
+          "min": 20
+        }
+      }
+    ]
+  },
+  "tradeable": false,
+  "message": "NOT_TRADEABLE: UNIVERSE_TOO_SMALL, CANDIDATE_TOO_SMALL"
+}

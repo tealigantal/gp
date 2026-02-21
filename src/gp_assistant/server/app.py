@@ -26,6 +26,7 @@ from ..core.paths import store_dir
 from ..chat.orchestrator import handle_message
 from ..recommend import agent as rec_agent
 from ..recommend.datahub import MarketDataHub
+from ..chat import event_store
 from .models import (
     ChatReq,
     ChatResp,
@@ -34,6 +35,7 @@ from .models import (
     RecommendReq,
     RecommendResp,
 )
+from .models import SyncReq, SyncResp, EventOut
 
 
 app = FastAPI(title="gp_assistant", version="1.1.0")
@@ -214,6 +216,8 @@ def api_get_ohlcv(
 ) -> OHLCVResp:
     try:
         return _handle_ohlcv(symbol, start, end, limit)
+    except ValueError as e:  # data unavailable / not found
+        raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:  # noqa: BLE001
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -224,6 +228,118 @@ def api_get_recommend_by_date(date: str) -> Dict[str, Any]:
         return _handle_recommend_by_date(date)
     except HTTPException:
         raise
+    except Exception as e:  # noqa: BLE001
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# --- Event/sync APIs ---
+
+
+@api.post("/sync", response_model=SyncResp)
+def api_post_sync(req: SyncReq) -> SyncResp:  # type: ignore[return-value]
+    ack: Dict[str, str] = {}
+    for ev in req.outbox_events:
+        try:
+            event_store.ensure_conversation(ev.conversation_id)
+            event_store.ensure_participant(ev.conversation_id)
+            seq, _ = event_store.append_event(
+                ev.conversation_id,
+                event_id=ev.id,
+                type=ev.type,
+                data=ev.data,
+                actor_id=ev.actor_id,
+            )
+            if ev.type == "read.updated":
+                try:
+                    last_read_seq = int((ev.data or {}).get("last_read_seq") or 0)
+                    if last_read_seq > 0:
+                        event_store.update_read(ev.conversation_id, ev.actor_id, last_read_seq)
+                except Exception:
+                    pass
+            ack[ev.id] = f"accepted:{seq}"
+        except Exception as e:  # noqa: BLE001
+            ack[ev.id] = f"error:{e}"
+
+    deltas: Dict[str, List[EventOut]] = {}
+    for cid, last_seq in (req.conv_cursors or {}).items():
+        try:
+            events = event_store.list_events_after(cid, int(last_seq or 0), limit=200)
+            deltas[cid] = [EventOut(**e) for e in events]
+        except Exception:
+            deltas[cid] = []
+
+    conversations_delta = event_store.list_conversations()
+
+    return SyncResp(
+        ack=ack,
+        deltas=deltas,
+        conversations_delta=conversations_delta,
+        user_settings_delta=[],
+    )
+
+
+@api.get("/conversations/{cid}/events", response_model=list[EventOut])
+def api_get_events(
+    cid: str,
+    after: Optional[int] = Query(default=None),
+    around: Optional[int] = Query(default=None),
+    limit: int = Query(default=100, ge=1, le=500),
+):
+    try:
+        if around is not None:
+            events = event_store.list_events_around(cid, int(around), limit=limit)
+        else:
+            events = event_store.list_events_after(cid, int(after or 0), limit=limit)
+        return [EventOut(**e) for e in events]
+    except Exception as e:  # noqa: BLE001
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api.get("/conversations/{cid}/export")
+def api_export_conversation(cid: str) -> Dict[str, Any]:
+    try:
+        return event_store.export_conversation(cid)
+    except Exception as e:  # noqa: BLE001
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api.post("/conversations/import")
+def api_import_conversation(payload: Dict[str, Any]) -> Dict[str, Any]:
+    try:
+        event_store.import_conversation(payload)
+        conv = (payload.get("conversation") or {}).get("id")
+        return {"status": "ok", "conversation_id": conv}
+    except Exception as e:  # noqa: BLE001
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api.delete("/conversations/{cid}")
+def api_delete_conversation(cid: str) -> Dict[str, Any]:
+    try:
+        event_store.delete_conversation(cid)
+        return {"status": "ok"}
+    except Exception as e:  # noqa: BLE001
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api.post("/conversations/cleanup")
+def api_cleanup_conversations(payload: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    """Cleanup all conversations and/or messages.
+
+    Body: {"mode": "all" | "events_only"}
+    """
+    mode = (payload or {}).get("mode") or "all"
+    try:
+        event_store.cleanup_conversations(str(mode))
+        return {"status": "ok", "mode": mode}
+    except Exception as e:  # noqa: BLE001
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api.get("/search")
+def api_search(q: str = Query(..., description="Search query"), conversation_id: Optional[str] = Query(default=None), limit: int = Query(default=50, ge=1, le=200)) -> List[Dict[str, Any]]:
+    try:
+        return event_store.search_messages(q, conversation_id=conversation_id, limit=limit)
     except Exception as e:  # noqa: BLE001
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -245,3 +361,24 @@ def post_recommend(req: RecommendReq) -> RecommendResp:  # type: ignore[return-v
 @app.get("/health", include_in_schema=False, response_model=HealthResp)
 def get_health() -> HealthResp:
     return _handle_health()
+
+
+@api.post("/attachments/sign")
+def api_post_attachments_sign(payload: Dict[str, Any]) -> Dict[str, Any]:
+    """Return a local upload path and a pseudo public URL.
+
+    This is a minimal placeholder to integrate client side direct uploads.
+    """
+    try:
+        filename = str(payload.get("filename") or f"upload-{datetime.now().timestamp():.0f}")
+        # sanitize filename
+        filename = os.path.basename(filename).strip().replace("..", "_") or "upload.bin"
+        att_dir = store_dir() / "attachments"
+        att_dir.mkdir(parents=True, exist_ok=True)
+        upload_path = str((att_dir / filename).resolve())
+        return {
+            "upload_path": upload_path,
+            "public_url": f"/attachments/{filename}",
+        }
+    except Exception as e:  # noqa: BLE001
+        raise HTTPException(status_code=500, detail=str(e))

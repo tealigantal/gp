@@ -43,3 +43,35 @@ export type HealthResp = { status: string; llm_ready: boolean; provider: any; ti
 export type OHLCVBar = { date: string; open: number; high: number; low: number; close: number; volume: number; amount: number }
 export type OHLCVResp = { symbol: string; meta: any; bars: OHLCVBar[] }
 
+// --- Events/Sync ---
+export type EventOut = {
+  id: string
+  conversation_id: string
+  seq: number
+  type: string
+  actor_id?: string | null
+  created_at: string
+  data: Record<string, any>
+}
+
+export type SyncEventIn = {
+  id: string
+  conversation_id: string
+  type: string
+  data: Record<string, any>
+  actor_id?: string | null
+  created_at?: string | null
+}
+
+export type SyncReq = {
+  device_id: string
+  conv_cursors: Record<string, number>
+  outbox_events: SyncEventIn[]
+}
+
+export type SyncResp = {
+  ack: Record<string, string>
+  deltas: Record<string, EventOut[]>
+  conversations_delta: Array<Record<string, any>>
+  user_settings_delta: Array<Record<string, any>>
+}

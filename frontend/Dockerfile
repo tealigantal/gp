@@ -1,8 +1,10 @@
 # --- build stage ---
+# syntax=docker/dockerfile:1.6
 FROM node:18-alpine AS build
 WORKDIR /app
 COPY package.json ./
-RUN npm i --no-audit --no-fund
+# Cache npm download/artifacts across builds
+RUN --mount=type=cache,target=/root/.npm npm i --no-audit --no-fund
 COPY . .
 RUN npm run build
 

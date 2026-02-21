@@ -1,0 +1,67 @@
+{
+  "timing": {},
+  "sources": [
+    {
+      "symbol": "000333",
+      "data_source": "provider"
+    }
+  ],
+  "failures": [],
+  "snapshot": {
+    "source": "akshare:em",
+    "cache": null,
+    "fallback": false,
+    "fallback_reason": null,
+    "stale": false,
+    "missing": false,
+    "elapsed_sec": 65.36,
+    "cache_age_sec": null,
+    "skipped_routes": [],
+    "attempts": [
+      {
+        "source": "akshare:em",
+        "ok": true,
+        "rows": 5810
+      }
+    ]
+  },
+  "candidate_stats": {
+    "universe_in_count": 1,
+    "universe_after_filter_count": 1,
+    "bars_missing_count": 0,
+    "bars_too_short_count": 0,
+    "indicator_error_count": 0,
+    "skipped_symbols_sample": [],
+    "candidates_out_count": 1,
+    "daily_attempts_sample": [
+      {
+        "symbol": "000333",
+        "src": "akshare:sina",
+        "attempts": [
+          {
+            "route": "sina",
+            "ok": true,
+            "rows": 2955
+          }
+        ]
+      }
+    ]
+  },
+  "degraded": true,
+  "degrade_reasons": [
+    {
+      "reason_code": "UNIVERSE_TOO_SMALL",
+      "detail": {
+        "count": 1,
+        "min": 50
+      }
+    },
+    {
+      "reason_code": "CANDIDATE_TOO_SMALL",
+      "detail": {
+        "count": 1,
+        "min": 20
+      }
+    }
+  ]
+}

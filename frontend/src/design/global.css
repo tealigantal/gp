@@ -1,0 +1,24 @@
+:root {
+  --radius-sm: 8px;
+  --radius-md: 12px;
+}
+
+html, body, #root {
+  height: 100%;
+}
+
+body {
+  font-family: "Noto Sans SC","PingFang SC","Microsoft YaHei",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.card-like {
+  border-radius: var(--radius-md);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+}
+
+.card-like:hover {
+  box-shadow: 0 4px 12px rgba(0,0,0,0.12);
+}
+
