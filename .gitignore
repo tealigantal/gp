@@ -28,3 +28,5 @@ configs/config.yaml
 
 # Logs
 *.log
+.env
+.env.example

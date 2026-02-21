@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+﻿import { useEffect, useMemo, useRef, useState } from 'react'
 import { Alert, Button, Card, FloatButton, Input, List, Space, Spin, Typography } from 'antd'
 import { useMutation } from '@tanstack/react-query'
 import { chat } from '../api/client'
@@ -6,8 +6,11 @@ import type { ChatReq } from '../api/types'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { syncManager } from '../sync/SyncManager'
 import MessageBubble from '../components/MessageBubble'
+import RecommendationCard from '../components/RecommendationCard'
+import KlineCard from '../components/KlineCard'
+import DockPanel from '../components/DockPanel'
 
-type Msg = { role: 'user' | 'assistant'; content: string; tool?: any }
+type Msg = { role: 'user' | 'assistant'; content?: string; tool?: any; kind?: 'text'|'rec'|'kline'; payload?: any }
 
 const LOCAL_SESSION_KEY = 'gp_session_id'
 const LAST_RECOMMEND_RESULT_KEY = 'gp_last_recommend_result'
@@ -20,12 +23,15 @@ export default function Chat() {
   const [messages, setMessages] = useState<Msg[]>([])
   const listRef = useRef<HTMLDivElement>(null)
   const [atBottom, setAtBottom] = useState(true)
+  const [dockOpen, setDockOpen] = useState(false)
+  const [dockSymbol, setDockSymbol] = useState<string | null>(null)
+  const [extras, setExtras] = useState<Msg[]>([])
 
   useEffect(() => {
     if (sessionId) localStorage.setItem(LOCAL_SESSION_KEY, sessionId)
   }, [sessionId])
 
-  // 同步：若已有会话，加载事件历史并保持轮询
+  // 鍚屾锛氳嫢宸叉湁浼氳瘽锛屽姞杞戒簨浠跺巻鍙插苟淇濇寔杞
   useEffect(() => {
     if (!sessionId) return
     let unsub = () => {}
@@ -39,7 +45,7 @@ export default function Chat() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionId])
 
-  // 支持搜索结果跳转：/chat?cid=xxx&seq=123
+  // 鏀寔鎼滅储缁撴灉璺宠浆锛?chat?cid=xxx&seq=123
   useEffect(() => {
     const params = new URLSearchParams(loc.search)
     const cid = params.get('cid') || undefined
@@ -60,7 +66,22 @@ export default function Chat() {
   function renderFromEvents() {
     if (!sessionId) return
     const evs = syncManager.messages(sessionId)
-    const view: Msg[] = evs.map((e) => ({ role: (e.actor_id === 'user' ? 'user' : 'assistant'), content: e.data?.content || '' }))
+    const view: Msg[] = []
+    for (const e of evs) {
+      const role: 'user' | 'assistant' = (e.actor_id === 'user' ? 'user' : 'assistant')
+      if (e?.data?.kind === 'card') {
+        const p = e?.data?.payload || {}
+        if (p?.type === 'recommendation' && Array.isArray(p?.picks)) {
+          view.push({ role, kind: 'rec', payload: p })
+          continue
+        }
+        if (p?.type === 'kline' && p?.symbol) {
+          view.push({ role, kind: 'kline', payload: p })
+          continue
+        }
+      }
+      view.push({ role, kind: 'text', content: e?.data?.content || '' })
+    }
     setMessages(view)
     const maxSeq = evs.length ? evs[evs.length - 1].seq : 0
     if (maxSeq) syncManager.reportRead(sessionId, maxSeq)
@@ -78,7 +99,7 @@ export default function Chat() {
       }
       return resp
     },
-    onSuccess: async (_resp, variables) => {
+    onSuccess: async (resp, variables) => {
       setMessages((prev) => [...prev, { role: 'user', content: variables }])
       setInput('')
       setTimeout(() => listRef.current?.scrollTo({ top: 999999, behavior: 'smooth' }), 30)
@@ -103,12 +124,12 @@ export default function Chat() {
         {messages.length === 0 && <Typography.Text type="secondary">试输入：“给我推荐3只低估值”</Typography.Text>}
         <List dataSource={messages} renderItem={(msg, idx) => (
           <List.Item key={idx} style={{ display: 'block', border: 'none', padding: 0 }}>
-            <MessageBubble role={msg.role} content={msg.content} />
-            {msg.role === 'assistant' && msg.tool?.triggered_recommend && (
-              <Space style={{ margin: '4px 8px' }}>
-                <Alert type="success" message="已生成一轮推荐" showIcon />
-                <Button type="link" onClick={() => nav('/recommend')}>查看本次推荐</Button>
-              </Space>
+            {msg.kind === 'rec' && msg.payload?.picks ? (
+              <RecommendationCard picks={msg.payload.picks} onShowKline={async (sym) => { if(!sessionId) return; setDockSymbol(sym); setDockOpen(true); syncManager.pushOutbox({ conversation_id: sessionId, type: 'message.created', actor_id: 'assistant', data: { message_id: 'card-kline-' + Date.now(), kind: 'card', content: 'kline', payload: { type: 'kline', symbol: sym } } }); await syncManager.flush(); renderFromEvents() }} />
+            ) : msg.kind === 'kline' && msg.payload?.symbol ? (
+              <KlineCard symbol={msg.payload.symbol} />
+            ) : (
+              <MessageBubble role={msg.role} content={msg.content || ''} />
             )}
           </List.Item>
         )} />
@@ -123,6 +144,13 @@ export default function Chat() {
       {!atBottom && (
         <FloatButton shape="square" type="primary" tooltip="回到底部" style={{ right: 24, bottom: 24 }} onClick={() => listRef.current?.scrollTo({ top: 999999, behavior: 'smooth' })} />
       )}
+      <DockPanel open={dockOpen} symbol={dockSymbol} onClose={() => setDockOpen(false)} />
     </Card>
   )
 }
+
+
+
+
+
+

@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 from typing import Any, Dict, Optional
+from datetime import datetime
 
 from .intent import detect_intent
 from .render import render_recommendation, render_recommendation_narrative
 from ..llm.client import LLMClient
 from ..recommend import agent as rec_agent
 from . import session_store as store
+from . import event_store
 
 
 def handle_message(session_id: Optional[str], message: str) -> Dict[str, Any]:
@@ -24,6 +26,25 @@ def handle_message(session_id: Optional[str], message: str) -> Dict[str, Any]:
             # Prefer LLM narrative; 若不可用，仅提示缺失，不回退规则清单
             reply = render_recommendation_narrative(res)
             tool_trace = {"triggered_recommend": True, "recommend_result": res}
+            # 同步追加一条“推荐卡片”到事件流，便于前端稳定渲染/回放
+            try:
+                picks = res.get("picks") if isinstance(res, dict) else None
+                if isinstance(picks, list) and picks:
+                    eid = f"card-reco-{datetime.utcnow().strftime('%Y%m%d%H%M%S%f')}"
+                    event_store.append_event(
+                        sid,
+                        event_id=eid,
+                        type="message.created",
+                        data={
+                            "message_id": eid,
+                            "kind": "card",
+                            "content": "recommendation",
+                            "payload": {"type": "recommendation", "picks": picks},
+                        },
+                        actor_id="assistant",
+                    )
+            except Exception:
+                pass
         except Exception as e:  # noqa: BLE001
             reply = f"[data_unavailable] 推荐生成失败：{e}"
             tool_trace = {"triggered_recommend": False, "error": str(e)}

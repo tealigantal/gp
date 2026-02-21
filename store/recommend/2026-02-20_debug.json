@@ -2,7 +2,203 @@
   "timing": {},
   "sources": [
     {
-      "symbol": "000333",
+      "symbol": "300017",
+      "data_source": "provider"
+    },
+    {
+      "symbol": "002506",
+      "data_source": "provider"
+    },
+    {
+      "symbol": "600487",
+      "data_source": "provider"
+    },
+    {
+      "symbol": "300394",
+      "data_source": "provider"
+    },
+    {
+      "symbol": "001330",
+      "data_source": "provider"
+    },
+    {
+      "symbol": "300251",
+      "data_source": "provider"
+    },
+    {
+      "symbol": "000657",
+      "data_source": "provider"
+    },
+    {
+      "symbol": "688521",
+      "data_source": "provider"
+    },
+    {
+      "symbol": "688158",
+      "data_source": "provider"
+    },
+    {
+      "symbol": "300182",
+      "data_source": "provider"
+    },
+    {
+      "symbol": "300548",
+      "data_source": "provider"
+    },
+    {
+      "symbol": "688008",
+      "data_source": "provider"
+    },
+    {
+      "symbol": "300846",
+      "data_source": "provider"
+    },
+    {
+      "symbol": "600589",
+      "data_source": "provider"
+    },
+    {
+      "symbol": "300620",
+      "data_source": "provider"
+    },
+    {
+      "symbol": "600893",
+      "data_source": "provider"
+    },
+    {
+      "symbol": "300065",
+      "data_source": "provider"
+    },
+    {
+      "symbol": "600673",
+      "data_source": "provider"
+    },
+    {
+      "symbol": "603667",
+      "data_source": "provider"
+    },
+    {
+      "symbol": "002131",
+      "data_source": "provider"
+    },
+    {
+      "symbol": "603986",
+      "data_source": "provider"
+    },
+    {
+      "symbol": "600111",
+      "data_source": "provider"
+    },
+    {
+      "symbol": "688525",
+      "data_source": "provider"
+    },
+    {
+      "symbol": "300364",
+      "data_source": "provider"
+    },
+    {
+      "symbol": "300766",
+      "data_source": "provider"
+    },
+    {
+      "symbol": "000021",
+      "data_source": "provider"
+    },
+    {
+      "symbol": "002837",
+      "data_source": "provider"
+    },
+    {
+      "symbol": "688041",
+      "data_source": "provider"
+    },
+    {
+      "symbol": "600089",
+      "data_source": "provider"
+    },
+    {
+      "symbol": "300750",
+      "data_source": "provider"
+    },
+    {
+      "symbol": "601899",
+      "data_source": "provider"
+    },
+    {
+      "symbol": "000559",
+      "data_source": "provider"
+    },
+    {
+      "symbol": "600410",
+      "data_source": "provider"
+    },
+    {
+      "symbol": "601318",
+      "data_source": "provider"
+    },
+    {
+      "symbol": "300058",
+      "data_source": "provider"
+    },
+    {
+      "symbol": "300136",
+      "data_source": "provider"
+    },
+    {
+      "symbol": "600150",
+      "data_source": "provider"
+    },
+    {
+      "symbol": "002384",
+      "data_source": "provider"
+    },
+    {
+      "symbol": "301308",
+      "data_source": "provider"
+    },
+    {
+      "symbol": "603993",
+      "data_source": "provider"
+    },
+    {
+      "symbol": "300418",
+      "data_source": "provider"
+    },
+    {
+      "symbol": "300502",
+      "data_source": "provider"
+    },
+    {
+      "symbol": "002371",
+      "data_source": "provider"
+    },
+    {
+      "symbol": "300476",
+      "data_source": "provider"
+    },
+    {
+      "symbol": "002050",
+      "data_source": "provider"
+    },
+    {
+      "symbol": "300059",
+      "data_source": "provider"
+    },
+    {
+      "symbol": "300274",
+      "data_source": "provider"
+    },
+    {
+      "symbol": "688981",
+      "data_source": "provider"
+    },
+    {
+      "symbol": "002475",
+      "data_source": "provider"
+    },
+    {
+      "symbol": "000547",
       "data_source": "provider"
     }
   ],
@@ -14,7 +210,7 @@
     "fallback_reason": null,
     "stale": false,
     "missing": false,
-    "elapsed_sec": 65.36,
+    "elapsed_sec": 64.06,
     "cache_age_sec": null,
     "skipped_routes": [],
     "attempts": [
@@ -26,42 +222,344 @@
     ]
   },
   "candidate_stats": {
-    "universe_in_count": 1,
-    "universe_after_filter_count": 1,
+    "universe_in_count": 50,
+    "universe_after_filter_count": 50,
     "bars_missing_count": 0,
     "bars_too_short_count": 0,
     "indicator_error_count": 0,
     "skipped_symbols_sample": [],
-    "candidates_out_count": 1,
+    "candidates_out_count": 50,
     "daily_attempts_sample": [
       {
-        "symbol": "000333",
+        "symbol": "300502",
         "src": "akshare:sina",
         "attempts": [
           {
             "route": "sina",
             "ok": true,
-            "rows": 2955
+            "rows": 2420
+          }
+        ]
+      },
+      {
+        "symbol": "300058",
+        "src": "akshare:sina",
+        "attempts": [
+          {
+            "route": "sina",
+            "ok": true,
+            "rows": 3674
+          }
+        ]
+      },
+      {
+        "symbol": "300251",
+        "src": "akshare:sina",
+        "attempts": [
+          {
+            "route": "sina",
+            "ok": true,
+            "rows": 3415
+          }
+        ]
+      },
+      {
+        "symbol": "601899",
+        "src": "akshare:sina",
+        "attempts": [
+          {
+            "route": "sina",
+            "ok": true,
+            "rows": 4286
+          }
+        ]
+      },
+      {
+        "symbol": "300394",
+        "src": "akshare:sina",
+        "attempts": [
+          {
+            "route": "sina",
+            "ok": true,
+            "rows": 2661
+          }
+        ]
+      },
+      {
+        "symbol": "300017",
+        "src": "akshare:sina",
+        "attempts": [
+          {
+            "route": "sina",
+            "ok": true,
+            "rows": 3907
+          }
+        ]
+      },
+      {
+        "symbol": "600589",
+        "src": "akshare:sina",
+        "attempts": [
+          {
+            "route": "sina",
+            "ok": true,
+            "rows": 5785
+          }
+        ]
+      },
+      {
+        "symbol": "002131",
+        "src": "akshare:sina",
+        "attempts": [
+          {
+            "route": "sina",
+            "ok": true,
+            "rows": 4207
+          }
+        ]
+      },
+      {
+        "symbol": "603986",
+        "src": "akshare:sina",
+        "attempts": [
+          {
+            "route": "sina",
+            "ok": true,
+            "rows": 2100
+          }
+        ]
+      },
+      {
+        "symbol": "002837",
+        "src": "akshare:sina",
+        "attempts": [
+          {
+            "route": "sina",
+            "ok": true,
+            "rows": 2142
+          }
+        ]
+      },
+      {
+        "symbol": "300750",
+        "src": "akshare:sina",
+        "attempts": [
+          {
+            "route": "sina",
+            "ok": true,
+            "rows": 1867
+          }
+        ]
+      },
+      {
+        "symbol": "300274",
+        "src": "akshare:sina",
+        "attempts": [
+          {
+            "route": "sina",
+            "ok": true,
+            "rows": 3445
+          }
+        ]
+      },
+      {
+        "symbol": "300418",
+        "src": "akshare:sina",
+        "attempts": [
+          {
+            "route": "sina",
+            "ok": true,
+            "rows": 2621
+          }
+        ]
+      },
+      {
+        "symbol": "002050",
+        "src": "akshare:sina",
+        "attempts": [
+          {
+            "route": "sina",
+            "ok": true,
+            "rows": 4805
+          }
+        ]
+      },
+      {
+        "symbol": "000021",
+        "src": "akshare:sina",
+        "attempts": [
+          {
+            "route": "sina",
+            "ok": true,
+            "rows": 7668
+          }
+        ]
+      },
+      {
+        "symbol": "300182",
+        "src": "akshare:sina",
+        "attempts": [
+          {
+            "route": "sina",
+            "ok": true,
+            "rows": 3487
+          }
+        ]
+      },
+      {
+        "symbol": "002475",
+        "src": "akshare:sina",
+        "attempts": [
+          {
+            "route": "sina",
+            "ok": true,
+            "rows": 3716
+          }
+        ]
+      },
+      {
+        "symbol": "603993",
+        "src": "akshare:sina",
+        "attempts": [
+          {
+            "route": "sina",
+            "ok": true,
+            "rows": 3225
+          }
+        ]
+      },
+      {
+        "symbol": "600487",
+        "src": "akshare:sina",
+        "attempts": [
+          {
+            "route": "sina",
+            "ok": true,
+            "rows": 5282
+          }
+        ]
+      },
+      {
+        "symbol": "300364",
+        "src": "akshare:sina",
+        "attempts": [
+          {
+            "route": "sina",
+            "ok": true,
+            "rows": 2531
+          }
+        ]
+      },
+      {
+        "symbol": "600089",
+        "src": "akshare:sina",
+        "attempts": [
+          {
+            "route": "sina",
+            "ok": true,
+            "rows": 6763
+          }
+        ]
+      },
+      {
+        "symbol": "600111",
+        "src": "akshare:sina",
+        "attempts": [
+          {
+            "route": "sina",
+            "ok": true,
+            "rows": 6828
+          }
+        ]
+      },
+      {
+        "symbol": "600410",
+        "src": "akshare:sina",
+        "attempts": [
+          {
+            "route": "sina",
+            "ok": true,
+            "rows": 5151
+          }
+        ]
+      },
+      {
+        "symbol": "688521",
+        "src": "akshare:sina",
+        "attempts": [
+          {
+            "route": "sina",
+            "ok": true,
+            "rows": 1324
+          }
+        ]
+      },
+      {
+        "symbol": "300065",
+        "src": "akshare:sina",
+        "attempts": [
+          {
+            "route": "sina",
+            "ok": true,
+            "rows": 3626
+          }
+        ]
+      },
+      {
+        "symbol": "601318",
+        "src": "akshare:sina",
+        "attempts": [
+          {
+            "route": "sina",
+            "ok": true,
+            "rows": 4546
+          }
+        ]
+      },
+      {
+        "symbol": "002371",
+        "src": "akshare:sina",
+        "attempts": [
+          {
+            "route": "sina",
+            "ok": true,
+            "rows": 3788
+          }
+        ]
+      },
+      {
+        "symbol": "600893",
+        "src": "akshare:sina",
+        "attempts": [
+          {
+            "route": "sina",
+            "ok": true,
+            "rows": 6596
+          }
+        ]
+      },
+      {
+        "symbol": "002506",
+        "src": "akshare:sina",
+        "attempts": [
+          {
+            "route": "sina",
+            "ok": true,
+            "rows": 3295
+          }
+        ]
+      },
+      {
+        "symbol": "688008",
+        "src": "akshare:sina",
+        "attempts": [
+          {
+            "route": "sina",
+            "ok": true,
+            "rows": 1596
           }
         ]
       }
     ]
-  },
-  "degraded": true,
-  "degrade_reasons": [
-    {
-      "reason_code": "UNIVERSE_TOO_SMALL",
-      "detail": {
-        "count": 1,
-        "min": 50
-      }
-    },
-    {
-      "reason_code": "CANDIDATE_TOO_SMALL",
-      "detail": {
-        "count": 1,
-        "min": 20
-      }
-    }
-  ]
+  }
 }
