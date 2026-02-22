@@ -1,3 +1,4 @@
+# src/gp_assistant/server/models.py
 from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
@@ -19,17 +20,22 @@ class ChatResp(BaseModel):
 
 
 class RecommendReq(BaseModel):
-    date: Optional[str] = None
-    topk: Optional[int] = 3
-    universe: Optional[str] = "auto"
+    # mode: default|dev|<custom_mode>
+    mode: Optional[str] = Field(default=None, description="recommend mode: default|dev|<custom>")
+
+    date: Optional[str] = Field(default=None, description="YYYY-MM-DD; default uses calendar as_of")
+    topk: Optional[int] = Field(default=3, ge=1, le=10)
+    universe: Optional[str] = Field(default="auto", description="auto|symbols|...")
     symbols: Optional[List[str]] = None
-    risk_profile: Optional[str] = "normal"
-    # new: compact | full (default compact)
-    detail: Optional[str] = "compact"
+    risk_profile: Optional[str] = Field(default="normal", description="normal|aggressive|conservative")
+
+    # compact | full (default compact)
+    detail: Optional[str] = Field(default="compact", description="compact|full")
 
 
 class RecommendResp(BaseModel):
-    """Response schema for recommendation.
+    """
+    Response schema for recommendation.
 
     Keep core fields explicit and allow unknown to pass through
     for backward/forward compatibility.
@@ -50,6 +56,8 @@ class RecommendResp(BaseModel):
 
 
 class HealthResp(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
     status: str
     llm_ready: bool
     provider: Dict[str, Any] | Any

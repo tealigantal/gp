@@ -1,6 +1,13 @@
-# 简介：应用配置中心。读取环境变量，提供数据源偏好、默认标的集合、
-# LLM/时区/超时等参数，供各模块统一访问。
 # src/gp_assistant/core/config.py
+"""
+应用配置中心（环境变量 -> 统一配置对象）。
+
+目标：
+- 把“运行模式 / 开发者模式 / 推荐模式”等开关收口到一个地方；
+- 供 server/recommend/providers/chat 等模块统一读取；
+- 默认不破坏线上行为：不设置 GP_DEV_MODE/GP_RUN_MODE 时，保持真实数据与默认推荐链路。
+"""
+
 from __future__ import annotations
 
 import os
@@ -25,6 +32,8 @@ def _split_csv(v: str | None) -> List[str]:
 
 @dataclass
 class ProviderConfig:
+    """数据源配置（factory 按此选择 provider）"""
+
     data_provider: str = os.getenv("DATA_PROVIDER", "akshare").lower()
     official_api_key: Optional[str] = os.getenv("OFFICIAL_API_KEY")
 
@@ -33,22 +42,29 @@ class ProviderConfig:
 class AppConfig:
     provider: ProviderConfig = field(default_factory=ProviderConfig)
 
-    # ---- Run mode / developer mode ----
-    run_mode: str = os.getenv("GP_RUN_MODE", "prod").lower()  # prod|dev
+    # -------------------------
+    # Run mode / developer mode
+    # -------------------------
+    # prod|dev（dev 时默认开启 dev_mode）
+    run_mode: str = os.getenv("GP_RUN_MODE", "prod").lower()
+
+    # 显式开发者模式开关（优先级高）
     dev_mode: bool = _truthy(os.getenv("GP_DEV_MODE", "0"))
-    recommend_mode: str = os.getenv("GP_RECOMMEND_MODE", "").lower()  # empty => auto
+
+    # 推荐模式：default|dev|<你未来新增的模式名>
+    # 为空 => auto（dev_mode -> dev，否则 default）
+    recommend_mode: str = os.getenv("GP_RECOMMEND_MODE", "").lower()
+
+    # 开发模式：固定输出的默认 symbols（用于前端卡片/列表）
     dev_symbols: List[str] = field(default_factory=lambda: ["000001", "000333", "600519"])
     dev_ohlcv_len: int = int(os.getenv("GP_DEV_OHLCV_LEN", "90"))
 
-    # ---- Defaults ----
-    default_universe: List[str] = field(
-        default_factory=lambda: ["000001", "000002", "000333", "600519"]
-    )
+    # -------------------------
+    # Defaults / knobs
+    # -------------------------
+    default_universe: List[str] = field(default_factory=lambda: ["000001", "000002", "000333", "600519"])
 
-    # Additional knobs
     request_timeout_sec: int = int(os.getenv("GP_REQUEST_TIMEOUT_SEC", "20"))
-
-    # Data defaults
     default_volume_unit: str = os.getenv("GP_DEFAULT_VOLUME_UNIT", "share").lower()
 
     # Timezone
@@ -59,8 +75,11 @@ class AppConfig:
     llm_api_key: Optional[str] = os.getenv("LLM_API_KEY")
     chat_model: str = os.getenv("CHAT_MODEL", "deepseek-chat")
 
-    # Strict real data only (no synthetic/degrade).
-    # Default ON per user requirement
+    # AkShare routes (optional)
+    ak_spot_priority: List[str] = field(default_factory=lambda: ["em", "sina"])
+    ak_daily_priority: List[str] = field(default_factory=lambda: ["sina", "em", "tx"])
+
+    # Strict real data only (no synthetic/degrade). Default ON (per your current repo behavior)
     strict_real_data: bool = _truthy(os.getenv("STRICT_REAL_DATA", "1"))
 
     # Universe/dynamic pool knobs
@@ -84,11 +103,12 @@ class AppConfig:
 
 
 def load_config() -> AppConfig:
+    """读取环境变量并做派生/校验。"""
     _ = configs_dir()  # ensure exists
 
     cfg = AppConfig()
 
-    # derive dev_mode from run_mode
+    # Derive dev_mode from run_mode
     if cfg.run_mode in {"dev", "development"}:
         cfg.dev_mode = True
 
@@ -96,6 +116,14 @@ def load_config() -> AppConfig:
     env_syms = _split_csv(os.getenv("GP_DEV_SYMBOLS"))
     if env_syms:
         cfg.dev_symbols = env_syms
+
+    # akshare route priorities override
+    spot = _split_csv(os.getenv("AK_SPOT_PRIORITY"))
+    daily = _split_csv(os.getenv("AK_DAILY_PRIORITY"))
+    if spot:
+        cfg.ak_spot_priority = spot
+    if daily:
+        cfg.ak_daily_priority = daily
 
     # default recommend_mode
     if not cfg.recommend_mode:

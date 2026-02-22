@@ -1,4 +1,13 @@
 # src/gp_assistant/recommend/runner.py
+"""
+推荐“多模式”路由器。
+
+用法：
+- 默认：mode 为空 => 根据配置决定（dev_mode -> dev，否则 default）
+- 显式：POST /api/recommend { "mode": "dev" } 或 "default" 或你未来新增的模式名
+- 新增模式：在 src/gp_assistant/recommend/modes/<mode>.py 里实现 run(...)
+"""
+
 from __future__ import annotations
 
 import importlib
@@ -15,15 +24,17 @@ _SAFE_MODE = re.compile(r"^[a-z0-9_]+$")
 
 def resolve_mode(request_mode: Optional[str]) -> str:
     cfg = load_config()
+
     m = (request_mode or "").strip().lower()
     if not m:
         m = (cfg.recommend_mode or ("dev" if cfg.dev_mode else "default")).strip().lower()
 
-    # aliases
     alias = {
         "prod": "default",
         "live": "default",
+        "real": "default",
         "mock": "dev",
+        "fixture": "dev",
     }
     return alias.get(m, m)
 
@@ -55,10 +66,12 @@ def run(
         raise APIError(status_code=500, message="recommend mode missing run()", detail={"mode": m})
 
     out = fn(date=date, topk=topk, universe=universe, symbols=symbols, risk_profile=risk_profile)
+
     if isinstance(out, dict):
         out.setdefault("debug", {})
-        out["debug"].setdefault("mode", m)
-    return out
+        if isinstance(out["debug"], dict):
+            out["debug"].setdefault("mode", m)
+    return out  # type: ignore[return-value]
 
 
 def list_modes() -> List[str]:

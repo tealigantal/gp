@@ -4,7 +4,6 @@ services:
       context: .
       args:
         PIP_INDEX_URL: ${PIP_INDEX_URL:-https://pypi.org/simple}
-
     volumes:
       - ./data:/app/data
       - ./results:/app/results
@@ -12,18 +11,30 @@ services:
       - gp_store:/app/store
       - gp_cache:/app/cache
       - ./configs:/app/configs
-
-    command: ["uvicorn","gp_assistant.server.app:app","--host","0.0.0.0","--port","8000"]
-
+    command: ["uvicorn", "gp_assistant.server.app:app", "--host", "0.0.0.0", "--port", "8000"]
     environment:
       TZ: ${TZ:-Asia/Shanghai}
 
-      # provider
+      # ---- run / dev mode ----
+      GP_RUN_MODE: ${GP_RUN_MODE:-prod}
+      GP_DEV_MODE: ${GP_DEV_MODE:-0}
+      GP_RECOMMEND_MODE: ${GP_RECOMMEND_MODE:-}
+      GP_DEV_SYMBOLS: ${GP_DEV_SYMBOLS:-}
+      GP_DEV_OHLCV_LEN: ${GP_DEV_OHLCV_LEN:-90}
+
+      # optional CORS (comma-separated)
+      GP_CORS_ORIGINS: ${GP_CORS_ORIGINS:-}
+
+      # ---- provider ----
       DATA_PROVIDER: ${DATA_PROVIDER:-akshare}
       GP_REQUEST_TIMEOUT_SEC: ${GP_REQUEST_TIMEOUT_SEC:-60}
       STRICT_REAL_DATA: ${STRICT_REAL_DATA:-1}
 
-      # mainline / universe knobs
+      # optional akshare route priority
+      AK_SPOT_PRIORITY: ${AK_SPOT_PRIORITY:-}
+      AK_DAILY_PRIORITY: ${AK_DAILY_PRIORITY:-}
+
+      # ---- mainline / universe knobs ----
       GP_RESTRICT_MAINLINE: ${GP_RESTRICT_MAINLINE:-1}
       GP_MAINLINE_TOP_N: ${GP_MAINLINE_TOP_N:-2}
       GP_MAINLINE_MODE: ${GP_MAINLINE_MODE:-auto}
@@ -35,7 +46,7 @@ services:
       GP_DYNAMIC_POOL_SIZE: ${GP_DYNAMIC_POOL_SIZE:-200}
       GP_MAX_PER_INDUSTRY: ${GP_MAX_PER_INDUSTRY:-2}
 
-      # LLM (optional)
+      # ---- LLM (optional) ----
       LLM_BASE_URL: ${LLM_BASE_URL:-}
       LLM_API_KEY: ${LLM_API_KEY:-}
       CHAT_MODEL: ${CHAT_MODEL:-deepseek-chat}
