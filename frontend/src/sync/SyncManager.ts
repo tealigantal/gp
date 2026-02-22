@@ -46,7 +46,7 @@ export class SyncManager {
   }
   private notify() { for (const fn of this.listeners) fn() }
 
-  start(intervalActive = 2500, intervalBg = 9000) {
+  start(intervalActive = 3000, intervalBg = 9000) {
     const tick = async () => {
       try {
         await this.flush()
@@ -59,6 +59,31 @@ export class SyncManager {
   }
   stop() {
     if (this.timer) { clearTimeout(this.timer); this.timer = null }
+  }
+
+  // --- local state maintenance helpers ---
+  removeConversation(cid: string) {
+    delete this.conv[cid]
+    delete this.convMeta[cid]
+    delete this.cursors[cid]
+    delete this.lastRead[cid]
+    try {
+      localStorage.setItem('gp_sync_cursors', JSON.stringify(this.cursors))
+      localStorage.setItem('gp_sync_last_read', JSON.stringify(this.lastRead))
+    } catch { /* ignore */ }
+    this.notify()
+  }
+
+  resetAll() {
+    this.cursors = {}
+    this.outbox = []
+    this.conv = {}
+    this.convMeta = {}
+    this.lastRead = {}
+    try {
+      ;['gp_sync_cursors','gp_sync_outbox','gp_sync_last_read'].forEach((k)=>localStorage.removeItem(k))
+    } catch { /* ignore */ }
+    this.notify()
   }
 
   convState(cid: string): ConvState {
@@ -88,6 +113,25 @@ export class SyncManager {
     this.outbox.push(e)
     localStorage.setItem('gp_sync_outbox', JSON.stringify(this.outbox))
     // 触发一次立即同步
+    // 乐观更新：对 message.created 先写入本地视图，待服务端回写后按 id 覆盖 seq/数据
+    try {
+      if (e && e.conversation_id && e.type === 'message.created') {
+        const cid = e.conversation_id
+        const st = this.convState(cid)
+        const pseudoSeq = (st.lastSeq || 0) + 1
+        const shadow: EventOut = {
+          id: e.id,
+          conversation_id: cid,
+          seq: pseudoSeq,
+          type: 'message.created',
+          actor_id: e.actor_id,
+          created_at: new Date().toISOString(),
+          data: e.data || {}
+        }
+        this.mergeEvents(cid, [shadow])
+        this.notify()
+      }
+    } catch { /* ignore */ }
     this.flush().catch(() => undefined)
   }
 
@@ -96,9 +140,18 @@ export class SyncManager {
     const st = this.convState(cid)
     const map = new Map(st.events.map((e) => [e.id, e]))
     for (const e of events) {
-      if (map.has(e.id)) continue
-      map.set(e.id, e)
-      st.events.push(e)
+      if (map.has(e.id)) {
+        // 覆盖本地影子事件的 seq/数据等
+        const ex = map.get(e.id)!
+        ex.seq = e.seq
+        ex.type = e.type
+        ex.actor_id = e.actor_id
+        ex.created_at = e.created_at
+        ex.data = e.data
+      } else {
+        map.set(e.id, e)
+        st.events.push(e)
+      }
       if (e.seq > st.lastSeq) st.lastSeq = e.seq
       // handle edits/recall by type
       if (e.type === 'message.edited' || e.type === 'message.recalled') {
@@ -116,6 +169,26 @@ export class SyncManager {
   }
 
   async flush() {
+    // Merge with persisted state to avoid losing events due to concurrent ticks or reloads
+    try {
+      const persisted = localStorage.getItem('gp_sync_outbox')
+      if (persisted) {
+        const arr: any[] = JSON.parse(persisted)
+        if (Array.isArray(arr)) {
+          const map = new Map<string, SyncEventIn>()
+          for (const e of this.outbox) { if (e && e.id) map.set(e.id, e) }
+          for (const e of arr) { if (e && e.id && !map.has(e.id)) map.set(e.id, e as SyncEventIn) }
+          this.outbox = Array.from(map.values())
+        }
+      }
+    } catch { /* ignore parse errors */ }
+    try {
+      const persistedCursors = localStorage.getItem('gp_sync_cursors')
+      if (persistedCursors) {
+        const obj = JSON.parse(persistedCursors) || {}
+        this.cursors = { ...obj, ...this.cursors }
+      }
+    } catch { /* ignore */ }
     const req = { device_id: this.deviceId, conv_cursors: this.cursors, outbox_events: this.outbox }
     const resp = await apiSync(req)
     // ack

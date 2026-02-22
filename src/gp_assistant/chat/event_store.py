@@ -2,13 +2,18 @@ from __future__ import annotations
 
 import json
 import sqlite3
+import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
+import threading
 
 from ..core.config import load_config
 from ..core.paths import store_dir
+
+# Global re-entrant lock to serialize SQLite writes within process
+_WRITE_LOCK = threading.RLock()
 
 
 # Lightweight Event Store for conversations/messages on top of SQLite.
@@ -26,7 +31,16 @@ def _db_path() -> Path:
 
 
 def _connect() -> sqlite3.Connection:
-    conn = sqlite3.connect(str(_db_path()))
+    # Add timeout and WAL mode to reduce 'database is locked' under concurrent writes
+    conn = sqlite3.connect(str(_db_path()), timeout=15.0)
+    try:
+        # Enable WAL for better concurrent read/write, and set a sane busy timeout
+        conn.execute("PRAGMA journal_mode=WAL")
+        conn.execute("PRAGMA synchronous=NORMAL")
+        conn.execute("PRAGMA busy_timeout=10000")  # 10s
+    except Exception:
+        # Pragmas are best-effort; continue even if unsupported
+        pass
     conn.execute(
         """
         CREATE TABLE IF NOT EXISTS conversations(
@@ -110,6 +124,24 @@ def _connect() -> sqlite3.Connection:
     return conn
 
 
+def _retry_on_locked(fn, *, retries: int = 8, base_delay: float = 0.08):
+    """Retry helper for sporadic 'database is locked' OperationalError.
+
+    Exponential backoff: base_delay * 2**attempt
+    """
+    for i in range(max(1, retries)):
+        try:
+            return fn()
+        except sqlite3.OperationalError as e:  # noqa: BLE001
+            msg = str(e).lower()
+            if "database is locked" in msg or "database is busy" in msg:
+                time.sleep(base_delay * (2 ** i))
+                continue
+            raise
+    # One last attempt (propagate if still failing)
+    return fn()
+
+
 def _now_iso() -> str:
     cfg = load_config()
     tz = timezone.utc
@@ -130,36 +162,48 @@ def _current_user_id() -> str:
 
 
 def ensure_conversation(conv_id: str, *, title: Optional[str] = None, conv_type: Optional[str] = None) -> None:
-    conn = _connect()
-    cur = conn.execute("SELECT id FROM conversations WHERE id=?", (conv_id,))
-    if cur.fetchone() is None:
-        conn.execute(
-            "INSERT INTO conversations(id, type, title, created_at, updated_at, last_seq) VALUES (?,?,?,?,?,0)",
-            (conv_id, conv_type or "chat", title or conv_id, _now_iso(), _now_iso()),
-        )
-    else:
-        conn.execute("UPDATE conversations SET updated_at=? WHERE id=?", (_now_iso(), conv_id))
-    conn.commit()
-    conn.close()
+    with _WRITE_LOCK:
+        conn = _connect()
+        try:
+            def _write() -> None:
+                cur = conn.execute("SELECT id FROM conversations WHERE id=?", (conv_id,))
+                if cur.fetchone() is None:
+                    conn.execute(
+                        "INSERT INTO conversations(id, type, title, created_at, updated_at, last_seq) VALUES (?,?,?,?,?,0)",
+                        (conv_id, conv_type or "chat", title or conv_id, _now_iso(), _now_iso()),
+                    )
+                else:
+                    conn.execute("UPDATE conversations SET updated_at=? WHERE id=?", (_now_iso(), conv_id))
+                conn.commit()
+
+            _retry_on_locked(_write)
+        finally:
+            conn.close()
 
 
 def ensure_participant(conv_id: str, user_id: Optional[str] = None, *, role: str = "owner") -> None:
     uid = user_id or _current_user_id()
-    conn = _connect()
-    cur = conn.execute(
-        "SELECT conversation_id FROM participants WHERE conversation_id=? AND user_id=?",
-        (conv_id, uid),
-    )
-    if cur.fetchone() is None:
-        conn.execute(
-            """
-            INSERT INTO participants(conversation_id, user_id, role, joined_at, last_read_seq, last_read_at)
-            VALUES (?,?,?,?,0,?)
-            """,
-            (conv_id, uid, role, _now_iso(), _now_iso()),
-        )
-        conn.commit()
-    conn.close()
+    with _WRITE_LOCK:
+        conn = _connect()
+        try:
+            def _write() -> None:
+                cur = conn.execute(
+                    "SELECT conversation_id FROM participants WHERE conversation_id=? AND user_id=?",
+                    (conv_id, uid),
+                )
+                if cur.fetchone() is None:
+                    conn.execute(
+                        """
+                        INSERT INTO participants(conversation_id, user_id, role, joined_at, last_read_seq, last_read_at)
+                        VALUES (?,?,?,?,0,?)
+                        """,
+                        (conv_id, uid, role, _now_iso(), _now_iso()),
+                    )
+                    conn.commit()
+
+            _retry_on_locked(_write)
+        finally:
+            conn.close()
 
 
 def _next_seq(conn: sqlite3.Connection, conv_id: str) -> int:
@@ -190,46 +234,59 @@ def append_event(
     """
     ensure_conversation(conv_id)
     ensure_participant(conv_id)
-    conn = _connect()
-    try:
-        seq = _next_seq(conn, conv_id)
-        conn.execute(
-            """
-            INSERT OR IGNORE INTO events(id, conversation_id, seq, type, actor_id, created_at, data)
-            VALUES (?,?,?,?,?,?,?)
-            """,
-            (event_id, conv_id, seq, type, actor_id or _current_user_id(), _now_iso(), json.dumps(data, ensure_ascii=False)),
-        )
-        # If duplicate event_id, fetch its seq
-        cur = conn.execute("SELECT conversation_id, seq, type, actor_id, created_at, data FROM events WHERE id=?", (event_id,))
-        row = cur.fetchone()
-        if row is None:
-            # Should not happen; treat as error
-            raise RuntimeError("failed to insert or find event")
-        # If inserted with a previous seq due to duplicate id, keep consistency
-        seq = int(row[1])
-        _bump_seq(conn, conv_id, max(seq, _next_seq(conn, conv_id) - 1))
-        # Materialize if message.*
-        etype = str(row[2])
-        edata = json.loads(row[5] or "{}")
-        if etype == "message.created":
-            _materialize_message_created(conn, conv_id, seq, row[3], edata)
-        elif etype == "message.edited":
-            _materialize_message_edited(conn, edata)
-        elif etype == "message.recalled":
-            _materialize_message_recalled(conn, edata)
-        conn.commit()
-        return seq, {
-            "id": event_id,
-            "conversation_id": conv_id,
-            "seq": seq,
-            "type": etype,
-            "actor_id": row[3],
-            "created_at": row[4],
-            "data": edata,
-        }
-    finally:
-        conn.close()
+    with _WRITE_LOCK:
+        conn = _connect()
+        try:
+            def _write() -> Tuple[int, Dict[str, Any]]:
+                # Attempt insert with retry on seq conflict due to concurrency
+                row = None
+                for i in range(10):
+                    seq = _next_seq(conn, conv_id)
+                    conn.execute(
+                        """
+                        INSERT OR IGNORE INTO events(id, conversation_id, seq, type, actor_id, created_at, data)
+                        VALUES (?,?,?,?,?,?,?)
+                        """,
+                        (event_id, conv_id, seq, type, actor_id or _current_user_id(), _now_iso(), json.dumps(data, ensure_ascii=False)),
+                    )
+                    # If duplicate event_id or successful insert, row will exist
+                    cur = conn.execute(
+                        "SELECT conversation_id, seq, type, actor_id, created_at, data FROM events WHERE id=?",
+                        (event_id,),
+                    )
+                    row = cur.fetchone()
+                    if row is not None:
+                        break
+                    # row is None -> likely seq conflict on UNIQUE(conversation_id, seq). Backoff and retry.
+                    time.sleep(0.01 * (2 ** i))
+                if row is None:
+                    raise RuntimeError("failed to insert or find event after retries")
+                # If inserted with a previous seq due to duplicate id, keep consistency on conversations.last_seq
+                seq2 = int(row[1])
+                _bump_seq(conn, conv_id, max(seq2, _next_seq(conn, conv_id) - 1))
+                # Materialize if message.*
+                etype = str(row[2])
+                edata = json.loads(row[5] or "{}")
+                if etype == "message.created":
+                    _materialize_message_created(conn, conv_id, seq2, row[3], edata)
+                elif etype == "message.edited":
+                    _materialize_message_edited(conn, edata)
+                elif etype == "message.recalled":
+                    _materialize_message_recalled(conn, edata)
+                conn.commit()
+                return seq2, {
+                    "id": event_id,
+                    "conversation_id": conv_id,
+                    "seq": seq2,
+                    "type": etype,
+                    "actor_id": row[3],
+                    "created_at": row[4],
+                    "data": edata,
+                }
+
+            return _retry_on_locked(_write)
+        finally:
+            conn.close()
 
 
 def _materialize_message_created(conn: sqlite3.Connection, conv_id: str, seq: int, author_id: str, data: Dict[str, Any]) -> None:
@@ -355,15 +412,19 @@ def append_text_message(conv_id: str, *, author_id: Optional[str], content: str,
 
 def update_read(conv_id: str, user_id: Optional[str], last_read_seq: int) -> None:
     uid = user_id or _current_user_id()
-    conn = _connect()
-    try:
-        conn.execute(
-            "UPDATE participants SET last_read_seq=?, last_read_at=? WHERE conversation_id=? AND user_id=?",
-            (int(last_read_seq), _now_iso(), conv_id, uid),
-        )
-        conn.commit()
-    finally:
-        conn.close()
+    with _WRITE_LOCK:
+        conn = _connect()
+        try:
+            def _write() -> None:
+                conn.execute(
+                    "UPDATE participants SET last_read_seq=?, last_read_at=? WHERE conversation_id=? AND user_id=?",
+                    (int(last_read_seq), _now_iso(), conv_id, uid),
+                )
+                conn.commit()
+
+            _retry_on_locked(_write)
+        finally:
+            conn.close()
 
 
 def list_events_after(conv_id: str, after_seq: int, limit: int = 100) -> List[Dict[str, Any]]:

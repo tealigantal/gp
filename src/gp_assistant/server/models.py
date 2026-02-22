@@ -8,12 +8,14 @@ from pydantic import BaseModel, ConfigDict, Field
 class ChatReq(BaseModel):
     session_id: Optional[str] = None
     message: str
+    message_id: Optional[str] = None
 
 
 class ChatResp(BaseModel):
     session_id: Optional[str] = None
     reply: str
     tool_trace: Dict[str, Any] = Field(default_factory=dict)
+    assistant_message_id: Optional[str] = None
 
 
 class RecommendReq(BaseModel):

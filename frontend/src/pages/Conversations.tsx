@@ -37,8 +37,9 @@ export default function Conversations() {
     try {
       await deleteConversation(cid)
       message.success('已删除会话')
-      // 立刻从列表移除
+      // 立刻从列表与本地状态移除
       setItems((prev) => prev.filter((x) => x.id !== cid))
+      syncManager.removeConversation(cid)
       // 触发一次同步以刷新 meta
       await syncManager.flush()
     } catch (e: any) {
@@ -56,9 +57,10 @@ export default function Conversations() {
     try {
       await cleanupConversations('all')
       message.success('已清理所有会话')
+      // 清空本地状态并通知订阅者，界面自动刷新
       setItems([])
-      // 同时清理本地缓存
-      ;['gp_session_id','gp_sync_cursors','gp_sync_outbox','gp_sync_last_read'].forEach((k)=>localStorage.removeItem(k))
+      syncManager.resetAll()
+      ;['gp_session_id'].forEach((k)=>localStorage.removeItem(k))
       await syncManager.flush()
     } catch (e: any) {
       message.error(e?.message || '清理失败')

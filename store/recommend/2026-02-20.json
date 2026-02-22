@@ -17185,7 +17185,7 @@
       "fallback_reason": null,
       "stale": false,
       "missing": false,
-      "elapsed_sec": 64.06,
+      "elapsed_sec": 68.25,
       "cache_age_sec": null,
       "skipped_routes": [],
       "attempts": [
@@ -17217,35 +17217,13 @@
           ]
         },
         {
-          "symbol": "300058",
+          "symbol": "002131",
           "src": "akshare:sina",
           "attempts": [
             {
               "route": "sina",
               "ok": true,
-              "rows": 3674
-            }
-          ]
-        },
-        {
-          "symbol": "300251",
-          "src": "akshare:sina",
-          "attempts": [
-            {
-              "route": "sina",
-              "ok": true,
-              "rows": 3415
-            }
-          ]
-        },
-        {
-          "symbol": "601899",
-          "src": "akshare:sina",
-          "attempts": [
-            {
-              "route": "sina",
-              "ok": true,
-              "rows": 4286
+              "rows": 4207
             }
           ]
         },
@@ -17272,6 +17250,28 @@
           ]
         },
         {
+          "symbol": "300251",
+          "src": "akshare:sina",
+          "attempts": [
+            {
+              "route": "sina",
+              "ok": true,
+              "rows": 3415
+            }
+          ]
+        },
+        {
+          "symbol": "300058",
+          "src": "akshare:sina",
+          "attempts": [
+            {
+              "route": "sina",
+              "ok": true,
+              "rows": 3674
+            }
+          ]
+        },
+        {
           "symbol": "600589",
           "src": "akshare:sina",
           "attempts": [
@@ -17283,13 +17283,13 @@
           ]
         },
         {
-          "symbol": "002131",
+          "symbol": "601899",
           "src": "akshare:sina",
           "attempts": [
             {
               "route": "sina",
               "ok": true,
-              "rows": 4207
+              "rows": 4286
             }
           ]
         },
@@ -17305,17 +17305,6 @@
           ]
         },
         {
-          "symbol": "002837",
-          "src": "akshare:sina",
-          "attempts": [
-            {
-              "route": "sina",
-              "ok": true,
-              "rows": 2142
-            }
-          ]
-        },
-        {
           "symbol": "300750",
           "src": "akshare:sina",
           "attempts": [
@@ -17323,50 +17312,6 @@
               "route": "sina",
               "ok": true,
               "rows": 1867
-            }
-          ]
-        },
-        {
-          "symbol": "300274",
-          "src": "akshare:sina",
-          "attempts": [
-            {
-              "route": "sina",
-              "ok": true,
-              "rows": 3445
-            }
-          ]
-        },
-        {
-          "symbol": "300418",
-          "src": "akshare:sina",
-          "attempts": [
-            {
-              "route": "sina",
-              "ok": true,
-              "rows": 2621
-            }
-          ]
-        },
-        {
-          "symbol": "002050",
-          "src": "akshare:sina",
-          "attempts": [
-            {
-              "route": "sina",
-              "ok": true,
-              "rows": 4805
-            }
-          ]
-        },
-        {
-          "symbol": "000021",
-          "src": "akshare:sina",
-          "attempts": [
-            {
-              "route": "sina",
-              "ok": true,
-              "rows": 7668
             }
           ]
         },
@@ -17382,57 +17327,57 @@
           ]
         },
         {
-          "symbol": "002475",
+          "symbol": "002837",
           "src": "akshare:sina",
           "attempts": [
             {
               "route": "sina",
               "ok": true,
-              "rows": 3716
+              "rows": 2142
             }
           ]
         },
         {
-          "symbol": "603993",
+          "symbol": "000021",
           "src": "akshare:sina",
           "attempts": [
             {
               "route": "sina",
               "ok": true,
-              "rows": 3225
+              "rows": 7668
             }
           ]
         },
         {
-          "symbol": "600487",
+          "symbol": "300274",
           "src": "akshare:sina",
           "attempts": [
             {
               "route": "sina",
               "ok": true,
-              "rows": 5282
+              "rows": 3445
             }
           ]
         },
         {
-          "symbol": "300364",
+          "symbol": "002050",
           "src": "akshare:sina",
           "attempts": [
             {
               "route": "sina",
               "ok": true,
-              "rows": 2531
+              "rows": 4805
             }
           ]
         },
         {
-          "symbol": "600089",
+          "symbol": "300418",
           "src": "akshare:sina",
           "attempts": [
             {
               "route": "sina",
               "ok": true,
-              "rows": 6763
+              "rows": 2621
             }
           ]
         },
@@ -17448,6 +17393,28 @@
           ]
         },
         {
+          "symbol": "300364",
+          "src": "akshare:sina",
+          "attempts": [
+            {
+              "route": "sina",
+              "ok": true,
+              "rows": 2531
+            }
+          ]
+        },
+        {
+          "symbol": "603993",
+          "src": "akshare:sina",
+          "attempts": [
+            {
+              "route": "sina",
+              "ok": true,
+              "rows": 3225
+            }
+          ]
+        },
+        {
           "symbol": "600410",
           "src": "akshare:sina",
           "attempts": [
@@ -17459,13 +17426,24 @@
           ]
         },
         {
-          "symbol": "688521",
+          "symbol": "600487",
           "src": "akshare:sina",
           "attempts": [
             {
               "route": "sina",
               "ok": true,
-              "rows": 1324
+              "rows": 5282
+            }
+          ]
+        },
+        {
+          "symbol": "600089",
+          "src": "akshare:sina",
+          "attempts": [
+            {
+              "route": "sina",
+              "ok": true,
+              "rows": 6763
             }
           ]
         },
@@ -17481,13 +17459,13 @@
           ]
         },
         {
-          "symbol": "601318",
+          "symbol": "688521",
           "src": "akshare:sina",
           "attempts": [
             {
               "route": "sina",
               "ok": true,
-              "rows": 4546
+              "rows": 1324
             }
           ]
         },
@@ -17514,24 +17492,46 @@
           ]
         },
         {
-          "symbol": "002506",
+          "symbol": "002475",
           "src": "akshare:sina",
           "attempts": [
             {
               "route": "sina",
               "ok": true,
-              "rows": 3295
+              "rows": 3716
             }
           ]
         },
         {
-          "symbol": "688008",
+          "symbol": "300548",
           "src": "akshare:sina",
           "attempts": [
             {
               "route": "sina",
               "ok": true,
-              "rows": 1596
+              "rows": 2270
+            }
+          ]
+        },
+        {
+          "symbol": "601318",
+          "src": "akshare:sina",
+          "attempts": [
+            {
+              "route": "sina",
+              "ok": true,
+              "rows": 4546
+            }
+          ]
+        },
+        {
+          "symbol": "000547",
+          "src": "akshare:sina",
+          "attempts": [
+            {
+              "route": "sina",
+              "ok": true,
+              "rows": 7312
             }
           ]
         }

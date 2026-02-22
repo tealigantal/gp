@@ -18,9 +18,8 @@ export default function MessageBubble({ role, content }: { role: 'user' | 'assis
           boxShadow: '0 1px 2px rgba(0,0,0,0.06)'
         }}
       >
-        <Typography.Text style={{ color: isUser ? '#fff' : 'inherit' }}>{content}</Typography.Text>
+        <Typography.Text style={{ color: isUser ? '#fff' : 'inherit', fontSize: 15, lineHeight: 1.7 }}>{content}</Typography.Text>
       </div>
     </div>
   )
 }
-

@@ -12,6 +12,7 @@ from typing import Any, Dict, List, Optional
 from ..core.config import load_config
 from ..core.paths import store_dir
 from . import event_store
+import time
 
 
 def _db_path() -> Path:
@@ -21,7 +22,14 @@ def _db_path() -> Path:
 
 
 def _connect() -> sqlite3.Connection:
-    conn = sqlite3.connect(str(_db_path()))
+    # Align SQLite pragmas with event_store to mitigate 'database is locked'
+    conn = sqlite3.connect(str(_db_path()), timeout=15.0)
+    try:
+        conn.execute("PRAGMA journal_mode=WAL")
+        conn.execute("PRAGMA synchronous=NORMAL")
+        conn.execute("PRAGMA busy_timeout=10000")  # 10s
+    except Exception:
+        pass
     conn.execute(
         """
         CREATE TABLE IF NOT EXISTS messages(
@@ -60,14 +68,25 @@ def _now_iso() -> str:
 def ensure_session(session_id: Optional[str] = None) -> str:
     sid = session_id or datetime.utcnow().strftime("sess-%Y%m%d%H%M%S%f")
     conn = _connect()
-    cur = conn.execute("SELECT session_id FROM sessions WHERE session_id=?", (sid,))
-    if cur.fetchone() is None:
-        conn.execute(
-            "INSERT INTO sessions(session_id, created_at, last_recommend_json) VALUES (?,?,?)",
-            (sid, _now_iso(), None),
-        )
-        conn.commit()
-    conn.close()
+    try:
+        # Retry small loop for locked
+        for i in range(6):
+            try:
+                cur = conn.execute("SELECT session_id FROM sessions WHERE session_id=?", (sid,))
+                if cur.fetchone() is None:
+                    conn.execute(
+                        "INSERT INTO sessions(session_id, created_at, last_recommend_json) VALUES (?,?,?)",
+                        (sid, _now_iso(), None),
+                    )
+                    conn.commit()
+                break
+            except sqlite3.OperationalError as e:
+                if "locked" in str(e).lower() or "busy" in str(e).lower():
+                    time.sleep(0.05 * (2 ** i))
+                    continue
+                raise
+    finally:
+        conn.close()
     # Also ensure conversation and participant in event store
     try:
         event_store.ensure_conversation(sid, title=sid, conv_type="chat")
@@ -78,21 +97,35 @@ def ensure_session(session_id: Optional[str] = None) -> str:
     return sid
 
 
-def append_message(session_id: str, role: str, content: str) -> None:
+def append_message(session_id: str, role: str, content: str, message_id: Optional[str] = None, *, require_event: bool = False) -> Optional[str]:
     conn = _connect()
-    conn.execute(
-        "INSERT INTO messages(session_id, role, content, ts) VALUES (?,?,?,?)",
-        (session_id, role, content, _now_iso()),
-    )
-    conn.commit()
-    conn.close()
-    # Mirror into Event Log (best-effort)
+    try:
+        for i in range(6):
+            try:
+                conn.execute(
+                    "INSERT INTO messages(session_id, role, content, ts) VALUES (?,?,?,?)",
+                    (session_id, role, content, _now_iso()),
+                )
+                conn.commit()
+                break
+            except sqlite3.OperationalError as e:
+                if "locked" in str(e).lower() or "busy" in str(e).lower():
+                    import time as _t
+                    _t.sleep(0.05 * (2 ** i))
+                    continue
+                raise
+    finally:
+        conn.close()
+    # Mirror into Event Log (best-effort); return the event id if available
     try:
         author_id = role or "user"
-        event_store.append_text_message(session_id, author_id=author_id, content=content)
-    except Exception:
-        # keep silent to avoid breaking legacy path
-        pass
+        _, ev = event_store.append_text_message(session_id, author_id=author_id, content=content, message_id=message_id)
+        return str(ev.get("id"))
+    except Exception as e:  # noqa: BLE001
+        if require_event:
+            # Fail fast to keep backend as single source of truth
+            raise
+        return message_id
 
 
 def load_history(session_id: str, limit: int = 50) -> List[Dict[str, Any]]:
@@ -108,12 +141,23 @@ def load_history(session_id: str, limit: int = 50) -> List[Dict[str, Any]]:
 
 def save_last_recommend(session_id: str, obj: Dict[str, Any]) -> None:
     conn = _connect()
-    conn.execute(
-        "UPDATE sessions SET last_recommend_json=? WHERE session_id=?",
-        (json.dumps(obj, ensure_ascii=False), session_id),
-    )
-    conn.commit()
-    conn.close()
+    try:
+        for i in range(6):
+            try:
+                conn.execute(
+                    "UPDATE sessions SET last_recommend_json=? WHERE session_id=?",
+                    (json.dumps(obj, ensure_ascii=False), session_id),
+                )
+                conn.commit()
+                break
+            except sqlite3.OperationalError as e:
+                if "locked" in str(e).lower() or "busy" in str(e).lower():
+                    import time as _t
+                    _t.sleep(0.05 * (2 ** i))
+                    continue
+                raise
+    finally:
+        conn.close()
 
 
 def load_last_recommend(session_id: str) -> Optional[Dict[str, Any]]:

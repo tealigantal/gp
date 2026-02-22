@@ -9,7 +9,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const loc = useLocation()
   const selected = useMemo(() => [
     loc.pathname.startsWith('/chat') ? 'chat' :
-    loc.pathname.startsWith('/recommend') ? 'recommend' :
     loc.pathname.startsWith('/search') ? 'search' :
     loc.pathname.startsWith('/health') ? 'health' : 'convs'
   ], [loc.pathname])
@@ -29,7 +28,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             items={[
               { key: 'convs', label: <Link to="/">会话</Link> },
               { key: 'chat', label: <Link to="/chat">对话</Link> },
-              { key: 'recommend', label: <Link to="/recommend">推荐</Link> },
               { key: 'search', label: <Link to="/search">搜索</Link> },
               { key: 'health', label: <Link to="/health">健康</Link> }
             ]}
@@ -37,7 +35,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           />
         </Header>
         <Content style={{ padding: '16px 24px' }}>
-          <div style={{ background: token.colorBgContainer, padding: 24, minHeight: 360 }}>
+          <div style={{ background: token.colorBgContainer, padding: 24, minHeight: 360, maxWidth: 1280, margin: '0 auto', fontSize: 15, lineHeight: 1.7 }}>
             {children}
           </div>
         </Content>
@@ -46,4 +44,3 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     </ConfigProvider>
   )
 }
-

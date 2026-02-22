@@ -7,12 +7,14 @@ export type ToolTrace = {
 export type ChatReq = {
   session_id?: string | null
   message: string
+  message_id?: string
 }
 
 export type ChatResp = {
   session_id?: string
   reply: string
   tool_trace: ToolTrace
+  assistant_message_id?: string
 }
 
 export type RecommendReq = {

@@ -9,7 +9,7 @@ from .chat.orchestrator import handle_message
 
 def _chat_once(message: str, session_id: str | None = None) -> int:
     try:
-        out = handle_message(session_id, message)
+        out = handle_message(session_id, message, None)
         print(json.dumps(out, ensure_ascii=True))
         return 0
     except Exception as e:  # noqa: BLE001
@@ -25,7 +25,7 @@ def _chat_repl() -> int:
             line = input("you> ").strip()
             if not line or line in {"/q", "/quit", ":q"}:
                 break
-            out = handle_message(sid, line)
+            out = handle_message(sid, line, None)
             sid = out.get("session_id", sid)
             reply = out.get("reply", "")
             print(f"agent> {reply}")

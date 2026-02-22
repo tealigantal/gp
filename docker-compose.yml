@@ -9,8 +9,8 @@ services:
       - ./data:/app/data
       - ./results:/app/results
       - ./universe:/app/universe
-      - ./store:/app/store
-      - ./cache:/app/cache
+      - gp_store:/app/store
+      - gp_cache:/app/cache
       - ./configs:/app/configs
 
     command: ["uvicorn","gp_assistant.server.app:app","--host","0.0.0.0","--port","8000"]
@@ -50,3 +50,7 @@ services:
       - gp
     ports:
       - "8080:80"
+
+volumes:
+  gp_store: {}
+  gp_cache: {}

@@ -96,12 +96,13 @@ def _compact_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def _handle_chat(req: ChatReq) -> ChatResp:
-    data = handle_message(req.session_id, req.message)
+    data = handle_message(req.session_id, req.message, getattr(req, "message_id", None))
     # Pack into ChatResp
     return ChatResp(
         session_id=data.get("session_id"),
         reply=str(data.get("reply", "")),
         tool_trace=data.get("tool_trace", {}),
+        assistant_message_id=data.get("assistant_message_id"),
     )
 
 
@@ -238,10 +239,20 @@ def api_get_recommend_by_date(date: str) -> Dict[str, Any]:
 @api.post("/sync", response_model=SyncResp)
 def api_post_sync(req: SyncReq) -> SyncResp:  # type: ignore[return-value]
     ack: Dict[str, str] = {}
+    # Pre-ensure conversations minimally once per conv to reduce contention
+    try:
+        conv_ids = {ev.conversation_id for ev in req.outbox_events}
+        for cid in conv_ids:
+            try:
+                event_store.ensure_conversation(cid)
+                event_store.ensure_participant(cid)
+            except Exception:
+                pass
+    except Exception:
+        pass
+
     for ev in req.outbox_events:
         try:
-            event_store.ensure_conversation(ev.conversation_id)
-            event_store.ensure_participant(ev.conversation_id)
             seq, _ = event_store.append_event(
                 ev.conversation_id,
                 event_id=ev.id,
@@ -382,3 +393,6 @@ def api_post_attachments_sign(payload: Dict[str, Any]) -> Dict[str, Any]:
         }
     except Exception as e:  # noqa: BLE001
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# (temporary selftest endpoint removed)

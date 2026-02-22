@@ -1,32 +1,26 @@
 # 简介：应用配置中心。读取环境变量，提供数据源偏好、默认标的集合、
 # LLM/时区/超时等参数，供各模块统一访问。
+# src/gp_assistant/core/config.py
 from __future__ import annotations
 
 import os
+import zoneinfo
 from dataclasses import dataclass, field
 from typing import List, Optional
-import zoneinfo
 
 from .paths import configs_dir
 
 
-def _parse_priority_env(name: str, default: str, *, allow: list[str]) -> List[str]:
-    """Parse comma-separated priority from env with filtering and normalization.
+def _truthy(v: str | None) -> bool:
+    if v is None:
+        return False
+    return v.strip().lower() in {"1", "true", "yes", "y", "on"}
 
-    Returns a list of lowercased route keys limited to `allow` while preserving order.
-    """
-    val = os.getenv(name, default)
-    items = [x.strip().lower() for x in (val or "").split(",") if x and x.strip()]
-    # keep only allowed and stable order (first occurrence wins)
-    seen: set[str] = set()
-    out: List[str] = []
-    for it in items:
-        if it in allow and it not in seen:
-            out.append(it)
-            seen.add(it)
-    if not out:
-        out = [x for x in default.split(",") if x in allow]
-    return out
+
+def _split_csv(v: str | None) -> List[str]:
+    if not v:
+        return []
+    return [x.strip() for x in v.split(",") if x.strip()]
 
 
 @dataclass
@@ -38,60 +32,79 @@ class ProviderConfig:
 @dataclass
 class AppConfig:
     provider: ProviderConfig = field(default_factory=ProviderConfig)
+
+    # ---- Run mode / developer mode ----
+    run_mode: str = os.getenv("GP_RUN_MODE", "prod").lower()  # prod|dev
+    dev_mode: bool = _truthy(os.getenv("GP_DEV_MODE", "0"))
+    recommend_mode: str = os.getenv("GP_RECOMMEND_MODE", "").lower()  # empty => auto
+    dev_symbols: List[str] = field(default_factory=lambda: ["000001", "000333", "600519"])
+    dev_ohlcv_len: int = int(os.getenv("GP_DEV_OHLCV_LEN", "90"))
+
+    # ---- Defaults ----
     default_universe: List[str] = field(
         default_factory=lambda: ["000001", "000002", "000333", "600519"]
     )
-    # Additional knobs (extendable):
+
+    # Additional knobs
     request_timeout_sec: int = int(os.getenv("GP_REQUEST_TIMEOUT_SEC", "20"))
+
     # Data defaults
     default_volume_unit: str = os.getenv("GP_DEFAULT_VOLUME_UNIT", "share").lower()
+
     # Timezone
     timezone: str = os.getenv("TZ", "Asia/Shanghai")
+
     # LLM
     llm_base_url: Optional[str] = os.getenv("LLM_BASE_URL")
     llm_api_key: Optional[str] = os.getenv("LLM_API_KEY")
     chat_model: str = os.getenv("CHAT_MODEL", "deepseek-chat")
-    # Strict real data only (no synthetic/degrade). Default ON per user requirement
-    strict_real_data: bool = os.getenv("STRICT_REAL_DATA", "1").lower() in {"1", "true", "yes"}
-    # AkShare multi-route priorities
-    ak_daily_priority: List[str] = field(
-        default_factory=lambda: _parse_priority_env(
-            "AK_DAILY_PRIORITY", "sina,em,tx", allow=["tx", "sina", "em"]
-        )
-    )
-    ak_spot_priority: List[str] = field(
-        default_factory=lambda: _parse_priority_env(
-            "AK_SPOT_PRIORITY", "em,sina", allow=["sina", "em"]
-        )
-    )
+
+    # Strict real data only (no synthetic/degrade).
+    # Default ON per user requirement
+    strict_real_data: bool = _truthy(os.getenv("STRICT_REAL_DATA", "1"))
+
     # Universe/dynamic pool knobs
     min_avg_amount: float = float(os.getenv("GP_MIN_AVG_AMOUNT", "5e8"))
     new_stock_days: int = int(os.getenv("GP_NEW_STOCK_DAYS", "60"))
     price_min: float = float(os.getenv("GP_PRICE_MIN", "2"))
     price_max: float = float(os.getenv("GP_PRICE_MAX", "500"))
     dynamic_pool_size: int = int(os.getenv("GP_DYNAMIC_POOL_SIZE", "200"))
+
     # Mainline restriction
-    restrict_to_mainline: bool = os.getenv("GP_RESTRICT_MAINLINE", "1").lower() in {"1", "true", "yes"}
+    restrict_to_mainline: bool = _truthy(os.getenv("GP_RESTRICT_MAINLINE", "1"))
     mainline_top_n: int = int(os.getenv("GP_MAINLINE_TOP_N", "2"))
     mainline_mode: str = os.getenv("GP_MAINLINE_MODE", "auto")  # industry|concept|auto
+
     # Diversification
     max_per_industry: int = int(os.getenv("GP_MAX_PER_INDUSTRY", "2"))
-    # Tradeable thresholds (hard conditions for live validation)
+
+    # Tradeable thresholds
     tradeable_min_universe: int = int(os.getenv("GP_TRADEABLE_MIN_UNIVERSE", "50"))
     tradeable_min_candidates: int = int(os.getenv("GP_TRADEABLE_MIN_CANDIDATES", "20"))
-    # Parallelism for candidate generation (0 -> auto)
-    parallel_workers: int = int(os.getenv("GP_PARALLEL", "0") or 0)
 
 
 def load_config() -> AppConfig:
-    # Keep simple: env only for now; yaml hook reserved here if needed later.
-    # If a configs/gp.yaml exists, we could merge, but per requirements avoid
-    # spreading defaults; keep single point here.
     _ = configs_dir()  # ensure exists
+
     cfg = AppConfig()
+
+    # derive dev_mode from run_mode
+    if cfg.run_mode in {"dev", "development"}:
+        cfg.dev_mode = True
+
+    # dev symbols override
+    env_syms = _split_csv(os.getenv("GP_DEV_SYMBOLS"))
+    if env_syms:
+        cfg.dev_symbols = env_syms
+
+    # default recommend_mode
+    if not cfg.recommend_mode:
+        cfg.recommend_mode = "dev" if cfg.dev_mode else "default"
+
     # Validate timezone
     try:
         _ = zoneinfo.ZoneInfo(cfg.timezone)
     except Exception:
         cfg.timezone = "Asia/Shanghai"
+
     return cfg

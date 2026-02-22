@@ -13,9 +13,9 @@ from . import session_store as store
 from . import event_store
 
 
-def handle_message(session_id: Optional[str], message: str) -> Dict[str, Any]:
+def handle_message(session_id: Optional[str], message: str, message_id: Optional[str] = None) -> Dict[str, Any]:
     sid = store.ensure_session(session_id)
-    store.append_message(sid, "user", message)
+    store.append_message(sid, "user", message, message_id=message_id)
     intent = detect_intent(message)
     tool_trace = {"triggered_recommend": False, "recommend_result": None}
     reply = ""
@@ -72,5 +72,5 @@ def handle_message(session_id: Optional[str], message: str) -> Dict[str, Any]:
             if last:
                 extra = render_recommendation_narrative(last)
                 reply += "\n\n【基于上次推荐的说明】\n" + extra
-    store.append_message(sid, "assistant", reply)
-    return {"session_id": sid, "reply": reply, "tool_trace": tool_trace}
+    assistant_mid = store.append_message(sid, "assistant", reply, require_event=True)
+    return {"session_id": sid, "reply": reply, "tool_trace": tool_trace, "assistant_message_id": assistant_mid}
