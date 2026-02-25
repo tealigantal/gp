@@ -4,14 +4,11 @@ from typing import Any, Dict, List, Optional
 
 import pandas as pd
 
+from .chg_normalize import detect_chg_col, normalize_chg_pct
+
 
 def _detect_chg_col(cols) -> Optional[str]:
-    names = ["涨跌幅", "涨跌幅(%)", "pct_chg", "涨跌", "changePct"]
-    s = set(map(str, cols))
-    for n in names:
-        if n in s:
-            return n
-    return None
+    return detect_chg_col(cols)
 
 
 def build_mover_hints(snapshot: Optional[pd.DataFrame], topn: int = 3) -> List[Dict[str, Any]]:
@@ -21,10 +18,7 @@ def build_mover_hints(snapshot: Optional[pd.DataFrame], topn: int = 3) -> List[D
     chg_col = _detect_chg_col(df.columns)
     if not chg_col:
         return []
-    try:
-        df["chg"] = pd.to_numeric(df[chg_col].astype(str).str.rstrip("% ％"), errors="coerce")
-    except Exception:
-        df["chg"] = pd.to_numeric(df[chg_col], errors="coerce")
+    df["chg"], ev_scale = normalize_chg_pct(df, chg_col)
     code_col = "代码" if "代码" in df.columns else ("code" if "code" in df.columns else None)
     if not code_col:
         return []
@@ -32,9 +26,15 @@ def build_mover_hints(snapshot: Optional[pd.DataFrame], topn: int = 3) -> List[D
     out: List[Dict[str, Any]] = []
     for _, r in df2.iterrows():
         try:
-            strength = f"{float(r.get('chg')):.2f}%"
+            chg_num = float(r.get('chg'))
         except Exception:
-            strength = ""
-        out.append({"symbol": r.get(code_col), "chg": strength, "source": "snapshot"})
+            chg_num = float('nan')
+        chg_txt = (f"{chg_num:.2f}%" if pd.notna(chg_num) else "")
+        out.append({
+            "symbol": r.get(code_col),
+            "chg": chg_txt,
+            "chg_num": (chg_num if pd.notna(chg_num) else None),
+            "source": "snapshot",
+            "evidence": list(ev_scale),
+        })
     return out
-

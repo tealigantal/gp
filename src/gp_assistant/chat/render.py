@@ -164,3 +164,11 @@ def render_recommendation_narrative(obj: Dict[str, Any]) -> str:
         return txt
     except Exception as e:  # noqa: BLE001
         return f"[narrative_unavailable] LLM 错误：{e}\n\n" + base_text
+
+# --- override with strict, provenance-first implementation without rewriting the file ---
+try:
+    from . import render_impl as _render_impl
+
+    render_recommendation_narrative = _render_impl.render_recommendation_narrative  # type: ignore[assignment]
+except Exception:
+    pass

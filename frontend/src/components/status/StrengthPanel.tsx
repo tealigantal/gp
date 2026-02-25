@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react'
-import { Card, List, Tag } from 'antd'
+import { Card, List, Tag, Tooltip } from 'antd'
 import { syncManager } from '../../sync/SyncManager'
 
 export default function StrengthPanel({ conversationId }: { conversationId?: string | null }) {
@@ -25,7 +25,11 @@ export default function StrengthPanel({ conversationId }: { conversationId?: str
       const e: any = evs[i]
       if (e?.data?.kind === 'card' && e?.data?.payload?.type === 'recommendation') {
         const mh = e?.data?.payload?.meta?.mover_hints
-        if (Array.isArray(mh)) return mh
+        if (Array.isArray(mh)) {
+          const arr = [...mh]
+          arr.sort((a: any, b: any) => (Number.isFinite(b?.chg_num) ? b.chg_num : -Infinity) - (Number.isFinite(a?.chg_num) ? a.chg_num : -Infinity))
+          return arr
+        }
       }
     }
     return [] as any[]
@@ -51,6 +55,9 @@ export default function StrengthPanel({ conversationId }: { conversationId?: str
               <span>{h?.symbol || '-'}</span>
               {h?.chg ? <Tag color="green" style={{ marginLeft: 8 }}>{h.chg}</Tag> : <Tag style={{ marginLeft: 8 }}>N/A</Tag>}
               {h?.source && <Tag style={{ marginLeft: 8 }}>{h.source}</Tag>}
+              {Array.isArray(h?.evidence) && h.evidence.length > 0 && (
+                <Tooltip title={h.evidence.join(', ')}><Tag style={{ marginLeft: 8 }}>evidence</Tag></Tooltip>
+              )}
             </List.Item>
           )} />
         )}

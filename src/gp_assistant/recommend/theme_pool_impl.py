@@ -6,15 +6,12 @@ import pandas as pd
 
 from .datahub import MarketDataHub
 from .theme_concept import build_concept_themes
+from .chg_normalize import detect_chg_col, normalize_chg_pct
 
 
 def _detect_chg_col(cols) -> Optional[str]:
-    names = ["涨跌幅", "涨跌幅(%)", "pct_chg", "涨跌", "changePct"]
-    s = set(map(str, cols))
-    for n in names:
-        if n in s:
-            return n
-    return None
+    # kept for backward import compatibility; delegate to chg_normalize
+    return detect_chg_col(cols)
 
 
 def build_themes_impl(hub: MarketDataHub, snapshot: Optional[pd.DataFrame] = None, topn: int = 2) -> List[Dict[str, Any]]:
@@ -29,20 +26,7 @@ def build_themes_impl(hub: MarketDataHub, snapshot: Optional[pd.DataFrame] = Non
         return build_concept_themes(topn=topn, reason="no_chg_col") or []
 
     df = snap.copy()
-    try:
-        df["chg"] = pd.to_numeric(df[chg_col].astype(str).str.rstrip("% ％"), errors="coerce")
-    except Exception:
-        df["chg"] = pd.to_numeric(df[chg_col], errors="coerce")
-    # Heuristic: if values look like decimals (median<1 and max<=1), scale to percent
-    scale_note = False
-    try:
-        med = float(df["chg"].dropna().abs().median()) if len(df) else 0.0
-        mx = float(df["chg"].dropna().abs().max()) if len(df) else 0.0
-        if (med < 1.0) and (mx <= 1.0) and mx > 0:
-            df["chg"] = df["chg"] * 100.0
-            scale_note = True
-    except Exception:
-        pass
+    df["chg"], ev_scale = normalize_chg_pct(df, chg_col)
 
     cols = set(map(str, df.columns))
 
@@ -69,8 +53,7 @@ def build_themes_impl(hub: MarketDataHub, snapshot: Optional[pd.DataFrame] = Non
             except Exception:
                 strength = ""
             ev = [f"样本n={int(r.get('count', 0) or 0)}"]
-            if scale_note:
-                ev.append("scale:x100")
+            ev.extend(ev_scale)
             themes.append({
                 "name": str(r.get("行业")),
                 "strength": strength,

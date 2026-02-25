@@ -124,3 +124,38 @@ def test_orchestrator_writes_card_even_when_picks_empty(monkeypatch):
             found = True
             break
     assert found
+
+
+def test_orchestrator_error_payload_has_data_status(monkeypatch):
+    import os, time
+    base = os.path.abspath("store_test_" + str(int(time.time())) + "_5")
+    os.makedirs(base, exist_ok=True)
+    monkeypatch.setenv("GP_STORE_DIR", base)
+
+    import gp_assistant.chat.orchestrator as orch
+
+    def raise_run(**kwargs: Any):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(orch, "recommend_run", raise_run)
+    data = orch.handle_message(session_id=None, message="推荐一下")
+    assert isinstance(data, dict)
+    from gp_assistant.chat import event_store
+    convs = event_store.list_conversations()
+    assert len(convs) >= 1
+    cid = convs[-1]["id"]
+    evs = event_store.list_events_after(cid, 0, limit=200)
+    found = False
+    for e in evs[::-1]:
+        d = e.get("data") or {}
+        if d.get("kind") == "card" and (d.get("payload") or {}).get("type") == "recommendation":
+            meta = (d.get("payload") or {}).get("meta")
+            assert isinstance(meta, dict)
+            ds = meta.get("data_status")
+            assert isinstance(ds, dict)
+            assert (ds.get("snapshot") or {}).get("ok") is False
+            assert (ds.get("snapshot") or {}).get("error") is not None
+            assert isinstance(meta.get("themes"), list)
+            found = True
+            break
+    assert found

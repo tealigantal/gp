@@ -267,7 +267,10 @@ export default function Chat() {
       if (!themes.length) {
         await replyText('暂无数据（先生成一次推荐）')
       } else {
-        const text = '主题热度：' + themes.slice(0, 10).map((t: any) => `${t?.name || '主题'}${t?.strength != null ? `(${t.strength})` : ''}`).join('、')
+        const text = '主题热度：' + themes.slice(0, 10).map((t: any) => {
+          const s = String(t?.strength || '').trim()
+          return `${t?.name || '主题'}${s ? `(${s})` : ''}`
+        }).join('、')
         await replyText(text)
       }
       return

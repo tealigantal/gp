@@ -1,6 +1,7 @@
 ﻿import React, { useEffect, useState } from 'react'
 import { Card, Input, Button, Space, message, Segmented, Typography } from 'antd'
 import DockPanel from './DockPanel'
+import DataStatusBar from './DataStatusBar'
 import { syncManager } from '../sync/SyncManager'
 import StatusPanel from './status/StatusPanel'
 import StrengthPanel from './status/StrengthPanel'
@@ -46,6 +47,7 @@ export default function ToolsPanel({
 
   return (
     <div>
+      <DataStatusBar />
       <Card size="small" title="快速K线" style={{ marginBottom: 12 }}>
         <Space.Compact style={{ width: '100%' }}>
           <Input value={symbol} onChange={(e) => setSymbol(e.target.value)} placeholder="输入代码后回车" onPressEnter={() => showKline()} />

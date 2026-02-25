@@ -69,8 +69,14 @@ def handle_message(session_id: Optional[str], message: str, message_id: Optional
                 err_payload = {
                     "as_of": datetime.utcnow().strftime("%Y-%m-%d"),
                     "themes": [],
+                    "mover_hints": [],
                     "message": f"recommend_error: {e}",
                     "debug": {"degraded": True, "degrade_reasons": [{"reason_code": "RECOMMEND_ERROR", "detail": {"message": str(e)}}]},
+                    "data_status": {
+                        "snapshot": {"ok": False, "source": None, "rows": 0, "elapsed_sec": None, "cache": "none", "as_of_ts": None, "error": "RECOMMEND_ERROR"},
+                        "themes": {"ok": False, "source": None, "attempted": [], "error": "RECOMMEND_ERROR", "as_of_ts": None},
+                        "daily": {"ok": False, "symbols_ok": 0, "symbols_fail": 0, "error_summary": "RECOMMEND_ERROR"},
+                    },
                 }
                 meta = compact_recommend_meta(err_payload)
                 if not isinstance(meta.get("themes"), list):

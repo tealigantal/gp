@@ -5,9 +5,12 @@ def test_industry_strength_handles_nan_and_scales_decimal():
     from gp_assistant.recommend.theme_pool_impl import build_themes_impl
 
     # snapshot with industry and decimal change (0.01 -> 1%) and NaN rows
+    # include evidence columns to infer scaling (implied ~100x)
     snap = pd.DataFrame({
         "代码": ["a", "b", "c", "d"],
         "行业": ["X", "X", "Y", "Y"],
+        "涨跌额": [0.1, None, 0.2, 0.0],
+        "最新价": [10.0, 10.0, 10.0, 10.0],
         "涨跌幅": [0.01, None, 0.02, 0.0],
         "成交额": [1e7, 2e7, 1e7, 1e7],
     })
@@ -17,6 +20,5 @@ def test_industry_strength_handles_nan_and_scales_decimal():
     # strength should be percentages and not 'nan%'
     for t in themes:
         assert t["strength"].endswith('%') and 'nan' not in t["strength"].lower()
-    # evidence includes scaling note if applied
-    assert any('scale' in (t.get('evidence') or [''])[0] or any('scale' in s for s in (t.get('evidence') or [])) for t in themes)
-
+    # evidence includes implied scaling when applied
+    assert any(any('scale:implied_pct_ratio~100' in s for s in (t.get('evidence') or [])) for t in themes)
