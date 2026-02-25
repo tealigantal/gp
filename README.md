@@ -12,8 +12,17 @@
   - `docker compose up -d --build`
 
 - 打开页面
-  - 前端：`http://localhost:8080`（首页是“会话”，顶部有“对话/搜索/推荐/健康”）
+  - 前端：`http://localhost:8080`（或 `http://localhost:3000`，以 docker-compose 配置为准）
   - 健康检查：`curl http://127.0.0.1:8000/api/health`
+  - 后端推荐接口：`POST http://127.0.0.1:8000/api/recommend`
+
+自检与回归（可在本机运行）：
+
+```
+python -m compileall src
+pytest -q tests/test_regress_theme_and_bands.py tests/test_contract_event_and_history.py
+PYTHONPATH=src python -m gp_assistant.recommend.self_check
+```
 
 - 只更新某一侧（可选）
   - 仅前端：`docker compose build web && docker compose up -d web`

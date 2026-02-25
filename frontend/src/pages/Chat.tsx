@@ -307,9 +307,9 @@ export default function Chat() {
         <List dataSource={messages} renderItem={(msg, idx) => (
           <List.Item key={idx} style={{ display: 'block', border: 'none', padding: 0 }}>
             {msg.kind === 'rec' && msg.payload?.picks ? (
-              <RecommendationCard picks={msg.payload.picks} onShowKline={async (sym) => { if(!sessionId) return; syncManager.pushOutbox({ conversation_id: sessionId, type: 'message.created', actor_id: 'assistant', data: { message_id: 'card-kline-' + Date.now(), kind: 'card', content: 'kline', payload: { type: 'kline', symbol: sym } } }); await syncManager.flush(); renderFromEvents(sessionId) }} />
+              <RecommendationCard picks={msg.payload.picks} meta={msg.payload?.meta} onShowKline={async (sym) => { if(!sessionId) return; syncManager.pushOutbox({ conversation_id: sessionId, type: 'message.created', actor_id: 'assistant', data: { message_id: 'card-kline-' + Date.now(), kind: 'card', content: 'kline', payload: { type: 'kline', symbol: sym } } }); await syncManager.flush(); renderFromEvents(sessionId) }} />
             ) : msg.kind === 'kline' && msg.payload?.symbol ? (
-              <KlineCard symbol={msg.payload.symbol} />
+              <KlineCard symbol={msg.payload.symbol} conversationId={sessionId} />
             ) : (
               <MessageBubble role={msg.role} content={msg.content || ''} />
             )}

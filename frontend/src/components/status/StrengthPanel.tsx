@@ -27,10 +27,10 @@ export default function StrengthPanel({ conversationId }: { conversationId?: str
           <List.Item>
             <span>{t?.name || '主题'}</span>
             {t?.strength != null && <Tag color="geekblue" style={{ marginLeft: 8 }}>强度 {t.strength}</Tag>}
+            {t?.source && <Tag color="default" style={{ marginLeft: 8 }}>{t.source}</Tag>}
           </List.Item>
         )} />
       )}
     </Card>
   )
 }
-

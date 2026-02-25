@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import json
 import sqlite3
@@ -209,7 +209,7 @@ def upsert_items(
     - payload_mapper: optional function to reduce payload before storing
     Returns statistics and new watermark.
     """
-    ensure_query(query_id, params={})
+    (lambda _m=query_meta(query_id): ensure_query(query_id, params={{}}) if (_m.get('params') is None) else None)()
     now = _now_iso()
     n_total = 0
     n_insert = 0
@@ -372,4 +372,5 @@ def vacuum() -> None:
             _retry_on_locked(_write)
         finally:
             conn.close()
+
 

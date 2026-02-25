@@ -18,6 +18,7 @@ from .intent import detect_intent
 from .render import render_recommendation_narrative
 from ..llm.client import LLMClient
 from ..recommend.runner import run as recommend_run
+from ..recommend.compact_payload import compact_recommend_meta
 
 
 def handle_message(session_id: Optional[str], message: str, message_id: Optional[str] = None) -> Dict[str, Any]:
@@ -41,6 +42,7 @@ def handle_message(session_id: Optional[str], message: str, message_id: Optional
                 picks = res.get("picks") if isinstance(res, dict) else None
                 if isinstance(picks, list) and picks:
                     eid = f"card-reco-{datetime.utcnow().strftime('%Y%m%d%H%M%S%f')}"
+                    meta = compact_recommend_meta(res if isinstance(res, dict) else {})
                     event_store.append_event(
                         sid,
                         event_id=eid,
@@ -49,7 +51,7 @@ def handle_message(session_id: Optional[str], message: str, message_id: Optional
                             "message_id": eid,
                             "kind": "card",
                             "content": "recommendation",
-                            "payload": {"type": "recommendation", "picks": picks},
+                            "payload": {"type": "recommendation", "picks": picks, "meta": meta},
                         },
                         actor_id="assistant",
                     )

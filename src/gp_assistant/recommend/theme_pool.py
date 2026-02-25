@@ -48,10 +48,13 @@ def build_themes(hub: MarketDataHub, snapshot: Optional[pd.DataFrame] = None) ->
     # 尝试概念板块强度（akshare）
     try:
         import akshare as ak  # type: ignore
+        cons_source = None
         try:
             cons_name = ak.stock_board_concept_name_em()
+            cons_source = "concept_board_em"
         except Exception:
             cons_name = ak.stock_board_concept_name_ths()  # type: ignore[attr-defined]
+            cons_source = "concept_board_ths"
         if cons_name is not None and len(cons_name) > 0:
             rank_col = None
             for c in ("涨跌幅", "涨跌幅(%)", "涨跌", "changePct"):
@@ -68,11 +71,19 @@ def build_themes(hub: MarketDataHub, snapshot: Optional[pd.DataFrame] = None) ->
                 name_col = "板块名称" if "板块名称" in cn.columns else cn.columns[0]
                 out: List[Dict[str, Any]] = []
                 for _, r in cn.iterrows():
+                    val = r.get("_r", None)
+                    if pd.isna(val):
+                        strength_txt = ""
+                    else:
+                        try:
+                            strength_txt = f"{float(val):.2f}%"
+                        except Exception:
+                            strength_txt = ""
                     out.append({
                         "name": f"概念-{str(r[name_col])}",
-                        "strength": f"{float(r.get('_r', 0.0)):.2f}%",
+                        "strength": strength_txt,
                         "evidence": ["来源：概念板块排行"],
-                        "source": "concept_board_ths",
+                        "source": cons_source,
                     })
                 return out
             else:

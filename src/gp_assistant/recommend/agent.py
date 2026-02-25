@@ -150,10 +150,13 @@ def run(date: Optional[str] = None, topk: int = 3, universe: str = "auto", symbo
         except Exception:
             setup = None
         # bands
+        band_source = None
         try:
             kb = getattr(mod, "key_bands", None)
             if callable(kb) and setup is not None:
                 bands = kb(df_feat, setup) or {}
+                if bands:
+                    band_source = "strategy_key_bands"
         except Exception:
             bands = {}
         if not bands:
@@ -163,6 +166,7 @@ def run(date: Optional[str] = None, topk: int = 3, universe: str = "auto", symbo
                 high = float(chip.get("band_90_high", 0.0))
                 mid = float(chip.get("avg_cost", 0.0)) or ((low + high) / 2.0 if (low and high) else 0.0)
                 bands = {"S1": low, "S2": mid, "R1": high, "R2": (high * 1.02 if high else 0.0)}
+                band_source = "chip_fallback"
             except Exception:
                 bands = {}
         # stale & sanity fallback (near-end window) + diagnostics
@@ -181,6 +185,7 @@ def run(date: Optional[str] = None, topk: int = 3, universe: str = "auto", symbo
                 r1 = float(x["close"].quantile(0.80)) if "close" in x.columns else 0.0
                 bands = {"S1": s1, "S2": s2, "R1": r1, "R2": (r1 * 1.02 if r1 else 0.0)}
                 diag.update({"setup_age": setup_age, "stale": True, "fallback_reason": "stale_setup"})
+                band_source = "recent_window_fallback"
             last_close = float(df_feat["close"].iloc[-1]) if "close" in df_feat.columns else 0.0
             if last_close and bands:
                 s1c = float(bands.get("S1", 0.0)); r1c = float(bands.get("R1", 0.0))
@@ -191,6 +196,13 @@ def run(date: Optional[str] = None, topk: int = 3, universe: str = "auto", symbo
                     r1 = float(x["close"].quantile(0.80)) if "close" in x.columns else 0.0
                     bands = {"S1": s1, "S2": s2, "R1": r1, "R2": (r1 * 1.02 if r1 else 0.0)}
                     diag.update({"sanity_warning": "key_bands_out_of_scale_fallback"})
+                    band_source = "recent_window_fallback"
+            # Always include setup metrics even if not stale
+            diag.setdefault("setup_idx", setup_idx)
+            diag.setdefault("setup_age", setup_age)
+            diag.setdefault("stale", False)
+            if band_source:
+                diag["band_source"] = band_source
         except Exception:
             diag = {}
         # actions & invalidation

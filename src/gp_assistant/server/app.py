@@ -34,6 +34,7 @@ from ..dev.fixtures import dev_ohlcv_bars
 from ..recommend.datahub import MarketDataHub
 from ..recommend.runner import list_modes as recommend_list_modes
 from ..recommend.runner import run as recommend_run
+from ..recommend.compact_payload import compact_recommend_payload
 from .models import (
     ChatReq,
     ChatResp,
@@ -75,36 +76,8 @@ async def api_error_handler(_, exc: APIError):  # noqa: ANN001
 
 
 def _compact_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
-    """
-    Return a compact form for RecommendResp.
-
-    Keeps only:
-    - as_of, timezone, env, themes, picks, tradeable, message, execution_checklist, disclaimer
-    - debug.{degraded,degrade_reasons,advisories,mode,dev_source}
-    """
-    keep_keys = {
-        "as_of",
-        "timezone",
-        "env",
-        "themes",
-        "picks",
-        "tradeable",
-        "message",
-        "execution_checklist",
-        "disclaimer",
-    }
-    out: Dict[str, Any] = {k: payload.get(k) for k in keep_keys if k in payload}
-
-    dbg = payload.get("debug") or {}
-    if isinstance(dbg, dict):
-        slim = {}
-        for k in ("degraded", "degrade_reasons", "advisories", "mode", "dev_source"):
-            if k in dbg:
-                slim[k] = dbg.get(k)
-        if slim:
-            out["debug"] = slim
-
-    return out
+    # Delegate to shared helper to keep orchestrator/app consistent
+    return compact_recommend_payload(payload)
 
 
 def _handle_chat(req: ChatReq) -> ChatResp:
@@ -304,6 +277,33 @@ def api_get_ohlcv(
         raise HTTPException(status_code=404, detail=str(e)) from e
     except Exception as e:  # noqa: BLE001
         raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@api.get("/ohlcv_min/{symbol}")
+def api_get_ohlcv_min(symbol: str, period: int = Query(5), days: int = Query(5), adjust: str = Query("")) -> Dict[str, Any]:
+    """Optional minute bars (feature flag). Returns 501 when disabled."""
+    if os.getenv("GP_MINLINE_ENABLED", "0").strip().lower() not in {"1", "true", "on", "yes"}:
+        raise HTTPException(status_code=501, detail={"error": "minline_disabled"})
+    try:
+        import akshare as ak  # type: ignore
+        df = ak.stock_zh_a_hist_min_em(symbol=symbol, period=str(period), start_date=None, end_date=None, adjust=adjust)  # type: ignore
+        if not isinstance(df, pd.DataFrame) or df.empty:
+            return {"symbol": symbol, "bars": []}
+        dff = df.tail(int(days) * 240)
+        bars: List[Dict[str, Any]] = []
+        for _, r in dff.iterrows():
+            bars.append({
+                "date": str(r.get("日期") or r.get("time") or r.get("date")),
+                "open": float(r.get("开盘") or r.get("open") or 0.0),
+                "high": float(r.get("最高") or r.get("high") or 0.0),
+                "low": float(r.get("最低") or r.get("low") or 0.0),
+                "close": float(r.get("收盘") or r.get("close") or 0.0),
+                "volume": float(r.get("成交量") or r.get("volume") or 0.0),
+                "amount": float(r.get("成交额") or r.get("amount") or 0.0),
+            })
+        return {"symbol": symbol, "bars": bars, "meta": {"period": period, "days": days, "adjust": adjust}}
+    except Exception as e:  # noqa: BLE001
+        raise HTTPException(status_code=502, detail={"error": "minline_fetch_failed", "message": str(e)}) from e
 
 
 @api.get("/recommend/{date}")

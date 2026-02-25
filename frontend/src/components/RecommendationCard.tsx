@@ -11,9 +11,9 @@ type PickItem = {
 }
 
 export default function RecommendationCard(
-  props: { picks: PickItem[]; onShowKline?: (symbol: string) => void }
+  props: { picks: PickItem[]; meta?: any; onShowKline?: (symbol: string) => void }
 ) {
-  const { picks, onShowKline } = props
+  const { picks, meta, onShowKline } = props
   const data = Array.isArray(picks) ? picks.slice(0, 6) : []
   return (
     <Card
