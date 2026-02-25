@@ -1,42 +1,14 @@
 [
   {
-    "symbol": "600519",
+    "symbol": "sz002455",
     "data_source": "provider"
   },
   {
-    "symbol": "002415",
+    "symbol": "sh601869",
     "data_source": "provider"
   },
   {
-    "symbol": "000333",
-    "data_source": "provider"
-  },
-  {
-    "symbol": "000858",
-    "data_source": "provider"
-  },
-  {
-    "symbol": "600036",
-    "data_source": "provider"
-  },
-  {
-    "symbol": "601318",
-    "data_source": "provider"
-  },
-  {
-    "symbol": "000001",
-    "data_source": "provider"
-  },
-  {
-    "symbol": "002594",
-    "data_source": "provider"
-  },
-  {
-    "symbol": "000651",
-    "data_source": "provider"
-  },
-  {
-    "symbol": "600000",
+    "symbol": "sz002969",
     "data_source": "provider"
   }
 ]

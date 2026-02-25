@@ -37,30 +37,59 @@ def handle_message(session_id: Optional[str], message: str, message_id: Optional
             reply = render_recommendation_narrative(res)
             tool_trace = {"triggered_recommend": True, "recommend_result": res}
 
-            # 同步追加一条“推荐卡片”到事件流，便于前端稳定渲染/回放
+            # 同步追加一条“推荐卡片”，即使 picks 为空
             try:
-                picks = res.get("picks") if isinstance(res, dict) else None
-                if isinstance(picks, list) and picks:
-                    eid = f"card-reco-{datetime.utcnow().strftime('%Y%m%d%H%M%S%f')}"
-                    meta = compact_recommend_meta(res if isinstance(res, dict) else {})
-                    event_store.append_event(
-                        sid,
-                        event_id=eid,
-                        type="message.created",
-                        data={
-                            "message_id": eid,
-                            "kind": "card",
-                            "content": "recommendation",
-                            "payload": {"type": "recommendation", "picks": picks, "meta": meta},
-                        },
-                        actor_id="assistant",
-                    )
+                picks = res.get("picks") if isinstance(res, dict) else []
+                if not isinstance(picks, list):
+                    picks = []
+                meta = compact_recommend_meta(res if isinstance(res, dict) else {})
+                if not isinstance(meta.get("themes"), list):
+                    meta["themes"] = []
+                eid = f"card-reco-{datetime.utcnow().strftime('%Y%m%d%H%M%S%f')}"
+                event_store.append_event(
+                    sid,
+                    event_id=eid,
+                    type="message.created",
+                    data={
+                        "message_id": eid,
+                        "kind": "card",
+                        "content": "recommendation",
+                        "payload": {"type": "recommendation", "picks": picks, "meta": meta},
+                    },
+                    actor_id="assistant",
+                )
             except Exception:
                 pass
 
         except Exception as e:  # noqa: BLE001
             reply = f"[data_unavailable] 推荐生成失败：{e}"
             tool_trace = {"triggered_recommend": False, "error": str(e)}
+            # 异常仍写入空卡片（degraded+RECOMMEND_ERROR）
+            try:
+                err_payload = {
+                    "as_of": datetime.utcnow().strftime("%Y-%m-%d"),
+                    "themes": [],
+                    "message": f"recommend_error: {e}",
+                    "debug": {"degraded": True, "degrade_reasons": [{"reason_code": "RECOMMEND_ERROR", "detail": {"message": str(e)}}]},
+                }
+                meta = compact_recommend_meta(err_payload)
+                if not isinstance(meta.get("themes"), list):
+                    meta["themes"] = []
+                eid = f"card-reco-{datetime.utcnow().strftime('%Y%m%d%H%M%S%f')}"
+                event_store.append_event(
+                    sid,
+                    event_id=eid,
+                    type="message.created",
+                    data={
+                        "message_id": eid,
+                        "kind": "card",
+                        "content": "recommendation",
+                        "payload": {"type": "recommendation", "picks": [], "meta": meta},
+                    },
+                    actor_id="assistant",
+                )
+            except Exception:
+                pass
 
     else:
         # normal chat via LLM with graceful degradation
