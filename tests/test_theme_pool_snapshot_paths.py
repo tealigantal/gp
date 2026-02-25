@@ -65,3 +65,8 @@ def test_snapshot_no_industry_concept_available_preferred(monkeypatch):
     assert len(themes) == len(fake_concepts)
     assert all(t["source"] == "concept_board_em" for t in themes)
 
+
+def test_build_themes_is_impl():
+    from gp_assistant.recommend.theme_pool import build_themes
+    # ensure alias to impl is active
+    assert build_themes.__module__.endswith("theme_pool_impl")
