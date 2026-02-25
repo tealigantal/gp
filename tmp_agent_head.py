@@ -1,4 +1,4 @@
-"""Recommendation engine (UTF-8 normalized, minimal reconstruction).
+﻿"""Recommendation engine (UTF-8 normalized, minimal reconstruction).
 
 This module orchestrates the end-to-end recommendation flow:
  - Fetch snapshot once via provider (agent is the only caller)
@@ -48,11 +48,9 @@ def run(date: Optional[str] = None, topk: int = 3, universe: str = "auto", symbo
     as_of = date or cal["as_of"]
     hub = MarketDataHub()
 
-    # 数据阶段：快照（Spot Snapshot）
-    # Fetch snapshot once and share within this run (degrade to None if unavailable)
+    # 鏁版嵁闃舵锛氬揩鐓э紙Spot Snapshot锛?    # Fetch snapshot once and share within this run (degrade to None if unavailable)
     provider = get_provider()
-    # 可观测性：打印快照抓取配置与结果
-    try:
+    # 鍙娴嬫€э細鎵撳嵃蹇収鎶撳彇閰嶇疆涓庣粨鏋?    try:
         routes = list(getattr(cfg, "ak_spot_priority", ["sina", "em"]))
     except Exception:
         routes = ["sina", "em"]
@@ -61,8 +59,8 @@ def run(date: Optional[str] = None, topk: int = 3, universe: str = "auto", symbo
     except Exception:
         to_sec = getattr(cfg, "request_timeout_sec", None)
     try:
-        print(f"[数据] 阶段=快照（spot）", flush=True)
-        print(f"[快照] 正在获取市场快照：provider={getattr(provider, 'name', '?')}，优先级={','.join(routes)}，超时={to_sec}s", flush=True)
+        print(f"[鏁版嵁] 闃舵=蹇収锛坰pot锛?, flush=True)
+        print(f"[蹇収] 姝ｅ湪鑾峰彇甯傚満蹇収锛歱rovider={getattr(provider, 'name', '?')}锛屼紭鍏堢骇={','.join(routes)}锛岃秴鏃?{to_sec}s", flush=True)
     except Exception:
         pass
     snapshot_df: Optional[pd.DataFrame]
@@ -75,16 +73,16 @@ def run(date: Optional[str] = None, topk: int = 3, universe: str = "auto", symbo
             rows = (0 if snapshot_df is None else int(len(snapshot_df)))
             elapsed = snap_meta.get("elapsed_sec", "?")
             cache = snap_meta.get("cache", None) or "none"
-            print(f"[快照] 成功：source={src}，rows={rows}，elapsed={elapsed}s，cache={cache}", flush=True)
-            print(f"[数据] 下一阶段=日线K（逐标的）", flush=True)
-            print(f"[数据] 分钟线=未调用（当前版本候选与策略基于日线）", flush=True)
+            print(f"[蹇収] 鎴愬姛锛歴ource={src}锛宺ows={rows}锛宔lapsed={elapsed}s锛宑ache={cache}", flush=True)
+            print(f"[鏁版嵁] 涓嬩竴闃舵=鏃ョ嚎K锛堥€愭爣鐨勶級", flush=True)
+            print(f"[鏁版嵁] 鍒嗛挓绾?鏈皟鐢紙褰撳墠鐗堟湰鍊欓€変笌绛栫暐鍩轰簬鏃ョ嚎锛?, flush=True)
         except Exception:
             pass
     except Exception as e:  # noqa: BLE001
         snapshot_df = None
         snap_meta = {"missing": True, "degrade": "no_snapshot_universe_mode", "error": str(e)}
         try:
-            print(f"[快照] 失败：{e}，降级为无快照模式（将使用 universe/symbols 模式）", flush=True)
+            print(f"[蹇収] 澶辫触锛歿e}锛岄檷绾т负鏃犲揩鐓фā寮忥紙灏嗕娇鐢?universe/symbols 妯″紡锛?, flush=True)
         except Exception:
             pass
 
@@ -165,34 +163,6 @@ def run(date: Optional[str] = None, topk: int = 3, universe: str = "auto", symbo
                 bands = {"S1": low, "S2": mid, "R1": high, "R2": (high * 1.02 if high else 0.0)}
             except Exception:
                 bands = {}
-        # stale & sanity fallback (near-end window) + diagnostics
-        try:
-            import os
-            diag = {}
-            last_idx = len(df_feat) - 1
-            setup_idx = int(getattr(setup, "idx", last_idx)) if setup is not None else last_idx
-            setup_age = max(0, last_idx - setup_idx)
-            stale_th = int(os.getenv("GP_KEYBAND_STALE_BARS", "10"))
-            recent_n = int(os.getenv("GP_KEYBAND_RECENT_WINDOW", "60"))
-            if setup_age > stale_th:
-                x = df_feat.tail(max(30, recent_n))
-                s1 = float(x["close"].quantile(0.30)) if "close" in x.columns else 0.0
-                s2 = float(x["close"].quantile(0.50)) if "close" in x.columns else 0.0
-                r1 = float(x["close"].quantile(0.80)) if "close" in x.columns else 0.0
-                bands = {"S1": s1, "S2": s2, "R1": r1, "R2": (r1 * 1.02 if r1 else 0.0)}
-                diag.update({"setup_age": setup_age, "stale": True, "fallback_reason": "stale_setup"})
-            last_close = float(df_feat["close"].iloc[-1]) if "close" in df_feat.columns else 0.0
-            if last_close and bands:
-                s1c = float(bands.get("S1", 0.0)); r1c = float(bands.get("R1", 0.0))
-                if (s1c and s1c < 0.4 * last_close) or (r1c and r1c > 2.5 * last_close):
-                    x = df_feat.tail(max(30, recent_n))
-                    s1 = float(x["close"].quantile(0.30)) if "close" in x.columns else 0.0
-                    s2 = float(x["close"].quantile(0.50)) if "close" in x.columns else 0.0
-                    r1 = float(x["close"].quantile(0.80)) if "close" in x.columns else 0.0
-                    bands = {"S1": s1, "S2": s2, "R1": r1, "R2": (r1 * 1.02 if r1 else 0.0)}
-                    diag.update({"sanity_warning": "key_bands_out_of_scale_fallback"})
-        except Exception:
-            diag = {}
         # actions & invalidation
         try:
             ct = getattr(mod, "confirm_text", None)
@@ -200,8 +170,8 @@ def run(date: Optional[str] = None, topk: int = 3, universe: str = "auto", symbo
                 t = ct(setup, q_grade or "Q?")
                 if isinstance(t, dict):
                     actions = {
-                        "window_A": str(t.get("window_A_text", "A窗：关键带回收，承接成立")),
-                        "window_B": str(t.get("window_B_text", "B窗：收盘确认，不追价")),
+                        "window_A": str(t.get("window_A_text", "A绐楋細鍏抽敭甯﹀洖鏀讹紝鎵挎帴鎴愮珛")),
+                        "window_B": str(t.get("window_B_text", "B绐楋細鏀剁洏纭锛屼笉杩戒环")),
                     }
         except Exception:
             actions = {}
@@ -212,8 +182,8 @@ def run(date: Optional[str] = None, topk: int = 3, universe: str = "auto", symbo
                 invalid = [str(x) for x in (lst or [])]
         except Exception:
             invalid = []
-        risk = {"stop_loss": "收盘有效跌破支撑带", "time_stop": "2-3日不强必走", "no_averaging_down": True}
-        return {"bands": bands, "actions": actions, "invalidation": invalid, "risk": risk, "diagnostics": diag}
+        risk = {"stop_loss": "鏀剁洏鏈夋晥璺岀牬鏀拺甯?, "time_stop": "2-3鏃ヤ笉寮哄繀璧?, "no_averaging_down": True}
+        return {"bands": bands, "actions": actions, "invalidation": invalid, "risk": risk}
 
     # Evaluate strategies for pool and choose champion
     feats_by_symbol: Dict[str, pd.DataFrame] = {}
@@ -240,8 +210,7 @@ def run(date: Optional[str] = None, topk: int = 3, universe: str = "auto", symbo
         sym = str(cand.get("symbol"))
         it: Dict[str, Any] = {
             "symbol": sym,
-            "theme": (cand.get("industry") or cand.get("source_reason") or "行业轮动"),
-            "market_theme": (themes[0]["name"] if themes else None),
+            "theme": themes[0]["name"] if themes else "琛屼笟杞姩",
             "flags": cand.get("flags", {}),
             "chip": cand.get("chip", {}),
             "indicators": cand.get("indicators", {}),
@@ -278,17 +247,17 @@ def run(date: Optional[str] = None, topk: int = 3, universe: str = "auto", symbo
         "candidate_pool": pool,
         "picks": picks,
         "execution_checklist": [
-            "1) 环境分层",
-            "2) 主线限制",
-            "3) 硬条件评估",
+            "1) 鐜鍒嗗眰",
+            "2) 涓荤嚎闄愬埗",
+            "3) 纭潯浠惰瘎浼?,
         ],
-        "disclaimer": "本内容仅供研究与教育，不构成任何投资建议或收益承诺；市场有风险，决策需独立承担",
+        "disclaimer": "鏈唴瀹逛粎渚涚爺绌朵笌鏁欒偛锛屼笉鏋勬垚浠讳綍鎶曡祫寤鸿鎴栨敹鐩婃壙璇猴紱甯傚満鏈夐闄╋紝鍐崇瓥闇€鐙珛鎵挎媴",
         "debug": {"timing": {}, "sources": sources, "failures": veto, "snapshot": snap_meta},
     }
     # Adjust execution checklist third item to reflect champion integration
     try:
         if isinstance(payload.get("execution_checklist"), list) and len(payload["execution_checklist"]) >= 3:
-            payload["execution_checklist"][2] = "3) 策略冠军与关键带"
+            payload["execution_checklist"][2] = "3) 绛栫暐鍐犲啗涓庡叧閿甫"
     except Exception:
         pass
 

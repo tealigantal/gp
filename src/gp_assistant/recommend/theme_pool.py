@@ -1,4 +1,4 @@
-# 简介：主题池构建（严格模式）。基于全市场快照的短期相对强度给出主线线索。
+﻿# 简介：主题池构建（严格模式）。基于全市场快照的短期相对强度给出主线线索。
 from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
@@ -16,15 +16,16 @@ def build_themes(hub: MarketDataHub, snapshot: Optional[pd.DataFrame] = None) ->
         return []
     snap = snapshot
     cols = set(snap.columns)
+    # 统一涨跌幅列名（支持 % 与中英兼容）
     chg_col = None
     for c in ("涨跌幅", "涨跌幅(%)", "pct_chg", "涨跌", "changePct"):
         if c in cols:
             chg_col = c
             break
     if not chg_col:
+        # 没有涨跌/涨跌幅字段：不伪造主线，直接返回空
         return []
     # normalize change
-    import pandas as pd
     df = snap.copy()
     df["chg"] = pd.to_numeric(df[chg_col].astype(str).str.rstrip("% "), errors="coerce")
     # Industry-aggregated themes
@@ -40,20 +41,23 @@ def build_themes(hub: MarketDataHub, snapshot: Optional[pd.DataFrame] = None) ->
             themes.append({
                 "name": str(r["行业"]),
                 "strength": f"{float(r['mean_chg']):.2f}%",
-                "evidence": [f"行业均值涨跌幅 {float(r['mean_chg']):.2f}%", f"样本数 {int(r['count'])}"],
+                "evidence": [f"行业均值涨跌幅 {float(r['mean_chg']):.2f}%", f"样本n={int(r['count'])}"],
+                "source": "industry_snapshot",
             })
         return themes
     # 尝试概念板块强度（akshare）
     try:
         import akshare as ak  # type: ignore
-        cons_name = ak.stock_board_concept_name_ths()  # type: ignore[attr-defined]
+        try:
+            cons_name = ak.stock_board_concept_name_em()
+        except Exception:
+            cons_name = ak.stock_board_concept_name_ths()  # type: ignore[attr-defined]
         if cons_name is not None and len(cons_name) > 0:
             rank_col = None
             for c in ("涨跌幅", "涨跌幅(%)", "涨跌", "changePct"):
                 if c in cons_name.columns:
                     rank_col = c
                     break
-            import pandas as pd
             cn = cons_name.copy()
             if rank_col:
                 try:
@@ -61,17 +65,19 @@ def build_themes(hub: MarketDataHub, snapshot: Optional[pd.DataFrame] = None) ->
                 except Exception:
                     cn["_r"] = pd.to_numeric(cn[rank_col], errors="coerce")
                 cn = cn.sort_values("_r", ascending=False).head(2)
+                name_col = "板块名称" if "板块名称" in cn.columns else cn.columns[0]
+                out: List[Dict[str, Any]] = []
+                for _, r in cn.iterrows():
+                    out.append({
+                        "name": f"概念-{str(r[name_col])}",
+                        "strength": f"{float(r.get('_r', 0.0)):.2f}%",
+                        "evidence": ["来源：概念板块排行"],
+                        "source": "concept_board_ths",
+                    })
+                return out
             else:
-                cn = cn.head(2)
-            name_col = "板块名称" if "板块名称" in cn.columns else cn.columns[0]
-            out: List[Dict[str, Any]] = []
-            for _, r in cn.iterrows():
-                out.append({
-                    "name": f"概念-{str(r[name_col])}",
-                    "strength": str(float(r.get("_r", 0.0))) if "_r" in r else "",
-                    "evidence": ["来源：概念板块排行"],
-                })
-            return out
+                # 概念源无涨跌幅列：不伪造主线，交由后续 fallback
+                pass
     except Exception:
         pass
     # fallback: top movers by code (仍是快照真实数据)
@@ -85,5 +91,7 @@ def build_themes(hub: MarketDataHub, snapshot: Optional[pd.DataFrame] = None) ->
             "name": f"强势线索-{r['code']}",
             "strength": f"{float(r['chg']):.2f}%",
             "evidence": [f"当日领涨：{float(r['chg']):.2f}%"],
+            "source": "top_movers",
         })
     return themes
+

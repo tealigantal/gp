@@ -1,6 +1,5 @@
-# 简介：筹码/成本带估算。提供 A/B 两种模型估算平均成本与 90% 带，
-# 并输出置信度等统计，供交易计划参考。
-from __future__ import annotations
+﻿# 绠€浠嬶細绛圭爜/鎴愭湰甯︿及绠椼€傛彁渚?A/B 涓ょ妯″瀷浼扮畻骞冲潎鎴愭湰涓?90% 甯︼紝
+# 骞惰緭鍑虹疆淇″害绛夌粺璁★紝渚涗氦鏄撹鍒掑弬鑰冦€?from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Any, Dict, Tuple
@@ -119,8 +118,50 @@ def _model_b(df: pd.DataFrame) -> Tuple[ChipResult, Dict[str, Any]]:
 
 
 def compute_chip(df: pd.DataFrame, float_shares: float | None = None) -> Tuple[ChipResult, Dict[str, Any]]:
-    a, meta_a = _model_a(df, float_shares)
+    # Use trailing window to avoid anchoring far past regimes
+    try:
+        import os
+        win = int(os.getenv("GP_CHIP_WINDOW_BARS", "120"))
+    except Exception:
+        win = 120
+    df2 = df.tail(max(30, win))
+    a, meta_a = _model_a(df2, float_shares)
     if a is not None:
-        return a, meta_a
-    b, meta_b = _model_b(df)
-    return b, meta_b
+        meta_a["window_bars"] = max(30, win)
+        res, meta = a, meta_a
+        try:
+            setattr(res, "calc_window_bars", max(30, win))
+        except Exception:
+            pass
+    else:
+        b, meta_b = _model_b(df2)
+        meta_b["window_bars"] = max(30, win)
+        res, meta = b, meta_b
+        try:
+            setattr(res, "calc_window_bars", max(30, win))
+        except Exception:
+            pass
+    # Sanity check vs last_close; if out-of-scale, shorten window
+    try:
+        last_close = float(df2["close"].iloc[-1])
+        hi = float(getattr(res, "band_90_high", last_close))
+        lo = float(getattr(res, "band_90_low", last_close))
+        if (hi / last_close) > 3.0 or (last_close / max(lo, 1e-6)) > 3.0:
+            short = max(30, win // 2)
+            df3 = df.tail(short)
+            a2, m2 = _model_a(df3, float_shares)
+            if a2 is not None:
+                res, meta = a2, m2
+            else:
+                b2, m2 = _model_b(df3)
+                res, meta = b2, m2
+            meta["window_bars"] = short
+            meta["sanity_fallback"] = True
+            try:
+                setattr(res, "calc_window_bars", short)
+                setattr(res, "sanity_warning", "chip_bands_out_of_scale_fallback")
+            except Exception:
+                pass
+    except Exception:
+        pass
+    return res, meta

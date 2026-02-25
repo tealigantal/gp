@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from typing import Any, Dict, List
 
@@ -7,7 +7,7 @@ from ..llm.client import LLMClient
 
 def _render_pick(it: Dict[str, Any]) -> str:
     sym = it.get("symbol")
-    theme = it.get("theme") or (it.get("source_reason") or "主线回踩")
+    stock_theme = it.get('theme') or it.get('industry') or it.get('source_reason') or '行业/来源'
     score = it.get("score", 0)
     q = it.get("q_grade", it.get("indicators", {}).get("q_grade", it.get("q", "Q1")))
     chip = it.get("chip", {})
@@ -20,11 +20,22 @@ def _render_pick(it: Dict[str, Any]) -> str:
         "R2": round(float(chip.get("band_90_high", 0.0)) * 1.02, 2),
     }
     lines: List[str] = []
-    lines.append(f"标的 {sym}｜主题：{theme}｜评分：{score:.1f}")
+    # 市场主线（如果 picks 项内带入）
+    mths = it.get('market_themes') or []
+    if mths:
+        mt_txt = []
+        for t in mths[:2]:
+            nm = str((t or {}).get('name') or '?')
+            st = str((t or {}).get('strength') or '').strip()
+            mt_txt.append(f"{nm}({st})" if st else nm)
+        market_part = "｜市场主线：" + "；".join(mt_txt)
+    else:
+        market_part = ""
+    lines.append(f"标的 {sym}｜个股标签：{stock_theme}{market_part}｜评分：{score:.1f}")
     lines.append(
-        f"- 指标面板：ATR%={it.get('atr_pct', it.get('indicators',{}).get('atr_pct',0)):.2%}，"
-        f"Gap={it.get('gap_pct', it.get('indicators',{}).get('gap_pct',0)):.2%}，"
-        f"Slope20={it.get('indicators',{}).get('slope20',0):.2%}"
+        f"- 指标面板：ATR%={it.get('atr_pct', it.get('indicators',{}).get('atr_pct',0)):.2%}"
+        f"｜Gap={it.get('gap_pct', it.get('indicators',{}).get('gap_pct',0)):.2%}"
+        f"｜Slope20={it.get('indicators',{}).get('slope20',0):.2%}"
     )
     lines.append(f"- 噪声等级Q：{q}（Q2以上A窗禁买，B窗收盘确认）")
     lines.append(
@@ -32,7 +43,7 @@ def _render_pick(it: Dict[str, Any]) -> str:
         f"（模型{chip.get('model_used','?')}，置信度{chip.get('confidence','low')}）"
     )
     lines.append(
-        f"- 形态统计：5日胜率≈{it.get('stats',{}).get('win_rate_5',0):.0%}，"
+        f"- 形态统计：5日胜率≈{it.get('stats',{}).get('win_rate_5',0):.0%}｜"
         f"样本k={it.get('stats',{}).get('k',0)}（不足则降权）"
     )
     lines.append(
@@ -53,6 +64,16 @@ def _render_pick(it: Dict[str, Any]) -> str:
         lines.append(
             f"- 冠军策略：{champ.get('strategy','NA')}｜关键带 S1≈{s1} / S2≈{s2} / R1≈{r1} / R2≈{r2}"
         )
+        # 若有诊断信息，做简短可读展示
+        diag = tp.get('diagnostics') or {}
+        try:
+            if diag:
+                age = diag.get('setup_age')
+                stale = diag.get('stale')
+                reason = diag.get('fallback_reason') or diag.get('sanity_warning')
+                lines.append(f"- 诊断：setup_age={age} stale={stale} {reason or ''}".strip())
+        except Exception:
+            pass
     # Two-window action
     lines.append(
         "- A窗动作：关键带回收→承接一项成立（低点不破/量能衰减/分时回收/横向消化），否则观望"
@@ -76,17 +97,21 @@ def render_recommendation(obj: Dict[str, Any]) -> str:
     # First paragraph: environment -> themes -> candidates summary
     head: List[str] = []
     head.append(
-        f"环境分层：{env.get('grade','C')}（依据：" + "；".join(env.get("reasons", [])) + "）"
+        f"环境分层：{env.get('grade','C')}（依据：" + "、".join(env.get("reasons", [])) + "）"
     )
     if env.get("grade") == "D":
         # 只有在不可交易时才给“空仓倾向”的强结论；可交易则给“防守/轻仓”提示
         if not bool(obj.get("tradeable")):
-            head.append("结论：空仓倾向；恢复条件：" + "；".join(env.get("recovery_conditions", [])))
+            head.append("结论：空仓倾向；恢复条件：" + "、".join(env.get("recovery_conditions", [])))
         else:
-            head.append("建议防守：轻仓/观察为主；恢复条件：" + "；".join(env.get("recovery_conditions", [])))
+            head.append("建议防守：轻仓观察为主；恢复条件：" + "、".join(env.get("recovery_conditions", [])))
     if themes:
-        th = [f"{t.get('name')}({t.get('strength')})" for t in themes[:2]]
-        head.append("主线主题：" + "；".join(th))
+        th: List[str] = []
+        for t in themes[:2]:
+            nm = str(t.get('name') or '?')
+            st = str(t.get('strength') or '').strip()
+            th.append(f"{nm}({st})" if st else nm)
+        head.append("市场主线：" + "；".join(th))
     head_txt = "\n".join(head)
     # Second paragraph
     body_lines: List[str] = []
@@ -98,8 +123,7 @@ def render_recommendation(obj: Dict[str, Any]) -> str:
 
 
 def render_recommendation_narrative(obj: Dict[str, Any]) -> str:
-    """LLM 只做“改写”，不新增事实；降级或未配置直接走可验证文本。
-
+    """LLM 只做“改写”，不新增事实；降级或未配置直接走可验证文本。 
     - 若 debug 显示降级（如 SNAPSHOT_MISSING）或 LLM 未配置，则返回结构化文本；
     - 正常情况下，先生成结构化文本，再交给 LLM 做“仅限改写/润色”。
     """
@@ -112,7 +136,7 @@ def render_recommendation_narrative(obj: Dict[str, Any]) -> str:
     client = LLMClient()
     ok, reason = client.available()
     if degraded or not ok:
-        # 降级或 LLM 不可用：直接返回可验证的结构化文本
+        # 降级/LLM 不可用：直接返回可验证的结构化文本
         return base_text if ok or not reason else f"[narrative_unavailable] {reason}\n\n" + base_text
 
     sys_prompt = (

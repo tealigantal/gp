@@ -1,4 +1,10 @@
-﻿from __future__ import annotations
+﻿# src/gp_assistant/core/config.py
+"""
+搴旂敤閰嶇疆涓績锛堢幆澧冨彉閲?-> 缁熶竴閰嶇疆瀵硅薄锛夈€?
+鐩爣锛?- 鎶娾€滆繍琛屾ā寮?/ 寮€鍙戣€呮ā寮?/ 鎺ㄨ崘妯″紡鈥濈瓑寮€鍏虫敹鍙ｅ埌涓€涓湴鏂癸紱
+- 渚?server/recommend/providers/chat 绛夋ā鍧楃粺涓€璇诲彇锛?- 榛樿涓嶇牬鍧忕嚎涓婅涓猴細涓嶈缃?GP_DEV_MODE/GP_RUN_MODE 鏃讹紝淇濇寔鐪熷疄鏁版嵁涓庨粯璁ゆ帹鑽愰摼璺€?"""
+
+from __future__ import annotations
 
 import os
 import zoneinfo
@@ -22,6 +28,8 @@ def _split_csv(v: str | None) -> List[str]:
 
 @dataclass
 class ProviderConfig:
+    """鏁版嵁婧愰厤缃紙factory 鎸夋閫夋嫨 provider锛?""
+
     data_provider: str = os.getenv("DATA_PROVIDER", "akshare").lower()
     official_api_key: Optional[str] = os.getenv("OFFICIAL_API_KEY")
 
@@ -30,18 +38,22 @@ class ProviderConfig:
 class AppConfig:
     provider: ProviderConfig = field(default_factory=ProviderConfig)
 
+    # -------------------------
     # Run mode / developer mode
-    run_mode: str = os.getenv("GP_RUN_MODE", "prod").lower()
-    dev_mode: bool = _truthy(os.getenv("GP_DEV_MODE", "0"))
+    # -------------------------
+    # prod|dev锛坉ev 鏃堕粯璁ゅ紑鍚?dev_mode锛?    run_mode: str = os.getenv("GP_RUN_MODE", "prod").lower()
 
-    # Recommend mode
-    recommend_mode: str = os.getenv("GP_RECOMMEND_MODE", "").lower()
+    # 鏄惧紡寮€鍙戣€呮ā寮忓紑鍏筹紙浼樺厛绾ч珮锛?    dev_mode: bool = _truthy(os.getenv("GP_DEV_MODE", "0"))
 
-    # Dev fixtures
-    dev_symbols: List[str] = field(default_factory=lambda: ["000001", "000333", "600519"])
+    # 鎺ㄨ崘妯″紡锛歞efault|dev|<浣犳湭鏉ユ柊澧炵殑妯″紡鍚?
+    # 涓虹┖ => auto锛坉ev_mode -> dev锛屽惁鍒?default锛?    recommend_mode: str = os.getenv("GP_RECOMMEND_MODE", "").lower()
+
+    # 寮€鍙戞ā寮忥細鍥哄畾杈撳嚭鐨勯粯璁?symbols锛堢敤浜庡墠绔崱鐗?鍒楄〃锛?    dev_symbols: List[str] = field(default_factory=lambda: ["000001", "000333", "600519"])
     dev_ohlcv_len: int = int(os.getenv("GP_DEV_OHLCV_LEN", "90"))
 
+    # -------------------------
     # Defaults / knobs
+    # -------------------------
     default_universe: List[str] = field(default_factory=lambda: ["000001", "000002", "000333", "600519"])
 
     request_timeout_sec: int = int(os.getenv("GP_REQUEST_TIMEOUT_SEC", "20"))
@@ -59,7 +71,7 @@ class AppConfig:
     ak_spot_priority: List[str] = field(default_factory=lambda: ["em", "sina"])
     ak_daily_priority: List[str] = field(default_factory=lambda: ["sina", "em", "tx"])
 
-    # Strict real data only (no synthetic/degrade)
+    # Strict real data only (no synthetic/degrade). Default ON (per your current repo behavior)
     strict_real_data: bool = _truthy(os.getenv("STRICT_REAL_DATA", "1"))
 
     # Universe/dynamic pool knobs
@@ -72,7 +84,7 @@ class AppConfig:
     # Mainline restriction
     restrict_to_mainline: bool = _truthy(os.getenv("GP_RESTRICT_MAINLINE", "1"))
     mainline_top_n: int = int(os.getenv("GP_MAINLINE_TOP_N", "2"))
-    mainline_mode: str = os.getenv("GP_MAINLINE_MODE", "auto")
+    mainline_mode: str = os.getenv("GP_MAINLINE_MODE", "auto")  # industry|concept|auto
 
     # Diversification
     max_per_industry: int = int(os.getenv("GP_MAX_PER_INDUSTRY", "2"))
@@ -81,37 +93,45 @@ class AppConfig:
     tradeable_min_universe: int = int(os.getenv("GP_TRADEABLE_MIN_UNIVERSE", "50"))
     tradeable_min_candidates: int = int(os.getenv("GP_TRADEABLE_MIN_CANDIDATES", "20"))
 
-    # Bands/windows knobs
-    chip_window_bars: int = int(os.getenv("GP_CHIP_WINDOW_BARS", "120"))
-    keyband_stale_threshold: int = int(os.getenv("GP_KEYBAND_STALE_BARS", "10"))
-    keyband_recent_window: int = int(os.getenv("GP_KEYBAND_RECENT_WINDOW", "60"))
-    bands_sanity_ratio: float = float(os.getenv("GP_BANDS_SANITY_RATIO", "3.0"))
-
-    # Parallelism
+    # Parallelism for candidate generation
+    # 0 or negative => auto (use CPU-based default)
     parallel_workers: int = int(os.getenv("GP_PARALLEL_WORKERS", "0"))
 
-    # Cache TTL
+    # Cache refresh TTL for market data (seconds). Within TTL, skip network refresh and serve cache.
     cache_refresh_ttl_sec: int = int(os.getenv("GP_CACHE_REFRESH_TTL_SEC", "300"))
 
 
 def load_config() -> AppConfig:
+    """璇诲彇鐜鍙橀噺骞跺仛娲剧敓/鏍￠獙銆?""
     _ = configs_dir()  # ensure exists
+
     cfg = AppConfig()
+
+    # Derive dev_mode from run_mode
     if cfg.run_mode in {"dev", "development"}:
         cfg.dev_mode = True
+
+    # dev symbols override
     env_syms = _split_csv(os.getenv("GP_DEV_SYMBOLS"))
     if env_syms:
         cfg.dev_symbols = env_syms
+
+    # akshare route priorities override
     spot = _split_csv(os.getenv("AK_SPOT_PRIORITY"))
     daily = _split_csv(os.getenv("AK_DAILY_PRIORITY"))
     if spot:
         cfg.ak_spot_priority = spot
     if daily:
         cfg.ak_daily_priority = daily
+
+    # default recommend_mode
     if not cfg.recommend_mode:
         cfg.recommend_mode = "dev" if cfg.dev_mode else "default"
+
+    # Validate timezone
     try:
         _ = zoneinfo.ZoneInfo(cfg.timezone)
     except Exception:
         cfg.timezone = "Asia/Shanghai"
+
     return cfg
