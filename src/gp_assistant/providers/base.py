@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Dict, Any
+from typing import Dict, Any, List, Dict as TDict
 import pandas as pd
 from ..core.errors import DataProviderError
 
@@ -43,3 +43,10 @@ class MarketDataProvider(ABC):
         """Return health info: {name, ok, reason}.
         Must not raise for expected misconfigurations; return reason instead.
         """
+
+    # Optional bulk API: default implementation loops get_daily
+    def get_daily_batch(self, symbols: List[str], start: str | None, end: str | None) -> TDict[str, pd.DataFrame]:  # noqa: D401
+        out: TDict[str, pd.DataFrame] = {}
+        for s in symbols:
+            out[s] = self.get_daily(s, start, end)
+        return out

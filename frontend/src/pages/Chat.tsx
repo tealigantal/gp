@@ -182,6 +182,8 @@ export default function Chat() {
       const text = `推荐 ${topk} 只；风险 ${risk}；范围 ${universe}.${symTxt}`
       // 进度：开始
       pushStatus(cid, 'report_started', '开始生成推荐', runId)
+      // 进度：规划/候选阶段（前端可见中间态）
+      pushStatus(cid, 'planning', '生成参数与候选', runId)
       await syncManager.flush().catch(()=>undefined)
       // 调用后端 /chat，让后端完成推荐、写入最新推荐与卡片（保持会话可追问）
       await chat({ session_id: cid, message: `荐股 ${text}`, message_id: msgId })

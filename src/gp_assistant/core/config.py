@@ -101,6 +101,13 @@ class AppConfig:
     tradeable_min_universe: int = int(os.getenv("GP_TRADEABLE_MIN_UNIVERSE", "50"))
     tradeable_min_candidates: int = int(os.getenv("GP_TRADEABLE_MIN_CANDIDATES", "20"))
 
+    # Parallelism for candidate generation
+    # 0 or negative => auto (use CPU-based default)
+    parallel_workers: int = int(os.getenv("GP_PARALLEL_WORKERS", "0"))
+
+    # Cache refresh TTL for market data (seconds). Within TTL, skip network refresh and serve cache.
+    cache_refresh_ttl_sec: int = int(os.getenv("GP_CACHE_REFRESH_TTL_SEC", "300"))
+
 
 def load_config() -> AppConfig:
     """读取环境变量并做派生/校验。"""

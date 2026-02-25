@@ -2,13 +2,20 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
 import requests
 
 from ..core.paths import store_dir
 from ..core.config import load_config
+from ..search.history_store import (
+    canonical_query_id,
+    ensure_query,
+    compute_next_range,
+    upsert_items,
+    list_items,
+)
 
 
 def _cache_path(symbol: str) -> str:
@@ -31,49 +38,98 @@ def _save_cache(symbol: str, data: Dict[str, Any]) -> None:
 
 
 def fetch_announcements(symbol: str) -> Dict[str, Any]:
+    """Fetch company announcements with incremental history-store.
+
+    - Uses history_store keyed by {kind:'ann', symbol, provider:'cninfo'}
+    - On each call, incrementally fetch [watermark-2d, now] and upsert
+    - Returns last 30d merged from local store with simple risk summary
+    """
     cfg = load_config()
-    # Try cache first（严格模式下仍允许已存在的真实缓存命中）
-    cached = _load_cache(symbol)
-    if cached:
-        return {**cached, "source": "cache"}
-    # Try CNINFO API（可能失败）
-    end = datetime.now().strftime("%Y-%m-%d")
-    start = (datetime.now() - timedelta(days=30)).strftime("%Y-%m-%d")
-    result = {"list": [], "risk_level": None, "evidence": [], "catalyst": [], "_reason": None}
+    now = datetime.now(tz=timezone.utc)
+    end_iso = now.date().isoformat()
+    lookback_days = 30
+    default_start_iso = (now - timedelta(days=lookback_days)).date().isoformat()
+
+    # History-store setup
+    qparams = {"kind": "ann", "symbol": str(symbol), "provider": "cninfo"}
+    qid = canonical_query_id(qparams)
+    ensure_query(qid, qparams)
+
+    # Compute incremental window with safety lookback
+    start_iso, end_iso_eff = compute_next_range(qid, user_start=default_start_iso, user_end=end_iso, safety_lookback_days=2)
+    start_iso = start_iso or default_start_iso
+    end_iso_eff = end_iso_eff or end_iso
+
+    # Try CNINFO network fetch for the incremental window
+    net_ok = False
     try:
-        # CNINFO requires complex params; use a placeholder endpoint that's public. If fails, degrade.
-        # For compliance we attempt and record failure without crashing.
         url = "https://www.cninfo.com.cn/new/hisAnnouncement/query"
-        params = {"plate": "sz;sh", "seDate": f"{start}~{end}", "searchkey": symbol, "pageNum": 1, "pageSize": 30}
+        params = {
+            "plate": "sz;sh",
+            "seDate": f"{start_iso}~{end_iso_eff}",
+            "searchkey": symbol,
+            "pageNum": 1,
+            "pageSize": 60,
+        }
         r = requests.post(url, data=params, timeout=10)
         r.raise_for_status()
         js = r.json()
         items = js.get("announcements", []) if isinstance(js, dict) else []
-        out_items: List[Dict[str, Any]] = []
-        for it in items[:20]:
-            out_items.append({
+
+        def _iid(it: Dict[str, Any]) -> str:
+            base = str(it.get("id") or it.get("adjunctUrl") or (str(it.get("announcementTitle", "")) + "|" + str(it.get("announcementTime", ""))))
+            # keep short id; stability is sufficient
+            import hashlib
+            return hashlib.sha256(base.encode("utf-8")).hexdigest()[:24]
+
+        parsed: List[Dict[str, Any]] = []
+        for it in items:
+            d = str(it.get("announcementTime") or "").strip()
+            # Convert to YYYY-MM-DD if timestamp-like
+            try:
+                if d.isdigit():
+                    # milliseconds
+                    ts = int(d)
+                    if ts > 10_000_000_000:
+                        ts = ts // 1000
+                    d_iso = datetime.utcfromtimestamp(ts).date().isoformat()
+                else:
+                    d_iso = datetime.fromisoformat(d.replace("/", "-")[:10]).date().isoformat()
+            except Exception:
+                d_iso = default_start_iso
+            parsed.append({
+                "id": _iid(it),
+                "date": d_iso,
                 "title": it.get("announcementTitle", ""),
-                "date": it.get("announcementTime", ""),
                 "type": it.get("announcementType", ""),
                 "url": it.get("adjunctUrl", ""),
                 "source": "cninfo",
             })
-        result["list"] = out_items
-        # risk keywords
-        text = "\n".join(x.get("title", "") for x in out_items)
-        risk_kw = ["减持", "解禁", "异常波动", "风险提示", "问询", "立案", "下修", "预亏", "失败"]
-        hits = [kw for kw in risk_kw if kw in text]
-        if any(hits):
-            result["risk_level"] = "high" if len(hits) >= 2 else "medium"
-            result["evidence"] = hits[:2]
-        result["_reason"] = "cninfo_ok"
+        if parsed:
+            upsert_items(qid, parsed, id_key="id", time_key="date", etag_key=None)
+        net_ok = True
     except Exception as e:  # noqa: BLE001
-        if cfg.strict_real_data:
-            # 不造数据：只标注错误信息，保持 risk_level=None
-            result["_reason"] = f"cninfo_failed:{e}"
-            result["error"] = str(e)
-        else:
-            result["_reason"] = f"cninfo_failed:{e}"
-            result["risk_level"] = "medium"
-    _save_cache(symbol, result)
+        # best effort; fall through to local store
+        net_err = str(e)
+
+    # Read last 30d from store and summarize
+    since_iso = default_start_iso
+    rows = list_items(qid, since=since_iso)
+    lst = [r["payload"] for r in rows]
+    # risk summary
+    text = "\n".join(x.get("title", "") for x in lst)
+    risk_kw = ["减持", "解禁", "异常波动", "风险提示", "问询", "立案", "下修", "预亏", "失败"]
+    hits = [kw for kw in risk_kw if kw in text]
+    risk_level = ("high" if len(hits) >= 2 else ("medium" if hits else None))
+
+    result: Dict[str, Any] = {
+        "list": lst,
+        "risk_level": risk_level,
+        "evidence": hits[:2],
+        "catalyst": [],
+        "_reason": "cninfo_ok" if net_ok else "cninfo_cached_or_failed",
+        "source": "store:cninfo",
+    }
+    if not net_ok:
+        result["error"] = locals().get("net_err")
     return result

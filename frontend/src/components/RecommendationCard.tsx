@@ -43,7 +43,11 @@ export default function RecommendationCard(
                   {it.symbol}
                   {it.name ? ` · ${it.name}` : ''}
                 </Typography.Text>
-                {it.theme && <Tag color="geekblue">{it.theme}</Tag>}
+                {(() => {
+                  const th = (it as any).theme
+                  const show = th && typeof th === 'string' && !th.startsWith('概念-')
+                  return show ? <Tag color="geekblue">{th}</Tag> : null
+                })()}
               </Space>
               {it.champion?.strategy && (
                 <Typography.Text type="secondary">
@@ -65,4 +69,3 @@ export default function RecommendationCard(
     </Card>
   )
 }
-

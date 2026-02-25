@@ -5,6 +5,7 @@ import json
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
+from datetime import datetime, timezone
 
 import pandas as pd
 
@@ -12,6 +13,14 @@ from ..core.paths import store_dir
 from ..core.config import load_config
 from ..providers.factory import get_provider
 from ..tools.market_data import normalize_daily_ohlcv
+from ..search.history_store import (
+    canonical_query_id,
+    ensure_query,
+    compute_next_range,
+    upsert_items,
+    list_items as _list_items,
+    query_meta as _query_meta,
+)
 
 
 def _cache_path(kind: str, key: str) -> Path:
@@ -57,24 +66,83 @@ class MarketDataHub:
                     continue
         return None
 
-    def daily_ohlcv(self, symbol: str, as_of: Optional[str] = None, min_len: int = 250) -> Tuple[pd.DataFrame, Dict[str, Any]]:
+    def daily_ohlcv(self, symbol: str, as_of: Optional[str] = None, min_len: int = 250, *, prefer_cache_only: bool = False) -> Tuple[pd.DataFrame, Dict[str, Any]]:
         cfg = load_config()
         df: Optional[pd.DataFrame] = None if cfg.strict_real_data else self._from_fixtures(symbol)
         meta: Dict[str, Any] = {"source": None}
-        if df is not None:
-            meta["source"] = "fixtures"
+
+        # Cache-first via history_store
+        provider = get_provider()
+        qparams = {"kind": "daily", "symbol": str(symbol), "provider": provider.name}
+        qid = canonical_query_id(qparams)
+        ensure_query(qid, qparams)
+
+        do_network = not prefer_cache_only
+        # TTL gating: if last_fetch_at within TTL, skip network
+        try:
+            ttl = int(getattr(cfg, "cache_refresh_ttl_sec", 300))
+            if ttl > 0:
+                meta_q = _query_meta(qid)
+                lfa = meta_q.get("last_fetch_at")
+                if isinstance(lfa, str) and lfa.strip():
+                    try:
+                        last = datetime.fromisoformat(lfa)
+                    except Exception:
+                        last = None
+                    if last is not None:
+                        now = datetime.now(tz=timezone.utc)
+                        age = (now - (last if last.tzinfo else last.replace(tzinfo=timezone.utc))).total_seconds()
+                        if age <= ttl:
+                            do_network = False
+        except Exception:
+            pass
+        if do_network:
+            start, end = compute_next_range(qid, user_start=None, user_end=as_of, safety_lookback_days=2)
+            def _date_only(s: Optional[str]) -> Optional[str]:
+                if s is None:
+                    return None
+                try:
+                    return pd.to_datetime(s).date().isoformat()
+                except Exception:
+                    return s.split("T", 1)[0]
+            raw = provider.get_daily(symbol, start=_date_only(start), end=_date_only(end))
+            df_norm_tmp, _ = normalize_daily_ohlcv(raw)
+            items = []
+            for _, r in df_norm_tmp.iterrows():
+                d = pd.to_datetime(r["date"]).date().isoformat()
+                items.append({
+                    "id": d,
+                    "date": d,
+                    "open": float(r["open"]),
+                    "high": float(r["high"]),
+                    "low": float(r["low"]),
+                    "close": float(r["close"]),
+                    "volume": float(r["volume"]),
+                    "amount": float(r.get("amount", 0.0) or 0.0),
+                })
+            upsert_items(qid, items, id_key="id", time_key="date", etag_key=None)
+
+        rows = _list_items(qid)
+        if rows:
+            df = pd.DataFrame([r["payload"] for r in rows])
+            df["date"] = pd.to_datetime(df["date"])  # type: ignore[assignment]
+            for c in ["open", "high", "low", "close", "volume", "amount"]:
+                if c in df.columns:
+                    df[c] = pd.to_numeric(df[c], errors="coerce")
+            df = df.sort_values("date").reset_index(drop=True)
+            meta["source"] = meta.get("source") or f"store:daily:{provider.name}"
         else:
-            provider = get_provider()
-            raw = provider.get_daily(symbol, start=None, end=as_of)
-            df = raw
-            src = getattr(provider, "_last_daily_source", None)
-            meta["source"] = src or f"provider:{provider.name}"
-            try:
-                atts = getattr(provider, "_last_daily_attempts", None)
-                if atts is not None:
-                    meta["attempts"] = atts
-            except Exception:
-                pass
+            if df is None and not prefer_cache_only:
+                raw = provider.get_daily(symbol, start=None, end=as_of)
+                df = raw
+                src = getattr(provider, "_last_daily_source", None)
+                meta["source"] = src or f"provider:{provider.name}"
+                try:
+                    atts = getattr(provider, "_last_daily_attempts", None)
+                    if atts is not None:
+                        meta["attempts"] = atts
+                except Exception:
+                    pass
         if df is None or len(df) == 0:
             raise ValueError(f"daily_ohlcv: 无法获取真实数据 symbol={symbol}")
         df_norm, m = normalize_daily_ohlcv(df)
@@ -83,6 +151,93 @@ class MarketDataHub:
         meta["insufficient_history"] = len(df_norm) < min_len
         df_norm.attrs.update(meta)
         return df_norm, meta
+
+    def daily_ohlcv_batch(self, symbols: list[str], as_of: Optional[str] = None, *, safety_lookback_days: int = 2) -> Dict[str, Tuple[pd.DataFrame, Dict[str, Any]]]:
+        if not symbols:
+            return {}
+        provider = get_provider()
+        # compute minimal start across symbols
+        starts = []
+        qids: Dict[str, str] = {}
+        skip_symbols: set[str] = set()
+        for s in symbols:
+            qparams = {"kind": "daily", "symbol": str(s), "provider": provider.name}
+            qid = canonical_query_id(qparams)
+            qids[s] = qid
+            ensure_query(qid, qparams)
+            # per-symbol TTL gating
+            try:
+                ttl = int(getattr(load_config(), "cache_refresh_ttl_sec", 300))
+                if ttl > 0:
+                    meta_q = _query_meta(qid)
+                    lfa = meta_q.get("last_fetch_at")
+                    if isinstance(lfa, str) and lfa.strip():
+                        last = None
+                        try:
+                            last = datetime.fromisoformat(lfa)
+                        except Exception:
+                            pass
+                        if last is not None:
+                            now = datetime.now(tz=timezone.utc)
+                            age = (now - (last if last.tzinfo else last.replace(tzinfo=timezone.utc))).total_seconds()
+                            if age <= ttl:
+                                skip_symbols.add(s)
+                                continue
+            except Exception:
+                pass
+            st, _ = compute_next_range(qid, user_start=None, user_end=as_of, safety_lookback_days=safety_lookback_days)
+            if st:
+                starts.append(st)
+        def _date_only(s: Optional[str]) -> Optional[str]:
+            if s is None:
+                return None
+            try:
+                return pd.to_datetime(s).date().isoformat()
+            except Exception:
+                return s.split("T", 1)[0]
+        start = _date_only(min(starts) if starts else None)
+        end = _date_only(as_of)
+
+        # Fetch batch and upsert
+        fetch_list = [s for s in symbols if s not in skip_symbols]
+        raw_map = provider.get_daily_batch(fetch_list, start=start, end=end) if fetch_list else {}
+        for s, raw in raw_map.items():
+            try:
+                df_norm, _ = normalize_daily_ohlcv(raw)
+            except Exception:
+                continue
+            items = []
+            for _, r in df_norm.iterrows():
+                d = pd.to_datetime(r["date"]).date().isoformat()
+                items.append({
+                    "id": d,
+                    "date": d,
+                    "open": float(r["open"]),
+                    "high": float(r["high"]),
+                    "low": float(r["low"]),
+                    "close": float(r["close"]),
+                    "volume": float(r["volume"]),
+                    "amount": float(r.get("amount", 0.0) or 0.0),
+                })
+            upsert_items(qids[s], items, id_key="id", time_key="date", etag_key=None)
+
+        # Return mapping from cache
+        out: Dict[str, Tuple[pd.DataFrame, Dict[str, Any]]] = {}
+        for s in symbols:
+            rows = _list_items(qids[s])
+            if not rows:
+                continue
+            df = pd.DataFrame([r["payload"] for r in rows])
+            df["date"] = pd.to_datetime(df["date"])  # type: ignore[assignment]
+            for c in ["open", "high", "low", "close", "volume", "amount"]:
+                if c in df.columns:
+                    df[c] = pd.to_numeric(df[c], errors="coerce")
+            df = df.sort_values("date").reset_index(drop=True)
+            df_norm, m = normalize_daily_ohlcv(df)
+            meta = {"source": f"store:daily:{provider.name}", **m, "len": len(df_norm), "insufficient_history": False}
+            df_norm.attrs.update(meta)
+            out[s] = (df_norm, meta)
+        return out
 
     def index_daily(self, symbol: str) -> Tuple[pd.DataFrame, Dict[str, Any]]:
         try:

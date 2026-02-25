@@ -20,7 +20,8 @@ def _build_candidate_worker(entry: Dict[str, Any], env_grade_in: str) -> Dict[st
     _hub = _Hub()
     sym = entry.get("code")
     try:
-        df, meta = _hub.daily_ohlcv(sym, None, min_len=250)
+        # Prefer cached bars to avoid duplicate fetch after prefetch
+        df, meta = _hub.daily_ohlcv(sym, None, min_len=250, prefer_cache_only=True)
     except Exception as e:  # noqa: BLE001
         return {"symbol": sym, "status": "skip", "skipped_sample": True, "reason": f"fetch_fail:{e}", "src": None, "len": None, "attempts": None}
     bars_too_short = False
@@ -251,10 +252,24 @@ def generate_candidates(symbols: List[str] | None, env_grade: str, topk: int = 3
     stats["universe_in_count"] = len(base_entries)
     stats["universe_after_filter_count"] = len(base_entries)
 
+    # —— 预取：按批量拉取+增量入库，加速后续并发计算 ——
+    try:
+        syms = [str(e.get("code")) for e in base_entries if e.get("code")]
+        if syms:
+            _ = hub.daily_ohlcv_batch(syms, as_of=None, safety_lookback_days=2)
+            print(f"[预取] 已批量入库日线，共 {len(syms)} 个标的", flush=True)
+    except Exception as e:  # noqa: BLE001
+        try:
+            print(f"[预取] 批量入库失败: {type(e).__name__}: {e}", flush=True)
+        except Exception:
+            pass
+
     # --- 并行执行符号任务（保持原逻辑，只改变执行方式） ---
 
     total = len(base_entries)
-    workers = cfg.parallel_workers if cfg.parallel_workers and cfg.parallel_workers > 0 else max(2, min(8, (os.cpu_count() or 4) * 2))
+    # Safe read for backward compatibility when config lacks the field
+    _w = getattr(cfg, "parallel_workers", 0)
+    workers = _w if isinstance(_w, int) and _w > 0 else max(2, min(8, (os.cpu_count() or 4) * 2))
     try:
         pri = ",".join(getattr(cfg, "ak_daily_priority", ["tx", "sina", "em"]))
         strict = bool(getattr(cfg, "strict_real_data", True))
