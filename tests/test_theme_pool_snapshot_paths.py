@@ -40,14 +40,15 @@ def test_snapshot_with_industry_returns_industry_snapshot(monkeypatch):
 def test_snapshot_no_industry_concept_empty_falls_back_to_top_movers(monkeypatch):
     _patch_concept_to_return(monkeypatch, [])
     from gp_assistant.recommend.theme_pool import build_themes
+    from gp_assistant.recommend.theme_hints import build_mover_hints
     snap = pd.DataFrame({
         "代码": ["000001", "000002", "000003"],
         "涨跌幅(%)": [0.1, 3.5, -1.0],
     })
     themes = build_themes(DummyHub(), snapshot=snap)
-    assert len(themes) >= 1
-    assert themes[0]["source"] == "top_movers"
-    assert themes[0]["name"].startswith("强势线索-")
+    assert themes == []  # no pseudo themes
+    hints = build_mover_hints(snap, topn=2)
+    assert len(hints) == 2 and hints[0]["source"] == "snapshot"
 
 
 def test_snapshot_no_industry_concept_available_preferred(monkeypatch):

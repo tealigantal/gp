@@ -20,8 +20,8 @@
 
 ```
 python -m compileall src
-pytest -q tests/test_regress_theme_and_bands.py tests/test_contract_event_and_history.py
-PYTHONPATH=src python -m gp_assistant.recommend.self_check
+python -m pytest -q tests/test_regress_theme_and_bands.py tests/test_contract_event_and_history.py tests/test_theme_concept_fallback_no_snapshot.py tests/test_theme_pool_snapshot_paths.py tests/test_theme_pool_impl_nan_and_scale.py tests/test_strict_no_pseudo_output.py
+PYTHONPATH=src python -m gp_assistant.recommend.self_check_contract
 ```
 
 - 只更新某一侧（可选）
@@ -98,3 +98,13 @@ PYTHONPATH=src python -m gp_assistant.recommend.self_check
 ---
 
 有新的偏好（加入日内、更多基本面过滤、实时主线识别、回测可视化等），告诉我就行，我会继续按“说人话 + 好用”打磨。
+
+---
+
+### 严格输出与数据契约
+
+- 默认严格模式（`GP_STRICT_OUTPUT=1`）：缺失数字字段输出为 `null`，不会用 `0.0` 兜底；不会伪造主题/线索。
+- 推荐卡片 `meta` 包含：
+  - `schema_version: 1`
+  - `data_status`: `{ snapshot: { ok, source, rows, elapsed_sec, cache, as_of_ts, error }, themes: { ok, source, attempted, error, as_of_ts }, daily: { ok, symbols_ok, symbols_fail, error_summary } }`
+  - `mover_hints`: 来自快照的强势线索；`themes` 仅包含行业/概念。

@@ -22,6 +22,12 @@ export default function KlineCard({ symbol, conversationId }: { symbol: string; 
   return (
     <Card size="small" title={`K线 · ${symbol}`} style={{ margin: '8px 0' }}>
       <KlineChart symbol={symbol} overlay={overlay} />
+      <div style={{ color: '#999', fontSize: 12, marginTop: 4 }}>
+        数据频率：日线
+        {overlay?.chip?.model_used && <> ｜ 筹码来源：{String(overlay.chip.model_used)}</>}
+        {overlay?.bands && overlay?.chip && <> ｜ 叠加：关键带 + 筹码</>}
+        {!overlay?.bands && !overlay?.chip && <> ｜ 无可用叠加数据（strict 模式下不会伪造）</>}
+      </div>
     </Card>
   )
 }

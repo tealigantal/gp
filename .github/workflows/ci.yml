@@ -19,7 +19,11 @@ jobs:
       - name: Compile
         run: python -m compileall src
       - name: Run regression tests
-        run: pytest -q tests/test_regress_theme_and_bands.py tests/test_contract_event_and_history.py tests/test_theme_concept_fallback_no_snapshot.py tests/test_theme_pool_snapshot_paths.py
+        run: python -m pytest -q tests/test_regress_theme_and_bands.py tests/test_contract_event_and_history.py tests/test_theme_concept_fallback_no_snapshot.py tests/test_theme_pool_snapshot_paths.py tests/test_theme_pool_impl_nan_and_scale.py tests/test_strict_no_pseudo_output.py
+      - name: Contract self-check
+        env:
+          PYTHONPATH: src
+        run: python -m gp_assistant.recommend.self_check_contract
       - name: Self-check (contract)
         env:
           PYTHONPATH: src

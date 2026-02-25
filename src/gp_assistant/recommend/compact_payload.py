@@ -15,6 +15,7 @@ def compact_recommend_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
         "timezone",
         "env",
         "themes",
+        "mover_hints",
         "picks",
         "tradeable",
         "message",
@@ -30,6 +31,10 @@ def compact_recommend_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
                 slim[k] = dbg.get(k)
         if slim:
             out["debug"] = slim
+    # attach schema/data_status if present
+    out["schema_version"] = 1
+    if isinstance(payload.get("data_status"), dict):
+        out["data_status"] = payload.get("data_status")
     return out
 
 
@@ -40,6 +45,7 @@ def compact_recommend_meta(payload: Dict[str, Any]) -> Dict[str, Any]:
         "timezone",
         "env",
         "themes",
+        "mover_hints",
         "tradeable",
         "message",
         "execution_checklist",
@@ -54,5 +60,7 @@ def compact_recommend_meta(payload: Dict[str, Any]) -> Dict[str, Any]:
                 slim[k] = dbg.get(k)
         if slim:
             out["debug"] = slim
+    out["schema_version"] = 1
+    if isinstance(payload.get("data_status"), dict):
+        out["data_status"] = payload.get("data_status")
     return out
-

@@ -33,6 +33,16 @@ def build_themes_impl(hub: MarketDataHub, snapshot: Optional[pd.DataFrame] = Non
         df["chg"] = pd.to_numeric(df[chg_col].astype(str).str.rstrip("% ％"), errors="coerce")
     except Exception:
         df["chg"] = pd.to_numeric(df[chg_col], errors="coerce")
+    # Heuristic: if values look like decimals (median<1 and max<=1), scale to percent
+    scale_note = False
+    try:
+        med = float(df["chg"].dropna().abs().median()) if len(df) else 0.0
+        mx = float(df["chg"].dropna().abs().max()) if len(df) else 0.0
+        if (med < 1.0) and (mx <= 1.0) and mx > 0:
+            df["chg"] = df["chg"] * 100.0
+            scale_note = True
+    except Exception:
+        pass
 
     cols = set(map(str, df.columns))
 
@@ -58,10 +68,13 @@ def build_themes_impl(hub: MarketDataHub, snapshot: Optional[pd.DataFrame] = Non
                 strength = f"{float(mean_val):.2f}%"
             except Exception:
                 strength = ""
+            ev = [f"样本n={int(r.get('count', 0) or 0)}"]
+            if scale_note:
+                ev.append("scale:x100")
             themes.append({
                 "name": str(r.get("行业")),
                 "strength": strength,
-                "evidence": [f"样本n={int(r.get('count', 0) or 0)}"],
+                "evidence": ev,
                 "source": "industry_snapshot",
             })
         return themes
@@ -70,24 +83,5 @@ def build_themes_impl(hub: MarketDataHub, snapshot: Optional[pd.DataFrame] = Non
     t = build_concept_themes(topn=topn, reason="no_industry_col")
     if t:
         return t
-
-    # Fallback: top movers by code from snapshot
-    code_col = "代码" if "代码" in cols else ("code" if "code" in cols else None)
-    if not code_col:
-        return []
-    df2 = df[[code_col, "chg"]].dropna(subset=["chg"]).sort_values("chg", ascending=False).head(max(0, int(topn)))
-    themes: List[Dict[str, Any]] = []
-    for _, r in df2.iterrows():
-        val = r.get("chg")
-        try:
-            strength = f"{float(val):.2f}%"
-        except Exception:
-            strength = ""
-        themes.append({
-            "name": f"强势线索-{r.get(code_col)}",
-            "strength": strength,
-            "evidence": [f"当日领涨：{strength}" if strength else "当日领涨"],
-            "source": "top_movers",
-        })
-    return themes
-
+    # No industry and no concept: no pseudo themes
+    return []

@@ -24,6 +24,10 @@ from .calendar import calendar_summary
 from .datahub import MarketDataHub
 from .market_env import score_regime
 from .theme_pool import build_themes
+from .theme_hints import build_mover_hints
+from .strict_output import normalize_payload
+from .theme_concept import last_concept_status
+from ..core.strict import is_strict
 from .candidate_gen import generate_candidates
 from ..providers.factory import get_provider
 
@@ -265,6 +269,15 @@ def run(date: Optional[str] = None, topk: int = 3, universe: str = "auto", symbo
             feat = feats_by_symbol.get(sym)
             if mod is not None and feat is not None:
                 it["trade_plan"] = _trade_plan_from_strategy(mod, feat, cand, q_grade=(cand.get("q_grade") or cand.get("indicators", {}).get("q_grade")))
+        # attach last_close/last_date if available
+        try:
+            feat = feats_by_symbol.get(sym)
+            if feat is not None and len(feat) > 0:
+                it["last_close"] = float(feat["close"].iloc[-1]) if "close" in feat.columns else None
+                it["last_date"] = str(getattr(feat.index, "__getitem__", lambda i: None)(-1)) if hasattr(feat, "index") else None
+        except Exception:
+            it.setdefault("last_close", None)
+            it.setdefault("last_date", None)
         picks.append(it)
     picks = picks[: topk or 3]
     # Champion availability advisory (soft warning, not affecting tradeable)
@@ -393,6 +406,41 @@ def run(date: Optional[str] = None, topk: int = 3, universe: str = "auto", symbo
                 if k in detail:
                     parts.append(f"{k}={detail[k]}")
             logger.warning(f"[DEGRADED] {code} {' '.join(parts)}".strip())
+
+    # Attach mover_hints (separate from themes; no pseudo when snapshot missing)
+    payload["mover_hints"] = build_mover_hints(snapshot_df, topn=3) if snapshot_df is not None else []
+
+    # Normalize for strict contract (drop pseudo, set None)
+    payload = normalize_payload(payload)
+
+    # Data status for contract
+    ds_snapshot = {
+        "ok": snapshot_df is not None,
+        "source": (snap_meta.get("source") or snap_meta.get("cache_of") or None),
+        "rows": (0 if snapshot_df is None else int(len(snapshot_df))),
+        "elapsed_sec": snap_meta.get("elapsed_sec"),
+        "cache": snap_meta.get("cache") or "none",
+        "as_of_ts": snap_meta.get("as_of_ts"),
+        "error": snap_meta.get("error"),
+    }
+    try:
+        lcs = last_concept_status()
+    except Exception:
+        lcs = {"attempted": [], "error": None}
+    ds_themes = {
+        "ok": bool(payload.get("themes")),
+        "source": ",".join(sorted(set([str(t.get("source")) for t in (payload.get("themes") or []) if isinstance(t, dict) and t.get("source")]))) or None,
+        "attempted": lcs.get("attempted") or [],
+        "error": lcs.get("error"),
+        "as_of_ts": snap_meta.get("as_of_ts"),
+    }
+    ds_daily = {
+        "ok": True,
+        "symbols_ok": len(feats_by_symbol),
+        "symbols_fail": len(locals().get("strategy_eval_failures", []) or []),
+        "error_summary": None,
+    }
+    payload["data_status"] = {"snapshot": ds_snapshot, "themes": ds_themes, "daily": ds_daily}
 
     _write_outputs(as_of, payload)
     return payload
