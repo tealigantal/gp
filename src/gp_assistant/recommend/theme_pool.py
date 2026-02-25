@@ -105,3 +105,9 @@ def build_themes(hub: MarketDataHub, snapshot: Optional[pd.DataFrame] = None) ->
         })
     return themes
 
+
+try:
+    from .theme_pool_impl import build_themes_impl as _build_themes_impl
+    build_themes = _build_themes_impl  # type: ignore[assignment]
+except Exception:
+    pass
