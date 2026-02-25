@@ -7,13 +7,14 @@ import pandas as pd
 
 from .datahub import MarketDataHub
 from ..providers.factory import get_provider
+from .theme_concept import build_concept_themes
 
 
 def build_themes(hub: MarketDataHub, snapshot: Optional[pd.DataFrame] = None) -> List[Dict[str, Any]]:
     # 优先使用快照中的行业列，按行业聚合给出主线；缺列则退为个股强势线索（仍来自真实快照）
     if snapshot is None:
-        # Degrade: no snapshot path -> no strong themes inferred
-        return []
+        t = build_concept_themes(topn=2, reason="no_snapshot")
+        return t or []
     snap = snapshot
     cols = set(snap.columns)
     # 统一涨跌幅列名（支持 % 与中英兼容）
@@ -22,12 +23,10 @@ def build_themes(hub: MarketDataHub, snapshot: Optional[pd.DataFrame] = None) ->
         if c in cols:
             chg_col = c
             break
+        t = build_concept_themes(topn=2, reason="no_chg_col")
     if not chg_col:
-        # 没有涨跌/涨跌幅字段：不伪造主线，直接返回空
-        return []
-    # normalize change
-    df = snap.copy()
-    df["chg"] = pd.to_numeric(df[chg_col].astype(str).str.rstrip("% "), errors="coerce")
+        t = build_concept_themes(topn=2, reason="no_chg_col")
+        return t or []
     # Industry-aggregated themes
     if "行业" in cols:
         # Aggregate by industry: mean change and sum of amount when available
