@@ -19,7 +19,7 @@ export default function StrengthPanel({ conversationId }: { conversationId?: str
     return [] as any[]
   }, [conversationId, tick])
   const { hints, hasRecCard } = useMemo(() => {
-    if (!conversationId) return [] as any[]
+    if (!conversationId) return { hints: [] as any[], hasRecCard: false }
     const evs = syncManager.messages(conversationId)
     for (let i = evs.length - 1; i >= 0; i--) {
       const e: any = evs[i]

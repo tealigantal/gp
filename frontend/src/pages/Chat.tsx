@@ -1,4 +1,4 @@
-ï»¿import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Card, FloatButton, Input, List, Space, Spin, Typography, message } from 'antd'
 import { useMutation } from '@tanstack/react-query'
 import { chat } from '../api/client'
@@ -46,14 +46,12 @@ export default function Chat() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // éšå±¾î„é”›æ°³å«¢å®¸å‰æ¹æµ¼æ°³ç˜½é”›å±½å§ææˆ’ç°¨æµ è·ºå·»é™æ’è‹Ÿæ·‡æ¿‡å¯”æî†¿î‡—
+  // åŒæ­¥ï¼šè‹¥å·²æœ‰ä¼šè¯ï¼ŒåŠ è½½äº‹ä»¶å†å²å¹¶ä¿æŒè½®è¯¢
   useEffect(() => {
     if (!sessionId) return
     let unsub = () => {}
     ;(async () => {
-      await syncManager.ensureLoaded(sessionId)
-      renderFromEvents()
-      unsub = syncManager.subscribe(() => renderFromEvents())
+            unsub = syncManager.subscribe(() => renderFromEvents())
     })()
     return () => unsub()
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -62,17 +60,17 @@ export default function Chat() {
   // incremental events polling (2.5s; persists cursor)
   useConversationEvents(sessionId)
 
-  // å‰å°åˆ‡æ¢ç«‹å³åŒæ­¥
+  // Ç°Ì¨ÇĞ»»Á¢¼´Í¬²½
   useEffect(() => {
     const onVis = () => { if (!document.hidden) syncManager.flush().catch(()=>undefined) }
     document.addEventListener('visibilitychange', onVis)
     return () => document.removeEventListener('visibilitychange', onVis)
   }, [])
 
-  // é€îˆ›å¯”é¼æ»…å‚¨ç¼æ’´ç‰ç’ºå® æµ†é”›?chat?cid=xxx&seq=123
+  // æ”¯æŒæœç´¢ç»“æœè·³è½¬ï¼?chat?cid=xxx&seq=123
   useEffect(() => {
     const params = new URLSearchParams(loc.search)
-    const cid = params.get('cid') || params.get('sid') || undefined
+    const cid = params.get('cid') || undefined
     const seqStr = params.get('seq') || undefined
     if (cid) {
       if (cid !== sessionId) {
@@ -105,7 +103,7 @@ export default function Chat() {
           continue
         }
         if (p?.type === 'status') {
-          // status å¡ç‰‡ä»…åœ¨å³ä¾§è¿›åº¦é¢æ¿å±•ç¤ºï¼Œå·¦ä¾§å¯¹è¯éšè—
+          // status ¿¨Æ¬½öÔÚÓÒ²à½ø¶ÈÃæ°åÕ¹Ê¾£¬×ó²à¶Ô»°Òş²Ø
           continue
         }
       }
@@ -131,12 +129,12 @@ export default function Chat() {
       return resp
     },
     onSuccess: async (resp) => {
-      // ç»Ÿä¸€ï¼šç¡®ä¿åŠ è½½ + ç«‹å³å¢é‡åŒæ­¥ + é‡ç»˜
+      // Í³Ò»£ºÈ·±£¼ÓÔØ + Á¢¼´ÔöÁ¿Í¬²½ + ÖØ»æ
       const cid = resp?.session_id || sessionIdRef.current
       if (cid) {
         try { await syncManager.ensureLoaded(String(cid)) } catch { /* ignore */ }
         try { await syncManager.flush() } catch { /* ignore */ }
-        // ä»…â€œç­‰å¾…-æ‹‰å–â€ï¼Œä¸åšä»»ä½•å…œåº•å†™å…¥ã€‚ä¿æŒåç«¯ä¸ºå”¯ä¸€äº‹å®æ¥æºã€‚
+        // ½ö¡°µÈ´ı-À­È¡¡±£¬²»×öÈÎºÎ¶µµ×Ğ´Èë¡£±£³Öºó¶ËÎªÎ¨Ò»ÊÂÊµÀ´Ô´¡£
         const targetId = resp.assistant_message_id
         const start = Date.now()
         const waitMs = 1600
@@ -148,7 +146,7 @@ export default function Chat() {
             try { await syncManager.flush() } catch { /* ignore */ }
           }
         } else {
-          // æ²¡æœ‰è¿”å› idï¼Œä¹Ÿåšä¸€æ¬¡è½»é‡æ‹‰å–
+          // Ã»ÓĞ·µ»Ø id£¬Ò²×öÒ»´ÎÇáÁ¿À­È¡
           try { await new Promise((r) => setTimeout(r, 150)) } catch {}
           try { await syncManager.flush() } catch { /* ignore */ }
         }
@@ -156,7 +154,7 @@ export default function Chat() {
       }
     },
     onError: (err: any) => {
-      message.error(err?.message || 'å‘é€å¤±è´¥')
+      message.error(err?.message || '·¢ËÍÊ§°Ü')
     }
   })
 
@@ -191,26 +189,26 @@ export default function Chat() {
       const topk = slots.topk ?? 3
       const risk = (slots.risk as any) || getRiskProfile() || 'normal'
       const universe = slots.universe || (slots.symbols && slots.symbols.length > 0 ? 'symbols' : 'auto')
-      const symTxt = (slots.symbols && slots.symbols.length) ? ` ä»£ç : ${slots.symbols.join(' ')}` : ''
-      const text = `æ¨è ${topk} åªï¼›é£é™© ${risk}ï¼›èŒƒå›´ ${universe}.${symTxt}`
-      // è¿›åº¦ï¼šå¼€å§‹
-      pushStatus(cid, 'report_started', 'å¼€å§‹ç”Ÿæˆæ¨è', runId)
-      // è¿›åº¦ï¼šè§„åˆ’/å€™é€‰é˜¶æ®µï¼ˆå‰ç«¯å¯è§ä¸­é—´æ€ï¼‰
-      pushStatus(cid, 'planning', 'ç”Ÿæˆå‚æ•°ä¸å€™é€‰', runId)
+      const symTxt = (slots.symbols && slots.symbols.length) ? ` ´úÂë: ${slots.symbols.join(' ')}` : ''
+      const text = `ÍÆ¼ö ${topk} Ö»£»·çÏÕ ${risk}£»·¶Î§ ${universe}.${symTxt}`
+      // ½ø¶È£º¿ªÊ¼
+      pushStatus(cid, 'report_started', '¿ªÊ¼Éú³ÉÍÆ¼ö', runId)
+      // ½ø¶È£º¹æ»®/ºòÑ¡½×¶Î£¨Ç°¶Ë¿É¼ûÖĞ¼äÌ¬£©
+      pushStatus(cid, 'planning', 'Éú³É²ÎÊıÓëºòÑ¡', runId)
       await syncManager.flush().catch(()=>undefined)
-      // è°ƒç”¨åç«¯ /chatï¼Œè®©åç«¯å®Œæˆæ¨èã€å†™å…¥æœ€æ–°æ¨èä¸å¡ç‰‡ï¼ˆä¿æŒä¼šè¯å¯è¿½é—®ï¼‰
-      await chat({ session_id: cid, message: `èè‚¡ ${text}`, message_id: msgId })
+      // µ÷ÓÃºó¶Ë /chat£¬ÈÃºó¶ËÍê³ÉÍÆ¼ö¡¢Ğ´Èë×îĞÂÍÆ¼öÓë¿¨Æ¬£¨±£³Ö»á»°¿É×·ÎÊ£©
+      await chat({ session_id: cid, message: `¼ö¹É ${text}`, message_id: msgId })
       await syncManager.flush().catch(()=>undefined)
-      // è¿›åº¦ï¼šå®Œæˆ
-      pushStatus(cid, 'plan_complete', 'æ¨èå·²ç”Ÿæˆ', runId)
-      pushStatus(cid, 'complete', 'å®Œæˆ', runId)
+      // ½ø¶È£ºÍê³É
+      pushStatus(cid, 'plan_complete', 'ÍÆ¼öÒÑÉú³É', runId)
+      pushStatus(cid, 'complete', 'Íê³É', runId)
       await syncManager.flush().catch(()=>undefined)
       renderFromEvents(cid)
     } catch (e: any) {
-      message.error(e?.message || 'æ¨èå¤±è´¥')
+      message.error(e?.message || 'ÍÆ¼öÊ§°Ü')
       if (cid) {
-        pushStatus(cid, 'error', 'æ•°æ®ä¸å¯ç”¨æˆ–å¤–éƒ¨æºæŠ¥é”™', runId)
-        pushStatus(cid, 'complete', 'å®Œæˆ', runId)
+        pushStatus(cid, 'error', 'Êı¾İ²»¿ÉÓÃ»òÍâ²¿Ô´±¨´í', runId)
+        pushStatus(cid, 'complete', 'Íê³É', runId)
         await syncManager.flush().catch(()=>undefined)
         renderFromEvents(cid)
       }
@@ -241,10 +239,10 @@ export default function Chat() {
   async function handleSubmit(raw: string) {
     const text = raw.trim()
     if (!text) return
-    // ç®€å•ï¼šå›è½¦å³æ¸…ç©ºè¾“å…¥
+    // ¼òµ¥£º»Ø³µ¼´Çå¿ÕÊäÈë
     setInput('')
     if (atBottom) setTimeout(() => listRef.current?.scrollTo({ top: 999999, behavior: 'smooth' }), 0)
-    // å¹‚ç­‰åŒå†™ï¼šæ— è®ºä½•ç§æ„å›¾ï¼Œå…ˆæŠŠåŸå§‹ç”¨æˆ·æ–‡æœ¬å†™ä¸ºäº‹ä»¶ï¼ˆä¿è¯â€œæˆ‘è¯´çš„è¯â€ä¸€å®šæ˜¾ç¤ºï¼‰ï¼Œ/api/chat ä¼ åŒä¸€ä¸ª message_id
+    // ÃİµÈË«Ğ´£ºÎŞÂÛºÎÖÖÒâÍ¼£¬ÏÈ°ÑÔ­Ê¼ÓÃ»§ÎÄ±¾Ğ´ÎªÊÂ¼ş£¨±£Ö¤¡°ÎÒËµµÄ»°¡±Ò»¶¨ÏÔÊ¾£©£¬/api/chat ´«Í¬Ò»¸ö message_id
     const cid = await ensureCid()
     const msgId = 'msg-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6)
     syncManager.pushOutbox({
@@ -277,12 +275,12 @@ export default function Chat() {
         }
       }
       if (!themes.length) {
-        await replyText('æš‚æ— æ•°æ®ï¼ˆå…ˆç”Ÿæˆä¸€æ¬¡æ¨èï¼‰')
+        await replyText('ÔİÎŞÊı¾İ£¨ÏÈÉú³ÉÒ»´ÎÍÆ¼ö£©')
       } else {
-        const text = 'ä¸»é¢˜çƒ­åº¦ï¼š' + themes.slice(0, 10).map((t: any) => {
+        const text = 'Ö÷ÌâÈÈ¶È£º' + themes.slice(0, 10).map((t: any) => {
           const s = String(t?.strength || '').trim()
-          return `${t?.name || 'ä¸»é¢˜'}${s ? `(${s})` : ''}`
-        }).join('ã€')
+          return `${t?.name || 'Ö÷Ìâ'}${s ? `(${s})` : ''}`
+        }).join('¡¢')
         await replyText(text)
       }
       return
@@ -291,7 +289,7 @@ export default function Chat() {
       const evs = syncManager.messages(cid)
       const sts = evs.filter((e: any) => e?.data?.kind === 'card' && e?.data?.payload?.type === 'status').map((e: any) => e?.data?.payload)
       if (!sts.length) {
-        await replyText('å½“å‰æ— ä»»åŠ¡')
+        await replyText('µ±Ç°ÎŞÈÎÎñ')
       } else {
         const groups = new Map<number, any[]>()
         for (const s of sts) { const run = Number(s.run_id || 0) || 0; if (!groups.has(run)) groups.set(run, []); groups.get(run)!.push(s) }
@@ -300,11 +298,11 @@ export default function Chat() {
         const codeSet = new Set(latest.map((s) => String(s.code)))
         const order = ['report_started', 'planning', 'plan_complete', 'complete']
         const current = order.find((c) => !codeSet.has(c)) || 'complete'
-        await replyText(current === 'complete' ? 'å½“å‰æ— ä»»åŠ¡' : `è¿›åº¦ï¼š${labelOf(current)}`)
+        await replyText(current === 'complete' ? 'µ±Ç°ÎŞÈÎÎñ' : `½ø¶È£º${labelOf(current)}`)
       }
       return
     }
-    // default: send to LLM chatï¼ˆç”¨æˆ·åŸå§‹æ–‡æœ¬å·²å†™å…¥äº‹ä»¶ï¼Œç”¨åŒä¸€ message_id è°ƒåç«¯ï¼‰
+    // default: send to LLM chat£¨ÓÃ»§Ô­Ê¼ÎÄ±¾ÒÑĞ´ÈëÊÂ¼ş£¬ÓÃÍ¬Ò» message_id µ÷ºó¶Ë£©
     if (atBottom) setTimeout(() => listRef.current?.scrollTo({ top: 999999, behavior: 'smooth' }), 30)
     m.mutate({ text, msgId })
   }
@@ -321,7 +319,7 @@ export default function Chat() {
         }}
         style={{ height: 420, overflowY: 'auto', padding: 8, border: '1px solid #eee', marginBottom: 12, borderRadius: 8 }}
       >
-        {messages.length === 0 && <Typography.Text type="secondary">è¯•è¾“å…¥ï¼šâ€œç»™æˆ‘æ¨è3åªä½ä¼°å€¼â€</Typography.Text>}
+        {messages.length === 0 && <Typography.Text type="secondary">ÊÔÊäÈë£º¡°¸øÎÒÍÆ¼ö3Ö»µÍ¹ÀÖµ¡±</Typography.Text>}
         <List dataSource={messages} renderItem={(msg, idx) => (
           <List.Item key={idx} style={{ display: 'block', border: 'none', padding: 0 }}>
             {msg.kind === 'rec' && msg.payload?.picks ? (
@@ -339,7 +337,7 @@ export default function Chat() {
           rows={2}
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          placeholder="å¯¹è¯å³æŒ‡ä»¤ï¼šå¦‚ â€˜ç»™æˆ‘æ¨è3åªä½ä¼°å€¼â€™ / â€˜çœ‹çœ‹600519 Kçº¿â€™ / â€˜ç°åœ¨è¿›åº¦åˆ°å“ªäº†â€™"
+          placeholder="¶Ô»°¼´Ö¸Áî£ºÈç ¡®¸øÎÒÍÆ¼ö3Ö»µÍ¹ÀÖµ¡¯ / ¡®¿´¿´600519 KÏß¡¯ / ¡®ÏÖÔÚ½ø¶Èµ½ÄÄÁË¡¯"
           onKeyDown={(e) => {
             if (e.key === 'Enter' && !e.shiftKey) {
               const ne: any = e
@@ -351,16 +349,16 @@ export default function Chat() {
         />
         {m.isPending && <div style={{ display: 'flex', alignItems: 'center', padding: '0 8px' }}><Spin /></div>}
       </Space.Compact>
-      {/* error area intentionally minimalï¼Œé¿å…å¤šä½™æç¤ºå½±å“æµç•…åº¦ */}
+      {/* error area intentionally minimal£¬±ÜÃâ¶àÓàÌáÊ¾Ó°ÏìÁ÷³©¶È */}
       {!atBottom && (
         <>
           {hasNew && (
             <div
               onClick={() => { listRef.current?.scrollTo({ top: 999999, behavior: 'smooth' }); setHasNew(false) }}
               style={{ cursor: 'pointer', color: '#1677ff', textAlign: 'center', margin: '6px 0' }}
-            >æœ‰æ–°å†…å®¹ï¼Œç‚¹å‡»æŸ¥çœ‹</div>
+            >ÓĞĞÂÄÚÈİ£¬µã»÷²é¿´</div>
           )}
-          <FloatButton shape="square" type="primary" tooltip="å›åˆ°åº•éƒ¨" style={{ right: 24, bottom: 24 }} onClick={() => { listRef.current?.scrollTo({ top: 999999, behavior: 'smooth' }); setHasNew(false) }} />
+          <FloatButton shape="square" type="primary" tooltip="»Øµ½µ×²¿" style={{ right: 24, bottom: 24 }} onClick={() => { listRef.current?.scrollTo({ top: 999999, behavior: 'smooth' }); setHasNew(false) }} />
         </>
       )}
     </div>
@@ -375,7 +373,7 @@ export default function Chat() {
   )
 
   return (
-    <Card title="å¯¹è¯åŠ©æ‰‹">
+    <Card title="¶Ô»°ÖúÊÖ">
       <WorkbenchLayout left={left} right={right} />
     </Card>
   )
@@ -383,10 +381,10 @@ export default function Chat() {
 
 function labelOf(code: string) {
   switch (code) {
-    case 'report_started': return 'å¼€å§‹';
-    case 'planning': return 'ç”Ÿæˆå‚æ•°ä¸å€™é€‰';
-    case 'plan_complete': return 'ç»“æœç”Ÿæˆ';
-    case 'complete': return 'å®Œæˆ';
+    case 'report_started': return '¿ªÊ¼';
+    case 'planning': return 'Éú³É²ÎÊıÓëºòÑ¡';
+    case 'plan_complete': return '½á¹ûÉú³É';
+    case 'complete': return 'Íê³É';
     default: return code;
   }
 }

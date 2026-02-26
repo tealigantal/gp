@@ -53,11 +53,13 @@ export async function search(params: { q: string; conversation_id?: string; limi
 }
 
 export async function deleteConversation(cid: string) {
-  const { data } = await api.delete<{ status: string }>(`/conversations/${encodeURIComponent(cid)}`)
+  const { data } = await api.delete<{ status: string }>(`/conversations/${encodeURIComponent(cid)}`,
+    { headers: { 'X-Delete-Reason': 'user_click' } })
   return data
 }
 
 export async function cleanupConversations(mode: 'all' | 'events_only' = 'all') {
-  const { data } = await api.post<{ status: string; mode: string }>(`/conversations/cleanup`, { mode })
+  const { data } = await api.post<{ status: string; mode: string }>(`/conversations/cleanup`, { mode },
+    { headers: { 'X-Delete-Reason': 'user_click_cleanup_all' } })
   return data
 }

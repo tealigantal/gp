@@ -2,19 +2,21 @@ export const LAST_SID_KEY = 'gp:lastSid'
 
 export function getOrCreateSessionId(): string {
   const url = new URL(window.location.href)
-  // prefer sid, fallback cid
-  const sidParam = url.searchParams.get('sid') || url.searchParams.get('cid')
-  let sid = sidParam || localStorage.getItem(LAST_SID_KEY) || ''
-  sid = (sid || '').trim()
+  // unify on 'cid'; accept legacy 'sid' and upgrade URL
+  const cidParam = url.searchParams.get('cid')
+  const legacySid = url.searchParams.get('sid')
+  let sid = (cidParam || legacySid || localStorage.getItem(LAST_SID_KEY) || '').trim()
   if (!sid) sid = newSid()
-  // persist and reflect in URL as cid
+  // persist and reflect in URL as cid only
   try { localStorage.setItem(LAST_SID_KEY, sid) } catch {}
   try {
     if (url.searchParams.get('cid') !== sid) {
       url.searchParams.set('cid', sid)
-      // maintain other params; do not add sid to avoid duplication
-      window.history.replaceState({}, '', url.toString())
     }
+    if (url.searchParams.has('sid')) {
+      url.searchParams.delete('sid')
+    }
+    window.history.replaceState({}, '', url.toString())
   } catch {}
   return sid
 }
@@ -24,6 +26,7 @@ export function setSessionId(sid: string) {
   try { localStorage.setItem(LAST_SID_KEY, sid) } catch {}
   try {
     url.searchParams.set('cid', sid)
+    if (url.searchParams.has('sid')) url.searchParams.delete('sid')
     window.history.replaceState({}, '', url.toString())
   } catch {}
 }
@@ -31,4 +34,3 @@ export function setSessionId(sid: string) {
 export function newSid() {
   return 'sess-' + Date.now().toString().slice(0, 10)
 }
-

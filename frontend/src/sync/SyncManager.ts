@@ -51,11 +51,12 @@ export class SyncManager {
 
   subscribe(fn: Listener) {
     this.listeners.add(fn)
-    return () => this.listeners.delete(fn)
+    return () => { this.listeners.delete(fn) }
   }
   private notify() { for (const fn of this.listeners) fn() }
 
   start(intervalActive = 30000, intervalBg = 60000) {
+    if (this.timer) return
     const tick = async () => {
       try {
         await this.flush()
@@ -64,7 +65,9 @@ export class SyncManager {
       const ms = hidden ? intervalBg : intervalActive
       this.timer = window.setTimeout(tick, ms)
     }
-    if (!this.timer) tick()
+    // mark started before first tick to avoid StrictMode double-start
+    this.timer = 1 as any
+    tick()
   }
   stop() {
     if (this.timer) { clearTimeout(this.timer); this.timer = null }
