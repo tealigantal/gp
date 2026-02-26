@@ -1,0 +1,70 @@
+## gp_assistant �?本地启动与“说人话”的荐股逻辑
+
+这份 README 只包含你最关心的两件事�?- 怎么在本地一键启�?更新�?- 它是“按什么思路推荐股票”的（用人话解释，不拗口）�?
+---
+
+### 一、如何启动（本地 Docker�?
+- 一键启动或更新
+  - `docker compose up -d --build`
+
+- 打开页面
+  - 前端：`http://localhost:8080`（或 `http://localhost:3000`，以 docker-compose 配置为准�?  - 健康检查：`curl http://127.0.0.1:8000/api/health`
+  - 后端推荐接口：`POST http://127.0.0.1:8000/api/recommend`
+
+自检与回归（可在本机运行）：
+
+```
+python -m compileall src
+python -m pytest -q tests/test_regress_theme_and_bands.py tests/test_contract_event_and_history.py tests/test_theme_concept_fallback_no_snapshot.py tests/test_theme_pool_snapshot_paths.py tests/test_theme_pool_impl_nan_and_scale.py tests/test_strict_no_pseudo_output.py
+PYTHONPATH=src python -m gp_assistant.recommend.self_check_contract
+```
+
+- 只更新某一侧（可选）
+  - 仅前端：`docker compose build web && docker compose up -d web`
+  - 仅后端：`docker compose build gp && docker compose up -d gp`
+
+- 数据位置（不会随容器丢失�?  - `store/sessions/session.db`
+
+- 清理会话（不可恢复）
+  - 前端“会话”页右上�?�?一键清�?
+---
+
+### 二、荐股逻辑（说人话�?
+目标：在“当下市场环境允许出手”的前提下，从“流动性好、风险可控”的股票里，找出少量更有胜算的机会，并给出买点和风控要点�?
+1) 数据从哪来？
+- 行情来自 AkShare，多路来源（Sina/东方财富/腾讯）按优先级回退，只用真实数据；
+- 以日线为主（K 线、成交量、成交额），必要时看当日快照判断是否可交易�?
+2) 先看“大环境”能不能做（环境评估�?- 看四件事�?  - 热度/扩散：涨跌对比、行�?概念扩散度；
+  - 量能：成交额是否回到常态；
+  - 波动/噪声：情绪过山车时会降权�?  - 主线：是否有 1�? 条明确的主线行业/概念�?- 结论会给出“可以做/轻仓/观望”的提示，避免硬推荐�?
+3) 先把明显不合格的过滤掉（候选池�?- 过滤规则很直白：
+  - 流动性与成交额达标；
+  - 非新�?�?ST�?  - 价格在合理区间（不碰极端高价或仙股）�?  - 优先围绕当日“主线行�?概念”�?- 得到一个“动态候选池”（几百只以内）�?
+4) 用看得懂的技�?形态信号打分（为什么选它�?- 典型信号举例�?  - 突破/回踩：MA20 回踩企稳、前高突破回踩不破；
+  - 收缩后释放：NR7/Squeeze 等“长时间收窄后放量突破”；
+  - 动量极值：RSI2 强势回落后的二次上攻�?  - 缺口处理：回补缺口后的方向选择�?  - 筹码/支撑：靠近密集成交区或均线带的低风险入场位；
+  - 假突破反转：类似 Turtle Soup 的快速反包�?- 每只股票会命中若干信号，按强度、量价配合、与支撑/阻力距离给基础分�?
+5) 风险与主题的修正（更稳更贴合�?- 风险扣分：剧烈波动、连续一�?炸板、异常缺口等�?- 主题加分：更贴近“当日主线”的行业/概念�?- 去重与分散：
+  - 同行业最�?N 只，避免“一篮子鸡蛋”；
+  - 多信号命中的候选保留评分最高的一只；
+  - 去掉高度相似/相关性过高的票�?
+6) 最终产出（少而精 + 可执行）
+- TopK（默�?3 只）+ 行业分散约束�?- 每只股票都给出：
+  - 命中信号（它凭什么被选中）；
+  - 参考买点区间、止�?止盈（怎么管风险）�?  - 行业/概念标签与简单解释；
+  - 可选自然语言叙述（有 LLM 时更顺滑，没有也会输出可读卡片）�?
+7) 边界与声�?- 这是“基于公开行情的筛选与提醒”，不是投资建议�?- 以日线与简单规则为主；极端行情/停牌/延迟会降低可用性；
+- 当天条件不足时会明确提示“观望或降权”�?
+接口你可能会用到（可选）
+- 生成推荐：`POST /api/recommend`（参数：`topk`、`universe`、`symbols`、`risk_profile`，默�?`topk=3`、`universe=auto`�?- 拉取 K 线：`GET /api/ohlcv/{symbol}?limit=800`
+
+---
+
+有新的偏好（加入日内、更多基本面过滤、实时主线识别、回测可视化等），告诉我就行，我会继续按“说人话 + 好用”打磨�?
+---
+
+### 严格输出与数据契�?
+- 默认严格模式（`GP_STRICT_OUTPUT=1`）：缺失数字字段输出�?`null`，不会用 `0.0` 兜底；不会伪造主�?线索�?- 推荐卡片 `meta` 包含�?  - `schema_version: 1`
+  - `data_status`: `{ snapshot: { ok, source, rows, elapsed_sec, cache, as_of_ts, error }, themes: { ok, source, attempted, error, as_of_ts }, daily: { ok, symbols_ok, symbols_fail, error_summary } }`
+  - `mover_hints`: 来自快照的强势线索；`themes` 仅包含行�?概念�?
+

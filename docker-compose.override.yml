@@ -8,4 +8,4 @@ services:
 
   # Do not start/build web by default in local dev
   web:
-    profiles: ["web"]
+    # Always included now; keep here for future dev overrides if needed

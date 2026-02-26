@@ -3,13 +3,14 @@ services:
     build:
       context: .
       args:
+        BASE_PY_IMAGE: ${BASE_PY_IMAGE:-python:3.11-slim}
         PIP_INDEX_URL: ${PIP_INDEX_URL:-https://pypi.org/simple}
     volumes:
       - ./data:/app/data
       - ./results:/app/results
       - ./universe:/app/universe
-      - gp_store:/app/store
-      - gp_cache:/app/cache
+      - ./store:/app/store
+      - ./cache:/app/cache
       - ./configs:/app/configs
     command: ["uvicorn", "gp_assistant.server.app:app", "--host", "0.0.0.0", "--port", "8000"]
     environment:
@@ -45,22 +46,46 @@ services:
       GP_PRICE_MAX: ${GP_PRICE_MAX:-500}
       GP_DYNAMIC_POOL_SIZE: ${GP_DYNAMIC_POOL_SIZE:-200}
       GP_MAX_PER_INDUSTRY: ${GP_MAX_PER_INDUSTRY:-2}
+      # Tradeability thresholds (defaults restored)
+      GP_TRADEABLE_MIN_UNIVERSE: ${GP_TRADEABLE_MIN_UNIVERSE:-50}
+      GP_TRADEABLE_MIN_CANDIDATES: ${GP_TRADEABLE_MIN_CANDIDATES:-20}
 
       # ---- LLM (optional) ----
-      LLM_BASE_URL: ${LLM_BASE_URL:-}
+      # Default to local llm-proxy; override in .env to use provider directly
+      LLM_BASE_URL: ${LLM_BASE_URL:-http://llm-proxy:8080/v1}
       LLM_API_KEY: ${LLM_API_KEY:-}
       CHAT_MODEL: ${CHAT_MODEL:-deepseek-chat}
 
     ports:
       - "8000:8000"
+    restart: unless-stopped
+
+  llm-proxy:
+    build:
+      context: ./services/llm_proxy
+    environment:
+      # Upstream provider credentials (can reuse LLM_* from .env)
+      UPSTREAM_BASE_URL: ${UPSTREAM_BASE_URL:-https://api.deepseek.com/v1}
+      UPSTREAM_API_KEY: ${UPSTREAM_API_KEY:-${LLM_API_KEY:-}}
+      # Optional client auth for proxy itself
+      PROXY_REQUIRE_AUTH: ${PROXY_REQUIRE_AUTH:-false}
+      PROXY_CLIENT_TOKENS: ${PROXY_CLIENT_TOKENS:-}
+    ports:
+      - "18080:8080"
+    restart: unless-stopped
 
   web:
     build:
       context: ./frontend
+      args:
+        BASE_NODE_IMAGE: ${BASE_NODE_IMAGE:-node:18-alpine}
+        BASE_NGINX_IMAGE: ${BASE_NGINX_IMAGE:-nginx:1.25-alpine}
     depends_on:
       - gp
+      - llm-proxy
     ports:
       - "8080:80"
+    restart: unless-stopped
 
 volumes:
   gp_store: {}

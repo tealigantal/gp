@@ -1,5 +1,8 @@
 # --- build stage ---
-FROM node:18-alpine AS build
+# Allow overriding base images via build-args (for users behind firewalls)
+ARG BASE_NODE_IMAGE=node:18-alpine
+ARG BASE_NGINX_IMAGE=nginx:1.25-alpine
+FROM ${BASE_NODE_IMAGE} AS build
 WORKDIR /app
 COPY package.json ./
 # Cache npm download/artifacts across builds
@@ -8,7 +11,7 @@ COPY . .
 RUN npm run build
 
 # --- runtime stage ---
-FROM nginx:1.25-alpine AS runtime
+FROM ${BASE_NGINX_IMAGE} AS runtime
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 COPY --from=build /app/dist /usr/share/nginx/html
 EXPOSE 80

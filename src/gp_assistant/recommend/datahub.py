@@ -1,4 +1,4 @@
-# 简介：行情数据枢纽（严格模式）。仅返回真实数据（或本地 fixtures），不做合成降级。
+﻿# 简介：行情数据枢纽（严格模式）。仅返回真实数据（或本地 fixtures），不做合成降级。
 from __future__ import annotations
 
 import json
@@ -343,9 +343,10 @@ class MarketDataHub:
         snap = snapshot
         # Canonical aliases for amount / pct_chg
         def _norm(s: str) -> str:
-            x = (s or "").strip().lower()
-            x = x.replace("（", "(").replace("）", ")").replace("％", "%").replace("%", "")
-            x = "".join(x.split())
+            import unicodedata, re
+            x = unicodedata.normalize("NFKC", (s or "")).strip().lower()
+            x = x.replace("(", "").replace(")", "").replace("%", "")
+            x = re.sub(r"\\s+", "", x)
             return x
         def _pick(df, cands):
             cmap = { _norm(c): c for c in df.columns }
@@ -353,11 +354,10 @@ class MarketDataHub:
                 nk = _norm(k)
                 if nk in cmap:
                     return cmap[nk]
-            return None
-        amt_src = _pick(snap, ["成交额", "成交金额", "amount", "turnover", "成交额(元)"])
+        amt_src = _pick(snap, ["amount", "turnover"])
         if amt_src and "amount" not in snap.columns:
             snap = snap.copy(); snap["amount"] = snap[amt_src]
-        chg_src = _pick(snap, ["涨跌幅", "涨跌幅(%)", "涨跌", "pct_chg", "changepct", "change_pct", "pct_change"])
+        chg_src = _pick(snap, ["pct_chg", "changepct", "change_pct", "pct_change"])
         if chg_src and "pct_chg" not in snap.columns:
             snap = snap.copy(); snap["pct_chg"] = snap[chg_src]
 

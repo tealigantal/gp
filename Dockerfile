@@ -1,4 +1,6 @@
-FROM python:3.11-slim
+# Allow overriding base image via build-arg to work around registry issues
+ARG BASE_PY_IMAGE=python:3.11-slim
+FROM ${BASE_PY_IMAGE}
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \

@@ -29,7 +29,7 @@ export default function ToolsPanel({
       if (!s) return
       const cid = conversationId || ('sess-' + Date.now())
       if (!conversationId) onEnsureConversation(cid)
-      // ÊÂ¼ş»¯£º×·¼ÓKÏß¿¨
+      // äº‹ä»¶ï¼šé™„åŠ  K çº¿å¡ç‰‡
       syncManager.pushOutbox({
         conversation_id: cid,
         type: 'message.created',
@@ -41,31 +41,31 @@ export default function ToolsPanel({
       setOpen(true)
       onRefresh()
     } catch (e: any) {
-      message.error(e?.message || 'ÏÔÊ¾Ê§°Ü')
+      message.error(e?.message || 'æ˜¾ç¤ºå¤±è´¥')
     }
   }
 
   return (
     <div>
       <DataStatusBar />
-      <Card size="small" title="¿ìËÙKÏß" style={{ marginBottom: 12 }}>
+      <Card size="small" title="æŸ¥çœ‹ K çº¿" style={{ marginBottom: 12 }}>
         <Space.Compact style={{ width: '100%' }}>
-          <Input value={symbol} onChange={(e) => setSymbol(e.target.value)} placeholder="ÊäÈë´úÂëºó»Ø³µ" onPressEnter={() => showKline()} />
-          <Button type="primary" onClick={() => showKline()}>²é¿´</Button>
+          <Input value={symbol} onChange={(e) => setSymbol(e.target.value)} placeholder="è¾“å…¥ä»£ç åå›è½¦" onPressEnter={() => showKline()} />
+          <Button type="primary" onClick={() => showKline()}>æŸ¥çœ‹</Button>
         </Space.Compact>
       </Card>
-      <Card size="small" title="·çÏÕÆ«ºÃ" style={{ marginBottom: 12 }}>
+      <Card size="small" title="é£é™©åå¥½" style={{ marginBottom: 12 }}>
         <Space direction="vertical" style={{ width: '100%' }}>
           <Segmented
             value={risk}
             onChange={(v) => { const nv = v as any; setRisk(nv); setRiskProfile(nv) }}
             options={[
-              { label: '±£ÊØ', value: 'conservative' },
-              { label: 'ÖĞĞÔ', value: 'normal' },
-              { label: '»ı¼«', value: 'aggressive' }
+              { label: 'ä¿å®ˆ', value: 'conservative' },
+              { label: 'å‡è¡¡', value: 'normal' },
+              { label: 'æ¿€è¿›', value: 'aggressive' }
             ]}
           />
-          <Typography.Text type="secondary">ÈôÎÄ±¾Î´Ö¸Ã÷·çÏÕ£¬Ä¬ÈÏÊ¹ÓÃ´ËÉèÖÃ¡£</Typography.Text>
+          <Typography.Text type="secondary">è‹¥æœªæŒ‡å®šæ—¥æœŸï¼Œé»˜è®¤ä½¿ç”¨æœ€è¿‘æ•°æ®ã€‚</Typography.Text>
         </Space>
       </Card>
       <DockPanel open={open} symbol={dockSymbol} onClose={() => setOpen(false)} />
@@ -74,7 +74,4 @@ export default function ToolsPanel({
     </div>
   )
 }
-
-
-
 
