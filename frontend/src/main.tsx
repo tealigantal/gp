@@ -7,8 +7,13 @@ import 'antd/dist/reset.css'
 import './design/global.css'
 import dayjs from 'dayjs'
 import 'dayjs/locale/zh-cn'
+import { syncManager } from './sync/SyncManager'
 
 dayjs.locale('zh-cn')
+
+// Start low-frequency background sync once (idempotent), with proper cleanup on HMR/unload
+try { syncManager.start(30000, 60000) } catch {}
+window.addEventListener('beforeunload', () => { try { syncManager.stop() } catch {} })
 
 const queryClient = new QueryClient({
   defaultOptions: {

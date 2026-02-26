@@ -3,6 +3,7 @@ import { Card, Input, Button, List, Space, Typography } from 'antd'
 import { search as apiSearch, listEvents } from '../api/client'
 import { syncManager } from '../sync/SyncManager'
 import { useNavigate } from 'react-router-dom'
+import { setSessionId as persistSessionId } from '../utils/session'
 
 export default function Search() {
   const [q, setQ] = useState('')
@@ -30,7 +31,7 @@ export default function Search() {
 
   async function jump(item: { conversation_id: string; seq: number }) {
     const cid = item.conversation_id
-    localStorage.setItem('gp_session_id', cid)
+    persistSessionId(cid)
     await syncManager.ensureLoaded(cid)
     await syncManager.jumpToSeq(cid, item.seq)
     nav(`/chat?cid=${encodeURIComponent(cid)}&seq=${item.seq}`)

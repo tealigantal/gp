@@ -19,8 +19,17 @@ export class SyncManager {
   private convMeta: Record<string, { id: string; title?: string; lastSeq: number; updatedAt?: string }> = {}
   private lastRead: Record<string, number> = {}
   private timer: any = null
+  private syncing = false
+  private pendingSync = false
+  private aborter: AbortController | null = null
+  // events polling state per conversation
+  private evTimers: Record<string, any> = {}
+  private evInFlight: Record<string, boolean> = {}
+  private evAborters: Record<string, AbortController | null> = {}
   private listeners: Set<Listener> = new Set()
   private deviceId: string
+  // optional getter to know current conversation for UI helpers
+  currentConversationId?: () => string | null
 
   constructor(deviceId?: string) {
     this.deviceId = deviceId || (localStorage.getItem('gp_device_id') || `dev-${crypto?.randomUUID?.() || Date.now()}`)
@@ -46,7 +55,7 @@ export class SyncManager {
   }
   private notify() { for (const fn of this.listeners) fn() }
 
-  start(intervalActive = 3000, intervalBg = 9000) {
+  start(intervalActive = 30000, intervalBg = 60000) {
     const tick = async () => {
       try {
         await this.flush()
@@ -59,6 +68,9 @@ export class SyncManager {
   }
   stop() {
     if (this.timer) { clearTimeout(this.timer); this.timer = null }
+    if (this.aborter) { try { this.aborter.abort() } catch {} finally { this.aborter = null } }
+    // stop all events pollers
+    Object.keys(this.evTimers).forEach((cid) => this.stopEventsPolling(cid))
   }
 
   // --- local state maintenance helpers ---
@@ -101,11 +113,16 @@ export class SyncManager {
 
   async ensureLoaded(cid: string) {
     const st = this.convState(cid)
-    if (st.events.length === 0) {
-      const data = await listEvents(cid, { after: 0, limit: 100 })
-      this.mergeEvents(cid, data)
-      this.notify()
-    }
+    // incremental load based on persisted cursor to avoid after=0 repeatedly
+    const key = `gp:after:${cid}`
+    let after = 0
+    try { const saved = Number(localStorage.getItem(key) || '0'); if (Number.isFinite(saved) && saved > 0) after = saved } catch {}
+    if (after <= 0 && st.lastSeq > 0) after = st.lastSeq
+    const data = await listEvents(cid, { after, limit: 100 })
+    this.mergeEvents(cid, data)
+    // persist last seq
+    try { localStorage.setItem(key, String(this.convState(cid).lastSeq || 0)) } catch {}
+    this.notify()
   }
 
   pushOutbox(ev: Omit<SyncEventIn, 'id'> & { id?: string }) {
@@ -135,7 +152,7 @@ export class SyncManager {
     this.flush().catch(() => undefined)
   }
 
-  private mergeEvents(cid: string, events: EventOut[]) {
+  mergeEvents(cid: string, events: EventOut[]) {
     if (!events || events.length === 0) return
     const st = this.convState(cid)
     const map = new Map(st.events.map((e) => [e.id, e]))
@@ -160,6 +177,8 @@ export class SyncManager {
     }
     st.events.sort((a, b) => a.seq - b.seq)
     this.setCursor(cid, st.lastSeq)
+    // persist last seq for incremental events polling
+    try { localStorage.setItem(`gp:after:${cid}`, String(st.lastSeq || 0)) } catch {}
   }
 
   messages(cid: string) {
@@ -169,6 +188,11 @@ export class SyncManager {
   }
 
   async flush() {
+    // prevent concurrent syncs; coalesce fast callers
+    if (this.syncing) { this.pendingSync = true; return }
+    this.syncing = true
+    this.pendingSync = false
+    // Merge with persisted state to avoid losing events due to concurrent ticks or reloads
     // Merge with persisted state to avoid losing events due to concurrent ticks or reloads
     try {
       const persisted = localStorage.getItem('gp_sync_outbox')
@@ -190,7 +214,10 @@ export class SyncManager {
       }
     } catch { /* ignore */ }
     const req = { device_id: this.deviceId, conv_cursors: this.cursors, outbox_events: this.outbox }
-    const resp = await apiSync(req)
+    // abort previous if any
+    if (this.aborter) { try { this.aborter.abort() } catch {} }
+    this.aborter = new AbortController()
+    const resp = await apiSync(req, { signal: this.aborter.signal as any })
     // ack
     if (this.outbox.length) {
       const acks = resp.ack || {}
@@ -210,6 +237,9 @@ export class SyncManager {
       if (lastSeq > st.lastSeq) st.lastSeq = lastSeq
     }
     this.notify()
+    this.syncing = false
+    // run one more time if needed (drop extra bursts)
+    if (this.pendingSync) { this.pendingSync = false; try { await this.flush() } catch {} }
   }
 
   reportRead(cid: string, seq: number, actorId?: string) {
@@ -252,6 +282,39 @@ export class SyncManager {
       if (e.type === 'message.created') return e.data?.content || ''
     }
     return ''
+  }
+
+  // --- events incremental polling ---
+  startEventsPolling(cid: string, intervalMs = 2500) {
+    const doPoll = async () => {
+      if (this.evInFlight[cid]) return
+      this.evInFlight[cid] = true
+      try {
+        const key = `gp:after:${cid}`
+        let after = 0
+        try { const saved = Number(localStorage.getItem(key) || '0'); if (Number.isFinite(saved) && saved > 0) after = saved } catch {}
+        if (after <= 0) after = this.convState(cid).lastSeq || 0
+        const aborter = new AbortController()
+        this.evAborters[cid] = aborter
+        const data = await listEvents(cid, { after, limit: 100 } as any, { signal: aborter.signal as any })
+        if (Array.isArray(data) && data.length) {
+          this.mergeEvents(cid, data)
+          this.notify()
+        }
+      } catch { /* ignore */ } finally {
+        this.evInFlight[cid] = false
+        const hidden = document.hidden
+        const next = hidden ? intervalMs * 2 : intervalMs
+        this.evTimers[cid] = window.setTimeout(doPoll, next)
+      }
+    }
+    if (!this.evTimers[cid]) doPoll()
+  }
+
+  stopEventsPolling(cid: string) {
+    if (this.evTimers[cid]) { clearTimeout(this.evTimers[cid]); delete this.evTimers[cid] }
+    if (this.evAborters[cid]) { try { this.evAborters[cid]?.abort() } catch {} finally { delete this.evAborters[cid] } }
+    delete this.evInFlight[cid]
   }
 }
 

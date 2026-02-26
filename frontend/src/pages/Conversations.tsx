@@ -4,6 +4,7 @@ import { syncManager } from '../sync/SyncManager'
 import dayjs from 'dayjs'
 import { useNavigate } from 'react-router-dom'
 import { deleteConversation, cleanupConversations } from '../api/client'
+import { setSessionId as persistSessionId } from '../utils/session'
 
 type Item = { id: string; title: string; lastSeq: number; updatedAt?: string; unread: number; preview: string }
 
@@ -19,7 +20,6 @@ export default function Conversations() {
   useEffect(() => {
     const unsub = syncManager.subscribe(() => setItems(syncManager.convList() as Item[]))
     setItems(syncManager.convList() as Item[])
-    syncManager.start()
     return () => unsub()
   }, [])
 
@@ -29,7 +29,7 @@ export default function Conversations() {
   }
 
   function open(cid: string) {
-    localStorage.setItem('gp_session_id', cid)
+    persistSessionId(cid)
     nav(`/chat?cid=${encodeURIComponent(cid)}`)
   }
 
@@ -49,7 +49,7 @@ export default function Conversations() {
 
   function createNew() {
     const id = newSessId()
-    localStorage.setItem('gp_session_id', id)
+    persistSessionId(id)
     nav(`/chat?cid=${encodeURIComponent(id)}`)
   }
 
@@ -60,7 +60,7 @@ export default function Conversations() {
       // 清空本地状态并通知订阅者，界面自动刷新
       setItems([])
       syncManager.resetAll()
-      ;['gp_session_id'].forEach((k)=>localStorage.removeItem(k))
+      ;['gp:lastSid','gp_session_id'].forEach((k)=>localStorage.removeItem(k))
       await syncManager.flush()
     } catch (e: any) {
       message.error(e?.message || '清理失败')

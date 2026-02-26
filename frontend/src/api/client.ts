@@ -37,13 +37,13 @@ export async function ohlcv(symbol: string, params?: { start?: string; end?: str
 }
 
 // --- Events/sync APIs ---
-export async function sync(req: SyncReq) {
-  const { data } = await api.post<SyncResp>('/sync', req)
+export async function sync(req: SyncReq, opts: { signal?: AbortSignal } = {}) {
+  const { data } = await api.post<SyncResp>('/sync', req, { signal: opts.signal })
   return data
 }
 
-export async function listEvents(cid: string, params: { after?: number; around?: number; limit?: number } = {}) {
-  const { data } = await api.get<EventOut[]>(`/conversations/${encodeURIComponent(cid)}/events`, { params })
+export async function listEvents(cid: string, params: { after?: number; around?: number; limit?: number } = {}, opts: { signal?: AbortSignal } = {}) {
+  const { data } = await api.get<EventOut[]>(`/conversations/${encodeURIComponent(cid)}/events`, { params, signal: opts.signal })
   return data
 }
 

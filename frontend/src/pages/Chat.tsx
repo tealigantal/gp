@@ -13,10 +13,11 @@ import WorkbenchLayout from '../components/WorkbenchLayout'
 import ToolsPanel from '../components/ToolsPanel'
 import { parseIntent } from '../intent/parser'
 import { getRiskProfile } from '../store/settings'
+import { getOrCreateSessionId, setSessionId as persistSessionId } from '../utils/session'
+import { useConversationEvents } from '../hooks/useConversationEvents'
 
 type Msg = { role: 'user' | 'assistant'; content?: string; tool?: any; kind?: 'text'|'rec'|'kline'; payload?: any }
 
-const LOCAL_SESSION_KEY = 'gp_session_id'
 const LAST_RECOMMEND_RESULT_KEY = 'gp_last_recommend_result'
 
 export default function Chat() {
@@ -32,9 +33,18 @@ export default function Chat() {
   // state for scroll + messages only; using events as source of truth
 
   useEffect(() => {
-    if (sessionId) localStorage.setItem(LOCAL_SESSION_KEY, sessionId)
+    if (sessionId) persistSessionId(sessionId)
     sessionIdRef.current = sessionId
+    // expose to consumers like DataStatusBar without tight coupling
+    syncManager.currentConversationId = () => sessionId
   }, [sessionId])
+
+  // initialize session id from URL/localStorage or create one
+  useEffect(() => {
+    const sid = getOrCreateSessionId()
+    setSessionId(sid)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // 鍚屾锛氳嫢宸叉湁浼氳瘽锛屽姞杞戒簨浠跺巻鍙插苟淇濇寔杞
   useEffect(() => {
@@ -44,11 +54,13 @@ export default function Chat() {
       await syncManager.ensureLoaded(sessionId)
       renderFromEvents()
       unsub = syncManager.subscribe(() => renderFromEvents())
-      syncManager.start()
     })()
     return () => unsub()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionId])
+
+  // incremental events polling (2.5s; persists cursor)
+  useConversationEvents(sessionId)
 
   // 前台切换立即同步
   useEffect(() => {
@@ -60,12 +72,12 @@ export default function Chat() {
   // 鏀寔鎼滅储缁撴灉璺宠浆锛?chat?cid=xxx&seq=123
   useEffect(() => {
     const params = new URLSearchParams(loc.search)
-    const cid = params.get('cid') || undefined
+    const cid = params.get('cid') || params.get('sid') || undefined
     const seqStr = params.get('seq') || undefined
     if (cid) {
       if (cid !== sessionId) {
         setSessionId(cid)
-        localStorage.setItem(LOCAL_SESSION_KEY, cid)
+        persistSessionId(cid)
       }
       const seq = seqStr ? Number(seqStr) : undefined
       if (seq && Number.isFinite(seq)) {
@@ -155,7 +167,7 @@ export default function Chat() {
     if (!cid) {
       cid = 'sess-' + Date.now()
       setSessionId(cid)
-      localStorage.setItem(LOCAL_SESSION_KEY, cid)
+      persistSessionId(cid)
     }
     sessionIdRef.current = cid
     return cid
@@ -357,7 +369,7 @@ export default function Chat() {
   const right = (
     <ToolsPanel
       conversationId={sessionId}
-      onEnsureConversation={(cid) => { setSessionId(cid); localStorage.setItem(LOCAL_SESSION_KEY, cid) }}
+      onEnsureConversation={(cid) => { setSessionId(cid); persistSessionId(cid) }}
       onRefresh={() => { syncManager.flush().catch(()=>undefined).then(()=>renderFromEvents()) }}
     />
   )
