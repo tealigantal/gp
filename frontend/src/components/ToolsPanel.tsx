@@ -1,4 +1,4 @@
-ï»¿import React, { useEffect, useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { Card, Input, Button, Space, message, Segmented, Typography } from 'antd'
 import DockPanel from './DockPanel'
 import DataStatusBar from './DataStatusBar'
@@ -29,43 +29,43 @@ export default function ToolsPanel({
       if (!s) return
       const cid = conversationId || ('sess-' + Date.now())
       if (!conversationId) onEnsureConversation(cid)
-      // äº‹ä»¶åŒ–ï¼šè¿½åŠ Kçº¿å¡
+      // ÊÂ¼ş»¯£º×·¼ÓKÏß¿¨
       syncManager.pushOutbox({
         conversation_id: cid,
         type: 'message.created',
         actor_id: 'assistant',
         data: { message_id: 'card-kline-' + Date.now(), kind: 'card', content: 'kline', payload: { type: 'kline', symbol: s } }
       })
-      await syncManager.flush()
+      syncManager.requestSync('tools')
       setDockSymbol(s)
       setOpen(true)
       onRefresh()
     } catch (e: any) {
-      message.error(e?.message || 'æ˜¾ç¤ºå¤±è´¥')
+      message.error(e?.message || 'ÏÔÊ¾Ê§°Ü')
     }
   }
 
   return (
     <div>
       <DataStatusBar />
-      <Card size="small" title="å¿«é€ŸKçº¿" style={{ marginBottom: 12 }}>
+      <Card size="small" title="¿ìËÙKÏß" style={{ marginBottom: 12 }}>
         <Space.Compact style={{ width: '100%' }}>
-          <Input value={symbol} onChange={(e) => setSymbol(e.target.value)} placeholder="è¾“å…¥ä»£ç åå›è½¦" onPressEnter={() => showKline()} />
-          <Button type="primary" onClick={() => showKline()}>æŸ¥çœ‹</Button>
+          <Input value={symbol} onChange={(e) => setSymbol(e.target.value)} placeholder="ÊäÈë´úÂëºó»Ø³µ" onPressEnter={() => showKline()} />
+          <Button type="primary" onClick={() => showKline()}>²é¿´</Button>
         </Space.Compact>
       </Card>
-      <Card size="small" title="é£é™©åå¥½" style={{ marginBottom: 12 }}>
+      <Card size="small" title="·çÏÕÆ«ºÃ" style={{ marginBottom: 12 }}>
         <Space direction="vertical" style={{ width: '100%' }}>
           <Segmented
             value={risk}
             onChange={(v) => { const nv = v as any; setRisk(nv); setRiskProfile(nv) }}
             options={[
-              { label: 'ä¿å®ˆ', value: 'conservative' },
-              { label: 'ä¸­æ€§', value: 'normal' },
-              { label: 'ç§¯æ', value: 'aggressive' }
+              { label: '±£ÊØ', value: 'conservative' },
+              { label: 'ÖĞĞÔ', value: 'normal' },
+              { label: '»ı¼«', value: 'aggressive' }
             ]}
           />
-          <Typography.Text type="secondary">è‹¥æ–‡æœ¬æœªæŒ‡æ˜é£é™©ï¼Œé»˜è®¤ä½¿ç”¨æ­¤è®¾ç½®ã€‚</Typography.Text>
+          <Typography.Text type="secondary">ÈôÎÄ±¾Î´Ö¸Ã÷·çÏÕ£¬Ä¬ÈÏÊ¹ÓÃ´ËÉèÖÃ¡£</Typography.Text>
         </Space>
       </Card>
       <DockPanel open={open} symbol={dockSymbol} onClose={() => setOpen(false)} />

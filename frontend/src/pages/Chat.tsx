@@ -60,14 +60,14 @@ export default function Chat() {
   // incremental events polling (2.5s; persists cursor)
   useConversationEvents(sessionId)
 
-  // Ç°Ì¨ÇÐ»»Á¢¼´Í¬²½
+  // Ç°Ì¨ï¿½Ð»ï¿½ï¿½ï¿½ï¿½ï¿½Í¬ï¿½ï¿½
   useEffect(() => {
-    const onVis = () => { if (!document.hidden) syncManager.flush().catch(()=>undefined) }
+    const onVis = () => { if (!document.hidden) syncManager.requestSync('visibility_change') }
     document.addEventListener('visibilitychange', onVis)
     return () => document.removeEventListener('visibilitychange', onVis)
   }, [])
 
-  // æ”¯æŒæœç´¢ç»“æžœè·³è½¬ï¼?chat?cid=xxx&seq=123
+  // æ”¯æŒæœç´¢ç»“æžœè·³è½¬ï¿½?chat?cid=xxx&seq=123
   useEffect(() => {
     const params = new URLSearchParams(loc.search)
     const cid = params.get('cid') || undefined
@@ -103,7 +103,7 @@ export default function Chat() {
           continue
         }
         if (p?.type === 'status') {
-          // status ¿¨Æ¬½öÔÚÓÒ²à½ø¶ÈÃæ°åÕ¹Ê¾£¬×ó²à¶Ô»°Òþ²Ø
+          // status ï¿½ï¿½Æ¬ï¿½ï¿½ï¿½ï¿½ï¿½Ò²ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Õ¹Ê¾ï¿½ï¿½ï¿½ï¿½ï¿½Ô»ï¿½ï¿½ï¿½ï¿½ï¿½
           continue
         }
       }
@@ -129,12 +129,12 @@ export default function Chat() {
       return resp
     },
     onSuccess: async (resp) => {
-      // Í³Ò»£ºÈ·±£¼ÓÔØ + Á¢¼´ÔöÁ¿Í¬²½ + ÖØ»æ
+      // Í³Ò»ï¿½ï¿½È·ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ + ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Í¬ï¿½ï¿½ + ï¿½Ø»ï¿½
       const cid = resp?.session_id || sessionIdRef.current
       if (cid) {
         try { await syncManager.ensureLoaded(String(cid)) } catch { /* ignore */ }
-        try { await syncManager.flush() } catch { /* ignore */ }
-        // ½ö¡°µÈ´ý-À­È¡¡±£¬²»×öÈÎºÎ¶µµ×Ð´Èë¡£±£³Öºó¶ËÎªÎ¨Ò»ÊÂÊµÀ´Ô´¡£
+        try { syncManager.requestSync('manual') } catch { /* ignore */ }
+        // ï¿½ï¿½ï¿½ï¿½ï¿½È´ï¿½-ï¿½ï¿½È¡ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ÎºÎ¶ï¿½ï¿½ï¿½Ð´ï¿½ë¡£ï¿½ï¿½ï¿½Öºï¿½ï¿½ÎªÎ¨Ò»ï¿½ï¿½Êµï¿½ï¿½Ô´ï¿½ï¿½
         const targetId = resp.assistant_message_id
         const start = Date.now()
         const waitMs = 1600
@@ -143,18 +143,18 @@ export default function Chat() {
             const evs = syncManager.messages(String(cid))
             if (evs.some((e) => e.id === targetId)) break
             try { await new Promise((r) => setTimeout(r, 150)) } catch {}
-            try { await syncManager.flush() } catch { /* ignore */ }
+            try { syncManager.requestSync('manual') } catch { /* ignore */ }
           }
         } else {
-          // Ã»ÓÐ·µ»Ø id£¬Ò²×öÒ»´ÎÇáÁ¿À­È¡
+          // Ã»ï¿½Ð·ï¿½ï¿½ï¿½ idï¿½ï¿½Ò²ï¿½ï¿½Ò»ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½È¡
           try { await new Promise((r) => setTimeout(r, 150)) } catch {}
-          try { await syncManager.flush() } catch { /* ignore */ }
+          try { syncManager.requestSync('manual') } catch { /* ignore */ }
         }
         renderFromEvents(String(cid))
       }
     },
     onError: (err: any) => {
-      message.error(err?.message || '·¢ËÍÊ§°Ü')
+      message.error(err?.message || 'ï¿½ï¿½ï¿½ï¿½Ê§ï¿½ï¿½')
     }
   })
 
@@ -189,27 +189,27 @@ export default function Chat() {
       const topk = slots.topk ?? 3
       const risk = (slots.risk as any) || getRiskProfile() || 'normal'
       const universe = slots.universe || (slots.symbols && slots.symbols.length > 0 ? 'symbols' : 'auto')
-      const symTxt = (slots.symbols && slots.symbols.length) ? ` ´úÂë: ${slots.symbols.join(' ')}` : ''
-      const text = `ÍÆ¼ö ${topk} Ö»£»·çÏÕ ${risk}£»·¶Î§ ${universe}.${symTxt}`
-      // ½ø¶È£º¿ªÊ¼
-      pushStatus(cid, 'report_started', '¿ªÊ¼Éú³ÉÍÆ¼ö', runId)
-      // ½ø¶È£º¹æ»®/ºòÑ¡½×¶Î£¨Ç°¶Ë¿É¼ûÖÐ¼äÌ¬£©
-      pushStatus(cid, 'planning', 'Éú³É²ÎÊýÓëºòÑ¡', runId)
-      await syncManager.flush().catch(()=>undefined)
-      // µ÷ÓÃºó¶Ë /chat£¬ÈÃºó¶ËÍê³ÉÍÆ¼ö¡¢Ð´Èë×îÐÂÍÆ¼öÓë¿¨Æ¬£¨±£³Ö»á»°¿É×·ÎÊ£©
-      await chat({ session_id: cid, message: `¼ö¹É ${text}`, message_id: msgId })
-      await syncManager.flush().catch(()=>undefined)
-      // ½ø¶È£ºÍê³É
-      pushStatus(cid, 'plan_complete', 'ÍÆ¼öÒÑÉú³É', runId)
-      pushStatus(cid, 'complete', 'Íê³É', runId)
-      await syncManager.flush().catch(()=>undefined)
+      const symTxt = (slots.symbols && slots.symbols.length) ? ` ï¿½ï¿½ï¿½ï¿½: ${slots.symbols.join(' ')}` : ''
+      const text = `ï¿½Æ¼ï¿½ ${topk} Ö»ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ${risk}ï¿½ï¿½ï¿½ï¿½Î§ ${universe}.${symTxt}`
+      // ï¿½ï¿½ï¿½È£ï¿½ï¿½ï¿½Ê¼
+      pushStatus(cid, 'report_started', 'ï¿½ï¿½Ê¼ï¿½ï¿½ï¿½ï¿½ï¿½Æ¼ï¿½', runId)
+      // ï¿½ï¿½ï¿½È£ï¿½ï¿½æ»®/ï¿½ï¿½Ñ¡ï¿½×¶Î£ï¿½Ç°ï¿½Ë¿É¼ï¿½ï¿½Ð¼ï¿½Ì¬ï¿½ï¿½
+      pushStatus(cid, 'planning', 'ï¿½ï¿½ï¿½É²ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ñ¡', runId)
+      syncManager.requestSync('manual')
+      // ï¿½ï¿½ï¿½Ãºï¿½ï¿½ /chatï¿½ï¿½ï¿½Ãºï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æ¼ï¿½ï¿½ï¿½Ð´ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æ¼ï¿½ï¿½ë¿¨Æ¬ï¿½ï¿½ï¿½ï¿½ï¿½Ö»á»°ï¿½ï¿½×·ï¿½Ê£ï¿½
+      await chat({ session_id: cid, message: `ï¿½ï¿½ï¿½ï¿½ ${text}`, message_id: msgId })
+      syncManager.requestSync('manual')
+      // ï¿½ï¿½ï¿½È£ï¿½ï¿½ï¿½ï¿½
+      pushStatus(cid, 'plan_complete', 'ï¿½Æ¼ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½', runId)
+      pushStatus(cid, 'complete', 'ï¿½ï¿½ï¿½', runId)
+      syncManager.requestSync('manual')
       renderFromEvents(cid)
     } catch (e: any) {
-      message.error(e?.message || 'ÍÆ¼öÊ§°Ü')
+      message.error(e?.message || 'ï¿½Æ¼ï¿½Ê§ï¿½ï¿½')
       if (cid) {
-        pushStatus(cid, 'error', 'Êý¾Ý²»¿ÉÓÃ»òÍâ²¿Ô´±¨´í', runId)
-        pushStatus(cid, 'complete', 'Íê³É', runId)
-        await syncManager.flush().catch(()=>undefined)
+        pushStatus(cid, 'error', 'ï¿½ï¿½ï¿½Ý²ï¿½ï¿½ï¿½ï¿½Ã»ï¿½ï¿½â²¿Ô´ï¿½ï¿½ï¿½ï¿½', runId)
+        pushStatus(cid, 'complete', 'ï¿½ï¿½ï¿½', runId)
+        syncManager.requestSync('manual')
         renderFromEvents(cid)
       }
     }
@@ -225,24 +225,24 @@ export default function Chat() {
         data: { message_id: 'card-kline-' + Date.now() + '-' + s, kind: 'card', content: 'kline', payload: { type: 'kline', symbol: s } }
       })
     }
-    await syncManager.flush()
+    syncManager.requestSync('manual')
     renderFromEvents()
   }
 
   async function replyText(text: string) {
     const cid = await ensureCid()
     syncManager.pushOutbox({ conversation_id: cid, type: 'message.created', actor_id: 'assistant', data: { message_id: 'msg-' + Date.now(), kind: 'text', content: text } })
-    await syncManager.flush()
+    syncManager.requestSync('manual')
     renderFromEvents()
   }
 
   async function handleSubmit(raw: string) {
     const text = raw.trim()
     if (!text) return
-    // ¼òµ¥£º»Ø³µ¼´Çå¿ÕÊäÈë
+    // ï¿½òµ¥£ï¿½ï¿½Ø³ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
     setInput('')
     if (atBottom) setTimeout(() => listRef.current?.scrollTo({ top: 999999, behavior: 'smooth' }), 0)
-    // ÃÝµÈË«Ð´£ºÎÞÂÛºÎÖÖÒâÍ¼£¬ÏÈ°ÑÔ­Ê¼ÓÃ»§ÎÄ±¾Ð´ÎªÊÂ¼þ£¨±£Ö¤¡°ÎÒËµµÄ»°¡±Ò»¶¨ÏÔÊ¾£©£¬/api/chat ´«Í¬Ò»¸ö message_id
+    // ï¿½Ýµï¿½Ë«Ð´ï¿½ï¿½ï¿½ï¿½ï¿½Ûºï¿½ï¿½ï¿½ï¿½ï¿½Í¼ï¿½ï¿½ï¿½È°ï¿½Ô­Ê¼ï¿½Ã»ï¿½ï¿½Ä±ï¿½Ð´Îªï¿½Â¼ï¿½ï¿½ï¿½ï¿½ï¿½Ö¤ï¿½ï¿½ï¿½ï¿½Ëµï¿½Ä»ï¿½ï¿½ï¿½Ò»ï¿½ï¿½ï¿½ï¿½Ê¾ï¿½ï¿½ï¿½ï¿½/api/chat ï¿½ï¿½Í¬Ò»ï¿½ï¿½ message_id
     const cid = await ensureCid()
     const msgId = 'msg-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6)
     syncManager.pushOutbox({
@@ -252,7 +252,7 @@ export default function Chat() {
       actor_id: 'user',
       data: { message_id: msgId, kind: 'text', content: text }
     })
-    try { await syncManager.flush() } catch { /* ignore */ }
+    try { syncManager.requestSync('manual') } catch { /* ignore */ }
 
     const intent = parseIntent(text)
     if (intent.type === 'recommend') {
@@ -275,12 +275,12 @@ export default function Chat() {
         }
       }
       if (!themes.length) {
-        await replyText('ÔÝÎÞÊý¾Ý£¨ÏÈÉú³ÉÒ»´ÎÍÆ¼ö£©')
+        await replyText('ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ý£ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ò»ï¿½ï¿½ï¿½Æ¼ï¿½ï¿½ï¿½')
       } else {
-        const text = 'Ö÷ÌâÈÈ¶È£º' + themes.slice(0, 10).map((t: any) => {
+        const text = 'ï¿½ï¿½ï¿½ï¿½ï¿½È¶È£ï¿½' + themes.slice(0, 10).map((t: any) => {
           const s = String(t?.strength || '').trim()
-          return `${t?.name || 'Ö÷Ìâ'}${s ? `(${s})` : ''}`
-        }).join('¡¢')
+          return `${t?.name || 'ï¿½ï¿½ï¿½ï¿½'}${s ? `(${s})` : ''}`
+        }).join('ï¿½ï¿½')
         await replyText(text)
       }
       return
@@ -289,7 +289,7 @@ export default function Chat() {
       const evs = syncManager.messages(cid)
       const sts = evs.filter((e: any) => e?.data?.kind === 'card' && e?.data?.payload?.type === 'status').map((e: any) => e?.data?.payload)
       if (!sts.length) {
-        await replyText('µ±Ç°ÎÞÈÎÎñ')
+        await replyText('ï¿½ï¿½Ç°ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½')
       } else {
         const groups = new Map<number, any[]>()
         for (const s of sts) { const run = Number(s.run_id || 0) || 0; if (!groups.has(run)) groups.set(run, []); groups.get(run)!.push(s) }
@@ -298,11 +298,11 @@ export default function Chat() {
         const codeSet = new Set(latest.map((s) => String(s.code)))
         const order = ['report_started', 'planning', 'plan_complete', 'complete']
         const current = order.find((c) => !codeSet.has(c)) || 'complete'
-        await replyText(current === 'complete' ? 'µ±Ç°ÎÞÈÎÎñ' : `½ø¶È£º${labelOf(current)}`)
+        await replyText(current === 'complete' ? 'ï¿½ï¿½Ç°ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½' : `ï¿½ï¿½ï¿½È£ï¿½${labelOf(current)}`)
       }
       return
     }
-    // default: send to LLM chat£¨ÓÃ»§Ô­Ê¼ÎÄ±¾ÒÑÐ´ÈëÊÂ¼þ£¬ÓÃÍ¬Ò» message_id µ÷ºó¶Ë£©
+    // default: send to LLM chatï¿½ï¿½ï¿½Ã»ï¿½Ô­Ê¼ï¿½Ä±ï¿½ï¿½ï¿½Ð´ï¿½ï¿½ï¿½Â¼ï¿½ï¿½ï¿½ï¿½ï¿½Í¬Ò» message_id ï¿½ï¿½ï¿½ï¿½Ë£ï¿½
     if (atBottom) setTimeout(() => listRef.current?.scrollTo({ top: 999999, behavior: 'smooth' }), 30)
     m.mutate({ text, msgId })
   }
@@ -319,11 +319,11 @@ export default function Chat() {
         }}
         style={{ height: 420, overflowY: 'auto', padding: 8, border: '1px solid #eee', marginBottom: 12, borderRadius: 8 }}
       >
-        {messages.length === 0 && <Typography.Text type="secondary">ÊÔÊäÈë£º¡°¸øÎÒÍÆ¼ö3Ö»µÍ¹ÀÖµ¡±</Typography.Text>}
+        {messages.length === 0 && <Typography.Text type="secondary">ï¿½ï¿½ï¿½ï¿½ï¿½ë£ºï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æ¼ï¿½3Ö»ï¿½Í¹ï¿½Öµï¿½ï¿½</Typography.Text>}
         <List dataSource={messages} renderItem={(msg, idx) => (
           <List.Item key={idx} style={{ display: 'block', border: 'none', padding: 0 }}>
             {msg.kind === 'rec' && msg.payload?.picks ? (
-              <RecommendationCard picks={msg.payload.picks} meta={msg.payload?.meta} onShowKline={async (sym) => { if(!sessionId) return; syncManager.pushOutbox({ conversation_id: sessionId, type: 'message.created', actor_id: 'assistant', data: { message_id: 'card-kline-' + Date.now(), kind: 'card', content: 'kline', payload: { type: 'kline', symbol: sym } } }); await syncManager.flush(); renderFromEvents(sessionId) }} />
+              <RecommendationCard picks={msg.payload.picks} meta={msg.payload?.meta} onShowKline={async (sym) => { if(!sessionId) return; syncManager.pushOutbox({ conversation_id: sessionId, type: 'message.created', actor_id: 'assistant', data: { message_id: 'card-kline-' + Date.now(), kind: 'card', content: 'kline', payload: { type: 'kline', symbol: sym } } }); syncManager.requestSync('manual'); renderFromEvents(sessionId) }} />
             ) : msg.kind === 'kline' && msg.payload?.symbol ? (
               <KlineCard symbol={msg.payload.symbol} conversationId={sessionId} />
             ) : (
@@ -337,7 +337,7 @@ export default function Chat() {
           rows={2}
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          placeholder="¶Ô»°¼´Ö¸Áî£ºÈç ¡®¸øÎÒÍÆ¼ö3Ö»µÍ¹ÀÖµ¡¯ / ¡®¿´¿´600519 KÏß¡¯ / ¡®ÏÖÔÚ½ø¶Èµ½ÄÄÁË¡¯"
+          placeholder="ï¿½Ô»ï¿½ï¿½ï¿½Ö¸ï¿½î£ºï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æ¼ï¿½3Ö»ï¿½Í¹ï¿½Öµï¿½ï¿½ / ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½600519 Kï¿½ß¡ï¿½ / ï¿½ï¿½ï¿½ï¿½ï¿½Ú½ï¿½ï¿½Èµï¿½ï¿½ï¿½ï¿½Ë¡ï¿½"
           onKeyDown={(e) => {
             if (e.key === 'Enter' && !e.shiftKey) {
               const ne: any = e
@@ -349,16 +349,16 @@ export default function Chat() {
         />
         {m.isPending && <div style={{ display: 'flex', alignItems: 'center', padding: '0 8px' }}><Spin /></div>}
       </Space.Compact>
-      {/* error area intentionally minimal£¬±ÜÃâ¶àÓàÌáÊ¾Ó°ÏìÁ÷³©¶È */}
+      {/* error area intentionally minimalï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ê¾Ó°ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ */}
       {!atBottom && (
         <>
           {hasNew && (
             <div
               onClick={() => { listRef.current?.scrollTo({ top: 999999, behavior: 'smooth' }); setHasNew(false) }}
               style={{ cursor: 'pointer', color: '#1677ff', textAlign: 'center', margin: '6px 0' }}
-            >ÓÐÐÂÄÚÈÝ£¬µã»÷²é¿´</div>
+            >ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ý£ï¿½ï¿½ï¿½ï¿½ï¿½é¿´</div>
           )}
-          <FloatButton shape="square" type="primary" tooltip="»Øµ½µ×²¿" style={{ right: 24, bottom: 24 }} onClick={() => { listRef.current?.scrollTo({ top: 999999, behavior: 'smooth' }); setHasNew(false) }} />
+          <FloatButton shape="square" type="primary" tooltip="ï¿½Øµï¿½ï¿½×²ï¿½" style={{ right: 24, bottom: 24 }} onClick={() => { listRef.current?.scrollTo({ top: 999999, behavior: 'smooth' }); setHasNew(false) }} />
         </>
       )}
     </div>
@@ -368,12 +368,12 @@ export default function Chat() {
     <ToolsPanel
       conversationId={sessionId}
       onEnsureConversation={(cid) => { setSessionId(cid); persistSessionId(cid) }}
-      onRefresh={() => { syncManager.flush().catch(()=>undefined).then(()=>renderFromEvents()) }}
+      onRefresh={() => { syncManager.requestSync('tools_refresh'); setTimeout(()=>renderFromEvents(),50) }}
     />
   )
 
   return (
-    <Card title="¶Ô»°ÖúÊÖ">
+    <Card title="ï¿½Ô»ï¿½ï¿½ï¿½ï¿½ï¿½">
       <WorkbenchLayout left={left} right={right} />
     </Card>
   )
@@ -381,10 +381,10 @@ export default function Chat() {
 
 function labelOf(code: string) {
   switch (code) {
-    case 'report_started': return '¿ªÊ¼';
-    case 'planning': return 'Éú³É²ÎÊýÓëºòÑ¡';
-    case 'plan_complete': return '½á¹ûÉú³É';
-    case 'complete': return 'Íê³É';
+    case 'report_started': return 'ï¿½ï¿½Ê¼';
+    case 'planning': return 'ï¿½ï¿½ï¿½É²ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ñ¡';
+    case 'plan_complete': return 'ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½';
+    case 'complete': return 'ï¿½ï¿½ï¿½';
     default: return code;
   }
 }

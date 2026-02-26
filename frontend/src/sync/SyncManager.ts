@@ -30,6 +30,12 @@ export class SyncManager {
   private deviceId: string
   // optional getter to know current conversation for UI helpers
   currentConversationId?: () => string | null
+  // sync scheduling
+  private syncDebounceTimer: any = null
+  private lastSyncAt = 0
+  private syncCooldownMs = 1000
+  private syncDebounceMs = 250
+  private lastSyncReason: string = 'interval'
 
   constructor(deviceId?: string) {
     this.deviceId = deviceId || (localStorage.getItem('gp_device_id') || `dev-${crypto?.randomUUID?.() || Date.now()}`)
@@ -59,7 +65,7 @@ export class SyncManager {
     if (this.timer) return
     const tick = async () => {
       try {
-        await this.flush()
+        this.requestSync('interval')
       } catch { /* ignore */ }
       const hidden = document.hidden
       const ms = hidden ? intervalBg : intervalActive
@@ -116,14 +122,28 @@ export class SyncManager {
 
   async ensureLoaded(cid: string) {
     const st = this.convState(cid)
-    // incremental load based on persisted cursor to avoid after=0 repeatedly
+    // Only hydrate when local memory is empty; otherwise polling takes over
+    if (st.events.length > 0) return
     const key = `gp:after:${cid}`
-    let after = 0
-    try { const saved = Number(localStorage.getItem(key) || '0'); if (Number.isFinite(saved) && saved > 0) after = saved } catch {}
-    if (after <= 0 && st.lastSeq > 0) after = st.lastSeq
-    const data = await listEvents(cid, { after, limit: 100 })
-    this.mergeEvents(cid, data)
-    // persist last seq
+    let last = 0
+    try { const saved = Number(localStorage.getItem(key) || '0'); if (Number.isFinite(saved) && saved > 0) last = saved } catch {}
+    if (last <= 0 && st.lastSeq > 0) last = st.lastSeq
+    let data: EventOut[] = []
+    try {
+      if (last > 0) {
+        // Tail-window hydration via around
+        data = await listEvents(cid, { around: last, limit: 100 } as any)
+      } else {
+        // Full fetch fallback
+        data = await listEvents(cid, { after: 0, limit: 100 } as any)
+      }
+    } catch {
+      // Fallback to full if around path failed
+      try { data = await listEvents(cid, { after: 0, limit: 100 } as any) } catch { data = [] }
+    }
+    if (Array.isArray(data) && data.length) {
+      this.mergeEvents(cid, data)
+    }
     try { localStorage.setItem(key, String(this.convState(cid).lastSeq || 0)) } catch {}
     this.notify()
   }
@@ -190,7 +210,7 @@ export class SyncManager {
     return st.events.filter((e) => e.type === 'message.created')
   }
 
-  async flush() {
+  async flush(reason: string = 'manual') {
     // prevent concurrent syncs; coalesce fast callers
     if (this.syncing) { this.pendingSync = true; return }
     this.syncing = true
@@ -220,7 +240,7 @@ export class SyncManager {
     // abort previous if any
     if (this.aborter) { try { this.aborter.abort() } catch {} }
     this.aborter = new AbortController()
-    const resp = await apiSync(req, { signal: this.aborter.signal as any })
+    const resp = await apiSync(req, { signal: this.aborter.signal as any, headers: { 'X-Sync-Reason': reason } })
     // ack
     if (this.outbox.length) {
       const acks = resp.ack || {}
@@ -240,9 +260,10 @@ export class SyncManager {
       if (lastSeq > st.lastSeq) st.lastSeq = lastSeq
     }
     this.notify()
+    this.lastSyncAt = Date.now()
     this.syncing = false
     // run one more time if needed (drop extra bursts)
-    if (this.pendingSync) { this.pendingSync = false; try { await this.flush() } catch {} }
+    if (this.pendingSync) { this.pendingSync = false; try { this.requestSync('pending') } catch {} }
   }
 
   reportRead(cid: string, seq: number, actorId?: string) {
@@ -285,6 +306,24 @@ export class SyncManager {
       if (e.type === 'message.created') return e.data?.content || ''
     }
     return ''
+  }
+
+  // Public: coalesced sync requests with debounce and cooldown
+  requestSync(reason: string = 'manual') {
+    this.lastSyncReason = reason || 'manual'
+    if (this.syncDebounceTimer) clearTimeout(this.syncDebounceTimer)
+    const fire = async () => {
+      const now = Date.now()
+      const since = now - this.lastSyncAt
+      if (since < this.syncCooldownMs) {
+        const wait = this.syncCooldownMs - since
+        this.syncDebounceTimer = window.setTimeout(fire, wait)
+        return
+      }
+      this.syncDebounceTimer = null
+      try { await this.flush(this.lastSyncReason) } catch { /* ignore */ }
+    }
+    this.syncDebounceTimer = window.setTimeout(fire, this.syncDebounceMs)
   }
 
   // --- events incremental polling ---

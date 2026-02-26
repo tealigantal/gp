@@ -37,8 +37,8 @@ export async function ohlcv(symbol: string, params?: { start?: string; end?: str
 }
 
 // --- Events/sync APIs ---
-export async function sync(req: SyncReq, opts: { signal?: AbortSignal } = {}) {
-  const { data } = await api.post<SyncResp>('/sync', req, { signal: opts.signal })
+export async function sync(req: SyncReq, opts: { signal?: AbortSignal; headers?: Record<string, string> } = {}) {
+  const { data } = await api.post<SyncResp>('/sync', req, { signal: opts.signal, headers: opts.headers })
   return data
 }
 

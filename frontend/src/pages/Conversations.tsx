@@ -1,15 +1,15 @@
-import { useEffect, useState } from 'react'
-import { Badge, Button, Card, List, Space, Typography, Popconfirm, message } from 'antd'
-import { syncManager } from '../sync/SyncManager'
-import dayjs from 'dayjs'
-import { useNavigate } from 'react-router-dom'
-import { deleteConversation, cleanupConversations } from '../api/client'
-import { setSessionId as persistSessionId } from '../utils/session'
+﻿import { useEffect, useState } from "react"
+import { Badge, Button, Card, List, Space, Typography, Popconfirm, message } from "antd"
+import { syncManager } from "../sync/SyncManager"
+import dayjs from "dayjs"
+import { useNavigate } from "react-router-dom"
+import { deleteConversation, cleanupConversations } from "../api/client"
+import { setSessionId as persistSessionId } from "../utils/session"
 
 type Item = { id: string; title: string; lastSeq: number; updatedAt?: string; unread: number; preview: string }
 
 function newSessId() {
-  return 'sess-' + Date.now().toString().slice(0, 10)
+  return "sess-" + Date.now().toString().slice(0, 10)
 }
 
 export default function Conversations() {
@@ -25,7 +25,7 @@ export default function Conversations() {
 
   async function refresh() {
     setLoading(true)
-    try { await syncManager.flush() } finally { setLoading(false) }
+    try { syncManager.requestSync('conversations') } finally { setLoading(false) }
   }
 
   function open(cid: string) {
@@ -41,7 +41,7 @@ export default function Conversations() {
       setItems((prev) => prev.filter((x) => x.id !== cid))
       syncManager.removeConversation(cid)
       // 触发一次同步以刷新 meta
-      await syncManager.flush()
+      syncManager.requestSync('conversations')
     } catch (e: any) {
       message.error(e?.message || '删除失败')
     }
@@ -61,7 +61,7 @@ export default function Conversations() {
       setItems([])
       syncManager.resetAll()
       ;['gp:lastSid','gp_session_id'].forEach((k)=>localStorage.removeItem(k))
-      await syncManager.flush()
+      syncManager.requestSync('conversations')
     } catch (e: any) {
       message.error(e?.message || '清理失败')
     }
