@@ -18,7 +18,7 @@ export default function StrengthPanel({ conversationId }: { conversationId?: str
     }
     return [] as any[]
   }, [conversationId, tick])
-  const hints = useMemo(() => {
+  const { hints, hasRecCard } = useMemo(() => {
     if (!conversationId) return [] as any[]
     const evs = syncManager.messages(conversationId)
     for (let i = evs.length - 1; i >= 0; i--) {
@@ -28,11 +28,12 @@ export default function StrengthPanel({ conversationId }: { conversationId?: str
         if (Array.isArray(mh)) {
           const arr = [...mh]
           arr.sort((a: any, b: any) => (Number.isFinite(b?.chg_num) ? b.chg_num : -Infinity) - (Number.isFinite(a?.chg_num) ? a.chg_num : -Infinity))
-          return arr
+          return { hints: arr, hasRecCard: true }
         }
+        return { hints: [] as any[], hasRecCard: true }
       }
     }
-    return [] as any[]
+    return { hints: [] as any[], hasRecCard: false }
   }, [conversationId, tick])
 
   if (!conversationId) return null
@@ -49,7 +50,11 @@ export default function StrengthPanel({ conversationId }: { conversationId?: str
       )}
       <div style={{ marginTop: 8 }}>
         <div style={{ color: '#999', marginBottom: 4 }}>强势线索（来自快照）</div>
-        {hints.length === 0 ? <span style={{ color: '#bbb' }}>N/A</span> : (
+        {!hasRecCard ? (
+          <span style={{ color: '#999' }}>暂无数据（生成一次推荐后显示）</span>
+        ) : hints.length === 0 ? (
+          <span style={{ color: '#bbb' }}>N/A</span>
+        ) : (
           <List dataSource={hints.slice(0, 6)} renderItem={(h: any) => (
             <List.Item>
               <span>{h?.symbol || '-'}</span>

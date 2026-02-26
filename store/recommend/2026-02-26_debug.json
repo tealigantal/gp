@@ -1,0 +1,118 @@
+{
+  "timing": {},
+  "sources": [
+    {
+      "symbol": "600519",
+      "data_source": "provider"
+    },
+    {
+      "symbol": "002415",
+      "data_source": "provider"
+    },
+    {
+      "symbol": "000333",
+      "data_source": "provider"
+    },
+    {
+      "symbol": "000858",
+      "data_source": "provider"
+    },
+    {
+      "symbol": "600036",
+      "data_source": "provider"
+    },
+    {
+      "symbol": "601318",
+      "data_source": "provider"
+    },
+    {
+      "symbol": "000001",
+      "data_source": "provider"
+    },
+    {
+      "symbol": "002594",
+      "data_source": "provider"
+    },
+    {
+      "symbol": "000651",
+      "data_source": "provider"
+    },
+    {
+      "symbol": "600000",
+      "data_source": "provider"
+    }
+  ],
+  "failures": [],
+  "snapshot": {
+    "missing": true,
+    "degrade": "no_snapshot_universe_mode",
+    "error": "AkShare snapshot failed: JSONDecodeError: Can not decode value starting with character '<'"
+  },
+  "candidate_stats": {
+    "universe_in_count": 10,
+    "universe_after_filter_count": 10,
+    "bars_missing_count": 0,
+    "bars_too_short_count": 0,
+    "indicator_error_count": 0,
+    "skipped_symbols_sample": [],
+    "candidates_out_count": 10,
+    "universe_raw_count": 11,
+    "universe_cleaned_count": 10,
+    "universe_removed_counts": {
+      "bom_removed": 1,
+      "comment_lines_removed": 1,
+      "inline_comments_stripped": 0,
+      "blank_removed": 0,
+      "invalid_removed": 0,
+      "dedup_removed": 0
+    },
+    "daily_attempts_sample": []
+  },
+  "degraded": true,
+  "degrade_reasons": [
+    {
+      "reason_code": "SNAPSHOT_MISSING",
+      "detail": {
+        "degrade": "no_snapshot_universe_mode",
+        "error": "AkShare snapshot failed: JSONDecodeError: Can not decode value starting with character '<'"
+      }
+    },
+    {
+      "reason_code": "ENV_NEUTRALIZED",
+      "detail": {}
+    },
+    {
+      "reason_code": "THEMES_EMPTY",
+      "detail": {}
+    },
+    {
+      "reason_code": "MARKET_STATS_MISSING",
+      "detail": {}
+    },
+    {
+      "reason_code": "UNIVERSE_TOO_SMALL",
+      "detail": {
+        "count": 10,
+        "min": 50
+      }
+    },
+    {
+      "reason_code": "CANDIDATE_TOO_SMALL",
+      "detail": {
+        "count": 10,
+        "min": 20
+      }
+    },
+    {
+      "reason_code": "UNIVERSE_DIRTY_INPUT",
+      "detail": {
+        "bom_removed": 1,
+        "comment_lines_removed": 1,
+        "inline_comments_stripped": 0,
+        "blank_removed": 0,
+        "invalid_removed": 0,
+        "dedup_removed": 0
+      }
+    }
+  ]
+}

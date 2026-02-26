@@ -21,7 +21,7 @@ const LAST_RECOMMEND_RESULT_KEY = 'gp_last_recommend_result'
 
 export default function Chat() {
   const loc = useLocation()
-  const [sessionId, setSessionId] = useState<string | null>(() => localStorage.getItem(LOCAL_SESSION_KEY))
+  const [sessionId, setSessionId] = useState<string | null>(null)
   const [input, setInput] = useState('')
   const [messages, setMessages] = useState<Msg[]>([])
   const listRef = useRef<HTMLDivElement>(null)

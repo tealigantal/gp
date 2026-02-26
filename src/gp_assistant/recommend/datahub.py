@@ -78,6 +78,11 @@ class MarketDataHub:
         ensure_query(qid, qparams)
 
         do_network = not prefer_cache_only
+        # track provenance/merge stats
+        rows_before = len(_list_items(qid))
+        network_attempted = False
+        network_error: Optional[str] = None
+        rows_new_from_network = 0
         # TTL gating: if last_fetch_at within TTL, skip network
         try:
             ttl = int(getattr(cfg, "cache_refresh_ttl_sec", 300))
@@ -105,22 +110,31 @@ class MarketDataHub:
                     return pd.to_datetime(s).date().isoformat()
                 except Exception:
                     return s.split("T", 1)[0]
-            raw = provider.get_daily(symbol, start=_date_only(start), end=_date_only(end))
-            df_norm_tmp, _ = normalize_daily_ohlcv(raw)
-            items = []
-            for _, r in df_norm_tmp.iterrows():
-                d = pd.to_datetime(r["date"]).date().isoformat()
-                items.append({
-                    "id": d,
-                    "date": d,
-                    "open": float(r["open"]),
-                    "high": float(r["high"]),
-                    "low": float(r["low"]),
-                    "close": float(r["close"]),
-                    "volume": float(r["volume"]),
-                    "amount": float(r.get("amount", 0.0) or 0.0),
-                })
-            upsert_items(qid, items, id_key="id", time_key="date", etag_key=None)
+            try:
+                raw = provider.get_daily(symbol, start=_date_only(start), end=_date_only(end))
+                df_norm_tmp, _ = normalize_daily_ohlcv(raw)
+                items = []
+                for _, r in df_norm_tmp.iterrows():
+                    d = pd.to_datetime(r["date"]).date().isoformat()
+                    items.append({
+                        "id": d,
+                        "date": d,
+                        "open": float(r["open"]),
+                        "high": float(r["high"]),
+                        "low": float(r["low"]),
+                        "close": float(r["close"]),
+                        "volume": float(r["volume"]),
+                        "amount": float(r.get("amount", 0.0) or 0.0),
+                    })
+                stat = upsert_items(qid, items, id_key="id", time_key="date", etag_key=None)
+                network_attempted = True
+                try:
+                    rows_new_from_network = int((stat or {}).get("inserted", 0)) + int((stat or {}).get("updated", 0))
+                except Exception:
+                    rows_new_from_network = 0
+            except Exception as e:  # noqa: BLE001
+                network_attempted = True
+                network_error = f"{type(e).__name__}: {e}"
 
         rows = _list_items(qid)
         if rows:
@@ -130,7 +144,15 @@ class MarketDataHub:
                 if c in df.columns:
                     df[c] = pd.to_numeric(df[c], errors="coerce")
             df = df.sort_values("date").reset_index(drop=True)
-            meta["source"] = meta.get("source") or f"store:daily:{provider.name}"
+            meta["source"] = ("store+network_merge" if network_attempted and rows_new_from_network > 0 else (meta.get("source") or f"store:daily:{provider.name}"))
+            meta["rows_total"] = len(df)
+            try:
+                meta["rows_new"] = max(0, len(rows) - rows_before)
+            except Exception:
+                meta["rows_new"] = None
+            meta["attempted"] = network_attempted
+            if network_error:
+                meta["error"] = network_error
         else:
             if df is None and not prefer_cache_only:
                 raw = provider.get_daily(symbol, start=None, end=as_of)
@@ -145,6 +167,46 @@ class MarketDataHub:
                     pass
         if df is None or len(df) == 0:
             raise ValueError(f"daily_ohlcv: 无法获取真实数据 symbol={symbol}")
+        # Optional full backfill when history too short and network allowed
+        if not prefer_cache_only:
+            try:
+                if df is not None and len(df) < max(1, int(min_len)):
+                    raw_full = provider.get_daily(symbol, start=None, end=as_of)
+                    df_full, _ = normalize_daily_ohlcv(raw_full)
+                    items_full = []
+                    for _, r in df_full.iterrows():
+                        d = pd.to_datetime(r["date"]).date().isoformat()
+                        items_full.append({
+                            "id": d,
+                            "date": d,
+                            "open": float(r["open"]),
+                            "high": float(r["high"]),
+                            "low": float(r["low"]),
+                            "close": float(r["close"]),
+                            "volume": float(r["volume"]),
+                            "amount": float(r.get("amount", 0.0) or 0.0),
+                        })
+                    upsert_items(qid, items_full, id_key="id", time_key="date", etag_key=None)
+                    rows2 = _list_items(qid)
+                    if rows2:
+                        df2 = pd.DataFrame([r["payload"] for r in rows2])
+                        df2["date"] = pd.to_datetime(df2["date"])  # type: ignore[assignment]
+                        for c in ["open", "high", "low", "close", "volume", "amount"]:
+                            if c in df2.columns:
+                                df2[c] = pd.to_numeric(df2[c], errors="coerce")
+                        df2 = df2.sort_values("date").reset_index(drop=True)
+                        df = df2
+                        meta["source"] = "store+network_merge"
+                        meta["rows_total"] = len(df)
+                        try:
+                            meta["rows_new"] = max(0, len(rows2) - rows_before)
+                        except Exception:
+                            pass
+                        meta["backfill"] = True
+                        meta["backfill_reason"] = "cache_too_short"
+            except Exception as e:  # noqa: BLE001
+                meta.setdefault("errors", []).append({"stage": "backfill", "error": f"{type(e).__name__}: {e}"})
+
         df_norm, m = normalize_daily_ohlcv(df)
         meta.update(m)
         meta["len"] = len(df_norm)

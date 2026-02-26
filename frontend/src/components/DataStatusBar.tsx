@@ -1,27 +1,40 @@
 import React, { useEffect, useMemo, useState } from 'react'
-import { Alert, Button, Space, Tag, Tooltip, Typography } from 'antd'
+import { Alert, Button, Space, Tag, Tooltip } from 'antd'
 import { syncManager } from '../sync/SyncManager'
 
 export default function DataStatusBar() {
   const [tick, setTick] = useState(0)
   useEffect(() => { const u = syncManager.subscribe(() => setTick((v)=>v+1)); return () => u() }, [])
 
-  const meta = useMemo(() => {
+  const { meta, hasRecCard, lastRec } = useMemo(() => {
     const cid = syncManager.currentConversationId?.()
-    if (!cid) return null
+    if (!cid) return { meta: null as any, hasRecCard: false, lastRec: null as any }
     const evs = syncManager.messages(cid)
     for (let i = evs.length - 1; i >= 0; i--) {
       const e: any = evs[i]
       if (e?.data?.kind === 'card' && e?.data?.payload?.type === 'recommendation') {
-        return e?.data?.payload?.meta || null
+        const rec = e?.data?.payload || null
+        return { meta: rec?.meta || null, hasRecCard: true, lastRec: rec }
       }
     }
-    return null
+    return { meta: null as any, hasRecCard: false, lastRec: null as any }
   }, [tick])
 
-  if (!meta) return (
-    <Alert type="error" message="契约异常：未收到 meta（说明后端未产出真实数据）" banner showIcon={false} style={{ marginBottom: 8 }} />
-  )
+  if (!hasRecCard) {
+    return (
+      <Alert type="warning" message="尚未生成推荐。试试输入：给我推荐3只低估值" banner showIcon={false} style={{ marginBottom: 8 }} />
+    )
+  }
+  if (!meta) {
+    if (import.meta?.env?.DEV) {
+      // CONTRACT_BROKEN: recommendation card exists but meta missing
+      // eslint-disable-next-line no-console
+      console.error('[CONTRACT_BROKEN] recommendation payload without meta', lastRec)
+    }
+    return (
+      <Alert type="error" message="契约异常：未收到 meta（说明后端未产出真实数据）" banner showIcon={false} style={{ marginBottom: 8 }} />
+    )
+  }
   const ds = meta.data_status || {}
   if (!ds || Object.keys(ds).length === 0) {
     return <Alert type="error" message="data_status 缺失（禁止交易）" banner showIcon={false} style={{ marginBottom: 8 }} />
