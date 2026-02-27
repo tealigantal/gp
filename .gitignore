@@ -35,3 +35,8 @@ configs/config.yaml
 store/search/*.db
 store/search/history.db
 *.db
+
+# local search history / sqlite
+store/search/*.db
+store/search/history.db
+*.db
