@@ -40,3 +40,7 @@ store/search/history.db
 store/search/*.db
 store/search/history.db
 *.db
+# local sqlite history
+store/search/history.db
+store/search/*.db
+
