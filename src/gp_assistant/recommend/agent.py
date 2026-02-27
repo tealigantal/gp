@@ -54,8 +54,13 @@ def run(date: Optional[str] = None, topk: int = 3, universe: str = "auto", symbo
     hub = MarketDataHub()
 
     # 数据阶段：快照（Spot Snapshot）
-    # Fetch snapshot once and share within this run (degrade to None if unavailable)
-    provider = get_provider()
+    # 在 symbols 模式下跳过快照抓取，直接进入后续流程以降低延迟
+    skip_snapshot = (universe == "symbols" and bool(symbols))
+    snapshot_df = None
+    snap_meta: Dict[str, Any] = {}
+    if not skip_snapshot:
+        # Fetch snapshot once and share within this run (degrade to None if unavailable)
+        provider = get_provider()
     # 可观测性：打印快照抓取配置与结果
     try:
         routes = list(getattr(cfg, "ak_spot_priority", ["sina", "em"]))
@@ -70,11 +75,10 @@ def run(date: Optional[str] = None, topk: int = 3, universe: str = "auto", symbo
         print(f"[快照] 正在获取市场快照：provider={getattr(provider, 'name', '?')}，优先级={','.join(routes)}，超时={to_sec}s", flush=True)
     except Exception:
         pass
-    snapshot_df: Optional[pd.DataFrame]
-    snap_meta: Dict[str, Any]
     try:
-        snapshot_df = provider.get_spot_snapshot()
-        snap_meta = getattr(provider, "last_snapshot_meta", lambda: {})() or {}
+        if not skip_snapshot:
+            snapshot_df = provider.get_spot_snapshot()
+            snap_meta = getattr(provider, "last_snapshot_meta", lambda: {})() or {}
         try:
             src = (snap_meta.get("source") or snap_meta.get("cache_of") or "?")
             rows = (0 if snapshot_df is None else int(len(snapshot_df)))
@@ -92,6 +96,9 @@ def run(date: Optional[str] = None, topk: int = 3, universe: str = "auto", symbo
             print(f"[快照] 失败：{e}，降级为无快照模式（将使用 universe/symbols 模式）", flush=True)
         except Exception:
             pass
+    if skip_snapshot:
+        # 明确记录跳过快照的原因，便于 debug.json 观察
+        snap_meta = {"missing": True, "degrade": "symbols_mode_skip_snapshot"}
 
     # Environ + themes
     env = score_regime(hub, snapshot=snapshot_df)

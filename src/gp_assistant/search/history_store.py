@@ -149,6 +149,20 @@ def query_meta(query_id: str) -> Dict[str, Any]:
         conn.close()
 
 
+def count_items(query_id: str) -> int:
+    """高效计数以避免 list_items 解 JSON 的额外开销。"""
+    conn = _connect()
+    try:
+        cur = conn.execute(
+            "SELECT COUNT(*) FROM items WHERE query_id=?",
+            (query_id,),
+        )
+        r = cur.fetchone()
+        return int(r[0]) if r and r[0] is not None else 0
+    finally:
+        conn.close()
+
+
 def watermark(query_id: str) -> Optional[str]:
     meta = query_meta(query_id)
     return meta.get("last_item_time")

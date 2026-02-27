@@ -88,6 +88,16 @@ def generate_candidates(
     elif snapshot is not None:
         base_entries = _build_dynamic_universe_symbols(snapshot)
         base_reason = "dynamic_pool"
+        # 对动态池做 TopN 截断（按成交额降序），以避免全市场逐标的重计算
+        try:
+            topn = max(int(topk) * 5, int(getattr(cfg, "dynamic_pool_size", 200)))
+        except Exception:
+            topn = max(int(topk) * 5, 200)
+        try:
+            base_entries.sort(key=lambda e: -float(e.get("amount", 0.0)))
+        except Exception:
+            pass
+        base_entries = base_entries[: topn]
     else:
         uni = UniverseProvider()
         syms = uni.get_symbols()
@@ -137,7 +147,13 @@ def generate_candidates(
     try:
         syms = [str(e.get("code")) for e in cleaned if e.get("code")]
         if syms:
-            _ = hub.daily_ohlcv_batch(syms, as_of=None, safety_lookback_days=365)
+            # 预取仅覆盖当前截断的候选集合，并缩小回溯窗口以减少重复 upsert
+            lookback = 60
+            try:
+                lookback = int(getattr(load_config(), "cache_refresh_ttl_sec", 300)) // 5 or 60
+            except Exception:
+                lookback = 60
+            _ = hub.daily_ohlcv_batch(syms, as_of=None, safety_lookback_days=min(lookback, 90))
             try:
                 print(f"[预取] 已批量入库日线：{len(syms)} 个标的", flush=True)
             except Exception:

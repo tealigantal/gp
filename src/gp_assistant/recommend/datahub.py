@@ -20,6 +20,7 @@ from ..search.history_store import (
     upsert_items,
     list_items as _list_items,
     query_meta as _query_meta,
+    count_items as _count_items,
 )
 
 
@@ -79,7 +80,8 @@ class MarketDataHub:
 
         do_network = not prefer_cache_only
         # track provenance/merge stats
-        rows_before = len(_list_items(qid))
+        # 使用 COUNT(*) 避免 JSON 解码全量行带来的额外 CPU/IO
+        rows_before = _count_items(qid)
         network_attempted = False
         network_error: Optional[str] = None
         rows_new_from_network = 0

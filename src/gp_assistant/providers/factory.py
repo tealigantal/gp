@@ -11,6 +11,9 @@ from .official_provider import OfficialProvider
 from .local_provider import LocalParquetProvider
 from .base import MarketDataProvider
 
+# 简单单例缓存，按 (prefer, choice) 维度缓存已选 provider，避免重复构造与健康检查
+_PROVIDER_CACHE: dict[tuple[str, str], MarketDataProvider] = {}
+
 
 def get_provider(prefer: Literal["local", "online", "auto", "akshare", "official", None] = None) -> MarketDataProvider:
     """Provider selection with explicit preference and clear fallback chain.
@@ -32,52 +35,75 @@ def get_provider(prefer: Literal["local", "online", "auto", "akshare", "official
         else:
             prefer = "auto"
 
-    # Providers
+    # 缓存命中
+    key = ((prefer or "auto"), choice)
+    if key in _PROVIDER_CACHE:
+        return _PROVIDER_CACHE[key]
+
+    # 显式选择时，短路，仅构造所需 provider
+    if choice == "akshare":
+        p = AkShareProvider(timeout_sec=cfg.request_timeout_sec)
+        _PROVIDER_CACHE[key] = p
+        return p
+    if choice == "local":
+        p = LocalParquetProvider()
+        _PROVIDER_CACHE[key] = p
+        return p
+    if choice == "official":
+        p = OfficialProvider(api_key=cfg.provider.official_api_key)
+        _PROVIDER_CACHE[key] = p
+        return p
+
+    # Providers（按需构造，避免无谓 healthcheck 放大）
     local = LocalParquetProvider()
     ak = AkShareProvider(timeout_sec=cfg.request_timeout_sec)
     off = OfficialProvider(api_key=cfg.provider.official_api_key)
 
     local_hc = local.healthcheck()
     ak_hc = ak.healthcheck()
-    # When user explicitly sets DATA_PROVIDER, honor it strictly
-    if choice == "akshare":
-        return ak
-    if choice == "local":
-        return local
-    if choice == "official":
-        return off
-
     off_hc = off.healthcheck() if choice == "official" else {"ok": False, "reason": "not-selected"}
 
     if prefer == "local":
         if local_hc.get("ok"):
+            _PROVIDER_CACHE[key] = local
             return local
         # try online fallbacks
         if off_hc.get("ok"):
+            _PROVIDER_CACHE[key] = off
             return off
         if ak_hc.get("ok"):
+            _PROVIDER_CACHE[key] = ak
             return ak
-        return local  # last resort
+        _PROVIDER_CACHE[key] = local  # last resort
+        return local
 
     if prefer == "online":
         if off_hc.get("ok"):
+            _PROVIDER_CACHE[key] = off
             return off
         if ak_hc.get("ok"):
+            _PROVIDER_CACHE[key] = ak
             return ak
         # fallback to local if available
         if local_hc.get("ok"):
+            _PROVIDER_CACHE[key] = local
             return local
+        _PROVIDER_CACHE[key] = ak
         return ak
 
     # AUTO (or unknown)
     if off_hc.get("ok"):
+        _PROVIDER_CACHE[key] = off
         return off
     if local_hc.get("ok"):
+        _PROVIDER_CACHE[key] = local
         return local
     if ak_hc.get("ok"):
+        _PROVIDER_CACHE[key] = ak
         return ak
     # final fallback
     logger.warning("所有数据源不可用，返回 AkShare 以暴露错误")
+    _PROVIDER_CACHE[key] = ak
     return ak
 
 
