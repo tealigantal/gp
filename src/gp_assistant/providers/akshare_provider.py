@@ -35,6 +35,152 @@ class AkShareProvider(MarketDataProvider):
         self._last_daily_source: Optional[str] = None
         self._last_daily_attempts: Optional[list[dict]] = None
 
+    # ---- Normalizers -------------------------------------------------------
+    def _standardize_spot_snapshot(self, df: pd.DataFrame, route: str) -> pd.DataFrame:  # noqa: ANN001
+        """Normalize Sina/EM snapshot to canonical schema.
+
+        Canonical columns:
+        - code: 6-digit string (e.g., 600519); strip prefixes like sz/bj if present
+        - symbol: prefixed form (e.g., sh600519/sz000001/bj430017)
+        - name: str
+        - price: float
+        - pct_chg: float (percent units, e.g., 1.23)
+        - chg: float (absolute change)
+        - volume: float
+        - amount: float (成交额)
+        - ts: optional timestamp
+        """
+        if not isinstance(df, pd.DataFrame) or df.empty:
+            return pd.DataFrame(columns=["code", "symbol", "name", "price", "pct_chg", "chg", "volume", "amount", "ts"])  # type: ignore[arg-type]
+
+        raw_cols = [str(c) for c in list(df.columns)]
+        x = df.copy()
+
+        def _pick(cands: list[str]) -> str | None:
+            cols = set(map(str, x.columns))
+            for c in cands:
+                if c in cols:
+                    return c
+            return None
+
+        def _coerce_num(series: pd.Series) -> pd.Series:  # noqa: ANN001
+            try:
+                if series.dtype == object:
+                    s = series.astype(str).str.replace("%", "", regex=False).str.replace(",", "", regex=False)
+                else:
+                    s = series
+                return pd.to_numeric(s, errors="coerce")
+            except Exception:
+                return pd.to_numeric(series, errors="coerce")
+
+        code_col = _pick(["code", "代码", "ts_code", "symbol"])  # symbol may contain prefixed code
+        name_col = _pick(["name", "名称", "股票名称"]) or None
+        price_col = _pick(["最新价", "现价", "close", "最新", "价格", "收盘价"]) or None
+        pct_col = _pick(["涨跌幅", "涨幅", "涨跌幅(%)", "涨跌幅%", "pct_chg", "changePct"]) or None
+        chg_col = _pick(["涨跌额", "涨跌", "change"]) or None
+        vol_col = _pick(["成交量", "成交量(手)", "成交量(股)", "总手", "volume"]) or None
+        amt_col = _pick(["成交额", "成交额(元)", "金额", "turnover", "amount"]) or None
+        ts_col = _pick(["更新时间", "时间", "时间戳", "timestamp"]) or None
+
+        out = pd.DataFrame()
+
+        # code normalization: extract 6 digits; accept prefixed forms (sh/sz/bj or *.SZ)
+        def _normalize_code(v: str) -> str | None:
+            if v is None:
+                return None
+            s = str(v).strip().lower()
+            if not s:
+                return None
+            # split suffix like 000001.sz
+            if "." in s:
+                s = s.split(".", 1)[0]
+            for p in ("sh", "sz", "bj"):
+                if s.startswith(p):
+                    s = s[len(p):]
+            # extract first 6 consecutive digits
+            digits = "".join([ch for ch in s if ch.isdigit()])
+            if len(digits) >= 6:
+                d6 = digits[:6]
+                if d6.isdigit():
+                    return d6
+            return None
+
+        codes: list[str] = []
+        if code_col and code_col in x.columns:
+            codes = [c or "" for c in x[code_col].astype(str).tolist()]
+        else:
+            codes = [""] * len(x)
+        norm_codes = [(_normalize_code(c) or "") for c in codes]
+        out["code"] = norm_codes
+
+        # symbol from code
+        def _to_symbol(c: str) -> str | None:
+            if not c or len(c) != 6 or not c.isdigit():
+                return None
+            if c.startswith("6"):
+                return f"sh{c}"
+            if c[0] in {"0", "2", "3"}:
+                return f"sz{c}"
+            if c[0] in {"4", "8", "9"}:
+                return f"bj{c}"
+            return f"sz{c}"
+
+        out["symbol"] = [(_to_symbol(c) or "") for c in out["code"].astype(str).tolist()]
+
+        # name, price, pct, chg, volume, amount, ts
+        if name_col and name_col in x.columns:
+            out["name"] = x[name_col].astype(str)
+        else:
+            out["name"] = ""
+        if price_col and price_col in x.columns:
+            out["price"] = _coerce_num(x[price_col])
+        else:
+            out["price"] = pd.NA
+        if pct_col and pct_col in x.columns:
+            out["pct_chg"] = _coerce_num(x[pct_col])
+        else:
+            out["pct_chg"] = pd.NA
+        if chg_col and chg_col in x.columns:
+            out["chg"] = _coerce_num(x[chg_col])
+        else:
+            out["chg"] = pd.NA
+        if vol_col and vol_col in x.columns:
+            out["volume"] = _coerce_num(x[vol_col])
+        else:
+            out["volume"] = pd.NA
+        if amt_col and amt_col in x.columns:
+            out["amount"] = _coerce_num(x[amt_col])
+        else:
+            out["amount"] = pd.NA
+        if ts_col and ts_col in x.columns:
+            out["ts"] = x[ts_col]
+        else:
+            out["ts"] = pd.NA
+
+        # drop invalid codes
+        out = out[(out["code"].astype(str).str.len() == 6) & (out["code"].astype(str).str.isdigit())].copy()
+        # best-effort sorting by amount desc if present
+        try:
+            if "amount" in out.columns:
+                out = out.sort_values(by=["amount"], ascending=False)
+        except Exception:
+            pass
+
+        # attach meta to self for later retrieval
+        schema_meta = {
+            "schema": {
+                "canonical": ["code", "symbol", "name", "price", "pct_chg", "chg", "volume", "amount", "ts"],
+                "raw_columns": raw_cols,
+                "route": route,
+            },
+            "normalized": True,
+        }
+        try:
+            self._last_snapshot_meta.update(schema_meta)  # type: ignore[union-attr]
+        except Exception:
+            self._last_snapshot_meta = dict(schema_meta)
+        return out
+
     # ---- AkShare import -----------------------------------------------------
     def _import(self):  # late import
         try:
@@ -98,11 +244,19 @@ class AkShareProvider(MarketDataProvider):
         except Exception:
             pass
 
-        # Memory TTL cache (<=30s)
+        # Memory TTL cache (route-aware TTL; enforce floor for Sina)
         try:
             if self._snapshot_cache_df is not None and self._snapshot_cache_ts is not None:
                 age = time.time() - float(self._snapshot_cache_ts)
-                if age <= 30:
+                # TTL from config; enforce a minimum of 30s for Sina to reduce ban risk
+                try:
+                    ttl_cfg = int(getattr(cfg, "ak_spot_refresh_ttl_sec", 30))
+                except Exception:
+                    ttl_cfg = 30
+                cache_src = self._snapshot_cache_source or ""
+                ttl_floor = 30 if (isinstance(cache_src, str) and ("sina" in cache_src)) else 0
+                ttl = max(ttl_cfg, ttl_floor)
+                if age <= ttl:
                     attempts.append({"source": self.SRC_CACHE, "ok": True, "rows": int(len(self._snapshot_cache_df))})
                     meta = {
                         "source": self.SRC_CACHE,
@@ -116,9 +270,17 @@ class AkShareProvider(MarketDataProvider):
                     }
                     if self._snapshot_cache_source:
                         meta["cache_of"] = self._snapshot_cache_source
+                    # propagate schema/normalized flags if present in last meta
+                    try:
+                        if isinstance(self._last_snapshot_meta, dict):
+                            if "schema" in self._last_snapshot_meta:
+                                meta["schema"] = self._last_snapshot_meta.get("schema")
+                            meta["normalized"] = True
+                    except Exception:
+                        pass
                     self._last_snapshot_meta = meta
                     try:
-                        print(f"[快照] 命中内存缓存 rows={int(len(self._snapshot_cache_df))} age={age:.1f}s", flush=True)
+                        print(f"[快照] 命中内存缓存 rows={int(len(self._snapshot_cache_df))} age={age:.1f}s ttl={ttl}s", flush=True)
                     except Exception:
                         pass
                     return self._snapshot_cache_df
@@ -136,6 +298,8 @@ class AkShareProvider(MarketDataProvider):
                     df = ak.stock_zh_a_spot()
                     if df is None or len(df) == 0:
                         raise DataProviderError("AkShare Sina snapshot empty")
+                    # normalize
+                    df = self._standardize_spot_snapshot(df, route="sina")
                     src = self._src_for_route("sina")
                     attempts.append({"source": src, "ok": True, "rows": int(len(df))})
                     self._last_snapshot_meta = {
@@ -146,6 +310,8 @@ class AkShareProvider(MarketDataProvider):
                         "elapsed_sec": round(time.time() - t0, 2),
                         "skipped_routes": [],
                         "attempts": attempts,
+                        "schema": (self._last_snapshot_meta or {}).get("schema"),
+                        "normalized": True,
                     }
                     try:
                         print(f"[快照] 命中 route=sina rows={int(len(df))} elapsed={round(time.time()-t0,2)}s", flush=True)
@@ -157,6 +323,8 @@ class AkShareProvider(MarketDataProvider):
                     df = self._call_with_retry(lambda: self._with_requests_timeout(lambda: ak.stock_zh_a_spot_em()), retries=1)
                     if df is None or len(df) == 0:
                         raise DataProviderError("AkShare EM snapshot empty")
+                    # normalize
+                    df = self._standardize_spot_snapshot(df, route="em")
                     src = self._src_for_route("em")
                     attempts.append({"source": src, "ok": True, "rows": int(len(df))})
                     self._last_snapshot_meta = {
@@ -167,6 +335,8 @@ class AkShareProvider(MarketDataProvider):
                         "elapsed_sec": round(time.time() - t0, 2),
                         "skipped_routes": [],
                         "attempts": attempts,
+                        "schema": (self._last_snapshot_meta or {}).get("schema"),
+                        "normalized": True,
                     }
                     try:
                         print(f"[快照] 命中 route=em rows={int(len(df))} elapsed={round(time.time()-t0,2)}s", flush=True)

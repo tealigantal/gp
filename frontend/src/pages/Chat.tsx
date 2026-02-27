@@ -7,7 +7,6 @@ import { useLocation } from 'react-router-dom'
 import { syncManager } from '../sync/SyncManager'
 import MessageBubble from '../components/MessageBubble'
 import RecommendationCard from '../components/RecommendationCard'
-import DataStatusBar from '../components/DataStatusBar'
 import KlineCard from '../components/KlineCard'
 import WorkbenchLayout from '../components/WorkbenchLayout'
 import ToolsPanel from '../components/ToolsPanel'
@@ -169,7 +168,6 @@ export default function Chat() {
 
   const left = (
     <div>
-      <DataStatusBar />
       <div
         ref={listRef}
         onScroll={(e) => {

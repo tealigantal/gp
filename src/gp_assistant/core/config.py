@@ -58,6 +58,8 @@ class AppConfig:
     # AkShare routes (optional)
     ak_spot_priority: List[str] = field(default_factory=lambda: ["em", "sina"])
     ak_daily_priority: List[str] = field(default_factory=lambda: ["sina", "em", "tx"])
+    # Spot refresh TTL (seconds) for memory cache hint
+    ak_spot_refresh_ttl_sec: int = int(os.getenv("AK_SPOT_REFRESH_TTL_SEC", "30"))
 
     # Strict real data only (no synthetic/degrade)
     strict_real_data: bool = _truthy(os.getenv("STRICT_REAL_DATA", "1"))
@@ -73,6 +75,8 @@ class AppConfig:
     restrict_to_mainline: bool = _truthy(os.getenv("GP_RESTRICT_MAINLINE", "1"))
     mainline_top_n: int = int(os.getenv("GP_MAINLINE_TOP_N", "2"))
     mainline_mode: str = os.getenv("GP_MAINLINE_MODE", "auto")
+    # Optional: require mainline to be present for tradeable
+    require_mainline_for_tradeable: bool = _truthy(os.getenv("GP_REQUIRE_MAINLINE_FOR_TRADEABLE", "0"))
 
     # Diversification
     max_per_industry: int = int(os.getenv("GP_MAX_PER_INDUSTRY", "2"))

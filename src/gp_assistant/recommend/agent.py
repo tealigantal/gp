@@ -1,4 +1,4 @@
-"""Recommendation engine (UTF-8 normalized, minimal reconstruction).
+﻿"""Recommendation engine (UTF-8 normalized, minimal reconstruction).
 
 This module orchestrates the end-to-end recommendation flow:
  - Fetch snapshot once via provider (agent is the only caller)
@@ -27,6 +27,7 @@ from .theme_pool import build_themes
 from .theme_hints import build_mover_hints
 from .strict_output import normalize_payload
 from .theme_concept import last_concept_status
+from .mainline import build_mainline
 from ..core.strict import is_strict
 from .candidate_gen import generate_candidates
 from ..providers.factory import get_provider
@@ -95,6 +96,11 @@ def run(date: Optional[str] = None, topk: int = 3, universe: str = "auto", symbo
     # Environ + themes
     env = score_regime(hub, snapshot=snapshot_df)
     themes = build_themes(hub, snapshot=snapshot_df)
+    # Mainline （资金流主线）
+    try:
+        mainline = build_mainline(indicator="今日", topn=max(1, int(getattr(cfg, "mainline_top_n", 2))))
+    except Exception as _e:
+        mainline = {"indicator": "今日", "sectors": [], "errors": ["build_mainline_failed"]}
 
     # Base selection
     if universe == "symbols" and symbols:
@@ -300,7 +306,8 @@ def run(date: Optional[str] = None, topk: int = 3, universe: str = "auto", symbo
         "timezone": cfg.timezone,
         "env": env,
         "themes": themes,
-        "candidate_pool": pool,
+                "mainline": mainline,
+"candidate_pool": pool,
         "picks": picks,
         "execution_checklist": [
             "1) 环境分层",
@@ -383,6 +390,12 @@ def run(date: Optional[str] = None, topk: int = 3, universe: str = "auto", symbo
     tradeable = not dbg.get("degraded") and _is_clean_live_snapshot(snap_meta) \
         and cand_stats.get("universe_after_filter_count", 0) >= getattr(cfg, "tradeable_min_universe", 50) \
         and cand_stats.get("candidates_out_count", 0) >= getattr(cfg, "tradeable_min_candidates", 20)
+    try:
+        if bool(getattr(cfg, "require_mainline_for_tradeable", False)) and not (mainline.get("sectors")):
+            degrade_record(dbg, "MAINLINE_MISSING", {})
+            tradeable = False
+    except Exception:
+        pass
     if tradeable and dbg.get("degrade_reasons"):
         degrade_record(dbg, "INSUFFICIENT_EVIDENCE_TRADEABLE", {"reason": "degrade_reasons_present"})
         tradeable = False
@@ -434,13 +447,24 @@ def run(date: Optional[str] = None, topk: int = 3, universe: str = "auto", symbo
         "error": lcs.get("error"),
         "as_of_ts": snap_meta.get("as_of_ts"),
     }
+    ds_mainline = {
+        "ok": bool(mainline.get("sectors")),
+        "source": "akshare:stock_sector_fund_flow_rank",
+        "error": None if (mainline.get("sectors")) else (";".join(mainline.get("errors") or []) if mainline.get("errors") else None),
+    }
     ds_daily = {
         "ok": True,
         "symbols_ok": len(feats_by_symbol),
         "symbols_fail": len(locals().get("strategy_eval_failures", []) or []),
         "error_summary": None,
     }
-    payload["data_status"] = {"snapshot": ds_snapshot, "themes": ds_themes, "daily": ds_daily}
+    payload["data_status"] = {"snapshot": ds_snapshot, "themes": ds_themes, "daily": ds_daily, "mainline": ds_mainline}
 
     _write_outputs(as_of, payload)
     return payload
+
+
+
+
+
+

@@ -31,6 +31,7 @@ export type RecommendResp = {
   timezone?: string
   env?: { grade?: string; reasons?: string[]; recovery_conditions?: string[]; [k: string]: any }
   themes?: Array<{ name: string; strength?: number; [k: string]: any }>
+  mainline?: { indicator?: string; sectors?: Array<any>; [k: string]: any }
   picks?: Array<any>
   tradeable?: boolean
   message?: string

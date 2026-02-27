@@ -1,4 +1,4 @@
-"""候选集生成（完整实现）。
+﻿"""候选集生成（完整实现）。
 
 基于快照/参数/本地 Universe，拉取日线 -> 计算指标/筹码/风险 ->
 给出可观测字段与必要的 veto/flags 信息，供后续策略与 UI 使用。
@@ -39,7 +39,7 @@ def _build_dynamic_universe_symbols(snapshot: Optional[pd.DataFrame]) -> List[Di
     if snapshot is None or len(snapshot) == 0:
         return []
     snap = snapshot.copy()
-    code_col = _pick_col(snap, ["code", "symbol", "ts_code"])  # required
+    code_col = _pick_col(snap, ["code", "symbol", "ts_code", "代码"])  # required
     if not code_col:
         return []
     name_col = _pick_col(snap, ["name"])  # optional
@@ -53,8 +53,17 @@ def _build_dynamic_universe_symbols(snapshot: Optional[pd.DataFrame]) -> List[Di
         df[c] = pd.to_numeric(df[c], errors="coerce")
     out: List[Dict[str, Any]] = []
     for _, r in df.iterrows():
+        raw_code = str(r[code_col])
+        s = raw_code.strip().lower()
+        if "." in s:
+            s = s.split(".", 1)[0]
+        for p in ("sh", "sz", "bj"):
+            if s.startswith(p):
+                s = s[len(p):]
+        digits = "".join([ch for ch in s if ch.isdigit()])
+        code = digits[:6] if len(digits) >= 6 else raw_code
         out.append({
-            "code": str(r[code_col]),
+            "code": str(code),
             "name": (str(r[name_col]) if name_col else None),
             "industry": (str(r[industry_col]) if industry_col else None),
             "amount": float(r.get(amount_col, 0.0)) if amount_col else 0.0,
@@ -84,21 +93,49 @@ def generate_candidates(
         syms = uni.get_symbols()
         base_entries = [{"code": s} for s in syms]
         base_reason = "universe:file"
+    pre_clean_len = len(base_entries)
+    bad_code_removed = 0
+    cleaned: List[Dict[str, Any]] = []
+    for e in base_entries:
+        s = str(e.get("code", "")).strip()
+        if len(s) == 6 and s.isdigit():
+            cleaned.append(e)
+        else:
+            bad_code_removed += 1
+
+    universe_fallback: Dict[str, Any] | None = None
+    if snapshot is not None and len(cleaned) == 0:
+        uni = UniverseProvider()
+        syms = uni.get_symbols()
+        cleaned = [{"code": s} for s in syms]
+        universe_fallback = {
+            "from": "snapshot",
+            "to": "universe_file",
+            "reason": "snapshot_schema_unusable",
+            "snapshot_columns": list(snapshot.columns) if hasattr(snapshot, "columns") else [],
+        }
 
     stats: Dict[str, Any] = {
-        "universe_in_count": len(base_entries),
-        "universe_after_filter_count": len(base_entries),
+        "universe_in_count": pre_clean_len,
+        "universe_after_filter_count": 0,
         "bars_missing_count": 0,
         "bars_too_short_count": 0,
         "indicator_error_count": 0,
         "skipped_symbols_sample": [],
         "candidates_out_count": 0,
         "daily_attempts_sample": [],
+        "universe_removed_counts": {
+            "bad_code": int(bad_code_removed),
+            "insufficient_liquidity": 0,
+            "insufficient_history": 0,
+        },
     }
+    if universe_fallback is not None:
+        stats["universe_fallback"] = universe_fallback
 
     # 预取（TTL 控制由 datahub 处理）
     try:
-        syms = [str(e.get("code")) for e in base_entries if e.get("code")]
+        syms = [str(e.get("code")) for e in cleaned if e.get("code")]
         if syms:
             _ = hub.daily_ohlcv_batch(syms, as_of=None, safety_lookback_days=365)
             try:
@@ -112,7 +149,7 @@ def generate_candidates(
     pool: List[Dict[str, Any]] = []
     veto_reasons: List[Dict[str, Any]] = []
 
-    for entry in base_entries:
+    for entry in cleaned:
         sym = str(entry.get("code"))
         if not sym:
             continue
@@ -175,8 +212,16 @@ def generate_candidates(
         if avg5_amount < cfg.min_avg_amount:
             veto = {"symbol": sym, "reason": "LOW_LIQ_HARD", "amount_5d_avg": avg5_amount}
             veto_reasons.append(veto)
+            try:
+                stats["universe_removed_counts"]["insufficient_liquidity"] += 1
+            except Exception:
+                pass
             if bool(meta.get("insufficient_history")):
                 stats["bars_too_short_count"] += 1
+                try:
+                    stats["universe_removed_counts"]["insufficient_history"] += 1
+                except Exception:
+                    pass
             continue
 
         # 构造候选
@@ -227,6 +272,12 @@ def generate_candidates(
         return {"A": 0, "B": 1, "C": 2}.get(str(g), 3)
 
     pool.sort(key=lambda x: (-(x["indicators"].get("slope20") or 0.0), x["atr_pct"], _liq_rank(x["liquidity"].get("grade"))))
+    stats["universe_after_filter_count"] = len(pool)
     stats["candidates_out_count"] = len(pool)
 
     return pool[: max(1, topk) * 5], veto_reasons, stats
+
+
+
+
+
