@@ -53,61 +53,85 @@ def run(date: Optional[str] = None, topk: int = 3, universe: str = "auto", symbo
     as_of = date or cal["as_of"]
     hub = MarketDataHub()
 
+    # Fast path: when caller provides concrete symbols, skip expensive snapshot/thematic computations.
+    symbols_mode = (str(universe or "").strip().lower() == "symbols" and bool(symbols))
+
     # 数据阶段：快照（Spot Snapshot）
-    # 在 symbols 模式下跳过快照抓取，直接进入后续流程以降低延迟
-    skip_snapshot = (universe == "symbols" and bool(symbols))
-    snapshot_df = None
-    snap_meta: Dict[str, Any] = {}
-    if not skip_snapshot:
-        # Fetch snapshot once and share within this run (degrade to None if unavailable)
-        provider = get_provider()
-    # 可观测性：打印快照抓取配置与结果
-    try:
-        routes = list(getattr(cfg, "ak_spot_priority", ["sina", "em"]))
-    except Exception:
-        routes = ["sina", "em"]
-    try:
-        to_sec = getattr(provider, "timeout_sec", getattr(cfg, "request_timeout_sec", None))
-    except Exception:
-        to_sec = getattr(cfg, "request_timeout_sec", None)
-    try:
-        print(f"[数据] 阶段=快照（spot）", flush=True)
-        print(f"[快照] 正在获取市场快照：provider={getattr(provider, 'name', '?')}，优先级={','.join(routes)}，超时={to_sec}s", flush=True)
-    except Exception:
-        pass
-    try:
-        if not skip_snapshot:
-            snapshot_df = provider.get_spot_snapshot()
-            snap_meta = getattr(provider, "last_snapshot_meta", lambda: {})() or {}
+    # Fetch snapshot once and share within this run (degrade to None if unavailable)
+    snapshot_df: Optional[pd.DataFrame]
+    snap_meta: Dict[str, Any]
+
+    if symbols_mode:
+        snapshot_df = None
+        snap_meta = {
+            "missing": True,
+            "degrade": "symbols_mode_skip_snapshot",
+            "error": None,
+            "source": None,
+            "cache": None,
+            "fallback": False,
+            "stale": False,
+            "elapsed_sec": 0.0,
+            "skipped_routes": [],
+            "attempts": [],
+        }
         try:
-            src = (snap_meta.get("source") or snap_meta.get("cache_of") or "?")
-            rows = (0 if snapshot_df is None else int(len(snapshot_df)))
-            elapsed = snap_meta.get("elapsed_sec", "?")
-            cache = snap_meta.get("cache", None) or "none"
-            print(f"[快照] 成功：source={src}，rows={rows}，elapsed={elapsed}s，cache={cache}", flush=True)
+            print(f"[数据] 阶段=快照（spot）", flush=True)
+            print(f"[快照] symbols 模式：跳过市场快照抓取（仅基于传入 symbols）", flush=True)
             print(f"[数据] 下一阶段=日线K（逐标的）", flush=True)
             print(f"[数据] 分钟线=未调用（当前版本候选与策略基于日线）", flush=True)
         except Exception:
             pass
-    except Exception as e:  # noqa: BLE001
-        snapshot_df = None
-        snap_meta = {"missing": True, "degrade": "no_snapshot_universe_mode", "error": str(e)}
+    else:
+        provider = get_provider()
+        # 可观测性：打印快照抓取配置与结果
         try:
-            print(f"[快照] 失败：{e}，降级为无快照模式（将使用 universe/symbols 模式）", flush=True)
+            routes = list(getattr(cfg, "ak_spot_priority", ["sina", "em"]))
+        except Exception:
+            routes = ["sina", "em"]
+        try:
+            to_sec = getattr(provider, "timeout_sec", getattr(cfg, "request_timeout_sec", None))
+        except Exception:
+            to_sec = getattr(cfg, "request_timeout_sec", None)
+        try:
+            print(f"[数据] 阶段=快照（spot）", flush=True)
+            print(f"[快照] 正在获取市场快照：provider={getattr(provider, 'name', '?')}，优先级={','.join(routes)}，超时={to_sec}s", flush=True)
         except Exception:
             pass
-    if skip_snapshot:
-        # 明确记录跳过快照的原因，便于 debug.json 观察
-        snap_meta = {"missing": True, "degrade": "symbols_mode_skip_snapshot"}
+        try:
+            snapshot_df = provider.get_spot_snapshot()
+            snap_meta = getattr(provider, "last_snapshot_meta", lambda: {})() or {}
+            try:
+                src = (snap_meta.get("source") or snap_meta.get("cache_of") or "?")
+                rows = (0 if snapshot_df is None else int(len(snapshot_df)))
+                elapsed = snap_meta.get("elapsed_sec", "?")
+                cache = snap_meta.get("cache", None) or "none"
+                print(f"[快照] 成功：source={src}，rows={rows}，elapsed={elapsed}s，cache={cache}", flush=True)
+                print(f"[数据] 下一阶段=日线K（逐标的）", flush=True)
+                print(f"[数据] 分钟线=未调用（当前版本候选与策略基于日线）", flush=True)
+            except Exception:
+                pass
+        except Exception as e:  # noqa: BLE001
+            snapshot_df = None
+            snap_meta = {"missing": True, "degrade": "no_snapshot_universe_mode", "error": str(e)}
+            try:
+                print(f"[快照] 失败：{e}，降级为无快照模式（将使用 universe/symbols 模式）", flush=True)
+            except Exception:
+                pass
 
     # Environ + themes
-    env = score_regime(hub, snapshot=snapshot_df)
-    themes = build_themes(hub, snapshot=snapshot_df)
-    # Mainline （资金流主线）
-    try:
-        mainline = build_mainline(indicator="今日", topn=max(1, int(getattr(cfg, "mainline_top_n", 2))))
-    except Exception as _e:
-        mainline = {"indicator": "今日", "sectors": [], "errors": ["build_mainline_failed"]}
+    if symbols_mode:
+        env = {"grade": "C", "degrade": "symbols_mode", "missing": ["snapshot_skipped"]}
+        themes = []
+        mainline = {"indicator": "今日", "sectors": [], "errors": ["skipped_symbols_mode"]}
+    else:
+        env = score_regime(hub, snapshot=snapshot_df)
+        themes = build_themes(hub, snapshot=snapshot_df)
+        # Mainline （资金流主线）
+        try:
+            mainline = build_mainline(indicator="今日", topn=max(1, int(getattr(cfg, "mainline_top_n", 2))))
+        except Exception as _e:
+            mainline = {"indicator": "今日", "sectors": [], "errors": ["build_mainline_failed"]}
 
     # Base selection
     if universe == "symbols" and symbols:

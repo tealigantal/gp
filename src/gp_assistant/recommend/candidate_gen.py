@@ -9,6 +9,7 @@ from __future__ import annotations
 from dataclasses import asdict
 from typing import Any, Dict, List, Optional, Tuple
 
+import os
 import math
 import pandas as pd
 
@@ -79,6 +80,27 @@ def generate_candidates(
     snapshot: Optional[pd.DataFrame] = None,
 ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]], Dict[str, Any]]:
     cfg = load_config()
+    # Cost controls (env overrides; keep logic local)
+    try:
+        dynamic_pool_size = int(getattr(cfg, "dynamic_pool_size", 0) or 0)
+    except Exception:
+        dynamic_pool_size = 0
+    if dynamic_pool_size <= 0:
+        try:
+            dynamic_pool_size = int(os.getenv("GP_DYNAMIC_POOL_SIZE", "200"))
+        except Exception:
+            dynamic_pool_size = 200
+
+    try:
+        prefetch_lookback_days = int(os.getenv("GP_PREFETCH_LOOKBACK_DAYS", "60"))
+    except Exception:
+        prefetch_lookback_days = 60
+    prefetch_lookback_days = max(0, min(365, int(prefetch_lookback_days)))
+
+    try:
+        universe_max = int(os.getenv("GP_UNIVERSE_MAX", "0"))
+    except Exception:
+        universe_max = 0
     hub = MarketDataHub()
 
     # 1) 基础股票池
@@ -142,20 +164,34 @@ def generate_candidates(
     }
     if universe_fallback is not None:
         stats["universe_fallback"] = universe_fallback
+    # Bound universe size early to avoid O(N) network/CPU blow-ups.
+    truncated: Dict[str, Any] | None = None
+    try:
+        if base_reason == "dynamic_pool" and dynamic_pool_size > 0 and len(cleaned) > dynamic_pool_size:
+            before = len(cleaned)
+            try:
+                cleaned.sort(key=lambda e: float(e.get("amount", 0.0) or 0.0), reverse=True)
+                cleaned = cleaned[:dynamic_pool_size]
+                truncated = {"from": before, "to": len(cleaned), "limit": dynamic_pool_size, "by": "amount_desc"}
+            except Exception:
+                cleaned = cleaned[:dynamic_pool_size]
+                truncated = {"from": before, "to": len(cleaned), "limit": dynamic_pool_size, "by": "slice"}
+        if base_reason == "universe:file" and universe_max and universe_max > 0 and len(cleaned) > universe_max:
+            before = len(cleaned)
+            cleaned = cleaned[:universe_max]
+            truncated = {"from": before, "to": len(cleaned), "limit": universe_max, "by": "universe_max"}
+    except Exception:
+        truncated = None
+    if truncated is not None:
+        stats["universe_truncated"] = truncated
 
     # 预取（TTL 控制由 datahub 处理）
     try:
         syms = [str(e.get("code")) for e in cleaned if e.get("code")]
         if syms:
-            # 预取仅覆盖当前截断的候选集合，并缩小回溯窗口以减少重复 upsert
-            lookback = 60
+            _ = hub.daily_ohlcv_batch(syms, as_of=None, safety_lookback_days=prefetch_lookback_days)
             try:
-                lookback = int(getattr(load_config(), "cache_refresh_ttl_sec", 300)) // 5 or 60
-            except Exception:
-                lookback = 60
-            _ = hub.daily_ohlcv_batch(syms, as_of=None, safety_lookback_days=min(lookback, 90))
-            try:
-                print(f"[预取] 已批量入库日线：{len(syms)} 个标的", flush=True)
+                print(f"[预取] 已批量入库日线：{len(syms)} 个标的 lookback_days={prefetch_lookback_days}", flush=True)
             except Exception:
                 pass
     except Exception:

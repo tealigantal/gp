@@ -14,6 +14,10 @@ from ..core.paths import store_dir
 
 _WRITE_LOCK = threading.RLock()
 
+_SCHEMA_LOCK = threading.Lock()
+_SCHEMA_INIT = False
+_ENSURED_QUERIES: set[str] = set()
+
 
 def _db_path() -> Path:
     p = store_dir() / "search" / "history.db"
@@ -29,35 +33,41 @@ def _connect() -> sqlite3.Connection:
         conn.execute("PRAGMA busy_timeout=10000")
     except Exception:
         pass
-    conn.execute(
-        """
-        CREATE TABLE IF NOT EXISTS queries(
-            id TEXT PRIMARY KEY,
-            params TEXT,
-            created_at TEXT,
-            updated_at TEXT,
-            last_fetch_at TEXT,
-            last_item_time TEXT
-        )
-        """
-    )
-    conn.execute(
-        """
-        CREATE TABLE IF NOT EXISTS items(
-            query_id TEXT,
-            item_id TEXT,
-            item_time TEXT,
-            etag TEXT,
-            payload TEXT,
-            updated_at TEXT,
-            PRIMARY KEY (query_id, item_id)
-        )
-        """
-    )
-    conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_items_query_time ON items(query_id, item_time)"
-    )
-    conn.commit()
+    # Schema init once per process (idempotent across processes via IF NOT EXISTS)
+    global _SCHEMA_INIT
+    if not _SCHEMA_INIT:
+        with _SCHEMA_LOCK:
+            if not _SCHEMA_INIT:
+                conn.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS queries(
+                        id TEXT PRIMARY KEY,
+                        params TEXT,
+                        created_at TEXT,
+                        updated_at TEXT,
+                        last_fetch_at TEXT,
+                        last_item_time TEXT
+                    )
+                    """
+                )
+                conn.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS items(
+                        query_id TEXT,
+                        item_id TEXT,
+                        item_time TEXT,
+                        etag TEXT,
+                        payload TEXT,
+                        updated_at TEXT,
+                        PRIMARY KEY (query_id, item_id)
+                    )
+                    """
+                )
+                conn.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_items_query_time ON items(query_id, item_time)"
+                )
+                conn.commit()
+                _SCHEMA_INIT = True
     return conn
 
 
@@ -96,8 +106,13 @@ def canonical_query_id(params: Dict[str, Any]) -> str:
 
 
 def ensure_query(query_id: str, params: Dict[str, Any]) -> None:
+    # Fast path: canonical_query_id is derived from params, so a query_id is immutable.
+    if query_id in _ENSURED_QUERIES:
+        return
     pjson = json.dumps(params, ensure_ascii=False, sort_keys=True)
     with _WRITE_LOCK:
+        if query_id in _ENSURED_QUERIES:
+            return
         conn = _connect()
         try:
             def _write() -> None:
@@ -116,6 +131,7 @@ def ensure_query(query_id: str, params: Dict[str, Any]) -> None:
                 conn.commit()
 
             _retry_on_locked(_write)
+            _ENSURED_QUERIES.add(query_id)
         finally:
             conn.close()
 
@@ -149,16 +165,18 @@ def query_meta(query_id: str) -> Dict[str, Any]:
         conn.close()
 
 
-def count_items(query_id: str) -> int:
-    """高效计数以避免 list_items 解 JSON 的额外开销。"""
+def count_items(query_id: str, *, since: Optional[str] = None) -> int:
     conn = _connect()
     try:
-        cur = conn.execute(
-            "SELECT COUNT(*) FROM items WHERE query_id=?",
-            (query_id,),
-        )
+        if since is None:
+            cur = conn.execute("SELECT COUNT(*) FROM items WHERE query_id=?", (query_id,))
+        else:
+            cur = conn.execute(
+                "SELECT COUNT(*) FROM items WHERE query_id=? AND (item_time >= ?)",
+                (query_id, since),
+            )
         r = cur.fetchone()
-        return int(r[0]) if r and r[0] is not None else 0
+        return int(r[0] or 0) if r else 0
     finally:
         conn.close()
 
