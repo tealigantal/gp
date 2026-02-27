@@ -30,3 +30,8 @@ configs/config.yaml
 *.log
 .env
 .env.example
+
+# local search history / sqlite
+store/search/*.db
+store/search/history.db
+*.db
