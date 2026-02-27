@@ -23,7 +23,7 @@ async def chat_completions(req: Request, cfg: ProxyConfig = Depends(get_cfg), _a
         'Accept': 'application/json',
     }
     url = cfg.upstream_base_url.rstrip('/') + '/chat/completions'
-    async with httpx.AsyncClient(timeout=60) as client:
+    # Disable client-side timeout to support long generations
+    async with httpx.AsyncClient(timeout=None) as client:
         r = await client.post(url, headers=headers, content=payload)
     return r.json()
-

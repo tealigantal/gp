@@ -111,7 +111,8 @@ class SimpleLLMClient:
         last_exc: Optional[Exception] = None
         for i in range(self.cfg.retries + 1):
             try:
-                resp = requests.post(url, headers=headers, data=data, timeout=self.cfg.timeout_sec)
+                timeout = None if (isinstance(self.cfg.timeout_sec, (int, float)) and self.cfg.timeout_sec <= 0) else self.cfg.timeout_sec
+                resp = requests.post(url, headers=headers, data=data, timeout=timeout)
                 resp.raise_for_status()
                 return resp.json()
             except Exception as e:

@@ -23,6 +23,7 @@ class LLMClient:
         self.api_key = (api_key or cfg.llm_api_key or "").strip()
         # Default to DeepSeek-friendly model name if not provided
         self.model = (model or cfg.chat_model or "deepseek-chat").strip()
+        # timeout<=0 表示不限制，由 requests 使用阻塞式无超时
         self.timeout = cfg.request_timeout_sec
 
     @staticmethod
@@ -54,6 +55,7 @@ class LLMClient:
             "Accept": "application/json",
         }
         data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
-        resp = requests.post(url, headers=headers, data=data, timeout=self.timeout)
+        timeout = None if (isinstance(self.timeout, (int, float)) and self.timeout <= 0) else self.timeout
+        resp = requests.post(url, headers=headers, data=data, timeout=timeout)
         resp.raise_for_status()
         return resp.json()

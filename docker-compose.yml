@@ -12,7 +12,8 @@ services:
       - ./store:/app/store
       - ./cache:/app/cache
       - ./configs:/app/configs
-    command: ["uvicorn", "gp_assistant.server.app:app", "--host", "0.0.0.0", "--port", "8000"]
+    # Use multiple workers to avoid head-of-line blocking by long CPU-bound tasks
+    command: ["uvicorn", "gp_assistant.server.app:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "2"]
     environment:
       TZ: ${TZ:-Asia/Shanghai}
 
@@ -28,7 +29,8 @@ services:
 
       # ---- provider ----
       DATA_PROVIDER: ${DATA_PROVIDER:-akshare}
-      GP_REQUEST_TIMEOUT_SEC: ${GP_REQUEST_TIMEOUT_SEC:-60}
+      # 0 表示不设超时（后端内部将按无限超时处理）
+      GP_REQUEST_TIMEOUT_SEC: ${GP_REQUEST_TIMEOUT_SEC:-0}
       STRICT_REAL_DATA: ${STRICT_REAL_DATA:-1}
 
       # optional akshare route priority
@@ -85,6 +87,9 @@ services:
       - llm-proxy
     ports:
       - "8080:80"
+    volumes:
+      # Mount nginx.conf so timeout tweaks apply without rebuild
+      - ./frontend/nginx.conf:/etc/nginx/conf.d/default.conf:ro
     restart: unless-stopped
 
 volumes:
