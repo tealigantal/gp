@@ -14,6 +14,7 @@
 - `python -m scripts.build_candidate_pool --date 20250106 --pool_size 20`
 - `python -m scripts.fetch_min5_for_pool --date 20250106`
 - `python -m backtest.runner_weekly --config configs/config.yaml --strategies configs/strategies/*.yaml --start 20200101 --end 20251231 --run_id demo_001`
+- `python gpbt.py doctor --date 20250106`
 
 无法使用 Tushare 分钟权限时如何切换：
 - 改用 `--provider akshare`。分钟接口使用 `stock_zh_a_hist_min_em`，可能仅能获取近期数据且存在频控限制；本项目脚本接口与 Tushare 对齐，可无缝切换。
@@ -47,4 +48,3 @@
 提示
 - 仓库根目录已包含 `sitecustomize.py`，可确保 `src/` 布局下使用 `python -m scripts.xxx` 直接运行。
 - 若需安装包方式使用，也可 `pip install -e .`。
-

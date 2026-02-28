@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -47,7 +48,9 @@ def main() -> None:
     s_bt.add_argument("--end", required=True)
     s_bt.add_argument("--run_id", required=True)
 
-    _ = sub.add_parser("doctor", help="Sanity check environment")
+    s_doc = sub.add_parser("doctor", help="Sanity check environment")
+    s_doc.add_argument("--date", help="Check candidate pool for date YYYYMMDD", required=False)
+    s_doc.add_argument("--provider", choices=["tushare", "akshare"], required=False)
 
     args = p.parse_args()
     if args.cmd == "init":
@@ -87,12 +90,76 @@ def main() -> None:
         argv = ["--config", args.config, "--strategies", *args.strategies, "--start", args.start, "--end", args.end, "--run_id", args.run_id]
         sys.exit(run_module("backtest.runner_weekly", argv))
     elif args.cmd == "doctor":
-        print("Python:", sys.version)
-        print("Working dir:", Path.cwd())
-        print("Found sitecustomize:", (Path.cwd() / "sitecustomize.py").exists())
-        print("Done.")
+        # Offline self-checks
+        from src.providers.local_store import LocalParquetStore
+        from datetime import datetime
+        root = Path.cwd()
+        ok = True
+        # Directories
+        need_dirs = ["data/raw", "data/bars/daily", "data/bars/min5", "universe", "results"]
+        for d in need_dirs:
+            p = root / d
+            if not p.exists():
+                print(f"[doctor] MISSING dir: {p}")
+                ok = False
+        # Schema checks
+        store = LocalParquetStore(root)
+        # daily sample
+        daily_file = None
+        dd = root / "data" / "bars" / "daily"
+        if dd.exists():
+            files = sorted(dd.glob("ts_code=*.parquet"))
+            if files:
+                daily_file = files[0]
+        if daily_file is None:
+            print("[doctor] WARN: no daily parquet found for schema check")
+        else:
+            try:
+                import pandas as pd
+                df = pd.read_parquet(daily_file)
+                need = {"ts_code", "trade_date", "open", "high", "low", "close", "vol", "amount"}
+                if not need.issubset(set(df.columns)):
+                    print(f"[doctor] INVALID daily schema: missing {need - set(df.columns)} in {daily_file}")
+                    ok = False
+            except Exception as e:
+                print(f"[doctor] ERROR reading daily parquet: {e}")
+                ok = False
+        # min5 sample
+        min5_root = root / "data" / "bars" / "min5"
+        min5_file = None
+        if min5_root.exists():
+            for p in min5_root.glob("ts_code=*/date=*.parquet"):
+                min5_file = p
+                break
+        if min5_file is None:
+            print("[doctor] WARN: no min5 parquet found for schema check")
+        else:
+            try:
+                import pandas as pd
+                df = pd.read_parquet(min5_file)
+                need = {"ts_code", "trade_time", "open", "high", "low", "close", "vol", "amount"}
+                if not need.issubset(set(df.columns)):
+                    print(f"[doctor] INVALID min5 schema: missing {need - set(df.columns)} in {min5_file}")
+                    ok = False
+            except Exception as e:
+                print(f"[doctor] ERROR reading min5 parquet: {e}")
+                ok = False
+        # Date-specific candidate pool
+        date_arg = getattr(args, "date", None)
+        if date_arg:
+            f = root / "universe" / f"candidate_pool_{date_arg}.csv"
+            if not f.exists():
+                print(f"[doctor] MISSING candidate pool file: {f}")
+                ok = False
+        # Provider env check (tushare)
+        provider_arg = getattr(args, "provider", None)
+        if provider_arg == "tushare":
+            if not (os.environ.get("TUSHARE_TOKEN")):
+                print("[doctor] MISSING env TUSHARE_TOKEN for provider=tushare")
+                ok = False
+        print("[doctor] OK" if ok else "[doctor] FAILED")
+        sys.exit(0 if ok else 2)
 
 
 if __name__ == "__main__":  # pragma: no cover
     main()
-

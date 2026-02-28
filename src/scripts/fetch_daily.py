@@ -54,7 +54,7 @@ def main() -> None:  # pragma: no cover - orchestration
         provider = make_provider(args.provider)
         basics = provider.get_stock_basic()
         store.write_raw("stock_basic", basics)
-    symbols = filter_mainboard(basics, args.min_list_days, args.end, args.exclude_st)
+    symbols = filter_mainboard_v2(basics, args.min_list_days, args.end, args.exclude_st)
     if not symbols:
         print("No symbols after filtering mainboard/exclusions.")
         return
@@ -76,4 +76,19 @@ def main() -> None:  # pragma: no cover - orchestration
 
 if __name__ == "__main__":  # pragma: no cover
     main()
-
+    
+def filter_mainboard_v2(basics: pd.DataFrame, min_list_days: int, end: str, exclude_st: bool = True) -> List[str]:
+    b = basics.copy()
+    if exclude_st and "is_st" in b.columns:
+        b = b[~b["is_st"]]
+    if "market" in b.columns:
+        b = b[b["market"].astype(str).str.contains("????|Main|主板", na=False)]
+    if "list_date" in b.columns:
+        try:
+            ld = pd.to_datetime(b["list_date"].astype(str), format="%Y%m%d", errors="coerce")
+            tgt = pd.to_datetime(end, format="%Y%m%d", errors="coerce")
+            mask = (ld.notna()) & ((tgt - ld).dt.days >= int(min_list_days))
+            b = b[mask]
+        except Exception:
+            pass
+    return b["ts_code"].dropna().astype(str).tolist()

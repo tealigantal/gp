@@ -34,7 +34,15 @@ def main() -> None:  # pragma: no cover - orchestration
     if "market" in b.columns:
         b = b[b["market"].astype(str).str.contains("主板|Main", na=False)]
     if "list_date" in b.columns:
-        b = b[b["list_date"] <= str(int(args.date) - args.min_list_days)]
+        # Use real date arithmetic for min_list_days
+        try:
+            ld = pd.to_datetime(b["list_date"].astype(str), format="%Y%m%d", errors="coerce")
+            tgt = pd.to_datetime(args.date, format="%Y%m%d", errors="coerce")
+            mask = (ld.notna()) & ((tgt - ld).dt.days >= int(args.min_list_days))
+            b = b[mask]
+        except Exception:
+            # fallback: keep all if malformed
+            pass
 
     # Build previous day daily frame for scoring inputs
     rows = []
@@ -68,4 +76,3 @@ def main() -> None:  # pragma: no cover - orchestration
 
 if __name__ == "__main__":  # pragma: no cover
     main()
-

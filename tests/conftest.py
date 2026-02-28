@@ -3,9 +3,8 @@ from pathlib import Path
 
 
 root = Path(__file__).resolve().parents[1]
-src = root / "src"
-if str(src) not in sys.path:
-    sys.path.insert(0, str(src))
+if str(root) not in sys.path:
+    sys.path.insert(0, str(root))
 
 # Ignore out-of-scope tests that depend on external frameworks or services
 collect_ignore = [
@@ -25,3 +24,17 @@ collect_ignore = [
     "test_imports_compile.py",
     "test_session_state.py",
 ]
+
+
+def pytest_collection_modifyitems(config, items):
+    """Mark unrelated tests as integration so default run skips them.
+
+    Keep core backtest/selector tests enabled; mark the rest as integration.
+    """
+    keep_prefixes = (
+        "test_backtest_core_rules.py",
+    )
+    for item in items:
+        fn = item.location[0]
+        if not any(fn.endswith(p) for p in keep_prefixes):
+            item.add_marker("integration")

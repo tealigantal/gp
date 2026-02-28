@@ -5,7 +5,7 @@ import glob
 import json
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 import pandas as pd
 import yaml
@@ -43,7 +43,8 @@ def load_strategies(strategy_files: List[Path]):
         name = cfg.get("name") or fp.stem
         cls = mapping.get(stype)
         if not cls:
-            raise ValueError(f"Unknown strategy type in {fp}: {stype}")
+            print(f"[runner_weekly] Skip strategy file without supported type: {fp} (type={stype})")
+            continue
         strategies.append(cls(name=name, params=params))
     return strategies
 
@@ -84,11 +85,42 @@ def main() -> None:  # pragma: no cover - high level orchestration
     run_dir = root / "results" / f"run_{args.run_id}"
     run_dir.mkdir(parents=True, exist_ok=True)
 
-    # collect all candidate dates within start-end
+    # collect all candidate dates within start-end; prefer trade calendar if available
     uni_dir = root / "universe"
     uni_files = sorted([p for p in uni_dir.glob("candidate_pool_*.csv")])
-    dates = [p.stem.split("_")[-1] for p in uni_files]
-    dates = [d for d in dates if args.start <= d <= args.end]
+    pool_dates = sorted([p.stem.split("_")[-1] for p in uni_files])
+    pool_dates = [d for d in pool_dates if args.start <= d <= args.end]
+
+    cal = store.read_raw("trade_calendar")
+    dates: List[str]
+    if cal is not None and not cal.empty:
+        cal = cal.copy()
+        cal = cal[(cal["cal_date"] >= args.start) & (cal["cal_date"] <= args.end) & (cal["is_open"] == 1)]
+        cal_dates = cal["cal_date"].astype(str).tolist()
+        # use dates that have candidate pool, but keep ordering from calendar
+        dates = [d for d in cal_dates if d in set(pool_dates)]
+        # compute week segments based on calendar index
+        def is_week_last(idx: int) -> bool:
+            if idx == len(cal_dates) - 1:
+                return True
+            # different ISO week number → last of week
+            import datetime as _dt
+            d0 = _dt.datetime.strptime(cal_dates[idx], "%Y%m%d").isocalendar().week
+            d1 = _dt.datetime.strptime(cal_dates[idx + 1], "%Y%m%d").isocalendar().week
+            return d0 != d1
+        week_last_map: Dict[str, bool] = {cal_dates[i]: is_week_last(i) for i in range(len(cal_dates))}
+    else:
+        # fallback to pool file dates; warn via print, keep deterministic order
+        print("[runner_weekly] Warning: trade_calendar not found; falling back to candidate_pool dates.")
+        dates = pool_dates
+        import datetime as _dt
+        def is_week_last_fallback(i: int) -> bool:
+            if i == len(dates) - 1:
+                return True
+            d0 = _dt.datetime.strptime(dates[i], "%Y%m%d").isocalendar().week
+            d1 = _dt.datetime.strptime(dates[i + 1], "%Y%m%d").isocalendar().week
+            return d0 != d1
+        week_last_map = {dates[i]: is_week_last_fallback(i) for i in range(len(dates))}
     # engines keyed by strategy name
     engines: Dict[str, BacktestEngine] = {}
     for s in strategies:
@@ -123,19 +155,19 @@ def main() -> None:  # pragma: no cover - high level orchestration
                     continue
                 # ensure columns
                 df = df[["trade_time", "open", "high", "low", "close", "vol", "amount"]]
-                bars = [r._asdict() for r in df.itertuples(index=False, name=None)]
-                # itertuples name=None returns tuple, fix to dict manually
+                # itertuples with name=None returns tuples; map manually to dict
+                tup = list(df.itertuples(index=False, name=None))
                 bars = [
                     {
-                        "trade_time": b[0],
-                        "open": float(b[1]),
-                        "high": float(b[2]),
-                        "low": float(b[3]),
-                        "close": float(b[4]),
-                        "vol": float(b[5]),
-                        "amount": float(b[6]),
+                        "trade_time": t[0],
+                        "open": float(t[1]),
+                        "high": float(t[2]),
+                        "low": float(t[3]),
+                        "close": float(t[4]),
+                        "vol": float(t[5]),
+                        "amount": float(t[6]),
                     }
-                    for b in bars
+                    for t in tup
                 ]
                 min5[ts] = bars
             # prev close map from daily store
@@ -149,7 +181,7 @@ def main() -> None:  # pragma: no cover - high level orchestration
                     continue
                 prev_map[ts] = float(prev.iloc[-1]["close"])
             eng.daily_prev_close = prev_map
-            fail = eng.run_day(d, min5, universe)
+            fail = eng.run_day(d, min5, universe, is_week_last=bool(week_last_map.get(d, False)))
             weekly_rows.append({"strategy": name, "date": d, **fail})
 
     # finalize and metrics; aggregate outputs at run root
@@ -158,16 +190,33 @@ def main() -> None:  # pragma: no cover - high level orchestration
     all_equity = []
     for name, eng in engines.items():
         eng.finalize()
-        trades = pd.read_csv(eng.results_dir / "trades.csv") if (eng.results_dir / "trades.csv").exists() else pd.DataFrame()
+        if (eng.results_dir / "trades.csv").exists():
+            try:
+                trades = pd.read_csv(eng.results_dir / "trades.csv")
+            except Exception:
+                trades = pd.DataFrame(columns=["time", "ts_code", "side", "price", "shares", "fee", "reason"])  # empty
+        else:
+            trades = pd.DataFrame()
         if not trades.empty:
             trades.insert(0, "strategy", name)
             all_trades.append(trades)
-        eq = pd.read_csv(eng.results_dir / "daily_equity.csv") if (eng.results_dir / "daily_equity.csv").exists() else pd.DataFrame()
+        if (eng.results_dir / "daily_equity.csv").exists():
+            try:
+                eq = pd.read_csv(eng.results_dir / "daily_equity.csv")
+            except Exception:
+                eq = pd.DataFrame(columns=["trade_date", "equity", "cash"])  # empty
+        else:
+            eq = pd.DataFrame()
         if not eq.empty:
             eq.insert(0, "strategy", name)
             all_equity.append(eq)
-        fails = {"buy_fail": sum(r["buy_fail"] for r in weekly_rows if r["strategy"] == name),
-                 "sell_fail": sum(r["sell_fail"] for r in weekly_rows if r["strategy"] == name)}
+        fails = {
+            "buy_fail": sum(r.get("buy_fail", 0) for r in weekly_rows if r["strategy"] == name),
+            "sell_fail": sum(r.get("sell_fail", 0) for r in weekly_rows if r["strategy"] == name),
+            "pending_bar_count": sum(r.get("pending_bar_count", 0) for r in weekly_rows if r["strategy"] == name),
+            "reject_buy": sum(r.get("reject_buy", 0) for r in weekly_rows if r["strategy"] == name),
+            "reject_sell": sum(r.get("reject_sell", 0) for r in weekly_rows if r["strategy"] == name),
+        }
         st = summarize(trades, eq, fails)
         summary_rows.append(
             {
@@ -179,6 +228,9 @@ def main() -> None:  # pragma: no cover - high level orchestration
                 "trades": st.trades,
                 "buy_fail": st.buy_fail,
                 "sell_fail": st.sell_fail,
+                "pending_bar_count": st.pending_bar_count,
+                "reject_buy": st.reject_buy,
+                "reject_sell": st.reject_sell,
             }
         )
 

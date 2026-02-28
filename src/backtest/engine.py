@@ -85,6 +85,8 @@ class BacktestEngine:
         self.daily_prev_close = daily_prev_close
         self.is_st_map = {r.ts_code: bool(r.is_st) for r in basics.itertuples()}
         self.exchange_map = {r.ts_code: str(r.exchange) for r in basics.itertuples()}
+        # carry-over orders to next trading day (e.g., T+1 sells or forced flat)
+        self.carry_orders: List[Order] = []
 
     def _position(self, ts: str) -> Position:
         if ts not in self.positions:
@@ -167,14 +169,26 @@ class BacktestEngine:
             equity += px * pos.shares
         self.daily_equity_rows.append({"trade_date": trade_date, "equity": round(equity, 2), "cash": round(self.cash, 2)})
 
-    def run_day(self, trade_date: str, min5_bars: Dict[str, List[Dict]], universe: List[str]) -> Dict:
+    def run_day(self, trade_date: str, min5_bars: Dict[str, List[Dict]], universe: List[str], *, is_week_last: bool = False) -> Dict:
         # Build a combined chronological set of bar times
         # min5_bars: {ts_code: [{trade_time, open, high, low, close, vol, amount}, ...]}
         times = sorted({b["trade_time"] for bars in min5_bars.values() for b in bars})
         history: Dict[str, List[Dict]] = {ts: [] for ts in min5_bars.keys()}
+        if not times:
+            # no bars available; still mark MTM using prev close
+            self._mark_to_market(trade_date, {})
+            return {"pending": [], "buy_fail": 0, "sell_fail": 0, "pending_bar_count": 0, "reject_buy": 0, "reject_sell": 0}
 
         scheduled: List[Order] = []
+        # preload carryover orders to first bar open
+        for o in self.carry_orders:
+            o.next_exec_time = times[0]
+            scheduled.append(o)
+        self.carry_orders = []
+
         pending_counts = {"buy_fail": 0, "sell_fail": 0}
+        pending_bar_count = 0
+        reject_counts = {"reject_buy": 0, "reject_sell": 0}
 
         last_px: Dict[str, float] = {}
 
@@ -202,13 +216,29 @@ class BacktestEngine:
                 if intent.ts_code == "__ALL__" and intent.side == "SELL":
                     # mark all positions for next-day close via engine policy; we record as a day-end plan
                     continue
+                if intent.side == "BUY" and is_week_last:
+                    # Friday no new positions: reject and log
+                    self.trades.append(
+                        {
+                            "time": t,
+                            "ts_code": intent.ts_code,
+                            "side": "REJECT_BUY",
+                            "price": 0.0,
+                            "shares": 0,
+                            "fee": 0.0,
+                            "reason": "friday_no_new_position",
+                        }
+                    )
+                    reject_counts["reject_buy"] += 1
+                    continue
                 order = Order(ts_code=intent.ts_code, side=intent.side, shares=round_to_lot(intent.shares), signal_time=t, next_exec_time=next_time, reason=intent.reason)
                 scheduled.append(order)
 
             # Try to execute scheduled whose time is now
             still_pending: List[Order] = []
             for order in scheduled:
-                if order.next_exec_time != t:
+                # allow re-try on every subsequent bar if next_exec_time is None (pending)
+                if order.next_exec_time not in (None, t):
                     still_pending.append(order)
                     continue
                 # determine open price at t for that symbol
@@ -222,13 +252,15 @@ class BacktestEngine:
                 if order.side == "BUY" and self._one_word_limit(order.ts_code, next_bar, prev_close, up=True):
                     order.pending_bars += 1
                     pending_counts["buy_fail"] += 1
-                    order.next_exec_time = None  # keep pending, retry on future bars
+                    pending_bar_count += 1
+                    order.next_exec_time = None  # keep pending, retry on future bars in the same day
                     still_pending.append(order)
                     continue
                 if order.side == "SELL" and self._one_word_limit(order.ts_code, next_bar, prev_close, up=False):
                     order.pending_bars += 1
                     pending_counts["sell_fail"] += 1
-                    order.next_exec_time = None
+                    pending_bar_count += 1
+                    order.next_exec_time = None  # keep pending, retry on future bars in the same day
                     still_pending.append(order)
                     continue
                 # attempt fill
@@ -241,7 +273,52 @@ class BacktestEngine:
 
         # Day end MTM
         self._mark_to_market(trade_date, last_px)
-        return {"pending": scheduled, **pending_counts}
+
+        # Create forced flat on week last bar: schedule SELL for all positions to next day
+        if is_week_last:
+            for ts, pos in list(self.positions.items()):
+                if pos.shares > 0:
+                    self.carry_orders.append(
+                        Order(
+                            ts_code=ts,
+                            side="SELL",
+                            shares=pos.shares,
+                            signal_time=f"{trade_date} {times[-1].split(' ')[1]}",
+                            next_exec_time=None,
+                            reason="force_flat_friday_close",
+                        )
+                    )
+
+        # Cancel leftover BUY at day end; carry over SELL if T+1 (same-day signal)
+        still_pending_carry: List[Order] = []
+        for order in scheduled:
+            sig_day = order.signal_time[:8]
+            if order.side == "SELL" and sig_day == trade_date:
+                # carry to next day due to T+1
+                self.carry_orders.append(order)
+                reject_counts["reject_sell"] += 1
+                continue
+            # otherwise cancel and record in trades log as CANCEL
+            self.trades.append(
+                {
+                    "time": f"{trade_date} {times[-1].split(' ')[1]}",
+                    "ts_code": order.ts_code,
+                    "side": ("CANCEL_BUY" if order.side == "BUY" else "CANCEL_SELL"),
+                    "price": 0.0,
+                    "shares": 0,
+                    "fee": 0.0,
+                    "reason": ("limit_locked" if order.pending_bars > 0 else "not_filled"),
+                }
+            )
+
+        return {
+            "pending": self.carry_orders[:],
+            "buy_fail": pending_counts["buy_fail"],
+            "sell_fail": pending_counts["sell_fail"],
+            "pending_bar_count": pending_bar_count,
+            "reject_buy": reject_counts["reject_buy"],
+            "reject_sell": reject_counts["reject_sell"],
+        }
 
     def finalize(self) -> None:
         self.results_dir.mkdir(parents=True, exist_ok=True)
@@ -249,4 +326,3 @@ class BacktestEngine:
         daily_eq = pd.DataFrame(self.daily_equity_rows)
         trades_df.to_csv(self.results_dir / "trades.csv", index=False)
         daily_eq.to_csv(self.results_dir / "daily_equity.csv", index=False)
-
