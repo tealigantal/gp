@@ -1,0 +1,6 @@
+name: pullback
+type: pullback
+params:
+  ma_window: 20
+  lot_shares: 100
+

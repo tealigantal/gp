@@ -1,0 +1,6 @@
+name: openrange
+type: openrange
+params:
+  range_bars: 3
+  lot_shares: 100
+

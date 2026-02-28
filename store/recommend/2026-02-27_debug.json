@@ -2,101 +2,134 @@
   "timing": {},
   "sources": [
     {
-      "symbol": "600519",
+      "symbol": "601869",
       "data_source": "provider"
     },
     {
-      "symbol": "002415",
+      "symbol": "301526",
       "data_source": "provider"
     },
     {
-      "symbol": "000333",
+      "symbol": "688167",
       "data_source": "provider"
     },
     {
-      "symbol": "000858",
+      "symbol": "603256",
       "data_source": "provider"
     },
     {
-      "symbol": "600036",
+      "symbol": "603618",
       "data_source": "provider"
     },
     {
-      "symbol": "601318",
+      "symbol": "300394",
       "data_source": "provider"
     },
     {
-      "symbol": "000001",
+      "symbol": "300164",
       "data_source": "provider"
     },
     {
-      "symbol": "002594",
+      "symbol": "300017",
       "data_source": "provider"
     },
     {
-      "symbol": "000651",
+      "symbol": "002506",
       "data_source": "provider"
     },
     {
-      "symbol": "600000",
+      "symbol": "002491",
+      "data_source": "provider"
+    },
+    {
+      "symbol": "688025",
+      "data_source": "provider"
+    },
+    {
+      "symbol": "300739",
+      "data_source": "provider"
+    },
+    {
+      "symbol": "600487",
+      "data_source": "provider"
+    },
+    {
+      "symbol": "002498",
+      "data_source": "provider"
+    },
+    {
+      "symbol": "600759",
       "data_source": "provider"
     }
   ],
   "failures": [],
   "snapshot": {
-    "missing": true,
-    "degrade": "no_snapshot_universe_mode",
-    "error": "AkShare snapshot failed: JSONDecodeError: Can not decode value starting with character '<'"
+    "source": "akshare:sina",
+    "cache": null,
+    "fallback": false,
+    "fallback_reason": null,
+    "stale": false,
+    "missing": false,
+    "elapsed_sec": 43.92,
+    "cache_age_sec": null,
+    "skipped_routes": [],
+    "attempts": [
+      {
+        "source": "akshare:em",
+        "ok": false,
+        "err": "ConnectionError: ('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))"
+      },
+      {
+        "source": "akshare:sina",
+        "ok": true,
+        "rows": 5484
+      }
+    ],
+    "schema": {
+      "canonical": [
+        "code",
+        "symbol",
+        "name",
+        "price",
+        "pct_chg",
+        "chg",
+        "volume",
+        "amount",
+        "ts"
+      ],
+      "raw_columns": [
+        "代码",
+        "名称",
+        "最新价",
+        "涨跌额",
+        "涨跌幅",
+        "买入",
+        "卖出",
+        "昨收",
+        "今开",
+        "最高",
+        "最低",
+        "成交量",
+        "成交额",
+        "时间戳"
+      ],
+      "route": "sina"
+    },
+    "normalized": true
   },
   "candidate_stats": {
-    "universe_in_count": 10,
-    "universe_after_filter_count": 10,
+    "universe_in_count": 200,
+    "universe_after_filter_count": 200,
     "bars_missing_count": 0,
     "bars_too_short_count": 0,
     "indicator_error_count": 0,
     "skipped_symbols_sample": [],
-    "candidates_out_count": 10,
+    "candidates_out_count": 200,
     "daily_attempts_sample": [],
     "universe_removed_counts": {
       "bad_code": 0,
       "insufficient_liquidity": 0,
       "insufficient_history": 0
     }
-  },
-  "degraded": true,
-  "degrade_reasons": [
-    {
-      "reason_code": "SNAPSHOT_MISSING",
-      "detail": {
-        "degrade": "no_snapshot_universe_mode",
-        "error": "AkShare snapshot failed: JSONDecodeError: Can not decode value starting with character '<'"
-      }
-    },
-    {
-      "reason_code": "ENV_NEUTRALIZED",
-      "detail": {}
-    },
-    {
-      "reason_code": "THEMES_EMPTY",
-      "detail": {}
-    },
-    {
-      "reason_code": "MARKET_STATS_MISSING",
-      "detail": {}
-    },
-    {
-      "reason_code": "UNIVERSE_TOO_SMALL",
-      "detail": {
-        "count": 10,
-        "min": 50
-      }
-    },
-    {
-      "reason_code": "CANDIDATE_TOO_SMALL",
-      "detail": {
-        "count": 10,
-        "min": 20
-      }
-    }
-  ]
+  }
 }

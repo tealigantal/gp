@@ -1,0 +1,6 @@
+name: breakout
+type: breakout
+params:
+  lookback: 20
+  lot_shares: 100
+

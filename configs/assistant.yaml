@@ -20,7 +20,7 @@ rag:
     - "cache/**"
 tools:
   enable_gpbt_runner: true
-  gpbt_allow_subcommands: ["init","fetch","build-candidates","build-candidates-range","doctor","backtest","llm-rank","tune","llm-run","fetch-min5-range","fetch-min5-for-pool"]
-  enable_gp_runner: true
-  gp_allow_subcommands: ["run","backtest","serve","update"]
+  gpbt_allow_subcommands: ["init","fetch","build-candidates","build-candidates-range","doctor","backtest","fetch-min5-range","fetch-min5-for-pool"]
+  enable_gp_runner: false
+  gp_allow_subcommands: []
   enable_shell: false

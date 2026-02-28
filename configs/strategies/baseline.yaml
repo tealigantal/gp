@@ -1,7 +1,8 @@
 name: baseline
-description: 固定时间买入候选Top1，次日固定时间卖出
+type: baseline
 params:
-  buy_time: "09:45:00"
-  sell_time: "10:00:00"
-  buy_top_k: 1
-  per_stock_cash: 0.25
+  entry_time: "09:50:00"
+  topk: 1
+  lot_shares: 100
+  exit_next_day_close: true
+
