@@ -31,7 +31,22 @@ def handle_message(session_id: Optional[str], message: str, message_id: Optional
 
     if intent["name"] == "recommend":
         try:
-            res = recommend_run(topk=int(intent["slots"].get("topk", 3)))
+            # Special triggers to use service mode (read store/recommend/latest.json)
+            s_msg = (message or "").strip()
+            svc_triggers = ["服务荐股", "服务推荐", "最新推荐", "今日推荐"]
+            use_service = False
+            try:
+                if any(k in s_msg for k in svc_triggers):
+                    use_service = True
+                if "latest" in s_msg.lower():
+                    use_service = True
+            except Exception:
+                use_service = False
+
+            if use_service:
+                res = recommend_run(mode="service", date="latest", topk=int(intent["slots"].get("topk", 3)))
+            else:
+                res = recommend_run(topk=int(intent["slots"].get("topk", 3)))
             store.save_last_recommend(sid, res)
 
             reply = render_recommendation_narrative(res)

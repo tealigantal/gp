@@ -130,8 +130,18 @@ def _evaluate_period(
         # Metrics
         eq_path = run_dir / "daily_equity.csv"
         tr_path = run_dir / "trades.csv"
-        eq = pd.read_csv(eq_path) if eq_path.exists() else pd.DataFrame()
-        tr = pd.read_csv(tr_path) if tr_path.exists() else pd.DataFrame()
+        # Robust CSV reads: tolerate empty files created by engines
+        def _safe_read_csv(p: Path) -> pd.DataFrame:
+            if not p.exists():
+                return pd.DataFrame()
+            try:
+                return pd.read_csv(p)
+            except Exception:
+                # Empty or malformed -> treat as empty for idempotency
+                return pd.DataFrame()
+
+        eq = _safe_read_csv(eq_path)
+        tr = _safe_read_csv(tr_path)
         rets = daily_returns(eq["equity"]) if not eq.empty else pd.Series(dtype=float)
         metrics[c.name + ":" + _json_hash(c.params)] = {
             "Sharpe": sharpe_ratio(rets),
@@ -257,8 +267,15 @@ def run_tournament():  # pragma: no cover - orchestration heavy
         eng.finalize()
         eq_path = run_dir / "daily_equity.csv"
         tr_path = run_dir / "trades.csv"
-        eq = pd.read_csv(eq_path) if eq_path.exists() else pd.DataFrame()
-        tr = pd.read_csv(tr_path) if tr_path.exists() else pd.DataFrame()
+        def _safe_read_csv(p: Path) -> pd.DataFrame:
+            if not p.exists():
+                return pd.DataFrame()
+            try:
+                return pd.read_csv(p)
+            except Exception:
+                return pd.DataFrame()
+        eq = _safe_read_csv(eq_path)
+        tr = _safe_read_csv(tr_path)
         if not eq.empty:
             equity_level = float(eq.iloc[-1]["equity"])
             eq_rows.extend(eq.to_dict(orient="records"))

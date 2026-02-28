@@ -1,0 +1,27 @@
+{
+  "champion_id": "demo_real",
+  "selected_at": "20250110",
+  "seed": 42,
+  "git_commit": "08092105ab310bedcb6f33a037546e474df7c1ae",
+  "strategy_type": "baseline",
+  "params": {
+    "entry_time": "09:50:00",
+    "topk": 1,
+    "lot_shares": 100,
+    "exit_next_day_close": true
+  },
+  "params_hash": "78657346e5",
+  "scenario": "base",
+  "robust": {
+    "robust_sharpe_p05": 0.0,
+    "worst_year_return": null,
+    "fill_rate": null,
+    "max_drawdown": 0.0,
+    "n_trades": 0,
+    "p_value_adj": null
+  },
+  "constraints": {
+    "max_participation_rate": null
+  },
+  "warnings": {}
+}

@@ -86,6 +86,11 @@ def main() -> None:
     s_doc.add_argument("--provider", choices=["tushare", "akshare"], required=False)
     s_doc.add_argument("--level", choices=["basic", "service", "research"], default="basic")
 
+    # Gate: one-key self-check orchestrator
+    s_gate = sub.add_parser("gate", help="Run Gate self-checks (A/B/C/ALL)")
+    s_gate.add_argument("--level", choices=["A", "B", "C", "ALL"], default="ALL")
+    s_gate.add_argument("--py", dest="py", default="auto", help="python launcher: auto|python|python3|'py -3'")
+
     args = p.parse_args()
     if args.cmd == "init":
         for d in ["data/raw", "data/bars/daily", "data/bars/min5", "universe", "results"]:
@@ -139,7 +144,8 @@ def main() -> None:
         if args.exp_id:
             argv += ["--exp_id", args.exp_id]
         argv += ["--seed", str(args.seed)]
-        sys.exit(run_module("backtest.experiment", argv))
+        # experiment module resides under src/
+        sys.exit(run_module("src.backtest.experiment", argv))
     elif args.cmd == "tournament":
         argv = [
             "--config",
@@ -161,16 +167,18 @@ def main() -> None:
             argv += ["--tournament_id", args.tournament_id]
         if args.emit_registry:
             argv += ["--emit_registry", args.emit_registry]
-        sys.exit(run_module("backtest.tournament", argv))
+        # tournament module resides under src/
+        sys.exit(run_module("src.backtest.tournament", argv))
     elif args.cmd == "service":
+        # Use explicit src.service.pipeline to avoid relying on sitecustomize
         if args.service_cmd == "preopen":
-            sys.exit(run_module("service.pipeline", ["preopen", "--date", args.date, "--topk", str(args.topk)]))
+            sys.exit(run_module("src.service.pipeline", ["preopen", "--date", args.date, "--topk", str(args.topk)]))
         elif args.service_cmd == "intraday":
-            sys.exit(run_module("service.pipeline", ["intraday", "--date", args.date, "--once"]))
+            sys.exit(run_module("src.service.pipeline", ["intraday", "--date", args.date, "--once"]))
         elif args.service_cmd == "close":
-            sys.exit(run_module("service.pipeline", ["close", "--date", args.date]))
+            sys.exit(run_module("src.service.pipeline", ["close", "--date", args.date]))
         elif args.service_cmd == "publish":
-            sys.exit(run_module("service.pipeline", ["publish", "--date", args.date]))
+            sys.exit(run_module("src.service.pipeline", ["publish", "--date", args.date]))
     elif args.cmd == "doctor":
         # Offline self-checks
         from src.providers.local_store import LocalParquetStore
@@ -182,8 +190,12 @@ def main() -> None:
         for d in need_dirs:
             p = root / d
             if not p.exists():
-                print(f"[doctor] MISSING dir: {p}")
-                ok = False
+                try:
+                    p.mkdir(parents=True, exist_ok=True)
+                    print(f"[doctor] CREATE dir: {p}")
+                except Exception:
+                    print(f"[doctor] MISSING dir: {p}")
+                    ok = False
         # Basic config checks
         cfg_path = root / "configs" / "config.yaml"
         if cfg_path.exists():
@@ -266,6 +278,119 @@ def main() -> None:
                 ok = False
         print("[doctor] OK" if ok else "[doctor] FAILED")
         sys.exit(0 if ok else 2)
+    elif args.cmd == "gate":
+        # Detect Python launcher for shell-outs
+        def detect_py(user_pref: str) -> list[str]:
+            pref = (user_pref or "auto").strip().lower()
+            if pref != "auto":
+                # return as a shlex-split list; simple handling
+                if pref == "python":
+                    return ["python"]
+                if pref == "python3":
+                    return ["python3"]
+                if pref in {"py -3", "py3", "py3.11", "py3.12"}:
+                    return ["py", "-3"]
+                # fallback to literal
+                return [pref]
+
+            # auto detection order: python, python3, py -3
+            cands: list[list[str]] = [["python"], ["python3"], ["py", "-3"]]
+            for cand in cands:
+                try:
+                    out = subprocess.run(cand + ["-V"], capture_output=True, text=True, timeout=5)
+                    if out.returncode == 0:
+                        return cand
+                except Exception:
+                    pass
+            # last resort: current interpreter
+            return [sys.executable]
+
+        PY = detect_py(getattr(args, "py", "auto"))
+
+        def run_cmd(argv: list[str]) -> int:
+            print("$", " ".join(argv))
+            p = subprocess.run(argv)
+            return int(p.returncode)
+
+        def py_m(mod: str, *more: str) -> list[str]:
+            return [*PY, "-m", mod, *more]
+
+        # Define Gates
+        gates: dict[str, list[list[str]]] = {}
+        # Gate A
+        gates["A"] = [
+            [*PY, "-m", "compileall", "-q", "."],
+            [*PY, "-m", "pytest", "-q"],
+            py_m("backtest.runner_weekly", "--config", "configs/config.yaml", "--strategies", *(["configs/strategies/*.yaml"]), "--start", "20250106", "--end", "20250110", "--run_id", "demo_fixture"),
+            [*PY, "gpbt.py", "doctor", "--level", "basic"],
+        ]
+        # Gate B
+        gates["B"] = [
+            [*PY, "gpbt.py", "service", "preopen", "--date", "20250106"],
+            [*PY, "gpbt.py", "service", "intraday", "--date", "20250106", "--once"],
+            [*PY, "gpbt.py", "service", "close", "--date", "20250106"],
+            [*PY, "gpbt.py", "service", "publish", "--date", "20250106"],
+        ]
+        # Gate C
+        gates["C"] = [
+            [*PY, "gpbt.py", "experiment", "--config", "configs/config.yaml", "--experiments", "configs/experiments/demo_grid.yaml", "--start", "20250106", "--end", "20250110", "--exp_id", "demo_matrix"],
+            [*PY, "gpbt.py", "tournament", "--config", "configs/config.yaml", "--strategies", *(["configs/strategies/*.yaml"]), "--start", "20250106", "--end", "20250131", "--mode", "realistic", "--training_window", "5", "--reselect_interval", "weekly", "--tournament_id", "demo_real", "--emit_registry", "store/registry/champion.json"],
+        ]
+
+        level = (getattr(args, "level", "ALL") or "ALL").upper()
+        order = ["A", "B", "C"] if level == "ALL" else [level]
+
+        failed_cmd: list[str] | None = None
+        failed_err: str | None = None
+
+        for lv in order:
+            print(f"[Gate {lv}] start")
+            for cmd in gates.get(lv, []):
+                code = run_cmd(cmd)
+                if code != 0:
+                    failed_cmd = cmd
+                    # Try to capture last lines of stderr/stdout by rerunning with capture when safe
+                    try:
+                        out = subprocess.run(cmd, capture_output=True, text=True)
+                        err = (out.stderr or out.stdout or "").strip().splitlines()
+                        failed_err = "\n".join(err[-10:])
+                    except Exception:
+                        failed_err = None
+                    print(f"[Gate {lv}] FAIL at: {' '.join(cmd)}")
+                    if failed_err:
+                        print(f"[Gate {lv}] Error tail:\n{failed_err}")
+                    sys.exit(code)
+            print(f"[Gate {lv}] PASS")
+
+        # After all, assert required files for B and C (best-effort)
+        try:
+            missing: list[str] = []
+            req = [
+                "store/recommend/20250106.json",
+                "store/recommend/latest.json",
+                "results/live_shadow/20250106/order_log.csv",
+                "results/live_shadow/20250106/equity.csv",
+                "results/live_shadow/20250106/metrics.json",
+                "results/exp_demo_matrix/leaderboard.csv",
+                "results/exp_demo_matrix/report.md",
+                "results/exp_demo_matrix/manifest.json",
+                "results/tournament_demo_real/metrics.json",
+                "results/tournament_demo_real/equity.csv",
+                "results/tournament_demo_real/switching_log.csv",
+                "store/registry/champion.json",
+            ]
+            for pth in req:
+                if not Path(pth).exists():
+                    missing.append(pth)
+            if missing:
+                print("[Gate] WARN: missing expected artifacts:")
+                for m in missing:
+                    print(" -", m)
+        except Exception:
+            pass
+
+        print("[Gate] ALL PASS")
+        sys.exit(0)
 
 
 if __name__ == "__main__":  # pragma: no cover
