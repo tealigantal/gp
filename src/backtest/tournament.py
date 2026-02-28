@@ -34,6 +34,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--training_window", type=int, default=20, help="Training window in trading days")
     p.add_argument("--reselect_interval", choices=["weekly"], default="weekly")
     p.add_argument("--tournament_id", default=None)
+    p.add_argument("--emit_registry", help="Path to write champion registry JSON (e.g., store/registry/champion.json)")
     return p.parse_args()
 
 
@@ -270,6 +271,7 @@ def run_tournament():  # pragma: no cover - orchestration heavy
             "score_Sharpe": best_val.get("Sharpe", 0.0),
             "score_expectancy": best_val.get("expectancy", 0.0),
             "is_oracle": is_oracle,
+            "params": cand.params,
         })
 
     # Persist outputs
@@ -299,6 +301,40 @@ def run_tournament():  # pragma: no cover - orchestration heavy
     }
     (out_dir / "metrics.json").write_text(json.dumps(metrics, ensure_ascii=False, indent=2), encoding="utf-8")
 
+    # Optionally emit champion registry (freeze last champion)
+    if args.emit_registry:
+        from .experiment import _get_git_commit, _json_hash
+        from ..service.registry import ChampionRecord, write_champion_registry
+        selected = switching_rows[-1] if switching_rows else None
+        if selected:
+            champ_name = selected["champion"]
+            cand = next((c for c in candidates if c.name == champ_name), None)
+            stype = _load_yaml(cand.file).get("type") if cand else "baseline"
+            params = cand.params if cand else {}
+            record = ChampionRecord(
+                champion_id=args.tournament_id or f"{args.mode}_{args.start}_{args.end}",
+                selected_at=selected["decision_date"],
+                seed=42,
+                git_commit=_get_git_commit(Path.cwd()),
+                strategy_type=stype,
+                params=params,
+                params_hash=_json_hash(params),
+                scenario="base",
+                robust={
+                    "robust_sharpe_p05": 0.0,
+                    "worst_year_return": None,
+                    "fill_rate": None,
+                    "max_drawdown": metrics.get("max_drawdown", 0.0),
+                    "n_trades": metrics.get("trades", 0),
+                    "p_value_adj": None,
+                },
+                constraints={
+                    "max_participation_rate": None,
+                },
+                warnings={},
+            )
+            write_champion_registry(Path(args.emit_registry), record)
+
 
 def main():  # pragma: no cover
     run_tournament()
@@ -306,4 +342,3 @@ def main():  # pragma: no cover
 
 if __name__ == "__main__":  # pragma: no cover
     main()
-

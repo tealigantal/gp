@@ -66,10 +66,25 @@ def main() -> None:
     s_tour.add_argument("--training_window", type=int, default=20)
     s_tour.add_argument("--reselect_interval", choices=["weekly"], default="weekly")
     s_tour.add_argument("--tournament_id", required=False)
+    s_tour.add_argument("--emit_registry", required=False, help="Write champion registry JSON")
+
+    s_srv = sub.add_parser("service", help="Operate service pipeline")
+    srv_sub = s_srv.add_subparsers(dest="service_cmd", required=True)
+    srv_pre = srv_sub.add_parser("preopen")
+    srv_pre.add_argument("--date", required=True)
+    srv_pre.add_argument("--topk", type=int, default=10)
+    srv_intra = srv_sub.add_parser("intraday")
+    srv_intra.add_argument("--date", required=True)
+    srv_intra.add_argument("--once", action="store_true", default=True)
+    srv_close = srv_sub.add_parser("close")
+    srv_close.add_argument("--date", required=True)
+    srv_pub = srv_sub.add_parser("publish")
+    srv_pub.add_argument("--date", required=True)
 
     s_doc = sub.add_parser("doctor", help="Sanity check environment")
     s_doc.add_argument("--date", help="Check candidate pool for date YYYYMMDD", required=False)
     s_doc.add_argument("--provider", choices=["tushare", "akshare"], required=False)
+    s_doc.add_argument("--level", choices=["basic", "service", "research"], default="basic")
 
     args = p.parse_args()
     if args.cmd == "init":
@@ -144,7 +159,18 @@ def main() -> None:
         ]
         if args.tournament_id:
             argv += ["--tournament_id", args.tournament_id]
+        if args.emit_registry:
+            argv += ["--emit_registry", args.emit_registry]
         sys.exit(run_module("backtest.tournament", argv))
+    elif args.cmd == "service":
+        if args.service_cmd == "preopen":
+            sys.exit(run_module("service.pipeline", ["preopen", "--date", args.date, "--topk", str(args.topk)]))
+        elif args.service_cmd == "intraday":
+            sys.exit(run_module("service.pipeline", ["intraday", "--date", args.date, "--once"]))
+        elif args.service_cmd == "close":
+            sys.exit(run_module("service.pipeline", ["close", "--date", args.date]))
+        elif args.service_cmd == "publish":
+            sys.exit(run_module("service.pipeline", ["publish", "--date", args.date]))
     elif args.cmd == "doctor":
         # Offline self-checks
         from src.providers.local_store import LocalParquetStore
@@ -152,12 +178,27 @@ def main() -> None:
         root = Path.cwd()
         ok = True
         # Directories
-        need_dirs = ["data/raw", "data/bars/daily", "data/bars/min5", "universe", "results"]
+        need_dirs = ["data/raw", "data/bars/daily", "data/bars/min5", "universe", "results", "store", "store/recommend", "store/registry"]
         for d in need_dirs:
             p = root / d
             if not p.exists():
                 print(f"[doctor] MISSING dir: {p}")
                 ok = False
+        # Basic config checks
+        cfg_path = root / "configs" / "config.yaml"
+        if cfg_path.exists():
+            try:
+                import yaml
+                cfg = yaml.safe_load(cfg_path.read_text(encoding="utf-8"))
+                if not cfg or ("vol_unit" not in cfg and "volume_unit" not in cfg):
+                    print("[doctor] MISSING config key: vol_unit (set to 'shares' or explicit unit)")
+                    ok = False
+            except Exception as e:
+                print(f"[doctor] ERROR reading config.yaml: {e}")
+                ok = False
+        else:
+            print("[doctor] MISSING configs/config.yaml")
+            ok = False
         # Schema checks
         store = LocalParquetStore(root)
         # daily sample
@@ -207,6 +248,16 @@ def main() -> None:
             if not f.exists():
                 print(f"[doctor] MISSING candidate pool file: {f}")
                 ok = False
+        # Level-based extra checks
+        level = getattr(args, "level", "basic")
+        if level in ("service", "research"):
+            latest = root / "store" / "recommend" / "latest.json"
+            if not latest.exists():
+                print("[doctor] WARN: store/recommend/latest.json not found (service not published)")
+        if level == "research":
+            exp_dir = root / "results"
+            # not enforcing presence, just a gentle reminder
+            pass
         # Provider env check (tushare)
         provider_arg = getattr(args, "provider", None)
         if provider_arg == "tushare":

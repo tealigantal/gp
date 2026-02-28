@@ -219,6 +219,50 @@ def _handle_recommend_by_date(date: str) -> Dict[str, Any]:
         raise HTTPException(status_code=500, detail=f"failed to read file: {e}") from e
 
 
+def _handle_reco_latest() -> Dict[str, Any]:
+    path = store_dir() / "recommend" / "latest.json"
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="latest recommend not found")
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except Exception as e:  # noqa: BLE001
+        raise HTTPException(status_code=500, detail=f"failed to read file: {e}") from e
+
+
+def _handle_champion() -> Dict[str, Any]:
+    path = store_dir() / "registry" / "champion.json"
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="champion not found")
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except Exception as e:  # noqa: BLE001
+        raise HTTPException(status_code=500, detail=f"failed to read file: {e}") from e
+
+
+def _handle_live_file(date: str, name: str) -> Dict[str, Any] | list[Dict[str, Any]]:
+    base = store_dir().parent / "results" / "live_shadow" / date
+    if name.endswith(".json"):
+        p = base / name
+        if not p.exists():
+            raise HTTPException(status_code=404, detail=f"not found: {name}")
+        try:
+            return json.loads(p.read_text(encoding="utf-8"))
+        except Exception as e:  # noqa: BLE001
+            raise HTTPException(status_code=500, detail=f"failed to read file: {e}") from e
+    elif name.endswith(".csv"):
+        p = base / name
+        if not p.exists():
+            raise HTTPException(status_code=404, detail=f"not found: {name}")
+        try:
+            import pandas as pd
+            df = pd.read_csv(p)
+            return df.to_dict(orient="records")
+        except Exception as e:  # noqa: BLE001
+            raise HTTPException(status_code=500, detail=f"failed to read file: {e}") from e
+    else:
+        raise HTTPException(status_code=400, detail="unsupported file type")
+
+
 # -------------------------
 # API router (preferred for SPA)
 # -------------------------
@@ -310,6 +354,72 @@ def api_get_ohlcv_min(symbol: str, period: int = Query(5), days: int = Query(5),
 def api_get_recommend_by_date(date: str) -> Dict[str, Any]:
     try:
         return _handle_recommend_by_date(date)
+    except HTTPException:
+        raise
+    except Exception as e:  # noqa: BLE001
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@api.get("/reco/latest")
+def api_get_reco_latest() -> Dict[str, Any]:
+    try:
+        return _handle_reco_latest()
+    except HTTPException:
+        raise
+    except Exception as e:  # noqa: BLE001
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@api.get("/reco/{date}")
+def api_get_reco_by_date(date: str) -> Dict[str, Any]:
+    try:
+        return _handle_recommend_by_date(date)
+    except HTTPException:
+        raise
+    except Exception as e:  # noqa: BLE001
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@api.get("/champion")
+def api_get_champion() -> Dict[str, Any]:
+    try:
+        return _handle_champion()
+    except HTTPException:
+        raise
+    except Exception as e:  # noqa: BLE001
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@api.get("/live/{date}/metrics")
+def api_get_live_metrics(date: str) -> Dict[str, Any]:
+    try:
+        data = _handle_live_file(date, "metrics.json")
+        assert isinstance(data, dict)
+        return data
+    except HTTPException:
+        raise
+    except Exception as e:  # noqa: BLE001
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@api.get("/live/{date}/equity")
+def api_get_live_equity(date: str) -> Dict[str, Any]:
+    try:
+        rows = _handle_live_file(date, "equity.csv")
+        assert isinstance(rows, list)
+        return {"date": date, "rows": rows}
+    except HTTPException:
+        raise
+    except Exception as e:  # noqa: BLE001
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@api.get("/live/{date}/orders")
+def api_get_live_orders(date: str) -> Dict[str, Any]:
+    try:
+        rows = _handle_live_file(date, "order_log.csv")
+        assert isinstance(rows, list)
+        return {"date": date, "rows": rows}
     except HTTPException:
         raise
     except Exception as e:  # noqa: BLE001

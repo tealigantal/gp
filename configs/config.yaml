@@ -13,3 +13,4 @@ transfer_fee: 0.00002
 stamp_duty: 0.001
 slippage_bps: 3
 min_commission: 5
+vol_unit: shares
