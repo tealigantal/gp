@@ -111,6 +111,58 @@ def _handle_recommend(req: RecommendReq) -> Dict[str, Any]:
     return result
 
 
+def _service_health_status() -> Dict[str, Any]:
+    """Collect minimal service health without external dependencies."""
+    latest_ok = False
+    latest_as_of: Optional[str] = None
+    latest_as_of_ts: Optional[str] = None
+    latest_stage: Optional[str] = None
+    shadow_metrics_ok = False
+    last_error: Optional[str] = None
+
+    try:
+        p = store_dir() / "recommend" / "latest.json"
+        if p.exists():
+            try:
+                obj = json.loads(p.read_text(encoding="utf-8"))
+                # minimal schema checks
+                if isinstance(obj, dict) and isinstance(obj.get("picks"), list):
+                    latest_ok = True
+                latest_as_of = str(obj.get("as_of")) if obj.get("as_of") is not None else None
+                latest_as_of_ts = str(obj.get("as_of_ts")) if obj.get("as_of_ts") is not None else None
+                latest_stage = str(obj.get("stage")) if obj.get("stage") is not None else None
+                # try locate live_shadow metrics by date
+                date_part = None
+                s = latest_as_of or ""
+                if len(s) == 8 and s.isdigit():
+                    date_part = s
+                else:
+                    # attempt to parse from as_of_ts like YYYYMMDD HH:MM:SS or YYYY-MM-DD
+                    t = latest_as_of_ts or s
+                    if isinstance(t, str):
+                        t2 = t.replace("-", "")
+                        if len(t2) >= 8 and t2[:8].isdigit():
+                            date_part = t2[:8]
+                if date_part:
+                    metrics = store_dir().parent / "results" / "live_shadow" / date_part / "metrics.json"
+                    shadow_metrics_ok = metrics.exists()
+            except Exception as e:  # noqa: BLE001
+                last_error = f"latest_read_error: {e}"
+        else:
+            last_error = "latest_missing"
+    except Exception as e:  # noqa: BLE001
+        last_error = f"service_health_error: {e}"
+
+    return {
+        "latest_ok": bool(latest_ok),
+        "latest_as_of": latest_as_of,
+        "latest_as_of_ts": latest_as_of_ts,
+        "stage": latest_stage,
+        "shadow_metrics_ok": bool(shadow_metrics_ok),
+        "last_error": last_error,
+    }
+
+
 def _handle_health() -> Dict[str, Any]:
     cfg = load_config()
     from ..providers.factory import get_provider
@@ -130,6 +182,7 @@ def _handle_health() -> Dict[str, Any]:
         "dev_mode": cfg.dev_mode,
         "recommend_mode": cfg.recommend_mode,
         "recommend_modes": recommend_list_modes(),
+        "service": _service_health_status(),
     }
 
 

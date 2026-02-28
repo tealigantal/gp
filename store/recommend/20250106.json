@@ -1,5 +1,6 @@
 {
-  "as_of": "20250106 15:10:00",
+  "as_of": "20250106",
+  "as_of_ts": "20250106 15:10:00",
   "timezone": "Asia/Shanghai",
   "tradeable": true,
   "message": "preopen",
@@ -13,7 +14,7 @@
       "champion": {
         "strategy": "baseline",
         "score": 0.0,
-        "params_hash": "",
+        "params_hash": "78657346e5",
         "scenario": "base"
       },
       "trade_plan": {
@@ -37,7 +38,7 @@
       "champion": {
         "strategy": "baseline",
         "score": 0.0,
-        "params_hash": "",
+        "params_hash": "78657346e5",
         "scenario": "base"
       },
       "trade_plan": {

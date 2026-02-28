@@ -80,6 +80,11 @@ def main() -> None:
     srv_close.add_argument("--date", required=True)
     srv_pub = srv_sub.add_parser("publish")
     srv_pub.add_argument("--date", required=True)
+    srv_run = srv_sub.add_parser("run")
+    srv_run.add_argument("--date", required=False)
+    srv_run.add_argument("--every", type=int, default=300)
+    srv_run.add_argument("--until", type=str, default="15:00")
+    srv_run.add_argument("--once", action="store_true", default=False)
 
     s_doc = sub.add_parser("doctor", help="Sanity check environment")
     s_doc.add_argument("--date", help="Check candidate pool for date YYYYMMDD", required=False)
@@ -179,6 +184,14 @@ def main() -> None:
             sys.exit(run_module("src.service.pipeline", ["close", "--date", args.date]))
         elif args.service_cmd == "publish":
             sys.exit(run_module("src.service.pipeline", ["publish", "--date", args.date]))
+        elif args.service_cmd == "run":
+            argv = ["run"]
+            if args.date:
+                argv += ["--date", args.date]
+            argv += ["--every", str(args.every), "--until", args.until]
+            if args.once:
+                argv += ["--once"]
+            sys.exit(run_module("src.service.pipeline", argv))
     elif args.cmd == "doctor":
         # Offline self-checks
         from src.providers.local_store import LocalParquetStore

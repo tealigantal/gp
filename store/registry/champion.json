@@ -2,7 +2,7 @@
   "champion_id": "demo_real",
   "selected_at": "20250110",
   "seed": 42,
-  "git_commit": "08092105ab310bedcb6f33a037546e474df7c1ae",
+  "git_commit": "47a788a04fbb417961a5d62f45bd91b73b40780d",
   "strategy_type": "baseline",
   "params": {
     "entry_time": "09:50:00",

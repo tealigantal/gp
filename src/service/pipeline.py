@@ -4,7 +4,7 @@ import argparse
 import json
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 import pandas as pd
 import yaml
@@ -17,6 +17,8 @@ from .state import LiveState, PositionState
 from .output import build_reco_json, write_reco_json
 from .risk_engine import ServiceRiskConfig, limit_picks
 from .registry import read_champion_registry
+from .io_utils import write_json_atomic, copy_atomic
+from .lock import FileLock
 
 
 def _load_cfg() -> Dict:
@@ -34,13 +36,25 @@ def _select_topk_from_pool(pool_file: Path, topk: int) -> List[str]:
     return codes[:topk]
 
 
+def _canonical_date(d: str) -> str:
+    """Return YYYYMMDD string from YYYYMMDD or YYYY-MM-DD input."""
+    s = str(d).strip()
+    if len(s) == 8 and s.isdigit():
+        return s
+    if len(s) == 10 and s[4] == '-' and s[7] == '-':
+        return s[0:4] + s[5:7] + s[8:10]
+    return s
+
+
 def service_preopen(date: str, *, topk: int = 10) -> None:
     root = Path.cwd()
     store_dir = root / "store"
     rec_dir = store_dir / "recommend"
     rec_dir.mkdir(parents=True, exist_ok=True)
+    lock_path = rec_dir / ".lock"
+    date_c = _canonical_date(date)
     # ensure candidate pool
-    uni_file = root / "universe" / f"candidate_pool_{date}.csv"
+    uni_file = root / "universe" / f"candidate_pool_{date_c}.csv"
     if not uni_file.exists():
         try:
             from .. import gp_assistant  # noqa: F401
@@ -72,11 +86,13 @@ def service_preopen(date: str, *, topk: int = 10) -> None:
         }
         for code in picks_codes
     ]
-    as_of = f"{date} 09:20:00"
-    obj = build_reco_json(as_of=as_of, stage="preopen", picks=picks, tradeable=True, message="preopen")
-    # write per-date and latest
-    write_reco_json(rec_dir / f"{date}.json", obj)
-    write_reco_json(rec_dir / "latest.json", obj)
+    as_of_date = date_c
+    as_of_ts = f"{as_of_date} 09:20:00"
+    obj = build_reco_json(as_of_date=as_of_date, as_of_ts=as_of_ts, stage="preopen", picks=picks, tradeable=True, message="preopen")
+    # write per-date and latest with lock + atomic
+    with FileLock(lock_path):
+        write_reco_json(rec_dir / f"{as_of_date}.json", obj)
+        write_reco_json(rec_dir / "latest.json", obj)
 
 
 def _run_live_once(date: str) -> Dict:
@@ -115,7 +131,8 @@ def _run_live_once(date: str) -> Dict:
         stype = "baseline"
     st = StrategyCls(name=f"live_{stype}", params=params)
     # Engine
-    live_dir = root / "results" / "live_shadow" / date
+    date_c = _canonical_date(date)
+    live_dir = root / "results" / "live_shadow" / date_c
     eng = BacktestEngine([st], initial_cash=float(cfg.get("initial_cash", 1_000_000.0)), cost_model=cost, results_dir=live_dir, basics=basics, daily_prev_close={})
     if "max_participation_rate" in cfg:
         try:
@@ -158,10 +175,10 @@ def _run_live_once(date: str) -> Dict:
     import shutil
     src_trades = live_dir / "trades.csv"
     if src_trades.exists():
-        shutil.copyfile(src_trades, order_log)
+        copy_atomic(src_trades, order_log)
     src_eq = live_dir / "daily_equity.csv"
     if src_eq.exists():
-        shutil.copyfile(src_eq, equity)
+        copy_atomic(src_eq, equity)
     # simple metrics
     trades_df = pd.read_csv(order_log) if order_log.exists() else pd.DataFrame()
     fill_rate = 0.0
@@ -171,8 +188,8 @@ def _run_live_once(date: str) -> Dict:
         b_rj = int((trades_df["side"] == "REJECT_BUY").sum())
         total = b_exec + b_cxl + b_rj
         fill_rate = float(b_exec / total) if total > 0 else 0.0
-    metrics = {"date": date, "fill_rate": fill_rate, "orders": int(len(trades_df)) if not trades_df.empty else 0}
-    metrics_path.write_text(json.dumps(metrics, ensure_ascii=False, indent=2), encoding="utf-8")
+    metrics = {"date": date_c, "fill_rate": fill_rate, "orders": int(len(trades_df)) if not trades_df.empty else 0}
+    write_json_atomic(metrics_path, metrics)
     return metrics
 
 
@@ -181,32 +198,50 @@ def service_intraday(date: str) -> None:
     # Update latest.json
     root = Path.cwd()
     rec_dir = root / "store" / "recommend"
-    if (rec_dir / f"{date}.json").exists():
-        obj = json.loads((rec_dir / f"{date}.json").read_text(encoding="utf-8"))
+    lock_path = rec_dir / ".lock"
+    date_c = _canonical_date(date)
+    f = rec_dir / f"{date_c}.json"
+    if f.exists():
+        obj = json.loads(f.read_text(encoding="utf-8"))
         obj["stage"] = "intraday"
-        obj["as_of"] = f"{date} 14:30:00"
-        write_reco_json(rec_dir / f"{date}.json", obj)
-        write_reco_json(rec_dir / "latest.json", obj)
+        # ensure required fields exist
+        obj.setdefault("as_of", date_c)
+        obj["as_of_ts"] = f"{date_c} 14:30:00"
+        with FileLock(lock_path):
+            write_reco_json(f, obj)
+            write_reco_json(rec_dir / "latest.json", obj)
 
 
 def service_close(date: str) -> None:
     root = Path.cwd()
     rec_dir = root / "store" / "recommend"
-    f = rec_dir / f"{date}.json"
+    lock_path = rec_dir / ".lock"
+    date_c = _canonical_date(date)
+    f = rec_dir / f"{date_c}.json"
     if f.exists():
         obj = json.loads(f.read_text(encoding="utf-8"))
         obj["stage"] = "close"
-        obj["as_of"] = f"{date} 15:10:00"
-        write_reco_json(f, obj)
-        write_reco_json(rec_dir / "latest.json", obj)
+        obj.setdefault("as_of", date_c)
+        obj["as_of_ts"] = f"{date_c} 15:10:00"
+        with FileLock(lock_path):
+            write_reco_json(f, obj)
+            write_reco_json(rec_dir / "latest.json", obj)
 
 
 def service_publish(date: str) -> None:
     root = Path.cwd()
     rec_dir = root / "store" / "recommend"
-    src = rec_dir / f"{date}.json"
+    lock_path = rec_dir / ".lock"
+    date_c = _canonical_date(date)
+    src = rec_dir / f"{date_c}.json"
     if src.exists():
-        write_reco_json(rec_dir / "latest.json", json.loads(src.read_text(encoding="utf-8")))
+        obj = json.loads(src.read_text(encoding="utf-8"))
+        # ensure schema has stage/as_of/as_of_ts minimally
+        obj.setdefault("stage", obj.get("stage") or "intraday")
+        obj.setdefault("as_of", date_c)
+        obj.setdefault("as_of_ts", f"{date_c} 14:30:00")
+        with FileLock(lock_path):
+            write_reco_json(rec_dir / "latest.json", obj)
 
 
 def parse_args() -> argparse.Namespace:
@@ -222,7 +257,59 @@ def parse_args() -> argparse.Namespace:
     close.add_argument("--date", required=True)
     pub = sub.add_parser("publish")
     pub.add_argument("--date", required=True)
+    # long-running loop
+    run = sub.add_parser("run")
+    run.add_argument("--date", required=False, help="YYYYMMDD | YYYY-MM-DD | today")
+    run.add_argument("--every", type=int, default=300, help="Interval seconds between intraday cycles")
+    run.add_argument("--until", type=str, default="15:00", help="Stop at HH:MM local time")
+    run.add_argument("--once", action="store_true", default=False, help="Run preopen/intraday/close once for Gate/testing")
     return p.parse_args()
+
+
+def _service_run(date: Optional[str], every: int, until: str, once: bool = False) -> None:
+    """Run the all-day service loop.
+
+    - preopen if missing/expired
+    - intraday cycles every `every` seconds
+    - close at or after `until`
+    - publish after each phase
+    """
+    from datetime import datetime, time as dtime
+    import time
+
+    # resolve date
+    if not date or date.strip().lower() == "today":
+        date_c = datetime.now().strftime("%Y%m%d")
+    else:
+        date_c = _canonical_date(date)
+
+    # preopen if not exists
+    root = Path.cwd()
+    rec_dir = root / "store" / "recommend"
+    if not (rec_dir / f"{date_c}.json").exists():
+        service_preopen(date_c)
+        service_publish(date_c)
+
+    def _parse_until(s: str) -> dtime:
+        s = (s or "15:00").strip()
+        hh, mm = s.split(":")
+        return dtime(hour=int(hh), minute=int(mm))
+
+    end_t = _parse_until(until)
+    # intraday cycles
+    while True:
+        now = datetime.now()
+        if now.time() >= end_t:
+            break
+        service_intraday(date_c)
+        service_publish(date_c)
+        if once:
+            break
+        time.sleep(max(1, int(every)))
+
+    # close phase
+    service_close(date_c)
+    service_publish(date_c)
 
 
 def main():  # pragma: no cover
@@ -235,8 +322,9 @@ def main():  # pragma: no cover
         service_close(args.date)
     elif args.cmd == "publish":
         service_publish(args.date)
+    elif args.cmd == "run":
+        _service_run(getattr(args, "date", None), int(getattr(args, "every", 300)), str(getattr(args, "until", "15:00")), bool(getattr(args, "once", False)))
 
 
 if __name__ == "__main__":  # pragma: no cover
     main()
-

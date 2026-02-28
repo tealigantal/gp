@@ -12,14 +12,47 @@ debug.degrade_reasons including SERVICE_RECO_MISSING.
 
 import json
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from ...core.paths import store_dir
 
 
+def _parse_date_keyword(d: Optional[str]) -> Tuple[Optional[str], Optional[str]]:
+    """Validate and normalize incoming date keyword.
+
+    Returns (normalized, error_reason) where normalized is one of:
+    - "latest"
+    - YYYYMMDD
+    and error_reason is a string code when invalid.
+    """
+    if d is None or str(d).strip() == "":
+        return ("latest", None)
+    s = str(d).strip().lower()
+    if s in {"latest", "today"}:
+        if s == "today":
+            from datetime import datetime
+            return (datetime.now().strftime("%Y%m%d"), None)
+        return ("latest", None)
+    # strict validation: only digits and dash up to len 10
+    if any(ch in s for ch in ("..", "/", "\\")):
+        return (None, "INVALID_DATE")
+    if not all((c.isdigit() or c == '-') for c in s):
+        return (None, "INVALID_DATE")
+    if len(s) > 10:
+        return (None, "INVALID_DATE")
+    # normalize to YYYYMMDD or keep as-is for lookup
+    if len(s) == 8 and s.isdigit():
+        return (s, None)
+    if len(s) == 10 and s[4] == '-' and s[7] == '-':
+        return (s[0:4] + s[5:7] + s[8:10], None)
+    # allow 7/9 lengths degrade
+    return (None, "INVALID_DATE")
+
+
 def _read_reco_file(date: Optional[str]) -> Dict[str, Any] | None:
     base = store_dir() / "recommend"
-    if not date or date == "latest":
+    norm, _ = _parse_date_keyword(date)
+    if not norm or norm == "latest":
         p = base / "latest.json"
         if not p.exists():
             return None
@@ -28,10 +61,10 @@ def _read_reco_file(date: Optional[str]) -> Dict[str, Any] | None:
         except Exception:
             return None
     # try YYYYMMDD then YYYY-MM-DD
-    cand: List[Path] = [base / f"{date}.json"]
+    cand: List[Path] = [base / f"{norm}.json"]
     try:
-        if len(str(date)) == 8 and str(date).isdigit():
-            yyyy, mm, dd = str(date)[0:4], str(date)[4:6], str(date)[6:8]
+        if len(str(norm)) == 8 and str(norm).isdigit():
+            yyyy, mm, dd = str(norm)[0:4], str(norm)[4:6], str(norm)[6:8]
             cand.append(base / f"{yyyy}-{mm}-{dd}.json")
     except Exception:
         pass
@@ -83,7 +116,30 @@ def run(
     symbols: Optional[List[str]] = None,
     risk_profile: str = "normal",
 ) -> Dict[str, Any]:
-    obj = _read_reco_file(date or "latest")
+    norm, err = _parse_date_keyword(date)
+    if err:
+        return {
+            "picks": [],
+            "as_of": None,
+            "themes": [],
+            "mainline": {"sectors": []},
+            "mover_hints": [],
+            "message": "service_recommend_invalid_date",
+            "debug": {
+                "mode": "service",
+                "degraded": True,
+                "degrade_reasons": [
+                    {"reason_code": "INVALID_DATE", "detail": {"date": date}}
+                ],
+            },
+            "data_status": {
+                "snapshot": {"ok": False, "source": None, "rows": 0, "elapsed_sec": None, "cache": "none", "as_of_ts": None, "error": "INVALID_DATE"},
+                "themes": {"ok": False, "source": None, "attempted": [], "error": "INVALID_DATE", "as_of_ts": None},
+                "daily": {"ok": False, "symbols_ok": 0, "symbols_fail": 0, "error_summary": "INVALID_DATE"},
+            },
+        }
+
+    obj = _read_reco_file(norm or "latest")
     if not isinstance(obj, dict):
         # degraded payload
         return {
@@ -113,4 +169,3 @@ def run(
         obj["picks"] = obj.get("picks", [])[:topk]
 
     return _ensure_card_shape(obj)
-
