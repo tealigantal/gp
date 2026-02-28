@@ -48,6 +48,25 @@ def main() -> None:
     s_bt.add_argument("--end", required=True)
     s_bt.add_argument("--run_id", required=True)
 
+    s_exp = sub.add_parser("experiment", help="Run experiment grid across strategies/params/scenarios")
+    s_exp.add_argument("--config", required=True)
+    s_exp.add_argument("--experiments", nargs="*", help="Experiment YAML globs (configs/experiments/*.yaml)")
+    s_exp.add_argument("--strategies", nargs="*", help="Strategy YAML globs if not using experiments YAML")
+    s_exp.add_argument("--start", required=True)
+    s_exp.add_argument("--end", required=True)
+    s_exp.add_argument("--exp_id", required=False)
+    s_exp.add_argument("--seed", type=int, default=42)
+
+    s_tour = sub.add_parser("tournament", help="Run champion tournament (realistic or oracle)")
+    s_tour.add_argument("--config", required=True)
+    s_tour.add_argument("--strategies", nargs="+", required=True)
+    s_tour.add_argument("--start", required=True)
+    s_tour.add_argument("--end", required=True)
+    s_tour.add_argument("--mode", choices=["realistic", "oracle"], required=True)
+    s_tour.add_argument("--training_window", type=int, default=20)
+    s_tour.add_argument("--reselect_interval", choices=["weekly"], default="weekly")
+    s_tour.add_argument("--tournament_id", required=False)
+
     s_doc = sub.add_parser("doctor", help="Sanity check environment")
     s_doc.add_argument("--date", help="Check candidate pool for date YYYYMMDD", required=False)
     s_doc.add_argument("--provider", choices=["tushare", "akshare"], required=False)
@@ -89,6 +108,43 @@ def main() -> None:
     elif args.cmd == "backtest":
         argv = ["--config", args.config, "--strategies", *args.strategies, "--start", args.start, "--end", args.end, "--run_id", args.run_id]
         sys.exit(run_module("backtest.runner_weekly", argv))
+    elif args.cmd == "experiment":
+        argv = [
+            "--config",
+            args.config,
+            "--start",
+            args.start,
+            "--end",
+            args.end,
+        ]
+        if args.experiments:
+            argv += ["--experiments", *args.experiments]
+        if args.strategies:
+            argv += ["--strategies", *args.strategies]
+        if args.exp_id:
+            argv += ["--exp_id", args.exp_id]
+        argv += ["--seed", str(args.seed)]
+        sys.exit(run_module("backtest.experiment", argv))
+    elif args.cmd == "tournament":
+        argv = [
+            "--config",
+            args.config,
+            "--strategies",
+            *args.strategies,
+            "--start",
+            args.start,
+            "--end",
+            args.end,
+            "--mode",
+            args.mode,
+            "--training_window",
+            str(args.training_window),
+            "--reselect_interval",
+            args.reselect_interval,
+        ]
+        if args.tournament_id:
+            argv += ["--tournament_id", args.tournament_id]
+        sys.exit(run_module("backtest.tournament", argv))
     elif args.cmd == "doctor":
         # Offline self-checks
         from src.providers.local_store import LocalParquetStore

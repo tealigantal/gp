@@ -1,0 +1,26 @@
+exp_id: demo_grid
+grid:
+  - strategy_file: configs/strategies/breakout.yaml
+    params:
+      lookback: [10, 20]
+      lot_shares: [100]
+  - strategy_file: configs/strategies/openrange.yaml
+    params:
+      range_bars: [3, 5]
+      lot_shares: [100]
+scenarios:
+  - name: base
+    slippage_bps: 3
+    commission_rate: 0.0003
+  - name: low_cost
+    slippage_bps: 0
+    commission_rate: 0.0001
+  - name: high_cost
+    slippage_bps: 10
+    commission_rate: 0.0005
+min_trades: 1
+leaderboard_metric: sharpe
+score_weights:
+  sharpe: 1.0
+  max_drawdown: -0.5
+

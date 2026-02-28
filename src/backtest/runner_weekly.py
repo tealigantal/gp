@@ -125,7 +125,7 @@ def main() -> None:  # pragma: no cover - high level orchestration
     engines: Dict[str, BacktestEngine] = {}
     for s in strategies:
         res_dir = run_dir / s.name
-        engines[s.name] = BacktestEngine(
+        eng = BacktestEngine(
             strategies=[s],
             initial_cash=float(cfg.get("initial_cash", 1_000_000)),
             cost_model=cost,
@@ -133,6 +133,13 @@ def main() -> None:  # pragma: no cover - high level orchestration
             basics=basics,
             daily_prev_close={},
         )
+        # Optional capacity constraint
+        if "max_participation_rate" in cfg:
+            try:
+                eng.max_participation_rate = float(cfg.get("max_participation_rate"))
+            except Exception:
+                eng.max_participation_rate = None
+        engines[s.name] = eng
 
     weekly_rows = []
 

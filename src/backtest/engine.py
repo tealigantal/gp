@@ -87,6 +87,13 @@ class BacktestEngine:
         self.exchange_map = {r.ts_code: str(r.exchange) for r in basics.itertuples()}
         # carry-over orders to next trading day (e.g., T+1 sells or forced flat)
         self.carry_orders: List[Order] = []
+        # capacity/participation settings (optional; set via attribute)
+        self.max_participation_rate: Optional[float] = None  # e.g., 0.05; if None -> disabled
+        # fill tracking
+        self._buy_intent_shares: int = 0
+        self._buy_filled_shares: int = 0
+        self._partial_fill_count: int = 0
+        self._unfilled_shares_eod: int = 0
 
     def _position(self, ts: str) -> Position:
         if ts not in self.positions:
@@ -104,7 +111,7 @@ class BacktestEngine:
             and (bar.get("vol", 0) <= 1)
         )
 
-    def _exec_order(self, order: Order, bar_open: float, trade_time: str) -> bool:
+    def _exec_order(self, order: Order, bar_open: float, trade_time: str, *, bar_vol: Optional[float] = None) -> bool:
         # return True if filled
         pos = self._position(order.ts_code)
         exch = self.exchange_map.get(order.ts_code, "SH")
@@ -113,6 +120,53 @@ class BacktestEngine:
         px = round_price(bar_open * slip_mult)
 
         if order.side == "BUY":
+            # capacity constraint: cap shares by participation of bar volume
+            if self.max_participation_rate is not None and bar_vol is not None:
+                cap_shares = int(math.floor(float(bar_vol) * float(self.max_participation_rate)))
+                cap_shares = round_to_lot(cap_shares)
+                ask_shares = round_to_lot(order.shares)
+                self._buy_intent_shares += ask_shares
+                if cap_shares <= 0:
+                    return False
+                if ask_shares > cap_shares:
+                    # partial fill amount
+                    fill_shares = cap_shares
+                    leftover = max(0, ask_shares - fill_shares)
+                    # update order to leftover for retry later in day
+                    order.shares = leftover
+                    order.next_exec_time = None
+                    self._partial_fill_count += 1
+                else:
+                    fill_shares = ask_shares
+                    leftover = 0
+                if fill_shares <= 0:
+                    return False
+                # recompute fees on actual amount
+                amount2 = px * fill_shares
+                fee, _ = self.cost_model.calc(order.side, amount2, exchange=exch)
+                total = px * fill_shares + fee
+                if total > self.cash + 1e-6:
+                    return False
+                # fill
+                new_shares = pos.shares + fill_shares
+                pos.cost = (pos.cost * pos.shares + px * fill_shares) / new_shares if new_shares else 0.0
+                pos.shares = new_shares
+                pos.last_buy_date = trade_time[:8]
+                self.cash -= total
+                self.trades.append(
+                    {
+                        "time": trade_time,
+                        "ts_code": order.ts_code,
+                        "side": order.side,
+                        "price": px,
+                        "shares": fill_shares,
+                        "fee": fee,
+                        "reason": order.reason,
+                    }
+                )
+                self._buy_filled_shares += fill_shares
+                # if leftover remains, keep order pending
+                return leftover == 0
             total = px * order.shares + fee
             if total > self.cash + 1e-6:
                 return False
@@ -133,6 +187,7 @@ class BacktestEngine:
                     "reason": order.reason,
                 }
             )
+            self._buy_filled_shares += order.shares
             return True
         else:
             if pos.shares <= 0:
@@ -264,7 +319,7 @@ class BacktestEngine:
                     still_pending.append(order)
                     continue
                 # attempt fill
-                filled = self._exec_order(order, next_bar["open"], t)
+                filled = self._exec_order(order, next_bar["open"], t, bar_vol=next_bar.get("vol"))
                 if not filled:
                     # keep as pending to try later bars the same day
                     order.next_exec_time = None
@@ -299,6 +354,9 @@ class BacktestEngine:
                 reject_counts["reject_sell"] += 1
                 continue
             # otherwise cancel and record in trades log as CANCEL
+            if order.side == "BUY":
+                # count remaining shares as unfilled
+                self._unfilled_shares_eod += int(order.shares)
             self.trades.append(
                 {
                     "time": f"{trade_date} {times[-1].split(' ')[1]}",
@@ -318,6 +376,8 @@ class BacktestEngine:
             "pending_bar_count": pending_bar_count,
             "reject_buy": reject_counts["reject_buy"],
             "reject_sell": reject_counts["reject_sell"],
+            "partial_fill_count": self._partial_fill_count,
+            "unfilled_shares_end_of_day": self._unfilled_shares_eod,
         }
 
     def finalize(self) -> None:
