@@ -23,7 +23,7 @@ def make_provider(name: str) -> DataProvider:
 
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description="Fetch 5min bars for candidate pool (and open positions if any)")
-    p.add_argument("--provider", choices=["tushare", "akshare"], default="tushare")
+    p.add_argument("--provider", choices=["tushare", "akshare"], default="akshare")
     p.add_argument("--date", required=True)
     return p.parse_args()
 
@@ -55,4 +55,3 @@ def main() -> None:  # pragma: no cover - orchestration
 
 if __name__ == "__main__":  # pragma: no cover
     main()
-

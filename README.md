@@ -8,16 +8,17 @@
 - 严格 T+1；周一开始，周五收盘强制清仓；
 - 输出每策略：胜率/单笔期望/盈亏比/最大回撤/交易次数/不可成交次数（涨停买不到/跌停卖不出）。
 
-从 0 到跑通（命令）
-- `python -m scripts.fetch_basics --provider tushare --start 20180101 --end 20251231`
-- `python -m scripts.fetch_daily --provider tushare --start 20180101 --end 20251231`
+从 0 到跑通（命令，默认 AkShare）
+- `python -m scripts.fetch_basics --provider akshare --start 20180101 --end 20251231`
+- `python -m scripts.fetch_daily --provider akshare --start 20180101 --end 20251231`
 - `python -m scripts.build_candidate_pool --date 20250106 --pool_size 20`
-- `python -m scripts.fetch_min5_for_pool --date 20250106`
+- `python -m scripts.fetch_min5_for_pool --provider akshare --date 20250106`
 - `python -m backtest.runner_weekly --config configs/config.yaml --strategies configs/strategies/*.yaml --start 20200101 --end 20251231 --run_id demo_001`
 - `python gpbt.py doctor --date 20250106`
 
-无法使用 Tushare 分钟权限时如何切换：
-- 改用 `--provider akshare`。分钟接口使用 `stock_zh_a_hist_min_em`，可能仅能获取近期数据且存在频控限制；本项目脚本接口与 Tushare 对齐，可无缝切换。
+数据源切换说明：
+- 默认链路为 AkShare（无需额外 Token）。分钟接口使用 `stock_zh_a_hist_min_em`，可能仅能获取近期数据且存在频控限制。
+- 若具备 Tushare 权限，可通过 `--provider tushare` 切换（需设置 `TUSHARE_TOKEN` 环境变量）。
 
 项目结构（关键新增）
 - `src/providers/`: 数据提供接口（Tushare/AkShare）与本地 Parquet 存储
@@ -48,3 +49,6 @@
 提示
 - 仓库根目录已包含 `sitecustomize.py`，可确保 `src/` 布局下使用 `python -m scripts.xxx` 直接运行。
 - 若需安装包方式使用，也可 `pip install -e .`。
+
+自检
+- 一键自检（含单测/服务链路/实验）：`python gpbt.py gate --level ALL`

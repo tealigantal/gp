@@ -19,7 +19,7 @@ def main() -> None:
     s_init = sub.add_parser("init", help="Initialize directories")
 
     s_fetch = sub.add_parser("fetch", help="Fetch basics and daily bars")
-    s_fetch.add_argument("--provider", choices=["tushare", "akshare"], default="tushare")
+    s_fetch.add_argument("--provider", choices=["tushare", "akshare"], default="akshare")
     s_fetch.add_argument("--start", required=True)
     s_fetch.add_argument("--end", required=True)
 
@@ -33,11 +33,11 @@ def main() -> None:
     s_pool_range.add_argument("--pool_size", type=int, default=20)
 
     s_min5 = sub.add_parser("fetch-min5-for-pool", help="Fetch 5min bars for a candidate date")
-    s_min5.add_argument("--provider", choices=["tushare", "akshare"], default="tushare")
+    s_min5.add_argument("--provider", choices=["tushare", "akshare"], default="akshare")
     s_min5.add_argument("--date", required=True)
 
     s_min5_range = sub.add_parser("fetch-min5-range", help="Fetch 5min bars for candidate pools in range")
-    s_min5_range.add_argument("--provider", choices=["tushare", "akshare"], default="tushare")
+    s_min5_range.add_argument("--provider", choices=["tushare", "akshare"], default="akshare")
     s_min5_range.add_argument("--start", required=True)
     s_min5_range.add_argument("--end", required=True)
 

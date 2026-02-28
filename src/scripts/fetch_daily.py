@@ -23,7 +23,7 @@ def make_provider(name: str) -> DataProvider:
 
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description="Fetch mainboard daily bars and append parquet store")
-    p.add_argument("--provider", choices=["tushare", "akshare"], default="tushare")
+    p.add_argument("--provider", choices=["tushare", "akshare"], default="akshare")
     p.add_argument("--start", required=True)
     p.add_argument("--end", required=True)
     p.add_argument("--min_list_days", type=int, default=60)
