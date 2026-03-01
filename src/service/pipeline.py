@@ -6,19 +6,21 @@ from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional
 
-import pandas as pd
+# Avoid global pandas import to make preopen runnable in minimal env
 import yaml
 
 from ..backtest.engine import BacktestEngine, CostModel
 from ..backtest.runner_weekly import load_strategies
 from ..backtest.experiment import _json_hash, _get_git_commit
 from ..providers.local_store import LocalParquetStore
+from ..gp_assistant.core.paths import store_dir as _store_dir, results_dir as _results_dir, universe_dir as _universe_dir
 from .state import LiveState, PositionState
 from .output import build_reco_json, write_reco_json
 from .risk_engine import ServiceRiskConfig, limit_picks
 from .registry import read_champion_registry
 from .io_utils import write_json_atomic, copy_atomic
 from .lock import FileLock
+from .symbols import canonicalize_ts_code
 
 
 def _load_cfg() -> Dict:
@@ -31,9 +33,24 @@ def _load_cfg() -> Dict:
 def _select_topk_from_pool(pool_file: Path, topk: int) -> List[str]:
     if not pool_file.exists():
         return []
-    df = pd.read_csv(pool_file)
-    codes = df["ts_code"].astype(str).tolist()
-    return codes[:topk]
+    try:
+        import pandas as pd  # type: ignore
+
+        df = pd.read_csv(pool_file)
+        codes = df["ts_code"].astype(str).tolist()
+        return codes[:topk]
+    except Exception:
+        # fallback csv reader
+        import csv
+
+        rows: List[str] = []
+        with pool_file.open("r", encoding="utf-8") as f:
+            reader = csv.DictReader(f)
+            for r in reader:
+                v = (r.get("ts_code") or "").strip()
+                if v:
+                    rows.append(v)
+        return rows[:topk]
 
 
 def _canonical_date(d: str) -> str:
@@ -47,14 +64,13 @@ def _canonical_date(d: str) -> str:
 
 
 def service_preopen(date: str, *, topk: int = 10) -> None:
-    root = Path.cwd()
-    store_dir = root / "store"
-    rec_dir = store_dir / "recommend"
+    store_root = _store_dir()
+    rec_dir = store_root / "recommend"
     rec_dir.mkdir(parents=True, exist_ok=True)
     lock_path = rec_dir / ".lock"
     date_c = _canonical_date(date)
     # ensure candidate pool
-    uni_file = root / "universe" / f"candidate_pool_{date_c}.csv"
+    uni_file = _universe_dir() / f"candidate_pool_{date_c}.csv"
     if not uni_file.exists():
         try:
             from .. import gp_assistant  # noqa: F401
@@ -62,7 +78,7 @@ def service_preopen(date: str, *, topk: int = 10) -> None:
             pass
         # best-effort: don't fail if cannot build
     # pick champion from registry
-    reg = read_champion_registry(store_dir / "registry" / "champion.json") or {}
+    reg = read_champion_registry(store_root / "registry" / "champion.json") or {}
     champ = {
         "strategy": reg.get("strategy_type", "baseline"),
         "score": reg.get("robust", {}).get("robust_sharpe_p05", 0.0),
@@ -73,9 +89,13 @@ def service_preopen(date: str, *, topk: int = 10) -> None:
     cfg = _load_cfg()
     risk_cfg = ServiceRiskConfig(max_positions=int(cfg.get("max_positions", 10)))
     picks_codes = limit_picks(_select_topk_from_pool(uni_file, topk), risk_cfg)
-    picks = [
-        {
-            "symbol": code,
+    picks: List[Dict[str, Any]] = []
+    for raw in picks_codes:
+        ts_code, code6, sym = canonicalize_ts_code(raw)
+        picks.append({
+            "symbol": sym,  # keep legacy display
+            "ts_code": ts_code,
+            "code": code6,
             "name": "",
             "theme": "",
             "champion": champ,
@@ -83,12 +103,32 @@ def service_preopen(date: str, *, topk: int = 10) -> None:
             "tags": [],
             "risk": {"max_position": 1.0 / max(1, risk_cfg.max_positions), "cooldown": risk_cfg.cooldown_days},
             "debug": {},
-        }
-        for code in picks_codes
-    ]
+        })
     as_of_date = date_c
     as_of_ts = f"{as_of_date} 09:20:00"
-    obj = build_reco_json(as_of_date=as_of_date, as_of_ts=as_of_ts, stage="preopen", picks=picks, tradeable=True, message="preopen")
+    paths_meta = {
+        "store_dir": str(_store_dir().resolve()),
+        "results_dir": str(_results_dir().resolve()),
+        "universe_dir": str(_universe_dir().resolve()),
+    }
+    # empty picks enforcement stats
+    pool_count = 0
+    try:
+        if uni_file.exists():
+            import pandas as _pd  # local import to avoid global dependency at import time
+            pool_count = int(len(_pd.read_csv(uni_file)))
+    except Exception:
+        pool_count = 0
+    obj = build_reco_json(
+        as_of_date=as_of_date,
+        as_of_ts=as_of_ts,
+        stage="preopen",
+        picks=picks,
+        tradeable=True,
+        message="preopen",
+        paths_meta=paths_meta,
+        empty_picks_stats=(pool_count, int(topk)),
+    )
     # write per-date and latest with lock + atomic
     with FileLock(lock_path):
         write_reco_json(rec_dir / f"{as_of_date}.json", obj)
@@ -100,9 +140,10 @@ def _run_live_once(date: str) -> Dict:
 
     Overwrites outputs to be idempotent.
     """
-    root = Path.cwd()
+    root = Path.cwd()  # used only for LocalParquetStore root; path usage below uses core.paths
     store = LocalParquetStore(root)
     cfg = _load_cfg()
+    import pandas as pd  # local import due to heavy dependency
     basics = store.read_raw("stock_basic")
     if basics is None:
         basics = pd.DataFrame(columns=["ts_code", "name", "market", "exchange", "is_st"])  # tolerable
@@ -114,12 +155,12 @@ def _run_live_once(date: str) -> Dict:
         min_commission=float(cfg.get("min_commission", 5.0)),
     )
     # read pool
-    uni_file = root / "universe" / f"candidate_pool_{date}.csv"
+    uni_file = _universe_dir() / f"candidate_pool_{date}.csv"
     universe = []
     if uni_file.exists():
         universe = pd.read_csv(uni_file)["ts_code"].astype(str).tolist()
     # champion
-    reg = read_champion_registry(root / "store" / "registry" / "champion.json") or {}
+    reg = read_champion_registry(_store_dir() / "registry" / "champion.json") or {}
     stype = reg.get("strategy_type", "baseline")
     params = reg.get("params", {"entry_time": "09:50:00", "topk": 1, "lot_shares": 100})
     # load one strategy by mapping file types
@@ -132,7 +173,7 @@ def _run_live_once(date: str) -> Dict:
     st = StrategyCls(name=f"live_{stype}", params=params)
     # Engine
     date_c = _canonical_date(date)
-    live_dir = root / "results" / "live_shadow" / date_c
+    live_dir = _results_dir() / "live_shadow" / date_c
     eng = BacktestEngine([st], initial_cash=float(cfg.get("initial_cash", 1_000_000.0)), cost_model=cost, results_dir=live_dir, basics=basics, daily_prev_close={})
     if "max_participation_rate" in cfg:
         try:
@@ -196,50 +237,83 @@ def _run_live_once(date: str) -> Dict:
 def service_intraday(date: str) -> None:
     _run_live_once(date)
     # Update latest.json
-    root = Path.cwd()
-    rec_dir = root / "store" / "recommend"
+    rec_dir = _store_dir() / "recommend"
     lock_path = rec_dir / ".lock"
     date_c = _canonical_date(date)
     f = rec_dir / f"{date_c}.json"
     if f.exists():
         obj = json.loads(f.read_text(encoding="utf-8"))
-        obj["stage"] = "intraday"
-        # ensure required fields exist
-        obj.setdefault("as_of", date_c)
-        obj["as_of_ts"] = f"{date_c} 14:30:00"
+        # normalize to v1 shape
+        try:
+            from ..gp_assistant.recommend.modes import service as _svc
+
+            obj = _svc._normalize_to_v1(obj)  # type: ignore[attr-defined]
+        except Exception:
+            pass
+        if isinstance(obj.get("meta"), dict):
+            obj["meta"]["stage"] = "intraday"
+            obj["meta"].setdefault("as_of", date_c)
+            obj["meta"]["as_of_ts"] = f"{date_c} 14:30:00"
+            # enforce empty picks degraded
+            if obj.get("meta", {}).get("tradeable", True) and not obj.get("picks"):
+                dbg = obj["meta"].setdefault("debug", {})
+                dr = list(dbg.get("degrade_reasons") or [])
+                dr.append({"reason_code": "EMPTY_PICKS", "detail": {}})
+                dbg["degrade_reasons"] = dr
+                dbg["degraded"] = True
+                dbg["reasons"] = dr
         with FileLock(lock_path):
             write_reco_json(f, obj)
             write_reco_json(rec_dir / "latest.json", obj)
 
 
 def service_close(date: str) -> None:
-    root = Path.cwd()
-    rec_dir = root / "store" / "recommend"
+    rec_dir = _store_dir() / "recommend"
     lock_path = rec_dir / ".lock"
     date_c = _canonical_date(date)
     f = rec_dir / f"{date_c}.json"
     if f.exists():
         obj = json.loads(f.read_text(encoding="utf-8"))
-        obj["stage"] = "close"
-        obj.setdefault("as_of", date_c)
-        obj["as_of_ts"] = f"{date_c} 15:10:00"
+        try:
+            from ..gp_assistant.recommend.modes import service as _svc
+
+            obj = _svc._normalize_to_v1(obj)  # type: ignore[attr-defined]
+        except Exception:
+            pass
+        if isinstance(obj.get("meta"), dict):
+            obj["meta"]["stage"] = "close"
+            obj["meta"].setdefault("as_of", date_c)
+            obj["meta"]["as_of_ts"] = f"{date_c} 15:10:00"
+            if obj.get("meta", {}).get("tradeable", True) and not obj.get("picks"):
+                dbg = obj["meta"].setdefault("debug", {})
+                dr = list(dbg.get("degrade_reasons") or [])
+                dr.append({"reason_code": "EMPTY_PICKS", "detail": {}})
+                dbg["degrade_reasons"] = dr
+                dbg["degraded"] = True
+                dbg["reasons"] = dr
         with FileLock(lock_path):
             write_reco_json(f, obj)
             write_reco_json(rec_dir / "latest.json", obj)
 
 
 def service_publish(date: str) -> None:
-    root = Path.cwd()
-    rec_dir = root / "store" / "recommend"
+    rec_dir = _store_dir() / "recommend"
     lock_path = rec_dir / ".lock"
     date_c = _canonical_date(date)
     src = rec_dir / f"{date_c}.json"
     if src.exists():
         obj = json.loads(src.read_text(encoding="utf-8"))
-        # ensure schema has stage/as_of/as_of_ts minimally
-        obj.setdefault("stage", obj.get("stage") or "intraday")
-        obj.setdefault("as_of", date_c)
-        obj.setdefault("as_of_ts", f"{date_c} 14:30:00")
+        try:
+            from ..gp_assistant.recommend.modes import service as _svc
+
+            obj = _svc._normalize_to_v1(obj)  # type: ignore[attr-defined]
+        except Exception:
+            pass
+        # ensure meta defaults
+        if isinstance(obj.get("meta"), dict):
+            obj["meta"].setdefault("stage", obj.get("meta", {}).get("stage") or "intraday")
+            obj["meta"].setdefault("as_of", date_c)
+            obj["meta"].setdefault("as_of_ts", f"{date_c} 14:30:00")
         with FileLock(lock_path):
             write_reco_json(rec_dir / "latest.json", obj)
 
@@ -284,8 +358,7 @@ def _service_run(date: Optional[str], every: int, until: str, once: bool = False
         date_c = _canonical_date(date)
 
     # preopen if not exists
-    root = Path.cwd()
-    rec_dir = root / "store" / "recommend"
+    rec_dir = _store_dir() / "recommend"
     if not (rec_dir / f"{date_c}.json").exists():
         service_preopen(date_c)
         service_publish(date_c)

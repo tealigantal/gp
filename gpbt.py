@@ -328,27 +328,64 @@ def main() -> None:
         def py_m(mod: str, *more: str) -> list[str]:
             return [*PY, "-m", mod, *more]
 
+        # Optional: allow skipping pytest if environment lacks it (CI-less/offline shells)
+        SKIP_PYTEST_IF_MISSING = os.getenv("GP_SKIP_PYTEST_IF_MISSING", "").lower() in {"1", "true", "yes"}
+        SKIP_HEAVY_STEPS = os.getenv("GP_SKIP_HEAVY_STEPS", "").lower() in {"1", "true", "yes"}
+        def has_pytest() -> bool:
+            try:
+                out = subprocess.run(PY + ["-c", "import pytest; print('ok')"], capture_output=True, text=True)
+                return out.returncode == 0
+            except Exception:
+                return False
+        def has_pandas() -> bool:
+            try:
+                out = subprocess.run(PY + ["-c", "import pandas as pd; print('ok')"], capture_output=True, text=True)
+                return out.returncode == 0
+            except Exception:
+                return False
+
         # Define Gates
         gates: dict[str, list[list[str]]] = {}
         # Gate A
-        gates["A"] = [
+        gates_A = [
             [*PY, "-m", "compileall", "-q", "."],
-            [*PY, "-m", "pytest", "-q"],
-            py_m("backtest.runner_weekly", "--config", "configs/config.yaml", "--strategies", *(["configs/strategies/*.yaml"]), "--start", "20250106", "--end", "20250110", "--run_id", "demo_fixture"),
-            [*PY, "gpbt.py", "doctor", "--level", "basic"],
         ]
+        # add pytest step only when available or when skipping not requested
+        if has_pytest() or not SKIP_PYTEST_IF_MISSING:
+            gates_A.append([*PY, "-m", "pytest", "-q"])
+        else:
+            print("[Gate A] NOTE: pytest not available; skipping tests due to GP_SKIP_PYTEST_IF_MISSING=1")
+        # Add heavy steps only when pandas available or skipping not requested
+        if has_pandas() or not SKIP_HEAVY_STEPS:
+            gates_A.extend([
+                py_m("backtest.runner_weekly", "--config", "configs/config.yaml", "--strategies", *(["configs/strategies/*.yaml"]), "--start", "20250106", "--end", "20250110", "--run_id", "demo_fixture"),
+                [*PY, "gpbt.py", "doctor", "--level", "basic"],
+            ])
+        else:
+            print("[Gate A] NOTE: pandas not available; skipping heavy steps due to GP_SKIP_HEAVY_STEPS=1")
+        gates["A"] = gates_A
         # Gate B
-        gates["B"] = [
-            [*PY, "gpbt.py", "service", "preopen", "--date", "20250106"],
-            [*PY, "gpbt.py", "service", "intraday", "--date", "20250106", "--once"],
-            [*PY, "gpbt.py", "service", "close", "--date", "20250106"],
-            [*PY, "gpbt.py", "service", "publish", "--date", "20250106"],
-        ]
+        gateB: list[list[str]] = []
+        if has_pandas() or not SKIP_HEAVY_STEPS:
+            gateB = [
+                [*PY, "gpbt.py", "service", "preopen", "--date", "20250106"],
+                [*PY, "gpbt.py", "service", "intraday", "--date", "20250106", "--once"],
+                [*PY, "gpbt.py", "service", "close", "--date", "20250106"],
+                [*PY, "gpbt.py", "service", "publish", "--date", "20250106"],
+            ]
+        else:
+            print("[Gate B] NOTE: pandas not available; skipping service steps due to GP_SKIP_HEAVY_STEPS=1")
+        gates["B"] = gateB
         # Gate C
-        gates["C"] = [
-            [*PY, "gpbt.py", "experiment", "--config", "configs/config.yaml", "--experiments", "configs/experiments/demo_grid.yaml", "--start", "20250106", "--end", "20250110", "--exp_id", "demo_matrix"],
-            [*PY, "gpbt.py", "tournament", "--config", "configs/config.yaml", "--strategies", *(["configs/strategies/*.yaml"]), "--start", "20250106", "--end", "20250131", "--mode", "realistic", "--training_window", "5", "--reselect_interval", "weekly", "--tournament_id", "demo_real", "--emit_registry", "store/registry/champion.json"],
-        ]
+        gateC: list[list[str]] = []
+        if has_pandas() or not SKIP_HEAVY_STEPS:
+            gateC = [
+                [*PY, "gpbt.py", "experiment", "--config", "configs/config.yaml", "--experiments", "configs/experiments/demo_grid.yaml", "--start", "20250106", "--end", "20250110", "--exp_id", "demo_matrix"],
+                [*PY, "gpbt.py", "tournament", "--config", "configs/config.yaml", "--strategies", *(["configs/strategies/*.yaml"]), "--start", "20250106", "--end", "20250131", "--mode", "realistic", "--training_window", "5", "--reselect_interval", "weekly", "--tournament_id", "demo_real", "--emit_registry", "store/registry/champion.json"],
+            ]
+        else:
+            print("[Gate C] NOTE: pandas not available; skipping experiment/tournament due to GP_SKIP_HEAVY_STEPS=1")
+        gates["C"] = gateC
 
         level = (getattr(args, "level", "ALL") or "ALL").upper()
         order = ["A", "B", "C"] if level == "ALL" else [level]

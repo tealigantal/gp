@@ -14,7 +14,10 @@ import json
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-from ...core.paths import store_dir
+import pandas as pd
+
+from ...core.paths import store_dir, data_dir
+from ....service.symbols import canonicalize_ts_code
 
 
 def _parse_date_keyword(d: Optional[str]) -> Tuple[Optional[str], Optional[str]]:
@@ -76,37 +79,86 @@ def _read_reco_file(date: Optional[str]) -> Dict[str, Any] | None:
                 return None
     return None
 
+def _normalize_to_v1(obj: Dict[str, Any]) -> Dict[str, Any]:
+    """Return {picks, meta} from mixed/legacy shapes.
 
-def _ensure_card_shape(obj: Dict[str, Any]) -> Dict[str, Any]:
-    out: Dict[str, Any] = dict(obj or {})
-    # required top-level fields expected by compact/meta helpers
-    out.setdefault("as_of", None)
-    out.setdefault("themes", [])
-    out.setdefault("mainline", {"sectors": []})
-    out.setdefault("mover_hints", [])
-    out.setdefault("picks", [])
-    # debug shape
-    dbg = out.get("debug") or {}
+    - Accepts legacy top-level fields or already v1 shape (with meta)
+    - Ensures debug.degrade_reasons exists; maps legacy `reasons`
+    - Canonicalizes pick symbols to include ts_code/code/symbol
+    - Enforces 'EMPTY_PICKS' degraded state if tradeable and empty picks
+    """
+    if not isinstance(obj, dict):
+        return {"picks": [], "meta": {"as_of": None, "as_of_ts": None, "timezone": "Asia/Shanghai", "tradeable": False, "message": "invalid", "disclaimer": None, "stage": None, "debug": {"mode": "service", "degraded": True, "degrade_reasons": [{"reason_code": "INVALID_PAYLOAD"}]}}}
+
+    # Already v1
+    if isinstance(obj.get("meta"), dict) and isinstance(obj.get("picks"), list):
+        picks = list(obj.get("picks") or [])
+        meta = dict(obj.get("meta") or {})
+    else:
+        # Legacy -> map to v1
+        picks = list(obj.get("picks") or [])
+        meta = {
+            "as_of": obj.get("as_of"),
+            "as_of_ts": obj.get("as_of_ts"),
+            "timezone": obj.get("timezone", "Asia/Shanghai"),
+            "tradeable": bool(obj.get("tradeable", True)),
+            "message": obj.get("message"),
+            "disclaimer": obj.get("disclaimer"),
+            "stage": obj.get("stage"),
+            "debug": obj.get("debug") or {},
+        }
+
+    # Normalize debug keys
+    dbg = meta.get("debug") or {}
     if not isinstance(dbg, dict):
         dbg = {}
-    dbg.setdefault("mode", "service")
-    # normalize key name to degrade_reasons
-    if "degrade_reasons" not in dbg:
-        if isinstance(dbg.get("reasons"), list):
-            dbg["degrade_reasons"] = dbg.get("reasons")
-        else:
-            dbg.setdefault("degrade_reasons", [])
+    if "degrade_reasons" not in dbg and isinstance(dbg.get("reasons"), list):
+        dbg["degrade_reasons"] = list(dbg["reasons"])  # type: ignore[index]
+    dbg.setdefault("degrade_reasons", [])
     dbg.setdefault("degraded", False)
-    out["debug"] = dbg
-    # data_status minimal skeleton
-    ds = out.get("data_status")
-    if not isinstance(ds, dict):
-        ds = {}
-    ds.setdefault("snapshot", {"ok": True, "source": "service_json", "rows": len(out.get("picks") or []), "elapsed_sec": None, "cache": "file", "as_of_ts": None})
-    ds.setdefault("themes", {"ok": True, "source": "service_json", "attempted": [], "error": None, "as_of_ts": None})
-    ds.setdefault("daily", {"ok": True, "symbols_ok": len(out.get("picks") or []), "symbols_fail": 0, "error_summary": None})
-    out["data_status"] = ds
-    return out
+    dbg.setdefault("mode", "service")
+    meta["debug"] = dbg
+
+    # Canonicalize picks symbols
+    norm_picks: List[Dict[str, Any]] = []
+    for it in picks:
+        if not isinstance(it, dict):
+            continue
+        raw = it.get("ts_code") or it.get("symbol") or it.get("code") or ""
+        ts, code6, disp = canonicalize_ts_code(str(raw))
+        out = dict(it)
+        out["ts_code"] = ts
+        out["code"] = code6
+        out.setdefault("symbol", disp)
+        norm_picks.append(out)
+    picks = norm_picks
+
+    # Enforce empty picks degraded state if tradeable is True
+    if bool(meta.get("tradeable", True)) and not picks:
+        dr = list(meta["debug"].get("degrade_reasons") or [])
+        dr.append({"reason_code": "EMPTY_PICKS", "detail": {}})
+        meta["debug"]["degrade_reasons"] = dr
+        meta["debug"]["degraded"] = True
+        # keep legacy redundancy
+        meta["debug"]["reasons"] = dr
+
+    return {"picks": picks, "meta": meta}
+
+
+def _load_trade_calendar() -> Optional[pd.DataFrame]:
+    try:
+        p = data_dir() / "raw" / "trade_calendar.parquet"
+        if p.exists():
+            df = pd.read_parquet(p)
+            # normalize columns
+            if "cal_date" in df.columns and "is_open" in df.columns:
+                df = df[["cal_date", "is_open"]].copy()
+                df["cal_date"] = df["cal_date"].astype(str)
+                df["is_open"] = df["is_open"].astype(int)
+                return df
+    except Exception:
+        return None
+    return None
 
 
 def run(
@@ -118,54 +170,87 @@ def run(
 ) -> Dict[str, Any]:
     norm, err = _parse_date_keyword(date)
     if err:
+        # Minimal v1 degraded output
         return {
             "picks": [],
-            "as_of": None,
-            "themes": [],
-            "mainline": {"sectors": []},
-            "mover_hints": [],
-            "message": "service_recommend_invalid_date",
-            "debug": {
-                "mode": "service",
-                "degraded": True,
-                "degrade_reasons": [
-                    {"reason_code": "INVALID_DATE", "detail": {"date": date}}
-                ],
-            },
-            "data_status": {
-                "snapshot": {"ok": False, "source": None, "rows": 0, "elapsed_sec": None, "cache": "none", "as_of_ts": None, "error": "INVALID_DATE"},
-                "themes": {"ok": False, "source": None, "attempted": [], "error": "INVALID_DATE", "as_of_ts": None},
-                "daily": {"ok": False, "symbols_ok": 0, "symbols_fail": 0, "error_summary": "INVALID_DATE"},
+            "meta": {
+                "as_of": None,
+                "as_of_ts": None,
+                "timezone": "Asia/Shanghai",
+                "tradeable": False,
+                "message": "service_recommend_invalid_date",
+                "disclaimer": None,
+                "stage": None,
+                "debug": {"mode": "service", "degraded": True, "degrade_reasons": [{"reason_code": "INVALID_DATE", "detail": {"date": date}}]},
             },
         }
 
     obj = _read_reco_file(norm or "latest")
     if not isinstance(obj, dict):
-        # degraded payload
+        # degraded payload v1
         return {
             "picks": [],
-            "as_of": None,
-            "themes": [],
-            "mainline": {"sectors": []},
-            "mover_hints": [],
-            "message": "service_recommend_missing",
-            "debug": {
-                "mode": "service",
-                "degraded": True,
-                "degrade_reasons": [
-                    {"reason_code": "SERVICE_RECO_MISSING", "detail": {"date": date or "latest"}}
-                ],
-            },
-            "data_status": {
-                "snapshot": {"ok": False, "source": None, "rows": 0, "elapsed_sec": None, "cache": "none", "as_of_ts": None, "error": "SERVICE_RECO_MISSING"},
-                "themes": {"ok": False, "source": None, "attempted": [], "error": "SERVICE_RECO_MISSING", "as_of_ts": None},
-                "daily": {"ok": False, "symbols_ok": 0, "symbols_fail": 0, "error_summary": "SERVICE_RECO_MISSING"},
+            "meta": {
+                "as_of": None,
+                "as_of_ts": None,
+                "timezone": "Asia/Shanghai",
+                "tradeable": False,
+                "message": "service_recommend_missing",
+                "disclaimer": None,
+                "stage": None,
+                "debug": {"mode": "service", "degraded": True, "degrade_reasons": [{"reason_code": "SERVICE_RECO_MISSING", "detail": {"date": date or "latest"}}]},
             },
         }
 
-    # limit picks to topk if provided
-    if isinstance(obj.get("picks"), list) and isinstance(topk, int) and topk > 0:
-        obj = dict(obj)
-        obj["picks"] = obj.get("picks", [])[:topk]
+    # normalize to v1
+    out = _normalize_to_v1(obj)
 
-    return _ensure_card_shape(obj)
+    # limit picks to topk if provided
+    if isinstance(out.get("picks"), list) and isinstance(topk, int) and topk > 0:
+        out["picks"] = out.get("picks", [])[:topk]
+
+    # Trading-day handling
+    try:
+        cal = _load_trade_calendar()
+        if cal is not None:
+            # requested_date vs resolved
+            req = (date or "latest").strip() if date is not None else "latest"
+            today = pd.Timestamp.today(tz=None).strftime("%Y%m%d")
+            if req in {"latest", "today", ""}:
+                # if today is non-trading day, annotate debug with resolved_date=next open
+                row = cal[cal["cal_date"] >= today]
+                next_open = None
+                if not row.empty:
+                    sub = row[row["is_open"] == 1]
+                    if not sub.empty:
+                        next_open = str(sub.iloc[0]["cal_date"])  # first open on/after today
+                if next_open and isinstance(out.get("meta"), dict):
+                    dbg = out["meta"].setdefault("debug", {})
+                    if isinstance(dbg, dict):
+                        dbg.setdefault("requested_date", req)
+                        dbg.setdefault("resolved_date", next_open)
+                        # If today not open and next_open != today, mark not tradeable
+                        if next_open != today:
+                            out["meta"]["tradeable"] = False
+                            dr = list(dbg.get("degrade_reasons") or [])
+                            dr.append({"reason_code": "NON_TRADING_DAY", "detail": {"requested": req, "resolved": next_open}})
+                            dbg["degrade_reasons"] = dr
+                            dbg["degraded"] = True
+                            dbg["reasons"] = dr
+            else:
+                # explicit date
+                dnorm = req.replace("-", "") if len(req) == 10 and req[4] == '-' else req
+                row = cal[cal["cal_date"] == dnorm]
+                if not row.empty and int(row.iloc[0]["is_open"]) != 1:
+                    out["meta"]["tradeable"] = False
+                    dbg = out["meta"].setdefault("debug", {})
+                    if isinstance(dbg, dict):
+                        dr = list(dbg.get("degrade_reasons") or [])
+                        dr.append({"reason_code": "NON_TRADING_DAY", "detail": {"requested": req}})
+                        dbg["degrade_reasons"] = dr
+                        dbg["degraded"] = True
+                        dbg["reasons"] = dr
+    except Exception:
+        pass
+
+    return out

@@ -29,7 +29,7 @@ from ..chat import event_store
 from ..chat.orchestrator import handle_message
 from ..core.config import load_config
 from ..core.errors import APIError
-from ..core.paths import store_dir
+from ..core.paths import store_dir, results_dir
 from ..dev.fixtures import dev_ohlcv_bars
 from ..recommend.datahub import MarketDataHub
 from ..recommend.runner import list_modes as recommend_list_modes
@@ -144,7 +144,7 @@ def _service_health_status() -> Dict[str, Any]:
                         if len(t2) >= 8 and t2[:8].isdigit():
                             date_part = t2[:8]
                 if date_part:
-                    metrics = store_dir().parent / "results" / "live_shadow" / date_part / "metrics.json"
+                    metrics = results_dir() / "live_shadow" / date_part / "metrics.json"
                     shadow_metrics_ok = metrics.exists()
             except Exception as e:  # noqa: BLE001
                 last_error = f"latest_read_error: {e}"
@@ -262,12 +262,35 @@ def _handle_ohlcv(symbol: str, start: Optional[str], end: Optional[str], limit: 
     return OHLCVResp(symbol=symbol, meta=meta_out, bars=[OHLCVBar(**b) for b in bars2])
 
 
+def _normalize_reco_obj(obj: Dict[str, Any]) -> Dict[str, Any]:
+    # Use service mode normalizer to v1 (picks+meta)
+    try:
+        from ..recommend.modes import service as _svc
+
+        return _svc._normalize_to_v1(obj)  # type: ignore[attr-defined]
+    except Exception:
+        # Best-effort minimal fallback
+        picks = obj.get("picks") if isinstance(obj, dict) else []
+        meta = {
+            "as_of": obj.get("as_of") if isinstance(obj, dict) else None,
+            "as_of_ts": obj.get("as_of_ts") if isinstance(obj, dict) else None,
+            "timezone": (obj.get("timezone") if isinstance(obj, dict) else None) or "Asia/Shanghai",
+            "tradeable": bool((obj.get("tradeable") if isinstance(obj, dict) else False)),
+            "message": obj.get("message") if isinstance(obj, dict) else None,
+            "disclaimer": obj.get("disclaimer") if isinstance(obj, dict) else None,
+            "stage": obj.get("stage") if isinstance(obj, dict) else None,
+            "debug": {"mode": "service", "degraded": True, "degrade_reasons": [{"reason_code": "NORMALIZE_FAILED"}]},
+        }
+        return {"picks": picks or [], "meta": meta}
+
+
 def _handle_recommend_by_date(date: str) -> Dict[str, Any]:
     path = store_dir() / "recommend" / f"{date}.json"
     if not path.exists():
         raise HTTPException(status_code=404, detail=f"recommend file not found for date={date}")
     try:
-        return json.loads(path.read_text(encoding="utf-8"))
+        obj = json.loads(path.read_text(encoding="utf-8"))
+        return _normalize_reco_obj(obj)
     except Exception as e:  # noqa: BLE001
         raise HTTPException(status_code=500, detail=f"failed to read file: {e}") from e
 
@@ -277,7 +300,8 @@ def _handle_reco_latest() -> Dict[str, Any]:
     if not path.exists():
         raise HTTPException(status_code=404, detail="latest recommend not found")
     try:
-        return json.loads(path.read_text(encoding="utf-8"))
+        obj = json.loads(path.read_text(encoding="utf-8"))
+        return _normalize_reco_obj(obj)
     except Exception as e:  # noqa: BLE001
         raise HTTPException(status_code=500, detail=f"failed to read file: {e}") from e
 
@@ -293,7 +317,7 @@ def _handle_champion() -> Dict[str, Any]:
 
 
 def _handle_live_file(date: str, name: str) -> Dict[str, Any] | list[Dict[str, Any]]:
-    base = store_dir().parent / "results" / "live_shadow" / date
+    base = results_dir() / "live_shadow" / date
     if name.endswith(".json"):
         p = base / name
         if not p.exists():
