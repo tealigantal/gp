@@ -266,7 +266,28 @@ def run(date: Optional[str] = None, topk: int = 3, universe: str = "auto", symbo
         except Exception:
             invalid = []
         risk = {"stop_loss": "收盘有效跌破支撑带", "time_stop": "2-3日不强必走", "no_averaging_down": True}
-        return {"bands": bands, "actions": actions, "invalidation": invalid, "risk": risk, "diagnostics": diag}
+        # Derive entry/stop/take for UI consumption
+        entry = None
+        take = None
+        stop = None
+        try:
+            if bands:
+                s1 = bands.get("S1")
+                s2 = bands.get("S2")
+                r1 = bands.get("R1")
+                r2 = bands.get("R2")
+                if s1 is not None and s2 is not None:
+                    entry = [s1, s2]
+                elif s1 is not None:
+                    entry = s1
+                if r1 is not None and r2 is not None:
+                    take = [r1, r2]
+                elif r1 is not None:
+                    take = r1
+        except Exception:
+            pass
+        stop = (risk.get("stop_loss") if isinstance(risk, dict) else None) or stop or "收盘有效跌破支撑带"
+        return {"bands": bands, "actions": actions, "invalidation": invalid, "risk": risk, "diagnostics": diag, "entry": entry, "stop": stop, "take": take}
 
     # Evaluate strategies for pool and choose champion
     feats_by_symbol: Dict[str, pd.DataFrame] = {}

@@ -4,14 +4,6 @@
     "data_source": "provider"
   },
   {
-    "symbol": "301526",
-    "data_source": "provider"
-  },
-  {
-    "symbol": "688167",
-    "data_source": "provider"
-  },
-  {
     "symbol": "603256",
     "data_source": "provider"
   },
@@ -20,31 +12,11 @@
     "data_source": "provider"
   },
   {
-    "symbol": "300394",
-    "data_source": "provider"
-  },
-  {
-    "symbol": "300164",
-    "data_source": "provider"
-  },
-  {
-    "symbol": "300017",
-    "data_source": "provider"
-  },
-  {
     "symbol": "002506",
     "data_source": "provider"
   },
   {
     "symbol": "002491",
-    "data_source": "provider"
-  },
-  {
-    "symbol": "688025",
-    "data_source": "provider"
-  },
-  {
-    "symbol": "300739",
     "data_source": "provider"
   },
   {
@@ -57,6 +29,34 @@
   },
   {
     "symbol": "600759",
+    "data_source": "provider"
+  },
+  {
+    "symbol": "002155",
+    "data_source": "provider"
+  },
+  {
+    "symbol": "600172",
+    "data_source": "provider"
+  },
+  {
+    "symbol": "002470",
+    "data_source": "provider"
+  },
+  {
+    "symbol": "000657",
+    "data_source": "provider"
+  },
+  {
+    "symbol": "601231",
+    "data_source": "provider"
+  },
+  {
+    "symbol": "600176",
+    "data_source": "provider"
+  },
+  {
+    "symbol": "600522",
     "data_source": "provider"
   }
 ]

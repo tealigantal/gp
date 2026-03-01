@@ -15,6 +15,7 @@ import pandas as pd
 
 from ..core.config import load_config
 from ..providers.universe_provider import UniverseProvider
+from providers.boards import is_mainboard
 from .datahub import MarketDataHub
 from ..strategy.indicators import compute_indicators
 from ..strategy.chip_model import compute_chip
@@ -125,6 +126,13 @@ def generate_candidates(
         syms = uni.get_symbols()
         base_entries = [{"code": s} for s in syms]
         base_reason = "universe:file"
+    # Strict mainboard-only filter (AkShare-compatible, code-based)
+    try:
+        before_cnt = len(base_entries)
+        base_entries = [e for e in base_entries if e.get("code") and is_mainboard(str(e.get("code")))]
+        removed_non_main = before_cnt - len(base_entries)
+    except Exception:
+        removed_non_main = 0
     pre_clean_len = len(base_entries)
     bad_code_removed = 0
     cleaned: List[Dict[str, Any]] = []
@@ -160,6 +168,7 @@ def generate_candidates(
             "bad_code": int(bad_code_removed),
             "insufficient_liquidity": 0,
             "insufficient_history": 0,
+            "non_mainboard": int(removed_non_main),
         },
     }
     if universe_fallback is not None:

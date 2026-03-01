@@ -7,6 +7,7 @@ from typing import List
 import pandas as pd
 
 from ..providers.local_store import LocalParquetStore
+from ..providers.boards import is_mainboard
 from ..selector.selector_v1 import SelectorConfig, explainable_score
 
 
@@ -27,12 +28,13 @@ def main() -> None:  # pragma: no cover - orchestration
     if basics is None:
         raise RuntimeError("Missing data/raw/stock_basic.parquet. Run fetch_basics first.")
 
-    # Filter mainboard + exclusions
+    # Filter mainboard + exclusions (strict code-based; AkShare-friendly)
     b = basics.copy()
     if args.exclude_st and "is_st" in b.columns:
         b = b[~b["is_st"]]
-    if "market" in b.columns:
-        b = b[b["market"].astype(str).str.contains("主板|Main", na=False)]
+    # Strict mainboard filter by code rules; ignore provider-specific market labels
+    if "ts_code" in b.columns:
+        b = b[b["ts_code"].astype(str).map(is_mainboard)]
     if "list_date" in b.columns:
         # Use real date arithmetic for min_list_days
         try:

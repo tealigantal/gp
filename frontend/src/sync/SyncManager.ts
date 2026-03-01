@@ -143,6 +143,17 @@ export class SyncManager {
     }
     if (Array.isArray(data) && data.length) {
       this.mergeEvents(cid, data)
+      // If the tail window contains no real messages, fetch an initial head slice once to surface history.
+      const hasCreatedInTail = data.some((e) => e?.type === 'message.created')
+      if (!hasCreatedInTail) {
+        try {
+          const head = await listEvents(cid, { after: 0, limit: 100 } as any)
+          if (Array.isArray(head) && head.length) {
+            const alreadyHas = this.convState(cid).events.some((e) => e.type === 'message.created')
+            if (!alreadyHas) this.mergeEvents(cid, head)
+          }
+        } catch { /* ignore */ }
+      }
     }
     try { localStorage.setItem(key, String(this.convState(cid).lastSeq || 0)) } catch {}
     this.notify()
