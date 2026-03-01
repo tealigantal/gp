@@ -19,7 +19,7 @@
   "mainline": {
     "indicator": "今日",
     "sectors": [],
-    "as_of_ts": "2026-02-28T11:51:29+08:00",
+    "as_of_ts": "2026-03-01T01:01:07+08:00",
     "errors": [
       "行业资金流:('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))",
       "概念资金流:('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))"
@@ -5355,7 +5355,7 @@
       "fallback_reason": null,
       "stale": false,
       "missing": false,
-      "elapsed_sec": 43.92,
+      "elapsed_sec": 40.1,
       "cache_age_sec": null,
       "skipped_routes": [],
       "attempts": [
@@ -5440,7 +5440,7 @@
       ]
     },
     {
-      "symbol": "301226",
+      "symbol": "300830",
       "chg": "20.00%",
       "chg_num": 20.0,
       "source": "snapshot",
@@ -5454,7 +5454,7 @@
       "ok": true,
       "source": "akshare:sina",
       "rows": 5484,
-      "elapsed_sec": 43.92,
+      "elapsed_sec": 40.1,
       "cache": "none",
       "as_of_ts": null,
       "error": null

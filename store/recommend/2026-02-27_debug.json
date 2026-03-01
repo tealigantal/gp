@@ -70,7 +70,7 @@
     "fallback_reason": null,
     "stale": false,
     "missing": false,
-    "elapsed_sec": 43.92,
+    "elapsed_sec": 40.1,
     "cache_age_sec": null,
     "skipped_routes": [],
     "attempts": [
