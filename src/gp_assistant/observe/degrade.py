@@ -16,9 +16,25 @@ def warn_once(reason_code: str, line: str) -> None:
     logger.warning(f"[DEGRADED] {line}")
 
 
-def record(debug: Dict[str, Any], reason_code: str, detail: Dict[str, Any] | None = None) -> None:
+def record(
+    debug: Dict[str, Any],
+    reason_code: str,
+    detail: Dict[str, Any] | None = None,
+    *,
+    severity: str = "degrade",
+) -> None:
+    """Record a degradation or warning into debug structure.
+
+    - severity == "degrade": preserve legacy behavior (set degraded=True and append to degrade_reasons)
+    - severity == "warn": append to warnings only, without toggling degraded nor degrade_reasons
+    """
     if detail is None:
         detail = {}
+    if str(severity).lower() == "warn":
+        warns: List[Dict[str, Any]] = debug.setdefault("warnings", [])  # type: ignore[assignment]
+        warns.append({"reason_code": reason_code, "detail": detail})
+        return
+    # default legacy path
     debug.setdefault("degraded", True)
     reasons: List[Dict[str, Any]] = debug.setdefault("degrade_reasons", [])  # type: ignore[assignment]
     reasons.append({"reason_code": reason_code, "detail": detail})

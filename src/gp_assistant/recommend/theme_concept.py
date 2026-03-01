@@ -109,6 +109,18 @@ def build_concept_themes(topn: int = 2, reason: Optional[str] = None) -> List[Di
         import akshare as ak  # type: ignore
     except Exception as e:  # noqa: BLE001
         _LAST_STATUS.update({"error": f"akshare_import_failed: {e}"})
+        # try disk cache when import fails
+        cache_p = store_dir() / "cache" / "theme_concept_themes.json"
+        try:
+            if cache_p.exists():
+                obj = json.loads(cache_p.read_text(encoding="utf-8"))
+                max_stale = int(os.getenv("GP_THEME_CONCEPT_MAX_STALE_SEC", "86400"))
+                if time.time() - float(obj.get("ts", 0.0)) <= max_stale:
+                    _LAST_STATUS["attempted"].append("disk_cache")
+                    _LAST_STATUS["error"] = f"stale_cache_used;{_LAST_STATUS.get('error')}"
+                    return list(obj.get("themes") or [])
+        except Exception:
+            pass
         return []
 
     themes: List[Dict[str, Any]] = []
@@ -119,12 +131,28 @@ def build_concept_themes(topn: int = 2, reason: Optional[str] = None) -> List[Di
         themes += _build_from_board_df(df_ind, board_type="industry", topn=topn, source="akshare:industry_name_em")
     except Exception as e:  # noqa: BLE001
         errors.append(f"industry_name_em:{e}")
+        # THS fallback if available
+        try:
+            if hasattr(ak, "stock_board_industry_name_ths"):
+                _LAST_STATUS["attempted"].append("industry_name_ths")
+                df_ind2 = ak.stock_board_industry_name_ths()  # type: ignore[attr-defined]
+                themes += _build_from_board_df(df_ind2, board_type="industry", topn=topn, source="akshare:industry_name_ths")
+        except Exception as e2:  # noqa: BLE001
+            errors.append(f"industry_name_ths:{e2}")
     try:
         _LAST_STATUS["attempted"].append("concept_name_em")
         df_con = ak.stock_board_concept_name_em()  # type: ignore[attr-defined]
         themes += _build_from_board_df(df_con, board_type="concept", topn=topn, source="akshare:concept_name_em")
     except Exception as e:  # noqa: BLE001
         errors.append(f"concept_name_em:{e}")
+        # THS fallback if available
+        try:
+            if hasattr(ak, "stock_board_concept_name_ths"):
+                _LAST_STATUS["attempted"].append("concept_name_ths")
+                df_con2 = ak.stock_board_concept_name_ths()  # type: ignore[attr-defined]
+                themes += _build_from_board_df(df_con2, board_type="concept", topn=topn, source="akshare:concept_name_ths")
+        except Exception as e2:  # noqa: BLE001
+            errors.append(f"concept_name_ths:{e2}")
 
     # Optional enrichment for top 1 of each type (fast, TTL cache on disk)
     try:
@@ -204,10 +232,28 @@ def build_concept_themes(topn: int = 2, reason: Optional[str] = None) -> List[Di
         pass
 
     if themes:
-        _CACHE.update({"ts": now, "themes": themes, "source": "em:name"})
+        _CACHE.update({"ts": now, "themes": themes, "source": "em_or_ths:name"})
         _LAST_STATUS.update({"error": None})
+        # persist disk cache (final themes only)
+        try:
+            p = store_dir() / "cache" / "theme_concept_themes.json"
+            p.parent.mkdir(parents=True, exist_ok=True)
+            p.write_text(json.dumps({"ts": now, "themes": themes, "source": _CACHE.get("source")}, ensure_ascii=False, indent=2), encoding="utf-8")
+        except Exception:
+            pass
         return themes
     if errors:
         _LAST_STATUS.update({"error": ";".join(errors)})
+    # final: try disk cache when we failed to build anything
+    try:
+        cache_p = store_dir() / "cache" / "theme_concept_themes.json"
+        if cache_p.exists():
+            obj = json.loads(cache_p.read_text(encoding="utf-8"))
+            max_stale = int(os.getenv("GP_THEME_CONCEPT_MAX_STALE_SEC", "86400"))
+            if time.time() - float(obj.get("ts", 0.0)) <= max_stale:
+                _LAST_STATUS["attempted"].append("disk_cache")
+                _LAST_STATUS["error"] = f"stale_cache_used;{_LAST_STATUS.get('error')}"
+                return list(obj.get("themes") or [])
+    except Exception:
+        pass
     return []
-

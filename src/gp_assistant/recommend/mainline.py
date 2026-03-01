@@ -3,6 +3,8 @@ from __future__ import annotations
 from typing import Any, Dict, List, Optional
 
 import time
+import os
+import json
 from datetime import datetime, timezone
 
 import pandas as pd
@@ -24,7 +26,38 @@ def _detect_col(cols: List[str], keywords: List[str]) -> Optional[str]:
     return None
 
 
-def build_mainline(indicator: str = "今日", topn: int = 3) -> Dict[str, Any]:
+def _cache_path(indicator: str):
+    try:
+        from ..core.paths import store_dir
+        safe = "".join([ch if ch.isalnum() else "_" for ch in str(indicator)]) or "today"
+        p = store_dir() / "cache" / f"mainline_fundflow_{safe}.json"
+        p.parent.mkdir(parents=True, exist_ok=True)
+        return p
+    except Exception:
+        return None
+
+
+def _read_cache(indicator: str) -> Optional[Dict[str, Any]]:
+    p = _cache_path(indicator)
+    if p is None or not p.exists():
+        return None
+    try:
+        return json.loads(p.read_text(encoding="utf-8"))
+    except Exception:
+        return None
+
+
+def _write_cache(indicator: str, obj: Dict[str, Any]) -> None:
+    p = _cache_path(indicator)
+    if p is None:
+        return
+    try:
+        p.write_text(json.dumps(obj, ensure_ascii=False, indent=2), encoding="utf-8")
+    except Exception:
+        pass
+
+
+def build_mainline(indicator: str = "今日", topn: int = 3, snapshot: Optional[pd.DataFrame] = None) -> Dict[str, Any]:
     """Build mainline/主线 via AkShare sector fund flow rank.
 
     Tries both 行业资金流 and 概念资金流, selects topn by 主力净流入-净额.
@@ -32,10 +65,45 @@ def build_mainline(indicator: str = "今日", topn: int = 3) -> Dict[str, Any]:
     try:
         import akshare as ak  # type: ignore
     except Exception as e:  # noqa: BLE001
+        # try cache fallback
+        cache = _read_cache(indicator)
+        if cache:
+            cache.setdefault("source", "cache:disk")
+            cache.setdefault("as_of_ts", _iso_now())
+            cache.setdefault("errors", [f"stale_cache_used;akshare_import_failed:{e}"])
+            return cache
         return {"indicator": indicator, "sectors": [], "as_of_ts": _iso_now(), "errors": [f"akshare_import_failed:{e}"]}
 
     out_sectors: List[Dict[str, Any]] = []
     errors: List[str] = []
+
+    # Snapshot industry aggregation priority when available
+    try:
+        if snapshot is not None and isinstance(snapshot, pd.DataFrame) and (not snapshot.empty) and ("行业" in [str(c) for c in snapshot.columns]):
+            df = snapshot.copy()
+            # choose metric: sum of 成交额 if present, otherwise mean of chg/pct_chg
+            cols = set(map(str, df.columns))
+            use_amt = "成交额" in cols
+            if use_amt:
+                g = df.groupby("行业")["成交额"].sum().sort_values(ascending=False).head(max(0, int(topn)))
+                for name, amt in g.items():
+                    out_sectors.append({"sector_type": "snapshot", "name": str(name), "pct_chg": None, "main_inflow": str(amt), "main_inflow_pct": None, "leader_stock": None, "source": "snapshot:industry_agg", "indicator": indicator})
+                return {"indicator": indicator, "sectors": out_sectors, "as_of_ts": _iso_now(), "errors": [], "source": "snapshot:industry_agg"}
+    except Exception as _e:
+        pass
+
+    # TTL gating for cache
+    try:
+        ttl = int(os.getenv("GP_MAINLINE_TTL_SEC", "300"))
+    except Exception:
+        ttl = 300
+    cache = _read_cache(indicator)
+    if cache and (time.time() - float(cache.get("ts", 0.0)) <= ttl):
+        cache.setdefault("source", "cache:disk")
+        cache.setdefault("as_of_ts", _iso_now())
+        cache.setdefault("errors", [])
+        cache.setdefault("indicator", indicator)
+        return cache
     for sector_type in ["行业资金流", "概念资金流"]:
         try:
             df = ak.stock_sector_fund_flow_rank(indicator=indicator, sector_type=sector_type)  # type: ignore[attr-defined]
@@ -76,6 +144,27 @@ def build_mainline(indicator: str = "今日", topn: int = 3) -> Dict[str, Any]:
         except Exception as e:  # noqa: BLE001
             errors.append(f"{sector_type}:{e}")
             continue
-
-    return {"indicator": indicator, "sectors": out_sectors, "as_of_ts": _iso_now(), "errors": errors}
-
+    result = {"indicator": indicator, "sectors": out_sectors, "as_of_ts": _iso_now(), "errors": errors, "source": "akshare:stock_sector_fund_flow_rank"}
+    if out_sectors:
+        try:
+            obj = dict(result)
+            obj["ts"] = time.time()
+            _write_cache(indicator, obj)
+        except Exception:
+            pass
+        return result
+    # Network failed -> stale cache fallback
+    try:
+        max_stale = int(os.getenv("GP_MAINLINE_MAX_STALE_SEC", "86400"))
+    except Exception:
+        max_stale = 86400
+    cache2 = _read_cache(indicator)
+    if cache2 and (time.time() - float(cache2.get("ts", 0.0)) <= max_stale):
+        cache2.setdefault("source", "cache:disk")
+        errs = list(errors)
+        errs.append("stale_cache_used")
+        cache2["errors"] = errs
+        cache2.setdefault("as_of_ts", _iso_now())
+        cache2.setdefault("indicator", indicator)
+        return cache2
+    return result

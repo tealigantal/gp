@@ -129,7 +129,7 @@ def run(date: Optional[str] = None, topk: int = 3, universe: str = "auto", symbo
         themes = build_themes(hub, snapshot=snapshot_df)
         # Mainline （资金流主线）
         try:
-            mainline = build_mainline(indicator="今日", topn=max(1, int(getattr(cfg, "mainline_top_n", 2))))
+            mainline = build_mainline(indicator="今日", topn=max(1, int(getattr(cfg, "mainline_top_n", 2))), snapshot=snapshot_df)
         except Exception as _e:
             mainline = {"indicator": "今日", "sectors": [], "errors": ["build_mainline_failed"]}
 
@@ -434,7 +434,7 @@ def run(date: Optional[str] = None, topk: int = 3, universe: str = "auto", symbo
     try:
         rem = cand_stats.get("universe_removed_counts", {}) or {}
         if any(int(v) > 0 for v in rem.values()):
-            degrade_record(dbg, "UNIVERSE_DIRTY_INPUT", rem)
+            degrade_record(dbg, "UNIVERSE_DIRTY_INPUT", rem, severity="warn")
     except Exception:
         pass
 
@@ -501,8 +501,9 @@ def run(date: Optional[str] = None, topk: int = 3, universe: str = "auto", symbo
     }
     ds_mainline = {
         "ok": bool(mainline.get("sectors")),
-        "source": "akshare:stock_sector_fund_flow_rank",
+        "source": mainline.get("source") or "akshare:stock_sector_fund_flow_rank",
         "error": None if (mainline.get("sectors")) else (";".join(mainline.get("errors") or []) if mainline.get("errors") else None),
+        "as_of_ts": mainline.get("as_of_ts"),
     }
     ds_daily = {
         "ok": True,

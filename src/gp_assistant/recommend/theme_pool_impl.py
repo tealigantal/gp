@@ -66,5 +66,54 @@ def build_themes_impl(hub: MarketDataHub, snapshot: Optional[pd.DataFrame] = Non
     t = build_concept_themes(topn=topn, reason="no_industry_col")
     if t:
         return t
-    # No industry and no concept: no pseudo themes
-    return []
+    # Fallback: build top movers from snapshot when concept fetch failed
+    try:
+        code_col = "代码" if "代码" in cols else ("code" if "code" in cols else None)
+        if not code_col:
+            return []
+        df2 = df.copy()
+        # prefer normalized pct in df2['chg'] produced earlier
+        pct = pd.to_numeric(df2.get("chg"), errors="coerce") if "chg" in df2.columns else None
+        if pct is None or pct.isna().all():
+            # attempt compute from abs chg + price
+            abs_chg_col = None
+            for c in ["涨跌额", "涨跌", "chg"]:
+                if c in df2.columns:
+                    abs_chg_col = c
+                    break
+            price_col = None
+            for c in ["price", "最新价", "收盘", "close"]:
+                if c in df2.columns:
+                    price_col = c
+                    break
+            if abs_chg_col and price_col:
+                try:
+                    abs_chg = pd.to_numeric(df2[abs_chg_col], errors="coerce")
+                    price = pd.to_numeric(df2[price_col], errors="coerce")
+                    pct = (abs_chg / (price - abs_chg) * 100.0)
+                    df2["_pct_from_abs"] = pct
+                except Exception:
+                    pct = None
+        if pct is None:
+            return []
+        df2["_pct"] = pd.to_numeric(pct, errors="coerce")
+        x = df2.dropna(subset=["_pct"]).copy().sort_values("_pct", ascending=False).head(max(0, int(topn)))
+        out: List[Dict[str, Any]] = []
+        for _, r in x.iterrows():
+            try:
+                pv = float(r["_pct"])
+            except Exception:
+                continue
+            ev: List[str] = []
+            if "_pct_from_abs" in r.index:
+                ev.append("pct_from_abs_chg")
+            ev.extend(ev_scale)
+            out.append({
+                "name": f"强势线索-{str(r.get(code_col))}",
+                "strength": f"{pv:.2f}%",
+                "evidence": ev,
+                "source": "top_movers_snapshot",
+            })
+        return out
+    except Exception:
+        return []
