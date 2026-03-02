@@ -1,62 +1,42 @@
 [
   {
-    "symbol": "601869",
+    "symbol": "600519",
     "data_source": "provider"
   },
   {
-    "symbol": "603256",
+    "symbol": "000333",
     "data_source": "provider"
   },
   {
-    "symbol": "603618",
+    "symbol": "002415",
     "data_source": "provider"
   },
   {
-    "symbol": "002506",
+    "symbol": "600036",
     "data_source": "provider"
   },
   {
-    "symbol": "002491",
+    "symbol": "000858",
     "data_source": "provider"
   },
   {
-    "symbol": "600487",
+    "symbol": "000001",
     "data_source": "provider"
   },
   {
-    "symbol": "002498",
+    "symbol": "601318",
     "data_source": "provider"
   },
   {
-    "symbol": "600759",
+    "symbol": "002594",
     "data_source": "provider"
   },
   {
-    "symbol": "002155",
+    "symbol": "000651",
     "data_source": "provider"
   },
   {
-    "symbol": "600172",
-    "data_source": "provider"
-  },
-  {
-    "symbol": "002470",
-    "data_source": "provider"
-  },
-  {
-    "symbol": "000657",
-    "data_source": "provider"
-  },
-  {
-    "symbol": "601231",
-    "data_source": "provider"
-  },
-  {
-    "symbol": "600176",
-    "data_source": "provider"
-  },
-  {
-    "symbol": "600522",
+    "symbol": "600000",
     "data_source": "provider"
   }
 ]

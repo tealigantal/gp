@@ -8,6 +8,53 @@ import json
 from datetime import datetime, timezone
 
 import pandas as pd
+from ..core.config import load_config
+from ..core.paths import cache_dir
+
+
+def _with_requests_timeout(fn):  # noqa: ANN001
+    try:
+        cfg = load_config()
+        timeout_sec = int(getattr(cfg, "request_timeout_sec", 20))
+    except Exception:
+        timeout_sec = 20
+    import requests  # type: ignore
+    original = requests.sessions.Session.request
+
+    def wrapped(session, method, url, **kwargs):  # noqa: ANN001
+        to = kwargs.get("timeout", None)
+        if to is None or (isinstance(to, (int, float)) and to < timeout_sec):
+            kwargs["timeout"] = timeout_sec
+        try:
+            hdrs = dict(kwargs.get("headers") or {})
+            hdrs.setdefault("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120 Safari/537.36")
+            if isinstance(url, str):
+                if "eastmoney.com" in url:
+                    hdrs.setdefault("Referer", "https://quote.eastmoney.com/")
+                elif "sina.com" in url or "sinajs.cn" in url:
+                    hdrs.setdefault("Referer", "https://finance.sina.com.cn/")
+            kwargs["headers"] = hdrs
+        except Exception:
+            pass
+        return original(session, method, url, **kwargs)
+
+    try:
+        requests.sessions.Session.request = wrapped  # type: ignore
+        return fn()
+    finally:
+        requests.sessions.Session.request = original  # type: ignore
+
+
+def _call_with_retry(fn, retries: int = 3):  # noqa: ANN001
+    import time as _t
+    import random as _r
+    for i in range(retries):
+        try:
+            return fn()
+        except Exception as e:  # noqa: BLE001
+            if i == retries - 1:
+                raise e
+            _t.sleep((2 ** i) + _r.random() * 0.5)
 
 
 def _iso_now() -> str:
@@ -106,7 +153,7 @@ def build_mainline(indicator: str = "今日", topn: int = 3, snapshot: Optional[
         return cache
     for sector_type in ["行业资金流", "概念资金流"]:
         try:
-            df = ak.stock_sector_fund_flow_rank(indicator=indicator, sector_type=sector_type)  # type: ignore[attr-defined]
+            df = _call_with_retry(lambda: _with_requests_timeout(lambda: ak.stock_sector_fund_flow_rank(indicator=indicator, sector_type=sector_type)), retries=3)  # type: ignore[attr-defined]
             if isinstance(df, pd.DataFrame) and not df.empty:
                 x = df.copy()
                 cols = [str(c) for c in x.columns]
@@ -152,6 +199,11 @@ def build_mainline(indicator: str = "今日", topn: int = 3, snapshot: Optional[
             _write_cache(indicator, obj)
         except Exception:
             pass
+        # persist simplified pickle cache
+        try:
+            pd.to_pickle(result, cache_dir() / "mainline.pkl")
+        except Exception:
+            pass
         return result
     # Network failed -> stale cache fallback
     try:
@@ -167,4 +219,17 @@ def build_mainline(indicator: str = "今日", topn: int = 3, snapshot: Optional[
         cache2.setdefault("as_of_ts", _iso_now())
         cache2.setdefault("indicator", indicator)
         return cache2
+    # pickle fallback as last resort
+    try:
+        pkl = cache_dir() / "mainline.pkl"
+        if pkl.exists():
+            data = pd.read_pickle(pkl)
+            if isinstance(data, dict):
+                data.setdefault("indicator", indicator)
+                data.setdefault("as_of_ts", _iso_now())
+                data.setdefault("source", "cache:file")
+                data.setdefault("errors", list(errors) + ["stale_cache_used"])  # type: ignore[arg-type]
+                return data
+    except Exception:
+        pass
     return result

@@ -2,146 +2,101 @@
   "timing": {},
   "sources": [
     {
-      "symbol": "601869",
+      "symbol": "600519",
       "data_source": "provider"
     },
     {
-      "symbol": "603256",
+      "symbol": "000333",
       "data_source": "provider"
     },
     {
-      "symbol": "603618",
+      "symbol": "002415",
       "data_source": "provider"
     },
     {
-      "symbol": "002506",
+      "symbol": "600036",
       "data_source": "provider"
     },
     {
-      "symbol": "002491",
+      "symbol": "000858",
       "data_source": "provider"
     },
     {
-      "symbol": "600487",
+      "symbol": "000001",
       "data_source": "provider"
     },
     {
-      "symbol": "002498",
+      "symbol": "601318",
       "data_source": "provider"
     },
     {
-      "symbol": "600759",
+      "symbol": "002594",
       "data_source": "provider"
     },
     {
-      "symbol": "002155",
+      "symbol": "000651",
       "data_source": "provider"
     },
     {
-      "symbol": "600172",
-      "data_source": "provider"
-    },
-    {
-      "symbol": "002470",
-      "data_source": "provider"
-    },
-    {
-      "symbol": "000657",
-      "data_source": "provider"
-    },
-    {
-      "symbol": "601231",
-      "data_source": "provider"
-    },
-    {
-      "symbol": "600176",
-      "data_source": "provider"
-    },
-    {
-      "symbol": "600522",
+      "symbol": "600000",
       "data_source": "provider"
     }
   ],
   "failures": [],
   "snapshot": {
-    "source": "akshare:sina",
-    "cache": null,
-    "fallback": false,
-    "fallback_reason": null,
-    "stale": false,
-    "missing": false,
-    "elapsed_sec": 865.55,
-    "cache_age_sec": null,
-    "skipped_routes": [],
-    "attempts": [
-      {
-        "source": "akshare:em",
-        "ok": false,
-        "err": "ConnectionError: ('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))"
-      },
-      {
-        "source": "akshare:sina",
-        "ok": true,
-        "rows": 5484
-      }
-    ],
-    "schema": {
-      "canonical": [
-        "code",
-        "symbol",
-        "name",
-        "price",
-        "pct_chg",
-        "chg",
-        "volume",
-        "amount",
-        "ts"
-      ],
-      "raw_columns": [
-        "代码",
-        "名称",
-        "最新价",
-        "涨跌额",
-        "涨跌幅",
-        "买入",
-        "卖出",
-        "昨收",
-        "今开",
-        "最高",
-        "最低",
-        "成交量",
-        "成交额",
-        "时间戳"
-      ],
-      "route": "sina"
-    },
-    "normalized": true
+    "missing": true,
+    "degrade": "no_snapshot_universe_mode",
+    "error": "AkShare snapshot failed: ConnectionError: ('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))"
   },
   "candidate_stats": {
-    "universe_in_count": 128,
-    "universe_after_filter_count": 128,
+    "universe_in_count": 10,
+    "universe_after_filter_count": 10,
     "bars_missing_count": 0,
     "bars_too_short_count": 0,
     "indicator_error_count": 0,
     "skipped_symbols_sample": [],
-    "candidates_out_count": 128,
+    "candidates_out_count": 10,
     "daily_attempts_sample": [],
     "universe_removed_counts": {
       "bad_code": 0,
       "insufficient_liquidity": 0,
       "insufficient_history": 0,
-      "non_mainboard": 72
+      "non_mainboard": 0
     }
   },
   "degraded": true,
   "degrade_reasons": [
     {
-      "reason_code": "UNIVERSE_DIRTY_INPUT",
+      "reason_code": "SNAPSHOT_MISSING",
       "detail": {
-        "bad_code": 0,
-        "insufficient_liquidity": 0,
-        "insufficient_history": 0,
-        "non_mainboard": 72
+        "degrade": "no_snapshot_universe_mode",
+        "error": "AkShare snapshot failed: ConnectionError: ('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))"
+      }
+    },
+    {
+      "reason_code": "ENV_NEUTRALIZED",
+      "detail": {}
+    },
+    {
+      "reason_code": "THEMES_EMPTY",
+      "detail": {}
+    },
+    {
+      "reason_code": "MARKET_STATS_MISSING",
+      "detail": {}
+    },
+    {
+      "reason_code": "UNIVERSE_TOO_SMALL",
+      "detail": {
+        "count": 10,
+        "min": 50
+      }
+    },
+    {
+      "reason_code": "CANDIDATE_TOO_SMALL",
+      "detail": {
+        "count": 10,
+        "min": 20
       }
     }
   ]

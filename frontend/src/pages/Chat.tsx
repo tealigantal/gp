@@ -118,6 +118,24 @@ export default function Chat() {
     onSuccess: async (resp) => {
       const cid = resp?.session_id || sessionIdRef.current
       if (cid) {
+        // Immediately inject assistant reply as a local event for smooth UX
+        try {
+          const id = resp?.assistant_message_id
+          if (id) {
+            const pseudoSeq = syncManager.maxSeq(String(cid)) + 1
+            const ev = {
+              id,
+              conversation_id: String(cid),
+              seq: pseudoSeq,
+              type: 'message.created',
+              actor_id: 'assistant',
+              created_at: new Date().toISOString(),
+              data: { message_id: id, kind: 'text', content: resp.reply }
+            } as any
+            syncManager.mergeEvents(String(cid), [ev])
+          }
+        } catch { /* ignore */ }
+        // Then ensure we pull any missing increments
         try { await syncManager.ensureLoaded(String(cid)) } catch {}
         syncManager.requestSync('chat_success')
         renderFromEvents(String(cid))
@@ -163,7 +181,22 @@ export default function Chat() {
     if (atBottom) setTimeout(() => listRef.current?.scrollTo({ top: 999999, behavior: 'smooth' }), 30)
     // 清空输入，避免按下回车后文本残留
     setInput('')
-    m.mutate({ text, msgId: 'msg-' + Date.now() })
+    // Local optimistic injection for user message (do not write to outbox)
+    const msgId = 'msg-' + Date.now()
+    try {
+      const pseudoSeq = syncManager.maxSeq(cid) + 1
+      syncManager.mergeEvents(cid, [{
+        id: msgId,
+        conversation_id: cid,
+        seq: pseudoSeq,
+        type: 'message.created',
+        actor_id: 'user',
+        created_at: new Date().toISOString(),
+        data: { message_id: msgId, kind: 'text', content: text }
+      } as any])
+      renderFromEvents(cid)
+    } catch { /* ignore */ }
+    m.mutate({ text, msgId })
   }
 
   const left = (

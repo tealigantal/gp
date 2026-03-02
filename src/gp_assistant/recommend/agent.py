@@ -494,16 +494,18 @@ def run(date: Optional[str] = None, topk: int = 3, universe: str = "auto", symbo
         lcs = {"attempted": [], "error": None}
     ds_themes = {
         "ok": bool(payload.get("themes")),
-        "source": ",".join(sorted(set([str(t.get("source")) for t in (payload.get("themes") or []) if isinstance(t, dict) and t.get("source")]))) or None,
+        "source": (lcs.get("source") or ",".join(sorted(set([str(t.get("source")) for t in (payload.get("themes") or []) if isinstance(t, dict) and t.get("source")]))) or None),
         "attempted": lcs.get("attempted") or [],
         "error": lcs.get("error"),
-        "as_of_ts": snap_meta.get("as_of_ts"),
+        "as_of_ts": (lcs.get("as_of_ts") or snap_meta.get("as_of_ts")),
+        "stale": bool(lcs.get("stale") or False),
     }
     ds_mainline = {
         "ok": bool(mainline.get("sectors")),
         "source": mainline.get("source") or "akshare:stock_sector_fund_flow_rank",
         "error": None if (mainline.get("sectors")) else (";".join(mainline.get("errors") or []) if mainline.get("errors") else None),
         "as_of_ts": mainline.get("as_of_ts"),
+        "stale": bool((isinstance(mainline.get("source"), str) and mainline.get("source") == "cache:file") or (isinstance(mainline.get("errors"), list) and any("stale_cache_used" in str(e) for e in mainline.get("errors") or []))),
     }
     ds_daily = {
         "ok": True,

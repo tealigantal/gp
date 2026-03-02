@@ -94,6 +94,58 @@
 - 默认数据源：AkShare（无需 token）。
 
 
+### 完整荐股策略（说人话）
+- 总体目标：给“仅沪深主板”的可交易清单，附带买点/止损/止盈线，盘前产出，盘中滚动刷新；任何外部接口故障都不影响用户“至少看到真实或近期真实的线索”。
+
+- 基础数据与“主板”严格限制
+  - 数据源：默认 AkShare；不需要 Tushare。
+  - 代码归一：统一到 `XXXXXX.SH|SZ`，内部计算一律用 `ts_code`。
+  - 主板仅这几段：沪 600/601/603/605；深 000/001/002/003。科创板 688、创业板 300/301、B 股 200/900 等全部剔除（候选池构建与动态候选都按这个规则过滤）。
+
+- 盘前（preopen）怎么挑票
+  1) 快照与环境：优先拉一次全市场快照（失败也不致命）；根据广度/涨跌幅等做“环境分层”打标签（A/B/C/D）。
+  2) 主题（themes）：
+     - 首选东财行业/概念榜；若断连自动尝试 THS；成功就写入磁盘缓存（真实历史）。
+     - 若接口全挂，回退到“快照强势线索”（按涨跌幅/成交额挑 top movers）——保证不是空白。
+  3) 主线（mainline）：
+     - 若快照里有“行业”，先做按行业的成交额/涨跌聚合；否则走资金流榜；成功即写磁盘缓存。
+     - 接口失败时在 TTL 内直接用缓存，超 TTL 但在可容忍时限内也用“stale cache”兜底（都是过去真实数据）。
+  4) 候选池：
+     - 动态候选优先用快照里成交额排序做截断（默认 200）；如无快照，则读 `universe/` 文件；都只保主板。
+     - 拉日线做基本特征：`ma20/slope20/atr_pct/gap_pct` 等。
+     - 筛掉硬性不合格：流动性太差/历史太短；并打“仅观察/禁止”的标记（如 ATR 过大、贴近 90% 筹码高位等）。
+  5) 生成 picks：
+     - 对每只票评估所有已注册策略（detect_setups/event study），选出“当下冠军（champion）”。
+     - 关键带（S1/S2/R1/R2）优先来自策略；不行则用筹码带；再不行用近期窗口分位点（并记录诊断）。
+     - 由关键带推导出“买点/止损/止盈”（entry/stop/take）写在 `trade_plan` 里，前端可直接展示。
+
+- 盘中（intraday）怎么滚动
+  - 每 5 分钟拉一次分钟线（动态候选 + 持仓涉及的票），按回测引擎跑“影子执行”，生成订单/权益/简单指标到 `results/live_shadow/`。
+  - 同步刷新 `latest.json` 的时间戳与阶段；若 picks 为空且 tradeable=true，会自动打 `EMPTY_PICKS` 的 degraded 提示，避免“好像可以交易但没票”的坏状态。
+
+- 降级与告警（不吓人，也不装）
+  - 真正问题才降级：会写 `debug.degraded=true` + `degrade_reasons=[...]`，前端红色提示。
+  - 轻微/可容忍问题只告警：写到 `debug.warnings`，不影响 `tradeable`（如 `UNIVERSE_DIRTY_INPUT`）。
+  - data_status 里标注来源（source）与是否用到了 TTL cache 或 stale cache，方便诊断。
+
+- 最终“能不能交易”的判定
+  - 必须：无降级 + 快照干净 + 候选池/可交易数量达标（阈值可配置）+（可选）主线存在。
+  - 不满足则 `tradeable=false`，message 前缀会列出关键原因代码。
+
+#### 常用开关（环境变量，按需）
+- `GP_DYNAMIC_POOL_SIZE`（默认 200）：动态候选截断规模（避免全市场都算）。
+- `GP_THEME_CONCEPT_MAX_STALE_SEC`（默认 86400）：主题缓存可用的最长“过期”时间。
+- `GP_MAINLINE_TTL_SEC`（默认 300）：主线资金流的磁盘缓存 TTL。
+- `GP_MAINLINE_MAX_STALE_SEC`（默认 86400）：主线资金流在失败时允许使用的最长“过期”时间。
+- `GP_TRADEABLE_MIN_UNIVERSE` / `GP_TRADEABLE_MIN_CANDIDATES`：可交易判定的数量阈值。
+
+#### 输出长什么样（v1 契约）
+- `store/recommend/latest.json` 与 `YYYYMMDD.json`：
+  - `picks: [...]`
+  - `meta: { tradeable, as_of, as_of_ts, stage, disclaimer, debug{ degraded, degrade_reasons|warnings, mode }, ... }`
+  - 买点/止损/止盈在每个 pick 的 `trade_plan.entry/stop/take`，关键带在 `trade_plan.bands`。
+
+
 本项目按《项目计划.txt》进行方向纠偏式重构，将原有 gp_assistant 主文档改为以回测实验系统为主。旧助手说明见 `docs/assistant.md`（docker-compose 仍可运行）。
 
 核心约束（默认）

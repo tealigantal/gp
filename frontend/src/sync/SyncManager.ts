@@ -122,39 +122,40 @@ export class SyncManager {
 
   async ensureLoaded(cid: string) {
     const st = this.convState(cid)
-    // Only hydrate when local memory is empty; otherwise polling takes over
-    if (st.events.length > 0) return
+    const loadedLast = st.events.length > 0 ? st.events[st.events.length - 1].seq : 0
+    const knownLast = Number(this.convMeta[cid]?.lastSeq || 0)
     const key = `gp:after:${cid}`
-    let last = 0
-    try { const saved = Number(localStorage.getItem(key) || '0'); if (Number.isFinite(saved) && saved > 0) last = saved } catch {}
-    if (last <= 0 && st.lastSeq > 0) last = st.lastSeq
+    // Case A: already loaded some, but not up to knownLast -> fetch increment
+    if (st.events.length > 0) {
+      if (knownLast > 0 && loadedLast < knownLast) {
+        try {
+          const data = await listEvents(cid, { after: loadedLast, limit: 200 } as any)
+          if (Array.isArray(data) && data.length) this.mergeEvents(cid, data)
+        } catch { /* ignore */ }
+        return
+      }
+      // No knownLast yet (no sync meta), but we might still have more on server -> try one incremental pull
+      try {
+        const data = await listEvents(cid, { after: loadedLast, limit: 200 } as any)
+        if (Array.isArray(data) && data.length) this.mergeEvents(cid, data)
+      } catch { /* ignore */ }
+      return
+    }
+    // Case B: empty memory -> hydrate a tail window around last known cursor
+    let anchor = 0
+    try { const saved = Number(localStorage.getItem(key) || '0'); if (Number.isFinite(saved) && saved > 0) anchor = saved } catch {}
+    if (anchor <= 0 && knownLast > 0) anchor = knownLast
     let data: EventOut[] = []
     try {
-      if (last > 0) {
-        // Tail-window hydration via around
-        data = await listEvents(cid, { around: last, limit: 100 } as any)
+      if (anchor > 0) {
+        data = await listEvents(cid, { around: anchor, limit: 100 } as any)
       } else {
-        // Full fetch fallback
         data = await listEvents(cid, { after: 0, limit: 100 } as any)
       }
     } catch {
-      // Fallback to full if around path failed
       try { data = await listEvents(cid, { after: 0, limit: 100 } as any) } catch { data = [] }
     }
-    if (Array.isArray(data) && data.length) {
-      this.mergeEvents(cid, data)
-      // If the tail window contains no real messages, fetch an initial head slice once to surface history.
-      const hasCreatedInTail = data.some((e) => e?.type === 'message.created')
-      if (!hasCreatedInTail) {
-        try {
-          const head = await listEvents(cid, { after: 0, limit: 100 } as any)
-          if (Array.isArray(head) && head.length) {
-            const alreadyHas = this.convState(cid).events.some((e) => e.type === 'message.created')
-            if (!alreadyHas) this.mergeEvents(cid, head)
-          }
-        } catch { /* ignore */ }
-      }
-    }
+    if (Array.isArray(data) && data.length) this.mergeEvents(cid, data)
     try { localStorage.setItem(key, String(this.convState(cid).lastSeq || 0)) } catch {}
     this.notify()
   }
@@ -221,6 +222,13 @@ export class SyncManager {
     return st.events.filter((e) => e.type === 'message.created')
   }
 
+  // Max merged sequence for a conversation (local view only)
+  maxSeq(cid: string): number {
+    const st = this.convState(cid)
+    if (st.events.length > 0) return st.events[st.events.length - 1].seq || 0
+    return 0
+  }
+
   async flush(reason: string = 'manual') {
     // prevent concurrent syncs; coalesce fast callers
     if (this.syncing) { this.pendingSync = true; return }
@@ -266,9 +274,8 @@ export class SyncManager {
       const cid = String(it.id)
       const lastSeq = Number(it.last_seq || 0)
       this.convMeta[cid] = { id: cid, title: it.title, lastSeq, updatedAt: it.updated_at }
-      // keep state in sync
-      const st = this.convState(cid)
-      if (lastSeq > st.lastSeq) st.lastSeq = lastSeq
+      // IMPORTANT: do NOT advance local state cursor from server meta
+      // st.lastSeq must only reflect merged event max seq to avoid skipping unseen events.
     }
     this.notify()
     this.lastSyncAt = Date.now()
@@ -346,7 +353,11 @@ export class SyncManager {
         const key = `gp:after:${cid}`
         let after = 0
         try { const saved = Number(localStorage.getItem(key) || '0'); if (Number.isFinite(saved) && saved > 0) after = saved } catch {}
-        if (after <= 0) after = this.convState(cid).lastSeq || 0
+        if (after <= 0) {
+          const st = this.convState(cid)
+          const loadedLast = st.events.length > 0 ? st.events[st.events.length - 1].seq : 0
+          after = loadedLast
+        }
         const aborter = new AbortController()
         this.evAborters[cid] = aborter
         const data = await listEvents(cid, { after, limit: 100 } as any, { signal: aborter.signal as any })

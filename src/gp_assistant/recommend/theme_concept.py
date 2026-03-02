@@ -7,11 +7,12 @@ import time
 import json
 import pandas as pd
 
-from ..core.paths import store_dir
+from ..core.paths import store_dir, cache_dir
+from ..core.config import load_config
 
 
 _CACHE: Dict[str, Any] = {"ts": 0.0, "themes": None, "source": None}
-_LAST_STATUS: Dict[str, Any] = {"attempted": [], "error": None, "ts": 0.0}
+_LAST_STATUS: Dict[str, Any] = {"attempted": [], "error": None, "ts": 0.0, "source": None, "stale": False, "as_of_ts": None}
 
 
 def _ttl() -> int:
@@ -23,6 +24,51 @@ def _ttl() -> int:
 
 def last_concept_status() -> Dict[str, Any]:
     return dict(_LAST_STATUS)
+
+
+def _with_requests_timeout(fn):  # noqa: ANN001
+    try:
+        cfg = load_config()
+        timeout_sec = int(getattr(cfg, "request_timeout_sec", 20))
+    except Exception:
+        timeout_sec = 20
+    import requests  # type: ignore
+    original = requests.sessions.Session.request
+
+    def wrapped(session, method, url, **kwargs):  # noqa: ANN001
+        to = kwargs.get("timeout", None)
+        if to is None or (isinstance(to, (int, float)) and to < timeout_sec):
+            kwargs["timeout"] = timeout_sec
+        try:
+            hdrs = dict(kwargs.get("headers") or {})
+            hdrs.setdefault("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120 Safari/537.36")
+            if isinstance(url, str):
+                if "eastmoney.com" in url:
+                    hdrs.setdefault("Referer", "https://quote.eastmoney.com/")
+                elif "sina.com" in url or "sinajs.cn" in url:
+                    hdrs.setdefault("Referer", "https://finance.sina.com.cn/")
+            kwargs["headers"] = hdrs
+        except Exception:
+            pass
+        return original(session, method, url, **kwargs)
+
+    try:
+        requests.sessions.Session.request = wrapped  # type: ignore
+        return fn()
+    finally:
+        requests.sessions.Session.request = original  # type: ignore
+
+
+def _call_with_retry(fn, retries: int = 3):  # noqa: ANN001
+    import time as _t
+    import random as _r
+    for i in range(retries):
+        try:
+            return fn()
+        except Exception as e:  # noqa: BLE001
+            if i == retries - 1:
+                raise e
+            _t.sleep((2 ** i) + _r.random() * 0.5)
 
 
 def _detect_rank_col(df: pd.DataFrame) -> Optional[str]:
@@ -118,7 +164,23 @@ def build_concept_themes(topn: int = 2, reason: Optional[str] = None) -> List[Di
                 if time.time() - float(obj.get("ts", 0.0)) <= max_stale:
                     _LAST_STATUS["attempted"].append("disk_cache")
                     _LAST_STATUS["error"] = f"stale_cache_used;{_LAST_STATUS.get('error')}"
+                    _LAST_STATUS["source"] = "cache:file"
+                    _LAST_STATUS["stale"] = True
+                    _LAST_STATUS["as_of_ts"] = None
                     return list(obj.get("themes") or [])
+        except Exception:
+            pass
+        # new cache_dir pkl fallback
+        try:
+            pkl = cache_dir() / "themes.pkl"
+            if pkl.exists():
+                data = pd.read_pickle(pkl)
+                _LAST_STATUS["attempted"].append("cache:file")
+                _LAST_STATUS["error"] = f"stale_cache_used;{_LAST_STATUS.get('error')}"
+                _LAST_STATUS["source"] = "cache:file"
+                _LAST_STATUS["stale"] = True
+                _LAST_STATUS["as_of_ts"] = None
+                return list(data) if isinstance(data, list) else []
         except Exception:
             pass
         return []
@@ -127,7 +189,7 @@ def build_concept_themes(topn: int = 2, reason: Optional[str] = None) -> List[Di
     errors: List[str] = []
     try:
         _LAST_STATUS["attempted"].append("industry_name_em")
-        df_ind = ak.stock_board_industry_name_em()  # type: ignore[attr-defined]
+        df_ind = _call_with_retry(lambda: _with_requests_timeout(lambda: ak.stock_board_industry_name_em()), retries=3)  # type: ignore[attr-defined]
         themes += _build_from_board_df(df_ind, board_type="industry", topn=topn, source="akshare:industry_name_em")
     except Exception as e:  # noqa: BLE001
         errors.append(f"industry_name_em:{e}")
@@ -141,7 +203,7 @@ def build_concept_themes(topn: int = 2, reason: Optional[str] = None) -> List[Di
             errors.append(f"industry_name_ths:{e2}")
     try:
         _LAST_STATUS["attempted"].append("concept_name_em")
-        df_con = ak.stock_board_concept_name_em()  # type: ignore[attr-defined]
+        df_con = _call_with_retry(lambda: _with_requests_timeout(lambda: ak.stock_board_concept_name_em()), retries=3)  # type: ignore[attr-defined]
         themes += _build_from_board_df(df_con, board_type="concept", topn=topn, source="akshare:concept_name_em")
     except Exception as e:  # noqa: BLE001
         errors.append(f"concept_name_em:{e}")
@@ -177,7 +239,7 @@ def build_concept_themes(topn: int = 2, reason: Optional[str] = None) -> List[Di
                         data = None
                 if (not data) or (now - float(data.get("ts", 0.0)) > _ttl()):
                     try:
-                        cons = ak.stock_board_industry_cons_em(symbol=str(ind["evidence"]["board_code"]))  # type: ignore[attr-defined]
+                        cons = _call_with_retry(lambda: _with_requests_timeout(lambda: ak.stock_board_industry_cons_em(symbol=str(ind["evidence"]["board_code"]))), retries=3)  # type: ignore[attr-defined]
                         if isinstance(cons, pd.DataFrame) and not cons.empty:
                             rc = cons.copy()
                             rank_col = _detect_rank_col(rc) or "涨跌幅"
@@ -208,7 +270,7 @@ def build_concept_themes(topn: int = 2, reason: Optional[str] = None) -> List[Di
                         data = None
                 if (not data) or (now - float(data.get("ts", 0.0)) > _ttl()):
                     try:
-                        cons = ak.stock_board_concept_cons_em(symbol=str(con["evidence"]["board_code"]))  # type: ignore[attr-defined]
+                        cons = _call_with_retry(lambda: _with_requests_timeout(lambda: ak.stock_board_concept_cons_em(symbol=str(con["evidence"]["board_code"]))), retries=3)  # type: ignore[attr-defined]
                         if isinstance(cons, pd.DataFrame) and not cons.empty:
                             rc = cons.copy()
                             rank_col = _detect_rank_col(rc) or "涨跌幅"
@@ -241,6 +303,11 @@ def build_concept_themes(topn: int = 2, reason: Optional[str] = None) -> List[Di
             p.write_text(json.dumps({"ts": now, "themes": themes, "source": _CACHE.get("source")}, ensure_ascii=False, indent=2), encoding="utf-8")
         except Exception:
             pass
+        # also persist a pickle cache for simplified recovery path
+        try:
+            pd.to_pickle(themes, cache_dir() / "themes.pkl")
+        except Exception:
+            pass
         return themes
     if errors:
         _LAST_STATUS.update({"error": ";".join(errors)})
@@ -253,7 +320,23 @@ def build_concept_themes(topn: int = 2, reason: Optional[str] = None) -> List[Di
             if time.time() - float(obj.get("ts", 0.0)) <= max_stale:
                 _LAST_STATUS["attempted"].append("disk_cache")
                 _LAST_STATUS["error"] = f"stale_cache_used;{_LAST_STATUS.get('error')}"
+                _LAST_STATUS["source"] = "cache:file"
+                _LAST_STATUS["stale"] = True
+                _LAST_STATUS["as_of_ts"] = None
                 return list(obj.get("themes") or [])
+    except Exception:
+        pass
+    # last resort: pickle fallback
+    try:
+        pkl = cache_dir() / "themes.pkl"
+        if pkl.exists():
+            data = pd.read_pickle(pkl)
+            _LAST_STATUS["attempted"].append("cache:file")
+            _LAST_STATUS["error"] = f"stale_cache_used;{_LAST_STATUS.get('error')}"
+            _LAST_STATUS["source"] = "cache:file"
+            _LAST_STATUS["stale"] = True
+            _LAST_STATUS["as_of_ts"] = None
+            return list(data) if isinstance(data, list) else []
     except Exception:
         pass
     return []

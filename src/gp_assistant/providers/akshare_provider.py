@@ -16,6 +16,7 @@ import pandas as pd
 from ..core.errors import DataProviderError
 from .base import MarketDataProvider
 from ..core.config import load_config
+from ..core.paths import cache_dir
 
 
 class AkShareProvider(MarketDataProvider):
@@ -244,6 +245,58 @@ class AkShareProvider(MarketDataProvider):
         except Exception:
             pass
 
+        # Disk cache fast-path
+        disk_path = cache_dir() / "ak_spot_snapshot.pkl"
+        disk_meta: Dict[str, Any] = {}
+        try:
+            try:
+                disk_ttl = int(getattr(cfg, "cache_refresh_ttl_sec", 300))
+            except Exception:
+                disk_ttl = 300
+            try:
+                env_ttl = int(__import__("os").getenv("AK_SPOT_DISK_TTL_SEC", "0"))
+            except Exception:
+                env_ttl = 0
+            if env_ttl and env_ttl > 0:
+                disk_ttl = env_ttl
+        except Exception:
+            disk_ttl = 300
+        try:
+            if disk_path.exists():
+                df_disk = pd.read_pickle(disk_path)  # type: ignore[arg-type]
+                mtime = float(getattr(disk_path.stat(), "st_mtime", time.time()))
+                age = time.time() - mtime
+                if isinstance(df_disk, pd.DataFrame) and age <= max(1, int(disk_ttl)):
+                    attempts.append({"source": "cache:file", "ok": True, "rows": int(len(df_disk))})
+                    disk_meta = {
+                        "source": "cache:file",
+                        "cache": "file",
+                        "fallback": False,
+                        "stale": False,
+                        "missing": False,
+                        "elapsed_sec": 0.0,
+                        "cache_age_sec": round(age, 2),
+                        "skipped_routes": [],
+                        "attempts": attempts,
+                        "as_of_ts": None,
+                    }
+                    # try carry schema if present
+                    try:
+                        if isinstance(self._last_snapshot_meta, dict) and self._last_snapshot_meta.get("schema"):
+                            disk_meta["schema"] = self._last_snapshot_meta.get("schema")
+                    except Exception:
+                        pass
+                    self._last_snapshot_meta = disk_meta
+                    try:
+                        print(f"[快照] 命中文件缓存 rows={int(len(df_disk))} age={age:.1f}s ttl={disk_ttl}s", flush=True)
+                    except Exception:
+                        pass
+                    # also refresh in-memory cache state
+                    self._update_snapshot_cache(df_disk)
+                    return df_disk
+        except Exception:
+            pass
+
         # Memory TTL cache (route-aware TTL; enforce floor for Sina)
         try:
             if self._snapshot_cache_df is not None and self._snapshot_cache_ts is not None:
@@ -295,7 +348,7 @@ class AkShareProvider(MarketDataProvider):
                 except Exception:
                     pass
                 if route == "sina":
-                    df = ak.stock_zh_a_spot()
+                    df = self._call_with_retry(lambda: self._with_requests_timeout(lambda: ak.stock_zh_a_spot()), retries=3)
                     if df is None or len(df) == 0:
                         raise DataProviderError("AkShare Sina snapshot empty")
                     # normalize
@@ -318,6 +371,11 @@ class AkShareProvider(MarketDataProvider):
                     except Exception:
                         pass
                     self._update_snapshot_cache(df)
+                    # persist disk cache
+                    try:
+                        df.to_pickle(disk_path)
+                    except Exception:
+                        pass
                     return df
                 if route == "em":
                     df = self._call_with_retry(lambda: self._with_requests_timeout(lambda: ak.stock_zh_a_spot_em()), retries=1)
@@ -343,6 +401,11 @@ class AkShareProvider(MarketDataProvider):
                     except Exception:
                         pass
                     self._update_snapshot_cache(df)
+                    # persist disk cache
+                    try:
+                        df.to_pickle(disk_path)
+                    except Exception:
+                        pass
                     return df
             except Exception as e:  # noqa: BLE001
                 last_err = e
@@ -353,7 +416,35 @@ class AkShareProvider(MarketDataProvider):
                     pass
                 continue
 
-        # No live route works
+        # No live route works -> try disk cache fallback
+        try:
+            if disk_path.exists():
+                df_disk = pd.read_pickle(disk_path)  # type: ignore[arg-type]
+                if isinstance(df_disk, pd.DataFrame) and not df_disk.empty:
+                    mtime = float(getattr(disk_path.stat(), "st_mtime", time.time()))
+                    age = time.time() - mtime
+                    self._last_snapshot_meta = {
+                        "source": "cache:file",
+                        "cache": "file",
+                        "fallback": True,
+                        "stale": True,
+                        "missing": False,
+                        "elapsed_sec": round(time.time() - t0, 2),
+                        "cache_age_sec": round(age, 2),
+                        "skipped_routes": [],
+                        "attempts": attempts,
+                        "error": (f"{type(last_err).__name__}: {last_err}" if last_err else None),
+                    }
+                    try:
+                        print(f"[快照] 失败回退到磁盘缓存 rows={int(len(df_disk))} age={age:.1f}s", flush=True)
+                    except Exception:
+                        pass
+                    # also refresh memory
+                    self._update_snapshot_cache(df_disk)
+                    return df_disk
+        except Exception:
+            pass
+        # Still failing
         self._last_snapshot_meta = {
             "source": None,
             "fallback": False,
@@ -365,7 +456,7 @@ class AkShareProvider(MarketDataProvider):
             "error": (f"{type(last_err).__name__}: {last_err}" if last_err else None),
         }
         try:
-            print(f"[快照] 全部路由失败 error={type(last_err).__name__ if last_err else 'None'}; attempts={len(attempts)}", flush=True)
+            print(f"[快照] 全部路由失败且无磁盘缓存 error={type(last_err).__name__ if last_err else 'None'}", flush=True)
         except Exception:
             pass
         raise DataProviderError(f"AkShare snapshot failed: {type(last_err).__name__}: {last_err}")
@@ -463,7 +554,7 @@ class AkShareProvider(MarketDataProvider):
                     except Exception:
                         pass
                     sym = self._to_prefixed_symbol(symbol)
-                    df = ak.stock_zh_a_hist_tx(symbol=sym, start_date=s_ymd or "19000101", end_date=e_ymd or "20500101", adjust="")
+                    df = self._call_with_retry(lambda: self._with_requests_timeout(lambda: ak.stock_zh_a_hist_tx(symbol=sym, start_date=s_ymd or "19000101", end_date=e_ymd or "20500101", adjust="")), retries=3)
                     if df is None or len(df) == 0:
                         raise RuntimeError("tx empty")
                     df = _standardize(df)
@@ -495,7 +586,7 @@ class AkShareProvider(MarketDataProvider):
                     except Exception:
                         pass
                     sym = self._to_prefixed_symbol(symbol)
-                    df = ak.stock_zh_a_daily(symbol=sym, start_date=s_ymd or "19000101", end_date=e_ymd or "21000101", adjust="")
+                    df = self._call_with_retry(lambda: self._with_requests_timeout(lambda: ak.stock_zh_a_daily(symbol=sym, start_date=s_ymd or "19000101", end_date=e_ymd or "21000101", adjust="")), retries=3)
                     if df is None or len(df) == 0:
                         raise RuntimeError("sina empty")
                     df = _standardize(df)
@@ -517,7 +608,7 @@ class AkShareProvider(MarketDataProvider):
                     except Exception:
                         pass
                     sym = self._to_em_symbol(symbol)
-                    df = ak.stock_zh_a_hist(symbol=sym, start_date=s_ymd, end_date=e_ymd, period="daily", adjust="")
+                    df = self._call_with_retry(lambda: self._with_requests_timeout(lambda: ak.stock_zh_a_hist(symbol=sym, start_date=s_ymd, end_date=e_ymd, period="daily", adjust="")), retries=3)
                     if df is None or len(df) == 0:
                         raise RuntimeError("em empty")
                     df = _standardize(df)
