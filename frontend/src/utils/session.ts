@@ -16,7 +16,9 @@ export function getOrCreateSessionId(): string {
     if (url.searchParams.has('sid')) {
       url.searchParams.delete('sid')
     }
-    window.history.replaceState({}, '', url.toString())
+    // IMPORTANT: preserve existing history.state (React Router stores its own keys in it).
+    // Replacing it with `{}` can break navigation/back/forward behavior.
+    window.history.replaceState(window.history.state, '', url.toString())
   } catch {}
   return sid
 }
@@ -27,10 +29,16 @@ export function setSessionId(sid: string) {
   try {
     url.searchParams.set('cid', sid)
     if (url.searchParams.has('sid')) url.searchParams.delete('sid')
-    window.history.replaceState({}, '', url.toString())
+    // Preserve router-managed state.
+    window.history.replaceState(window.history.state, '', url.toString())
   } catch {}
 }
 
 export function newSid() {
-  return 'sess-' + Date.now().toString().slice(0, 10)
+  // Avoid collisions (events/session ids must be globally unique on server).
+  try {
+    const uuid = crypto?.randomUUID?.()
+    if (uuid) return `sess-${uuid}`
+  } catch {}
+  return `sess-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`
 }

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Card, Input, Button, List, Space, Typography } from 'antd'
+import { Card, Input, Button, List, Space, Typography, message } from 'antd'
 import { search as apiSearch, listEvents } from '../api/client'
 import { syncManager } from '../sync/SyncManager'
 import { useNavigate } from 'react-router-dom'
@@ -18,12 +18,17 @@ export default function Search() {
       const data = await apiSearch({ q: q.trim(), limit: 50 })
       const withPreview = await Promise.all((data || []).map(async (it) => {
         try {
-          const evs = await listEvents(it.conversation_id, { around: it.seq, limit: 1 })
+          // Fetch the exact seq (around+limit=1 will return the previous event due to server-side windowing).
+          const after = Math.max(Number(it.seq || 0) - 1, 0)
+          const evs = await listEvents(it.conversation_id, { after, limit: 1 })
           const content = evs?.[0]?.data?.content || ''
           return { ...it, preview: content }
         } catch { return { ...it } }
       }))
       setResults(withPreview as any)
+    } catch (e: any) {
+      message.error(e?.message || '搜索失败')
+      setResults([])
     } finally {
       setLoading(false)
     }

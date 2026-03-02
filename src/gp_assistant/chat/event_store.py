@@ -453,7 +453,9 @@ def list_events_after(conv_id: str, after_seq: int, limit: int = 100) -> List[Di
 
 
 def list_events_around(conv_id: str, center_seq: int, limit: int = 50) -> List[Dict[str, Any]]:
-    half = max(1, int(limit) // 2)
+    # Center the window on center_seq.
+    # NOTE: For limit=1 we must return the event at center_seq (not the previous one).
+    half = max(0, int(limit) // 2)
     start = max(1, int(center_seq) - half)
     after = start - 1
     return list_events_after(conv_id, after, limit)
@@ -475,7 +477,8 @@ def list_conversations() -> List[Dict[str, Any]]:
     conn = _connect()
     try:
         cur = conn.execute(
-            "SELECT id, title, type, last_seq, updated_at FROM conversations ORDER BY last_seq DESC"
+            # Sort by recency first; last_seq is per-conversation and does NOT represent global recency.
+            "SELECT id, title, type, last_seq, updated_at FROM conversations ORDER BY updated_at DESC, last_seq DESC"
         )
         return [
             {
@@ -494,6 +497,8 @@ def list_conversations() -> List[Dict[str, Any]]:
 def search_messages(query: str, conversation_id: Optional[str] = None, limit: int = 50) -> List[Dict[str, Any]]:
     conn = _connect()
     try:
+        rows: List[Tuple[Any, ...]] = []
+        # 1) Prefer FTS when available (fast, ranked)
         try:
             if conversation_id:
                 cur = conn.execute(
@@ -507,11 +512,43 @@ def search_messages(query: str, conversation_id: Optional[str] = None, limit: in
                 )
             rows = cur.fetchall()
         except sqlite3.OperationalError:
-            # FTS not available
+            # FTS not available or query parse error
             rows = []
-        return [
-            {"message_id": r[0], "conversation_id": r[1], "seq": int(r[2] or 0)} for r in rows
-        ]
+
+        out = [{"message_id": r[0], "conversation_id": r[1], "seq": int(r[2] or 0)} for r in rows]
+        if out:
+            return out
+
+        # 2) Fallback: simple LIKE for better compatibility (e.g., when FTS5 isn't compiled,
+        #    or when non-space languages need substring match). Limit kept small.
+        def _escape_like(s: str) -> str:
+            return (s or "").replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+        pat = f"%{_escape_like(query)}%"
+        if conversation_id:
+            cur2 = conn.execute(
+                """
+                SELECT id, conversation_id, seq_created
+                FROM conv_messages
+                WHERE conversation_id=? AND deleted_at IS NULL AND content LIKE ? ESCAPE '\\'
+                ORDER BY created_at DESC
+                LIMIT ?
+                """,
+                (conversation_id, pat, int(limit)),
+            )
+        else:
+            cur2 = conn.execute(
+                """
+                SELECT id, conversation_id, seq_created
+                FROM conv_messages
+                WHERE deleted_at IS NULL AND content LIKE ? ESCAPE '\\'
+                ORDER BY created_at DESC
+                LIMIT ?
+                """,
+                (pat, int(limit)),
+            )
+        rows2 = cur2.fetchall()
+        return [{"message_id": r[0], "conversation_id": r[1], "seq": int(r[2] or 0)} for r in rows2]
     finally:
         conn.close()
 

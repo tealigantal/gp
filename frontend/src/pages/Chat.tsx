@@ -11,7 +11,7 @@ import KlineCard from '../components/KlineCard'
 import WorkbenchLayout from '../components/WorkbenchLayout'
 import ToolsPanel from '../components/ToolsPanel'
 import { getRiskProfile } from '../store/settings'
-import { getOrCreateSessionId, setSessionId as persistSessionId } from '../utils/session'
+import { getOrCreateSessionId, setSessionId as persistSessionId, newSid } from '../utils/session'
 import { useConversationEvents } from '../hooks/useConversationEvents'
 
 type Msg = { role: 'user' | 'assistant'; content?: string; kind?: 'text'|'rec'|'kline'; payload?: any }
@@ -151,7 +151,7 @@ export default function Chat() {
   async function ensureCid() {
     let cid = sessionId || null
     if (!cid) {
-      cid = 'sess-' + Date.now()
+      cid = newSid()
       setSessionId(cid)
       persistSessionId(cid)
     }
@@ -182,7 +182,8 @@ export default function Chat() {
     // 清空输入，避免按下回车后文本残留
     setInput('')
     // Local optimistic injection for user message (do not write to outbox)
-    const msgId = 'msg-' + Date.now()
+    // IMPORTANT: event/message ids must be globally unique across conversations (server uses a single PK).
+    const msgId = 'msg-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10)
     try {
       const pseudoSeq = syncManager.maxSeq(cid) + 1
       syncManager.mergeEvents(cid, [{

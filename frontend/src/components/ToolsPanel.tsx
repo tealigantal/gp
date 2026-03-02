@@ -6,6 +6,7 @@ import { syncManager } from '../sync/SyncManager'
 import StatusPanel from './status/StatusPanel'
 import StrengthPanel from './status/StrengthPanel'
 import { getRiskProfile, setRiskProfile } from '../store/settings'
+import { newSid } from '../utils/session'
 
 export default function ToolsPanel({
   conversationId,
@@ -27,7 +28,7 @@ export default function ToolsPanel({
     try {
       const s = (sym || symbol || '').trim()
       if (!s) return
-      const cid = conversationId || ('sess-' + Date.now())
+      const cid = conversationId || newSid()
       if (!conversationId) onEnsureConversation(cid)
       // 事件：附加 K 线卡片
       syncManager.pushOutbox({

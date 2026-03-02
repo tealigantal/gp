@@ -162,6 +162,17 @@ export class SyncManager {
 
   pushOutbox(ev: Omit<SyncEventIn, 'id'> & { id?: string }) {
     const e: SyncEventIn = { id: ev.id || nowId(), ...ev }
+
+    // IMPORTANT:
+    // - Server event_store materializes messages using data.message_id as PRIMARY KEY.
+    // - If different client events reuse the same data.message_id (e.g. Date.now()), messages can be overwritten.
+    // Therefore, enforce message_id to be globally unique by defaulting it to the event id.
+    if (e.type === 'message.created') {
+      const data: any = e.data || {}
+      // Always align message_id with the event id to guarantee uniqueness.
+      data.message_id = e.id
+      e.data = data
+    }
     this.outbox.push(e)
     localStorage.setItem('gp_sync_outbox', JSON.stringify(this.outbox))
     // 触发一次立即同步
@@ -314,7 +325,12 @@ export class SyncManager {
         unread: Math.max((m.lastSeq || 0) - this.getLastRead(m.id), 0),
         preview: this.previewText(m.id)
       }))
-      .sort((a, b) => (b.lastSeq - a.lastSeq))
+      .sort((a, b) => {
+        const ta = a.updatedAt ? Date.parse(a.updatedAt) : 0
+        const tb = b.updatedAt ? Date.parse(b.updatedAt) : 0
+        if (tb !== ta) return tb - ta
+        return (b.lastSeq - a.lastSeq)
+      })
   }
 
   previewText(cid: string) {

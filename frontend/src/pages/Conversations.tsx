@@ -4,13 +4,9 @@ import { syncManager } from "../sync/SyncManager"
 import dayjs from "dayjs"
 import { useNavigate } from "react-router-dom"
 import { deleteConversation, cleanupConversations } from "../api/client"
-import { setSessionId as persistSessionId } from "../utils/session"
+import { setSessionId as persistSessionId, newSid } from "../utils/session"
 
 type Item = { id: string; title: string; lastSeq: number; updatedAt?: string; unread: number; preview: string }
-
-function newSessId() {
-  return "sess-" + Date.now().toString().slice(0, 10)
-}
 
 export default function Conversations() {
   const [items, setItems] = useState<Item[]>([])
@@ -48,7 +44,7 @@ export default function Conversations() {
   }
 
   function createNew() {
-    const id = newSessId()
+    const id = newSid()
     persistSessionId(id)
     nav(`/chat?cid=${encodeURIComponent(id)}`)
   }
