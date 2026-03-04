@@ -32,7 +32,15 @@ def pytest_collection_modifyitems(config, items):
     Keep core backtest/selector tests enabled; mark the rest as integration.
     """
     keep_prefixes = (
+        # 保持为默认非 integration（CI/本地默认都会跑）
         "test_backtest_core_rules.py",
+        # CI 回归用例白名单（见 .github/workflows/ci.yml）
+        "test_regress_theme_and_bands.py",
+        "test_contract_event_and_history.py",
+        "test_theme_fallback_top_movers.py",
+        "test_theme_pool_snapshot_paths.py",
+        "test_theme_pool_impl_nan_and_scale.py",
+        "test_strict_no_pseudo_output.py",
     )
     for item in items:
         fn = item.location[0]
