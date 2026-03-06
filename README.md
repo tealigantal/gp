@@ -8,7 +8,7 @@
 - 一键自检（含单测/服务链路/实验）：
   - `python gpbt.py gate --level ALL`（看到 ALL PASS 即可）
 - 启动后端 API（FastAPI）：
-  - `python -m uvicorn src.gp_assistant.server.app:app --host 0.0.0.0 --port 8000`
+  - `python -m uvicorn gp_assistant.server.app:app --host 0.0.0.0 --port 8000`
   - 健康检查：`curl http://localhost:8000/api/health`（会返回 `service` 状态）
   - 获取最新推荐：`curl http://localhost:8000/api/reco/latest`
   - 按卡片模式获取：`curl -X POST http://localhost:8000/api/recommend -d '{"mode":"service","detail":"compact"}' -H 'Content-Type: application/json'`
@@ -23,7 +23,7 @@
   - Windows（PowerShell）：
     - `$env:LLM_API_KEY = "你的密钥"`
     - `$env:LLM_BASE_URL = "https://api.deepseek.com/v1"`
-  - 然后启动：`python -m uvicorn src.gp_assistant.server.app:app --host 0.0.0.0 --port 8000`
+  - 然后启动：`python -m uvicorn gp_assistant.server.app:app --host 0.0.0.0 --port 8000`
 
 ### 使用 Docker（后端与前端）
 - 准备：复制 `.env.example` 为 `.env`，按需改环境变量（默认数据源 AkShare，无需 Token）。
@@ -48,7 +48,7 @@
 ### 查看运行日志（可直接复制）
 - 本地（uvicorn 后端）：
   - 前台日志：
-    - `python -m uvicorn src.gp_assistant.server.app:app --host 0.0.0.0 --port 8000 --log-level info`
+    - `python -m uvicorn gp_assistant.server.app:app --host 0.0.0.0 --port 8000 --log-level info`
     - 调试级别：把 `--log-level info` 改为 `--log-level debug`
 - 本地（服务循环 gpbt）：
   - 注意：`--until` 必须为 `HH:MM`（例如 `15:00`）；重定向需与命令在同一行。
