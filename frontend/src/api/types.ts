@@ -1,6 +1,6 @@
 export type ToolTrace = {
   triggered_recommend: boolean
-  recommend_result?: any
+  recommend_result?: unknown
   error?: string
 }
 
@@ -29,22 +29,22 @@ export type RecommendReq = {
 export type RecommendResp = {
   as_of?: string
   timezone?: string
-  env?: { grade?: string; reasons?: string[]; recovery_conditions?: string[]; [k: string]: any }
-  themes?: Array<{ name: string; strength?: number; [k: string]: any }>
-  mainline?: { indicator?: string; sectors?: Array<any>; [k: string]: any }
-  picks?: Array<any>
+  env?: { grade?: string; reasons?: string[]; recovery_conditions?: string[]; [k: string]: unknown }
+  themes?: Array<{ name: string; strength?: number; [k: string]: unknown }>
+  mainline?: { indicator?: string; sectors?: Array<unknown>; [k: string]: unknown }
+  picks?: Array<unknown>
   tradeable?: boolean
   message?: string
   execution_checklist?: string[]
   disclaimer?: string
-  debug?: { degraded?: boolean; degrade_reasons?: Array<{ reason_code: string; detail?: any }>; advisories?: any; [k: string]: any }
-  [k: string]: any
+  debug?: { degraded?: boolean; degrade_reasons?: Array<{ reason_code: string; detail?: unknown }>; advisories?: unknown; [k: string]: unknown }
+  [k: string]: unknown
 }
 
-export type HealthResp = { status: string; llm_ready: boolean; provider: any; time: string }
+export type HealthResp = { status: string; llm_ready: boolean; provider: unknown; time: string }
 
 export type OHLCVBar = { date: string; open: number; high: number; low: number; close: number; volume: number; amount: number }
-export type OHLCVResp = { symbol: string; meta: any; bars: OHLCVBar[] }
+export type OHLCVResp = { symbol: string; meta: unknown; bars: OHLCVBar[] }
 
 // --- Events/Sync ---
 export type EventOut = {
@@ -54,14 +54,14 @@ export type EventOut = {
   type: string
   actor_id?: string | null
   created_at: string
-  data: Record<string, any>
+  data: Record<string, unknown>
 }
 
 export type SyncEventIn = {
   id: string
   conversation_id: string
   type: string
-  data: Record<string, any>
+  data: Record<string, unknown>
   actor_id?: string | null
   created_at?: string | null
 }
@@ -75,6 +75,6 @@ export type SyncReq = {
 export type SyncResp = {
   ack: Record<string, string>
   deltas: Record<string, EventOut[]>
-  conversations_delta: Array<Record<string, any>>
-  user_settings_delta: Array<Record<string, any>>
+  conversations_delta: Array<Record<string, unknown>>
+  user_settings_delta: Array<Record<string, unknown>>
 }

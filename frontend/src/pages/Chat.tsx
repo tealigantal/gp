@@ -13,7 +13,7 @@ import { useSendMessage } from '../features/thread/useSendMessage'
 import { getRecommendationArtifact } from '../api/client'
 import { asRecommendationArtifact } from '../api/adapters'
 import { useSelectedArtifact } from '../features/artifacts/useSelectedArtifact'
-import type { ThreadItem } from '../api/contracts'
+import type { ThreadItem, RecommendationArtifact } from '../api/contracts'
 
 export default function Chat() {
   const nav = useNavigate()
@@ -35,16 +35,26 @@ export default function Chat() {
       setSessionId(cidParam)
       persistSessionId(cidParam)
     }
-  }, [cidParam])
+  }, [cidParam, sessionId])
 
-  const { items, loading, loadOlder, loadNewer, reportRead, maxSeq } = useConversationThread(sessionId, { anchor: anchorSeq, pageSize: 60, pollMs: 4000 })
+  const { items, loadOlder, loadNewer, reportRead, hasMoreOlder } = useConversationThread(sessionId, { anchor: anchorSeq, pageSize: 60, pollMs: 4000 })
 
+  // anchor highlight
+  const [highlightSeq, setHighlightSeq] = useState<number | undefined>(anchorSeq)
+  useEffect(() => { setHighlightSeq(anchorSeq) }, [anchorSeq])
+  useEffect(() => {
+    if (!highlightSeq) return
+    const el = listRef.current?.querySelector(`[data-seq="${highlightSeq}"]`)
+    if (el && 'scrollIntoView' in el) {
+      (el as HTMLElement).scrollIntoView({ block: 'center' })
+    }
+  }, [items, highlightSeq])
   useEffect(() => { if (items.length) reportRead() }, [items, reportRead])
 
   const sendMutation = useSendMessage()
   const canSend = useMemo(() => input.trim().length > 0 && !sendMutation.isPending, [input, sendMutation.isPending])
 
-  async function ensureCid() { return sessionId }
+  //
 
   // K线独立 Inspector 后续接入；不再写入消息流。
 
@@ -68,8 +78,9 @@ export default function Chat() {
           // 拉取新项
           setTimeout(() => { loadNewer().catch(() => undefined) }, 100)
         },
-        onError: (err: any) => {
-          message.error(err?.message || '发送失败')
+        onError: (err: unknown) => {
+          const e = err as { message?: string }
+          message.error(e?.message || '发送失败')
           setPendingTexts((prev) => prev.slice(1))
         }
       }
@@ -87,9 +98,14 @@ export default function Chat() {
         }}
         style={{ flex: 1, overflowY: 'auto', padding: 8, border: '1px solid #eee', marginBottom: 12, borderRadius: 8, minHeight: 0 }}
       >
+        {hasMoreOlder && (
+          <div style={{ textAlign: 'center', marginBottom: 8 }}>
+            <a onClick={() => { loadOlder().catch(()=>undefined) }}>加载更早消息</a>
+          </div>
+        )}
         {(items.length === 0 && pendingTexts.length === 0) && <Typography.Text type="secondary">示例：给我推荐3只低估值</Typography.Text>}
         <List dataSource={items} renderItem={(it: ThreadItem) => (
-          <List.Item key={`${it.seq}`} style={{ display: 'block', border: 'none', padding: 0 }}>
+          <List.Item key={`${it.seq}`} data-seq={it.seq} style={{ display: 'block', border: 'none', padding: 0, background: (highlightSeq && it.seq === highlightSeq) ? 'rgba(255, 247, 173, 0.5)' : undefined }}>
             <ThreadItemRenderer item={it} />
           </List.Item>
         )} />
@@ -105,8 +121,8 @@ export default function Chat() {
           placeholder="对话指令：如 给我推荐3只低估值 / 查询 600519 K线 / 查看进度"
           onKeyDown={(e) => {
             if (e.key === 'Enter' && !e.shiftKey) {
-              const ne: any = e
-              if (ne?.nativeEvent?.isComposing) return
+              const native = e.nativeEvent as unknown as { isComposing?: boolean }
+              if (native?.isComposing) return
               e.preventDefault()
               if (canSend) handleSubmit(input)
             }
@@ -122,7 +138,7 @@ export default function Chat() {
               style={{ cursor: 'pointer', color: '#1677ff', textAlign: 'center', margin: '6px 0' }}
             >有新内容，点击查看</div>
           )}
-          <FloatButton shape="square" type="primary" tooltip="回到底部" style={{ right: 24, bottom: 24 }} onClick={() => { listRef.current?.scrollTo({ top: 999999, behavior: 'smooth' }); setHasNew(false) }} />
+          <FloatButton shape="square" type="primary" tooltip="回到底部" style={{ right: 24, bottom: 24 }} onClick={() => { listRef.current?.scrollTo({ top: 999999, behavior: 'smooth' }); setHasNew(false); setHighlightSeq(undefined) }} />
         </>
       )}
     </div>
@@ -158,25 +174,30 @@ function ThreadItemRenderer({ item }: { item: ThreadItem }) {
     return <MessageBubble role="assistant" content={item.message || ''} />
   }
   if (item.kind === 'recommendation') {
-    // lazy fetch artifact and render typed RecommendationDetail
-    const [data, setData] = useState<any>(null)
-    const { openKline } = useSelectedArtifact()
-    useEffect(() => {
-      let mounted = true
-      getRecommendationArtifact(item.artifact_id).then((d) => { if (mounted) setData(asRecommendationArtifact(d)) }).catch(()=>undefined)
-      return () => { mounted = false }
-    }, [item.artifact_id])
-    if (!data) return <Typography.Text type="secondary">加载推荐卡…</Typography.Text>
-    return (
-      <RecommendationDetail
-        artifact={data}
-        onShowKline={(sym) => {
-          const p = (data.picks || []).find((x: any) => x?.symbol === sym)
-          const overlay = p?.trade_plan ? { bands: p.trade_plan.bands, chip: p.chip } : { chip: p?.chip }
-          openKline(sym, overlay)
-        }}
-      />
-    )
+    return <RecommendationItemView artifactId={item.artifact_id} />
   }
   return null
+}
+
+function RecommendationItemView({ artifactId }: { artifactId: string }) {
+  const [data, setData] = useState<RecommendationArtifact | null>(null)
+  const { openKline } = useSelectedArtifact()
+  useEffect(() => {
+    let mounted = true
+    getRecommendationArtifact(artifactId)
+      .then((d) => { if (mounted) setData(asRecommendationArtifact(d)) })
+      .catch(() => undefined)
+    return () => { mounted = false }
+  }, [artifactId])
+  if (!data) return <Typography.Text type="secondary">加载推荐卡…</Typography.Text>
+  return (
+    <RecommendationDetail
+      artifact={data}
+      onShowKline={(sym) => {
+        const p = data.picks.find((x) => x.symbol === sym)
+        const overlay = p?.trade_plan ? { bands: p.trade_plan.bands, chip: p.chip } : { chip: p?.chip }
+        openKline(sym, overlay)
+      }}
+    />
+  )
 }

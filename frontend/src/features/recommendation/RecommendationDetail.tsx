@@ -53,7 +53,7 @@ export default function RecommendationDetail({ artifact, onShowKline }: { artifa
             <div>
               <div>degraded: {String(artifact.diagnostics.degraded)}</div>
               {Array.isArray(artifact.diagnostics.degrade_reasons) && artifact.diagnostics.degrade_reasons.length > 0 && (
-                <div>reasons: {artifact.diagnostics.degrade_reasons.map((r: any) => r?.reason_code).filter(Boolean).join(', ')}</div>
+                <div>reasons: {artifact.diagnostics.degrade_reasons.map((r) => (r && typeof r === 'object' && 'reason_code' in (r as { reason_code?: unknown }) ? String((r as { reason_code?: unknown }).reason_code) : 'UNKNOWN')).filter(Boolean).join(', ')}</div>
               )}
             </div>
           )
@@ -62,4 +62,3 @@ export default function RecommendationDetail({ artifact, onShowKline }: { artifa
     </Card>
   )
 }
-

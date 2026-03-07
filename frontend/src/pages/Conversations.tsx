@@ -36,8 +36,9 @@ export default function Conversations() {
             return b.lastSeq - a.lastSeq
           })
       )
-    } catch (e: any) {
-      message.error(e?.message || '加载失败')
+    } catch (e: unknown) {
+      const err = e as { message?: string }
+      message.error(err?.message || '加载失败')
     } finally {
       setLoading(false)
     }
@@ -62,8 +63,9 @@ export default function Conversations() {
       await deleteConversation(cid)
       message.success('已删除会话')
       await load()
-    } catch (e: any) {
-      message.error(e?.message || '删除失败')
+    } catch (e: unknown) {
+      const err = e as { message?: string }
+      message.error(err?.message || '删除失败')
     }
   }
 
@@ -80,8 +82,9 @@ export default function Conversations() {
       setItems([])
       ;['gp:lastSid','gp_session_id'].forEach((k)=>localStorage.removeItem(k))
       await load()
-    } catch (e: any) {
-      message.error(e?.message || '清理失败')
+    } catch (e: unknown) {
+      const err = e as { message?: string }
+      message.error(err?.message || '清理失败')
     }
   }
 

@@ -9,7 +9,7 @@ function Host() {
   const artifact = {
     id: 'a1', as_of: null, timezone: 'Asia/Shanghai', tradeable: true,
     picks: [{ symbol: '600519', name: '贵州茅台', trade_plan: { bands: { S1: 1, R1: 2 } }, chip: { model_used: 'mock' } }]
-  } as any
+  } as { id: string; as_of: null; timezone: string; tradeable: boolean; picks: Array<{ symbol: string; name?: string; trade_plan: { bands: { S1?: number; R1?: number } }; chip?: { model_used?: string } }> }
   return (
     <div>
       <RecommendationDetail artifact={artifact} onShowKline={(s) => openKline(s, { bands: artifact.picks[0].trade_plan.bands, chip: artifact.picks[0].chip })} />
@@ -21,7 +21,8 @@ function Host() {
 describe('KlineInspector', () => {
   it('opens and shows symbol', async () => {
     // polyfill matchMedia for antd responsive
-    ;(window as any).matchMedia = (window as any).matchMedia || ((q: string) => ({ matches: false, media: q, onchange: null, addListener: () => {}, removeListener: () => {}, addEventListener: () => {}, removeEventListener: () => {}, dispatchEvent: () => false }))
+    const w = window as unknown as { matchMedia?: (q: string) => { matches: boolean; media: string; onchange: null; addListener: (h: unknown)=>void; removeListener: (h: unknown)=>void; addEventListener: (t: string, h: unknown)=>void; removeEventListener: (t: string, h: unknown)=>void; dispatchEvent: (e: unknown)=> boolean } }
+    w.matchMedia = w.matchMedia || ((q: string) => ({ matches: false, media: q, onchange: null, addListener: () => {}, removeListener: () => {}, addEventListener: () => {}, removeEventListener: () => {}, dispatchEvent: () => false }))
     render(<SelectedArtifactProvider><Host /></SelectedArtifactProvider>)
     const link = screen.getByText('查看K线')
     fireEvent.click(link)

@@ -2,13 +2,15 @@ import { useState } from 'react'
 import { Card, Input, Button, List, Space, Typography, message } from 'antd'
 import { searchHits } from '../api/client'
 import { asSearchHits } from '../api/adapters'
+import { renderHighlight } from '../utils/highlight'
+import type { SearchHit } from '../api/contracts'
 import { useNavigate } from 'react-router-dom'
 import { setSessionId as persistSessionId } from '../utils/session'
 
 export default function Search() {
   const [q, setQ] = useState('')
   const [loading, setLoading] = useState(false)
-  const [results, setResults] = useState<ReturnType<typeof asSearchHits>>([])
+  const [results, setResults] = useState<SearchHit[]>([])
   const nav = useNavigate()
 
   async function run() {
@@ -17,8 +19,9 @@ export default function Search() {
     try {
       const data = await searchHits({ q: q.trim(), limit: 50 })
       setResults(asSearchHits(data))
-    } catch (e: any) {
-      message.error(e?.message || '搜索失败')
+    } catch (e: unknown) {
+      const err = e as { message?: string }
+      message.error(err?.message || '搜索失败')
       setResults([])
     } finally {
       setLoading(false)
@@ -42,14 +45,14 @@ export default function Search() {
       ) : (
         <List
           dataSource={results}
-          renderItem={(it: any) => (
+          renderItem={(it: SearchHit) => (
             <List.Item onClick={() => jump(it)} style={{ cursor: 'pointer' }}>
               <Space direction="vertical" size={2}>
                 <Typography.Text>会话: {it.conversation_id}</Typography.Text>
                 <Typography.Text type="secondary">定位 seq: {it.seq}</Typography.Text>
                 {it.preview && (
                   <Typography.Paragraph ellipsis={{ rows: 2 }}>
-                    {highlightWithIndices(it.preview, it.highlights || [])}
+                    {renderHighlight(it.preview, it.highlights || [])}
                   </Typography.Paragraph>
                 )}
               </Space>
@@ -58,22 +61,5 @@ export default function Search() {
         />
       )}
     </Card>
-  )
-}
-
-function highlightWithIndices(text: string, highlights: Array<{ start: number; length: number }>) {
-  if (!highlights || highlights.length === 0) return text
-  const h = highlights[0]
-  const start = Math.max(0, h.start)
-  const end = Math.min(text.length, start + Math.max(0, h.length))
-  const pre = text.slice(0, start)
-  const mid = text.slice(start, end)
-  const suf = text.slice(end)
-  return (
-    <span>
-      {pre}
-      <mark>{mid}</mark>
-      {suf}
-    </span>
   )
 }

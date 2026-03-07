@@ -11,21 +11,22 @@ const getConversationSummaries = vi.fn()
 const getRecommendationArtifact = vi.fn()
 
 vi.mock('../api/client', () => ({
-  getThreadItems: (...args: any[]) => getThreadItems(...args),
-  chat: (...args: any[]) => chatApi(...args),
-  getConversationSummaries: (...args: any[]) => getConversationSummaries(...args),
-  getRecommendationArtifact: (...args: any[]) => getRecommendationArtifact(...args),
+  getThreadItems: (...args: unknown[]) => getThreadItems(...(args as [])),
+  chat: (...args: unknown[]) => chatApi(...(args as [])),
+  getConversationSummaries: (...args: unknown[]) => getConversationSummaries(...(args as [])),
+  getRecommendationArtifact: (...args: unknown[]) => getRecommendationArtifact(...(args as [])),
 }))
 
 vi.mock('../api/adapters', async (orig) => {
   const base = await orig()
-  return { ...base as any, asRecommendationArtifact: (x: any) => x }
+  return { ...(base as Record<string, unknown>), asRecommendationArtifact: (x: unknown) => x }
 })
 
 describe('Chat thread', () => {
   it('renders thread around anchor and refreshes after send', async () => {
     // polyfill matchMedia for antd responsive
-    ;(window as any).matchMedia = (window as any).matchMedia || ((q: string) => ({ matches: false, media: q, onchange: null, addListener: () => {}, removeListener: () => {}, addEventListener: () => {}, removeEventListener: () => {}, dispatchEvent: () => false }))
+    const w = window as unknown as { matchMedia?: (q: string) => { matches: boolean; media: string; onchange: null; addListener: (h: unknown)=>void; removeListener: (h: unknown)=>void; addEventListener: (t: string, h: unknown)=>void; removeEventListener: (t: string, h: unknown)=>void; dispatchEvent: (e: unknown)=> boolean } }
+    w.matchMedia = w.matchMedia || ((q: string) => ({ matches: false, media: q, onchange: null, addListener: () => {}, removeListener: () => {}, addEventListener: () => {}, removeEventListener: () => {}, dispatchEvent: () => false }))
     getConversationSummaries.mockResolvedValueOnce([])
     getThreadItems
       .mockResolvedValueOnce([

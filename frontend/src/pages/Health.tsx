@@ -7,7 +7,7 @@ export default function Health() {
   return (
     <Card title="系统健康">
       {q.isLoading && <Spin />}
-      {q.isError && <Alert type="error" message={(q.error as any)?.message || '请求失败'} />}
+      {q.isError && <Alert type="error" message={(q.error as { message?: string })?.message || '请求失败'} />}
       {q.data && (
         <Descriptions bordered column={1} size="small">
           <Descriptions.Item label="状态">{q.data.status}</Descriptions.Item>

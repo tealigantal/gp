@@ -12,7 +12,7 @@ const reasonMap: Record<string, string> = {
   MAINLINE_MISSING: '主线缺失',
 }
 
-export default function DegradeAlert({ reasons }: { reasons: Array<{ reason_code: string; detail?: any }> }) {
+export default function DegradeAlert({ reasons }: { reasons: Array<{ reason_code: string; detail?: unknown }> }) {
   if (!reasons || reasons.length === 0) return null
   return (
     <Alert
@@ -29,7 +29,11 @@ export default function DegradeAlert({ reasons }: { reasons: Array<{ reason_code
                 {reasonMap[r.reason_code] ? `（${reasonMap[r.reason_code]}）` : ''}
                 {r.detail ? (
                   <>
-                    {' '}<small>{Object.entries(r.detail).map(([k,v]) => `${k}=${String(v)}`).join(' ')}</small>
+                    {' '}<small>{
+                      typeof r.detail === 'object' && r.detail != null
+                        ? Object.entries(r.detail as Record<string, unknown>).map(([k,v]) => `${k}=${String(v)}`).join(' ')
+                        : String(r.detail)
+                    }</small>
                   </>
                 ) : null}
               </li>

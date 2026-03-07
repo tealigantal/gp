@@ -4,10 +4,12 @@ import { Card, Input, Button, Space, message, Segmented, Typography } from 'antd
 import { getRiskProfile, setRiskProfile } from '../store/settings'
 import { useSelectedArtifact } from '../features/artifacts/useSelectedArtifact'
 
+type Risk = 'conservative' | 'normal' | 'aggressive'
 export default function ToolsPanel(props: { conversationId?: string | null; onEnsureConversation?: (cid: string) => void; onRefresh?: () => void }) {
   const { conversationId } = props
+  void conversationId
   const [symbol, setSymbol] = useState('')
-  const [risk, setRisk] = useState(getRiskProfile())
+  const [risk, setRisk] = useState<Risk>(getRiskProfile() as Risk)
   const { openKline } = useSelectedArtifact()
 
   useEffect(() => { setRisk(getRiskProfile()) }, [])
@@ -35,7 +37,7 @@ export default function ToolsPanel(props: { conversationId?: string | null; onEn
         <Space direction="vertical" style={{ width: '100%' }}>
           <Segmented
             value={risk}
-            onChange={(v) => { const nv = v as any; setRisk(nv); setRiskProfile(nv) }}
+            onChange={(v) => { const nv = v as Risk; setRisk(nv); setRiskProfile(nv) }}
             options={[
               { label: '保守', value: 'conservative' },
               { label: '均衡', value: 'normal' },

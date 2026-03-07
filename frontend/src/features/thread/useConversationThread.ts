@@ -10,7 +10,10 @@ function dedupeMerge(arrA: ThreadItem[], arrB: ThreadItem[]): ThreadItem[] {
   return Array.from(map.values()).sort((a, b) => a.seq - b.seq)
 }
 
-export function useConversationThread(conversationId?: string | null, opts?: { anchor?: number; pageSize?: number; pollMs?: number }) {
+export function useConversationThread(
+  conversationId?: string | null,
+  opts?: { anchor?: number; pageSize?: number; pollMs?: number }
+) {
   const cid = conversationId || undefined
   const pageSize = opts?.pageSize ?? 60
   const anchor = opts?.anchor
@@ -19,6 +22,7 @@ export function useConversationThread(conversationId?: string | null, opts?: { a
   const [items, setItems] = useState<ThreadItem[]>([])
   const [loading, setLoading] = useState(false)
   const [initialized, setInitialized] = useState(false)
+  const [hasMoreOlder, setHasMoreOlder] = useState(true)
   const pollRef = useRef<number | null>(null)
 
   const minSeq = useMemo(() => (items.length ? items[0].seq : 0), [items])
@@ -32,9 +36,11 @@ export function useConversationThread(conversationId?: string | null, opts?: { a
         const back = await getThreadItems(cid, { anchor, direction: 'backward', limit: Math.ceil(pageSize / 2) })
         const fwd = await getThreadItems(cid, { anchor, direction: 'forward', limit: Math.ceil(pageSize / 2) })
         setItems(dedupeMerge(back, fwd))
+        setHasMoreOlder((back?.length || 0) > 0)
       } else {
         const back = await getThreadItems(cid, { direction: 'backward', limit: pageSize })
         setItems(back)
+        setHasMoreOlder((back?.length || 0) > 0)
       }
     } finally {
       setLoading(false)
@@ -46,6 +52,10 @@ export function useConversationThread(conversationId?: string | null, opts?: { a
     if (!cid) return
     const a = (minSeq ? minSeq - 1 : 0)
     const back = await getThreadItems(cid, { anchor: a, direction: 'backward', limit: pageSize })
+    if (!back || back.length === 0) {
+      setHasMoreOlder(false)
+      return
+    }
     setItems((prev) => dedupeMerge(back, prev))
   }, [cid, minSeq, pageSize])
 
@@ -61,17 +71,23 @@ export function useConversationThread(conversationId?: string | null, opts?: { a
     // start only after initial load
     if (!initialized) return
     const id = window.setInterval(() => { loadNewer().catch(() => undefined) }, pollMs)
-    pollRef.current = id as any
+    pollRef.current = id as number
     return () => { if (pollRef.current) window.clearInterval(pollRef.current) }
   }, [cid, initialized, pollMs, loadNewer])
 
   useEffect(() => { loadInitial().catch(() => undefined) }, [loadInitial])
 
+  // Reset state when conversation changes
+  useEffect(() => {
+    setItems([])
+    setInitialized(false)
+    setHasMoreOlder(true)
+  }, [cid])
+
   const reportRead = useCallback(async () => {
     if (!cid || !maxSeq) return
-    try { await postThreadRead(cid, { last_read_seq: maxSeq }) } catch {}
+    try { await postThreadRead(cid, { last_read_seq: maxSeq }) } catch { /* ignore */ }
   }, [cid, maxSeq])
 
-  return { items, loading, loadOlder, loadNewer, reportRead, minSeq, maxSeq }
+  return { items, loading, loadOlder, loadNewer, reportRead, minSeq, maxSeq, hasMoreOlder }
 }
-
