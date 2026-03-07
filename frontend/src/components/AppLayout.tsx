@@ -2,6 +2,7 @@ import { Layout, Menu, theme, ConfigProvider } from 'antd'
 import { Link, useLocation } from 'react-router-dom'
 import { useMemo } from 'react'
 import { lightTheme } from '../design/theme'
+import { SelectedArtifactProvider } from '../features/artifacts/useSelectedArtifact'
 
 const { Header, Content, Footer } = Layout
 
@@ -32,9 +33,11 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             style={{ flex: 1, minWidth: 0 }}
           />
         </Header>
-        <Content style={{ padding: '16px 24px' }}>
-          <div style={{ background: token.colorBgContainer, padding: 24, minHeight: 360, maxWidth: 1280, margin: '0 auto', fontSize: 15, lineHeight: 1.7 }}>
-            {children}
+        <Content style={{ padding: '16px 24px', height: 'calc(100vh - 64px - 64px)' }}>
+          <div style={{ background: token.colorBgContainer, padding: 24, height: '100%', maxWidth: 1400, margin: '0 auto', fontSize: 15, lineHeight: 1.7, overflow: 'hidden' }}>
+            <SelectedArtifactProvider>
+              {children}
+            </SelectedArtifactProvider>
           </div>
         </Content>
         <Footer style={{ textAlign: 'center' }}>gp assistant · React SPA</Footer>

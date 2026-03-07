@@ -8,7 +8,8 @@
     "build": "vite build",
     "preview": "vite preview --port 5173",
     "lint": "eslint --max-warnings=0 --ext .ts,.tsx src",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run --environment jsdom"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.45.0",
@@ -32,6 +33,11 @@
     "eslint-plugin-react-hooks": "^4.6.0",
     "eslint-plugin-import": "^2.29.1",
     "typescript": "^5.3.3",
-    "vite": "^5.1.4"
+    "vite": "^5.1.4",
+    "vitest": "^1.4.0",
+    "@testing-library/react": "^14.2.1",
+    "@testing-library/jest-dom": "^6.4.2",
+    "@testing-library/user-event": "^14.5.2",
+    "jsdom": "^24.0.0"
   }
 }

@@ -1,27 +1,55 @@
 ﻿import { useEffect, useState } from "react"
 import { Badge, Button, Card, List, Space, Typography, Popconfirm, message } from "antd"
-import { syncManager } from "../sync/SyncManager"
 import dayjs from "dayjs"
 import { useNavigate } from "react-router-dom"
-import { deleteConversation, cleanupConversations } from "../api/client"
+import { deleteConversation, cleanupConversations, getConversationSummaries } from "../api/client"
+import { asConversationSummary } from "../api/adapters"
+import type { ConversationSummary } from "../api/contracts"
 import { setSessionId as persistSessionId, newSid } from "../utils/session"
 
-type Item = { id: string; title: string; lastSeq: number; updatedAt?: string; unread: number; preview: string }
+type Item = { id: string; title: string; lastSeq: number; updatedAt?: string | null; unread: number; preview: string }
 
 export default function Conversations() {
   const [items, setItems] = useState<Item[]>([])
   const [loading, setLoading] = useState(false)
   const nav = useNavigate()
 
+  async function load() {
+    setLoading(true)
+    try {
+      const data = await getConversationSummaries()
+      const list = (data || []).map(asConversationSummary)
+      setItems(
+        list
+          .map((m: ConversationSummary) => ({
+            id: m.id,
+            title: m.title || m.id,
+            lastSeq: m.last_seq,
+            updatedAt: m.updated_at,
+            unread: m.unread_count,
+            preview: m.last_item_preview || "",
+          }))
+          .sort((a, b) => {
+            const ta = a.updatedAt ? Date.parse(a.updatedAt) : 0
+            const tb = b.updatedAt ? Date.parse(b.updatedAt) : 0
+            if (tb !== ta) return tb - ta
+            return b.lastSeq - a.lastSeq
+          })
+      )
+    } catch (e: any) {
+      message.error(e?.message || '加载失败')
+    } finally {
+      setLoading(false)
+    }
+  }
+
   useEffect(() => {
-    const unsub = syncManager.subscribe(() => setItems(syncManager.convList() as Item[]))
-    setItems(syncManager.convList() as Item[])
-    return () => unsub()
+    load()
   }, [])
 
   async function refresh() {
     setLoading(true)
-    try { syncManager.requestSync('conversations') } finally { setLoading(false) }
+    try { await load() } finally { setLoading(false) }
   }
 
   function open(cid: string) {
@@ -33,11 +61,7 @@ export default function Conversations() {
     try {
       await deleteConversation(cid)
       message.success('已删除会话')
-      // 立刻从列表与本地状态移除
-      setItems((prev) => prev.filter((x) => x.id !== cid))
-      syncManager.removeConversation(cid)
-      // 触发一次同步以刷新 meta
-      syncManager.requestSync('conversations')
+      await load()
     } catch (e: any) {
       message.error(e?.message || '删除失败')
     }
@@ -53,11 +77,9 @@ export default function Conversations() {
     try {
       await cleanupConversations('all')
       message.success('已清理所有会话')
-      // 清空本地状态并通知订阅者，界面自动刷新
       setItems([])
-      syncManager.resetAll()
       ;['gp:lastSid','gp_session_id'].forEach((k)=>localStorage.removeItem(k))
-      syncManager.requestSync('conversations')
+      await load()
     } catch (e: any) {
       message.error(e?.message || '清理失败')
     }

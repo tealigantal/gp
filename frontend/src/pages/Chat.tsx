@@ -1,207 +1,83 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Card, FloatButton, Input, List, Space, Spin, Typography, message } from 'antd'
-import { useMutation } from '@tanstack/react-query'
-import { chat } from '../api/client'
-import type { ChatReq } from '../api/types'
-import { useLocation } from 'react-router-dom'
-import { syncManager } from '../sync/SyncManager'
+import { useLocation, useNavigate } from 'react-router-dom'
 import MessageBubble from '../components/MessageBubble'
-import RecommendationCard from '../components/RecommendationCard'
-import KlineCard from '../components/KlineCard'
+import RecommendationDetail from '../features/recommendation/RecommendationDetail'
 import WorkbenchLayout from '../components/WorkbenchLayout'
 import ToolsPanel from '../components/ToolsPanel'
-import { getRiskProfile } from '../store/settings'
-import { getOrCreateSessionId, setSessionId as persistSessionId, newSid } from '../utils/session'
-import { useConversationEvents } from '../hooks/useConversationEvents'
-
-type Msg = { role: 'user' | 'assistant'; content?: string; kind?: 'text'|'rec'|'kline'; payload?: any }
-
-const LAST_RECOMMEND_RESULT_KEY = 'gp_last_recommend_result'
+import Conversations from './Conversations'
+import KlineInspector from '../features/artifacts/KlineInspector'
+import { setSessionId as persistSessionId } from '../utils/session'
+import { useConversationThread } from '../features/thread/useConversationThread'
+import { useSendMessage } from '../features/thread/useSendMessage'
+import { getRecommendationArtifact } from '../api/client'
+import { asRecommendationArtifact } from '../api/adapters'
+import { useSelectedArtifact } from '../features/artifacts/useSelectedArtifact'
+import type { ThreadItem } from '../api/contracts'
 
 export default function Chat() {
+  const nav = useNavigate()
   const loc = useLocation()
   const [sessionId, setSessionId] = useState<string | null>(null)
   const [input, setInput] = useState('')
-  const [messages, setMessages] = useState<Msg[]>([])
+  const [pendingTexts, setPendingTexts] = useState<string[]>([])
   const listRef = useRef<HTMLDivElement>(null)
   const [atBottom, setAtBottom] = useState(true)
   const [hasNew, setHasNew] = useState(false)
-  const lastMaxSeqRef = useRef<number>(0)
-  const sessionIdRef = useRef<string | null>(sessionId)
+
+  const params = useMemo(() => new URLSearchParams(loc.search), [loc.search])
+  const cidParam = params.get('cid') || null
+  const seqParam = params.get('seq')
+  const anchorSeq = seqParam ? Number(seqParam) : undefined
 
   useEffect(() => {
-    if (sessionId) persistSessionId(sessionId)
-    sessionIdRef.current = sessionId
-    syncManager.currentConversationId = () => sessionId
-  }, [sessionId])
-
-  useEffect(() => {
-    const sid = getOrCreateSessionId()
-    setSessionId(sid)
-  }, [])
-
-  // 订阅：事件变化驱动渲染（加载与轮询由 hook 负责）
-  useEffect(() => {
-    if (!sessionId) return
-    const unsub = syncManager.subscribe(() => renderFromEvents())
-    return () => unsub()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sessionId])
-
-  // 增量拉取 events（2.5s；cursor 持久化）
-  useConversationEvents(sessionId)
-
-  // 前台可见性切换时触发轻量同步
-  useEffect(() => {
-    const onVis = () => { if (!document.hidden) syncManager.requestSync('visibility_change') }
-    document.addEventListener('visibilitychange', onVis)
-    return () => document.removeEventListener('visibilitychange', onVis)
-  }, [])
-
-  // 支持：?cid=xxx&seq=123 定位
-  useEffect(() => {
-    const params = new URLSearchParams(loc.search)
-    const cid = params.get('cid') || undefined
-    const seqStr = params.get('seq') || undefined
-    if (cid) {
-      if (cid !== sessionId) {
-        setSessionId(cid)
-        persistSessionId(cid)
-      }
-      const seq = seqStr ? Number(seqStr) : undefined
-      if (seq && Number.isFinite(seq)) {
-        syncManager.jumpToSeq(cid, seq).then(() => renderFromEvents())
-      }
+    if (cidParam && cidParam !== sessionId) {
+      setSessionId(cidParam)
+      persistSessionId(cidParam)
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loc.search])
+  }, [cidParam])
 
-  function renderFromEvents(cidArg?: string | null) {
-    const cid = cidArg || sessionId
-    if (!cid) return
-    const evs = syncManager.messages(cid)
-    const view: Msg[] = []
-    for (const e of evs) {
-      const role: 'user' | 'assistant' = (e.actor_id === 'user' ? 'user' : 'assistant')
-      if (e?.data?.kind === 'card') {
-        const p = e?.data?.payload || {}
-        if (p?.type === 'recommendation' && Array.isArray(p?.picks)) {
-          view.push({ role, kind: 'rec', payload: p })
-          continue
-        }
-        if (p?.type === 'kline' && p?.symbol) {
-          view.push({ role, kind: 'kline', payload: p })
-          continue
-        }
-        if (p?.type === 'status') continue
-      }
-      view.push({ role, kind: 'text', content: e?.data?.content || '' })
-    }
-    setMessages(view)
-    const maxSeq = evs.length ? evs[evs.length - 1].seq : 0
-    if (maxSeq && cid) syncManager.reportRead(cid, maxSeq)
-    if (maxSeq > lastMaxSeqRef.current && !atBottom) setHasNew(true)
-    lastMaxSeqRef.current = Math.max(lastMaxSeqRef.current, maxSeq)
-  }
+  const { items, loading, loadOlder, loadNewer, reportRead, maxSeq } = useConversationThread(sessionId, { anchor: anchorSeq, pageSize: 60, pollMs: 4000 })
 
-  const m = useMutation({
-    mutationFn: async ({ text, msgId }: { text: string; msgId?: string }) => {
-      const body: ChatReq = { session_id: sessionIdRef.current, message: text, message_id: msgId }
-      const resp = await chat(body)
-      if (!sessionId && resp.session_id) setSessionId(resp.session_id)
-      const tool = resp.tool_trace
-      if (tool?.triggered_recommend && tool?.recommend_result) {
-        localStorage.setItem(LAST_RECOMMEND_RESULT_KEY, JSON.stringify(tool.recommend_result))
-      }
-      return resp
-    },
-    onSuccess: async (resp) => {
-      const cid = resp?.session_id || sessionIdRef.current
-      if (cid) {
-        // Immediately inject assistant reply as a local event for smooth UX
-        try {
-          const id = resp?.assistant_message_id
-          if (id) {
-            const pseudoSeq = syncManager.maxSeq(String(cid)) + 1
-            const ev = {
-              id,
-              conversation_id: String(cid),
-              seq: pseudoSeq,
-              type: 'message.created',
-              actor_id: 'assistant',
-              created_at: new Date().toISOString(),
-              data: { message_id: id, kind: 'text', content: resp.reply }
-            } as any
-            syncManager.mergeEvents(String(cid), [ev])
-          }
-        } catch { /* ignore */ }
-        // Then ensure we pull any missing increments
-        try { await syncManager.ensureLoaded(String(cid)) } catch {}
-        syncManager.requestSync('chat_success')
-        renderFromEvents(String(cid))
-      }
-    },
-    onError: (err: any) => {
-      message.error(err?.message || '发送失败')
-    }
-  })
+  useEffect(() => { if (items.length) reportRead() }, [items, reportRead])
 
-  const canSend = useMemo(() => input.trim().length > 0 && !m.isPending, [input, m.isPending])
+  const sendMutation = useSendMessage()
+  const canSend = useMemo(() => input.trim().length > 0 && !sendMutation.isPending, [input, sendMutation.isPending])
 
-  async function ensureCid() {
-    let cid = sessionId || null
-    if (!cid) {
-      cid = newSid()
-      setSessionId(cid)
-      persistSessionId(cid)
-    }
-    sessionIdRef.current = cid
-    return cid
-  }
+  async function ensureCid() { return sessionId }
 
-  async function insertKlineCards(symbols: string[]) {
-    const cid = await ensureCid()
-    for (const s of symbols) {
-      syncManager.pushOutbox({
-        conversation_id: cid,
-        type: 'message.created',
-        actor_id: 'assistant',
-        data: { message_id: 'card-kline-' + Date.now(), kind: 'card', content: 'kline', payload: { type: 'kline', symbol: s } }
-      })
-    }
-    syncManager.requestSync('kline_cards')
-    renderFromEvents(cid)
-  }
+  // K线独立 Inspector 后续接入；不再写入消息流。
 
   async function handleSubmit(raw: string) {
     const text = raw.trim()
     if (!text) return
-    const cid = await ensureCid()
-    // 简化：默认走 LLM 对话通道
-    if (atBottom) setTimeout(() => listRef.current?.scrollTo({ top: 999999, behavior: 'smooth' }), 30)
-    // 清空输入，避免按下回车后文本残留
+    // 轻量 optimistic：仅在 UI 显示 pending 文本，不伪造 seq/assistant 影子
     setInput('')
-    // Local optimistic injection for user message (do not write to outbox)
-    // IMPORTANT: event/message ids must be globally unique across conversations (server uses a single PK).
-    const msgId = 'msg-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10)
-    try {
-      const pseudoSeq = syncManager.maxSeq(cid) + 1
-      syncManager.mergeEvents(cid, [{
-        id: msgId,
-        conversation_id: cid,
-        seq: pseudoSeq,
-        type: 'message.created',
-        actor_id: 'user',
-        created_at: new Date().toISOString(),
-        data: { message_id: msgId, kind: 'text', content: text }
-      } as any])
-      renderFromEvents(cid)
-    } catch { /* ignore */ }
-    m.mutate({ text, msgId })
+    setPendingTexts((prev) => [...prev, text])
+    sendMutation.mutate(
+      { session_id: sessionId, message: text },
+      {
+        onSuccess: (resp) => {
+          const cid = resp?.session_id || sessionId
+          if (cid && cid !== sessionId) {
+            setSessionId(cid)
+            persistSessionId(cid)
+            nav(`/chat?cid=${encodeURIComponent(cid)}`)
+          }
+          setPendingTexts((prev) => prev.slice(1))
+          // 拉取新项
+          setTimeout(() => { loadNewer().catch(() => undefined) }, 100)
+        },
+        onError: (err: any) => {
+          message.error(err?.message || '发送失败')
+          setPendingTexts((prev) => prev.slice(1))
+        }
+      }
+    )
   }
 
-  const left = (
-    <div>
+  const center = (
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
       <div
         ref={listRef}
         onScroll={(e) => {
@@ -209,20 +85,17 @@ export default function Chat() {
           const nearBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - 40
           setAtBottom(nearBottom)
         }}
-        style={{ height: 420, overflowY: 'auto', padding: 8, border: '1px solid #eee', marginBottom: 12, borderRadius: 8 }}
+        style={{ flex: 1, overflowY: 'auto', padding: 8, border: '1px solid #eee', marginBottom: 12, borderRadius: 8, minHeight: 0 }}
       >
-        {messages.length === 0 && <Typography.Text type="secondary">示例：给我推荐3只低估值</Typography.Text>}
-        <List dataSource={messages} renderItem={(msg, idx) => (
-          <List.Item key={idx} style={{ display: 'block', border: 'none', padding: 0 }}>
-            {msg.kind === 'rec' && msg.payload?.picks ? (
-              <RecommendationCard picks={msg.payload.picks} meta={msg.payload?.meta} onShowKline={async (sym) => { if(!sessionId) return; syncManager.pushOutbox({ conversation_id: sessionId, type: 'message.created', actor_id: 'assistant', data: { message_id: 'card-kline-' + Date.now(), kind: 'card', content: 'kline', payload: { type: 'kline', symbol: sym } } }); syncManager.requestSync('kline_card'); renderFromEvents(sessionId) }} />
-            ) : msg.kind === 'kline' && msg.payload?.symbol ? (
-              <KlineCard symbol={msg.payload.symbol} conversationId={sessionId} />
-            ) : (
-              <MessageBubble role={msg.role} content={msg.content || ''} />
-            )}
+        {(items.length === 0 && pendingTexts.length === 0) && <Typography.Text type="secondary">示例：给我推荐3只低估值</Typography.Text>}
+        <List dataSource={items} renderItem={(it: ThreadItem) => (
+          <List.Item key={`${it.seq}`} style={{ display: 'block', border: 'none', padding: 0 }}>
+            <ThreadItemRenderer item={it} />
           </List.Item>
         )} />
+        {pendingTexts.map((t, i) => (
+          <div key={`pending-${i}`}><MessageBubble role='user' content={t + '  (发送中...)'} /></div>
+        ))}
       </div>
       <Space.Compact style={{ width: '100%' }}>
         <Input.TextArea
@@ -239,7 +112,7 @@ export default function Chat() {
             }
           }}
         />
-        {m.isPending && <div style={{ display: 'flex', alignItems: 'center', padding: '0 8px' }}><Spin /></div>}
+        {sendMutation.isPending && <div style={{ display: 'flex', alignItems: 'center', padding: '0 8px' }}><Spin /></div>}
       </Space.Compact>
       {!atBottom && (
         <>
@@ -256,16 +129,54 @@ export default function Chat() {
   )
 
   const right = (
-    <ToolsPanel
-      conversationId={sessionId}
-      onEnsureConversation={(cid) => { setSessionId(cid); persistSessionId(cid) }}
-      onRefresh={() => { syncManager.requestSync('tools_refresh'); setTimeout(()=>renderFromEvents(),50) }}
-    />
+    <div style={{ height: '100%', overflow: 'auto' }}>
+      <KlineInspector />
+      <ToolsPanel
+        conversationId={sessionId}
+        onEnsureConversation={(cid) => { setSessionId(cid); persistSessionId(cid) }}
+        onRefresh={() => { /* no-op for new model; polling handles newer items */ }}
+      />
+    </div>
   )
 
   return (
-    <Card title="对话">
-      <WorkbenchLayout left={left} right={right} />
+    <Card title="对话" style={{ height: '100%' }}>
+      <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+        <div style={{ flex: 1, minHeight: 0 }}>
+          <WorkbenchLayout left={<Conversations />} center={center} right={right} />
+        </div>
+      </div>
     </Card>
   )
+}
+
+function ThreadItemRenderer({ item }: { item: ThreadItem }) {
+  if (item.kind === 'text') {
+    return <MessageBubble role={item.role === 'system' ? 'assistant' : item.role} content={item.content} />
+  }
+  if (item.kind === 'status') {
+    return <MessageBubble role="assistant" content={item.message || ''} />
+  }
+  if (item.kind === 'recommendation') {
+    // lazy fetch artifact and render typed RecommendationDetail
+    const [data, setData] = useState<any>(null)
+    const { openKline } = useSelectedArtifact()
+    useEffect(() => {
+      let mounted = true
+      getRecommendationArtifact(item.artifact_id).then((d) => { if (mounted) setData(asRecommendationArtifact(d)) }).catch(()=>undefined)
+      return () => { mounted = false }
+    }, [item.artifact_id])
+    if (!data) return <Typography.Text type="secondary">加载推荐卡…</Typography.Text>
+    return (
+      <RecommendationDetail
+        artifact={data}
+        onShowKline={(sym) => {
+          const p = (data.picks || []).find((x: any) => x?.symbol === sym)
+          const overlay = p?.trade_plan ? { bands: p.trade_plan.bands, chip: p.chip } : { chip: p?.chip }
+          openKline(sym, overlay)
+        }}
+      />
+    )
+  }
+  return null
 }

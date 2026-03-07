@@ -1,26 +1,14 @@
 import React, { useEffect, useState } from 'react'
 import { Card, Input, Button, Space, message, Segmented, Typography } from 'antd'
-import DockPanel from './DockPanel'
-import DataStatusBar from './DataStatusBar'
-import { syncManager } from '../sync/SyncManager'
-import StatusPanel from './status/StatusPanel'
-import StrengthPanel from './status/StrengthPanel'
+// Deprecated status widgets removed from main UI
 import { getRiskProfile, setRiskProfile } from '../store/settings'
-import { newSid } from '../utils/session'
+import { useSelectedArtifact } from '../features/artifacts/useSelectedArtifact'
 
-export default function ToolsPanel({
-  conversationId,
-  onEnsureConversation,
-  onRefresh
-}: {
-  conversationId?: string | null
-  onEnsureConversation: (cid: string) => void
-  onRefresh: () => void
-}) {
+export default function ToolsPanel(props: { conversationId?: string | null; onEnsureConversation?: (cid: string) => void; onRefresh?: () => void }) {
+  const { conversationId } = props
   const [symbol, setSymbol] = useState('')
-  const [open, setOpen] = useState(false)
-  const [dockSymbol, setDockSymbol] = useState<string | null>(null)
   const [risk, setRisk] = useState(getRiskProfile())
+  const { openKline } = useSelectedArtifact()
 
   useEffect(() => { setRisk(getRiskProfile()) }, [])
 
@@ -28,27 +16,15 @@ export default function ToolsPanel({
     try {
       const s = (sym || symbol || '').trim()
       if (!s) return
-      const cid = conversationId || newSid()
-      if (!conversationId) onEnsureConversation(cid)
-      // 事件：附加 K 线卡片
-      syncManager.pushOutbox({
-        conversation_id: cid,
-        type: 'message.created',
-        actor_id: 'assistant',
-        data: { message_id: 'card-kline-' + Date.now(), kind: 'card', content: 'kline', payload: { type: 'kline', symbol: s } }
-      })
-      syncManager.requestSync('tools')
-      setDockSymbol(s)
-      setOpen(true)
-      onRefresh()
-    } catch (e: any) {
-      message.error(e?.message || '显示失败')
+      openKline(s)
+    } catch (e: unknown) {
+      const err = e as { message?: string }
+      message.error(err?.message || '显示失败')
     }
   }
 
   return (
     <div>
-      <DataStatusBar />
       <Card size="small" title="查看 K 线" style={{ marginBottom: 12 }}>
         <Space.Compact style={{ width: '100%' }}>
           <Input value={symbol} onChange={(e) => setSymbol(e.target.value)} placeholder="输入代码后回车" onPressEnter={() => showKline()} />
@@ -69,9 +45,6 @@ export default function ToolsPanel({
           <Typography.Text type="secondary">若未指定日期，默认使用最近数据。</Typography.Text>
         </Space>
       </Card>
-      <DockPanel open={open} symbol={dockSymbol} onClose={() => setOpen(false)} />
-      <StatusPanel conversationId={conversationId} />
-      <StrengthPanel conversationId={conversationId} />
     </div>
   )
 }

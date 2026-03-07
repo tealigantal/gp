@@ -1,5 +1,6 @@
 import axios from 'axios'
 import type { ChatReq, ChatResp, RecommendReq, RecommendResp, HealthResp, OHLCVResp, SyncReq, SyncResp, EventOut } from './types'
+import type { ConversationSummary, ThreadItem, RecommendationArtifact, SearchHit } from './contracts'
 
 const baseURL = import.meta.env.VITE_API_BASE || '/api'
 
@@ -47,14 +48,42 @@ export async function listEvents(cid: string, params: { after?: number; around?:
   return data
 }
 
+// Legacy search (kept for existing UI)
 export async function search(params: { q: string; conversation_id?: string; limit?: number }) {
-  const { data } = await api.get<Array<{ conversation_id: string; seq: number; message_id: string }>>('/search', { params })
+  const { data } = await api.get<Array<{ conversation_id: string; seq: number; message_id: string }>>('/search_legacy', { params })
   return data
 }
 
 export async function deleteConversation(cid: string) {
   const { data } = await api.delete<{ status: string }>(`/conversations/${encodeURIComponent(cid)}`,
     { headers: { 'X-Delete-Reason': 'user_click' } })
+  return data
+}
+
+// -------- New read-model API (Phase 1) --------
+
+export async function getConversationSummaries() {
+  const { data } = await api.get<ConversationSummary[]>('/conversations/summaries')
+  return data
+}
+
+export async function getThreadItems(conversationId: string, params: { anchor?: number; direction?: 'backward' | 'forward'; limit?: number } = {}) {
+  const { data } = await api.get<ThreadItem[]>(`/threads/${encodeURIComponent(conversationId)}/items`, { params })
+  return data
+}
+
+export async function postThreadRead(conversationId: string, body: { last_read_seq: number }) {
+  const { data } = await api.post<{ status: string }>(`/threads/${encodeURIComponent(conversationId)}/read`, body)
+  return data
+}
+
+export async function getRecommendationArtifact(artifactId: string) {
+  const { data } = await api.get<RecommendationArtifact>(`/artifacts/recommendations/${encodeURIComponent(artifactId)}`)
+  return data
+}
+
+export async function searchHits(params: { q: string; conversation_id?: string; limit?: number }) {
+  const { data } = await api.get<SearchHit[]>('/search', { params })
   return data
 }
 

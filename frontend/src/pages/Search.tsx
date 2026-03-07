@@ -1,31 +1,22 @@
 import { useState } from 'react'
 import { Card, Input, Button, List, Space, Typography, message } from 'antd'
-import { search as apiSearch, listEvents } from '../api/client'
-import { syncManager } from '../sync/SyncManager'
+import { searchHits } from '../api/client'
+import { asSearchHits } from '../api/adapters'
 import { useNavigate } from 'react-router-dom'
 import { setSessionId as persistSessionId } from '../utils/session'
 
 export default function Search() {
   const [q, setQ] = useState('')
   const [loading, setLoading] = useState(false)
-  const [results, setResults] = useState<Array<{ conversation_id: string; seq: number; message_id: string }>>([])
+  const [results, setResults] = useState<ReturnType<typeof asSearchHits>>([])
   const nav = useNavigate()
 
   async function run() {
     if (!q.trim()) return
     setLoading(true)
     try {
-      const data = await apiSearch({ q: q.trim(), limit: 50 })
-      const withPreview = await Promise.all((data || []).map(async (it) => {
-        try {
-          // Fetch the exact seq (around+limit=1 will return the previous event due to server-side windowing).
-          const after = Math.max(Number(it.seq || 0) - 1, 0)
-          const evs = await listEvents(it.conversation_id, { after, limit: 1 })
-          const content = evs?.[0]?.data?.content || ''
-          return { ...it, preview: content }
-        } catch { return { ...it } }
-      }))
-      setResults(withPreview as any)
+      const data = await searchHits({ q: q.trim(), limit: 50 })
+      setResults(asSearchHits(data))
     } catch (e: any) {
       message.error(e?.message || '搜索失败')
       setResults([])
@@ -37,8 +28,6 @@ export default function Search() {
   async function jump(item: { conversation_id: string; seq: number }) {
     const cid = item.conversation_id
     persistSessionId(cid)
-    await syncManager.ensureLoaded(cid)
-    await syncManager.jumpToSeq(cid, item.seq)
     nav(`/chat?cid=${encodeURIComponent(cid)}&seq=${item.seq}`)
   }
 
@@ -60,7 +49,7 @@ export default function Search() {
                 <Typography.Text type="secondary">定位 seq: {it.seq}</Typography.Text>
                 {it.preview && (
                   <Typography.Paragraph ellipsis={{ rows: 2 }}>
-                    {highlight(it.preview, q)}
+                    {highlightWithIndices(it.preview, it.highlights || [])}
                   </Typography.Paragraph>
                 )}
               </Space>
@@ -72,12 +61,14 @@ export default function Search() {
   )
 }
 
-function highlight(text: string, q: string) {
-  const idx = text.toLowerCase().indexOf(q.toLowerCase())
-  if (idx < 0) return text
-  const pre = text.slice(0, idx)
-  const mid = text.slice(idx, idx + q.length)
-  const suf = text.slice(idx + q.length)
+function highlightWithIndices(text: string, highlights: Array<{ start: number; length: number }>) {
+  if (!highlights || highlights.length === 0) return text
+  const h = highlights[0]
+  const start = Math.max(0, h.start)
+  const end = Math.min(text.length, start + Math.max(0, h.length))
+  const pre = text.slice(0, start)
+  const mid = text.slice(start, end)
+  const suf = text.slice(end)
   return (
     <span>
       {pre}

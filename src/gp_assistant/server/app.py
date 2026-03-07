@@ -21,7 +21,7 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 import pandas as pd
-from fastapi import APIRouter, FastAPI, HTTPException, Query
+from fastapi import APIRouter, FastAPI, HTTPException, Query, Body
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
@@ -559,6 +559,441 @@ def api_post_sync(req: SyncReq) -> SyncResp:  # type: ignore[return-value]
     )
 
 
+# -------------------------
+# Read-model endpoints (Phase 1)
+# -------------------------
+
+def _sql_conn():
+    try:
+        # best-effort reuse of event_store connection helper
+        return event_store._connect()  # type: ignore[attr-defined]
+    except Exception as e:  # noqa: BLE001
+        raise RuntimeError(f"failed to connect event store: {e}")
+
+
+def _current_user_id_safe() -> str:
+    try:
+        return event_store._current_user_id()  # type: ignore[attr-defined]
+    except Exception:
+        return "local"
+
+
+def _get_last_read_seq(cid: str, user_id: Optional[str] = None) -> int:
+    uid = user_id or _current_user_id_safe()
+    try:
+        conn = _sql_conn()
+        cur = conn.execute(
+            "SELECT last_read_seq FROM participants WHERE conversation_id=? AND user_id=?",
+            (cid, uid),
+        )
+        row = cur.fetchone()
+        conn.close()
+        return int(row[0] or 0) if row else 0
+    except Exception:
+        return 0
+
+
+def _row_payload_to_obj(val: Optional[str]) -> Optional[Dict[str, Any]]:
+    if val is None:
+        return None
+    try:
+        return json.loads(val)
+    except Exception:
+        return None
+
+
+def _map_kind_and_preview(kind: str, content: Optional[str], payload: Optional[Dict[str, Any]]):
+    # Map storage rows to stable kind + preview string
+    k = (kind or "text").strip().lower()
+    if k == "text":
+        pv = (content or "").strip()
+        return "text", pv
+    if k == "card":
+        ptype = str((payload or {}).get("type") or "").strip().lower()
+        if ptype == "recommendation":
+            picks = (payload or {}).get("picks")
+            n = 0
+            if isinstance(picks, list):
+                n = len(picks)
+            return "recommendation", f"推荐清单 {n}"
+        if ptype == "status":
+            msg = str((payload or {}).get("message") or (payload or {}).get("content") or "状态更新")
+            return "status", msg
+        if ptype == "kline":
+            # Do not treat K线为主要线程项；预览保守返回空
+            return "status", ""
+    # fallback
+    return "text", (content or "").strip()
+
+
+def _last_item_info(cid: str) -> Dict[str, Any]:
+    conn = _sql_conn()
+    try:
+        cur = conn.execute(
+            """
+            SELECT id, seq_created, kind, content, payload, created_at
+            FROM conv_messages
+            WHERE conversation_id=? AND deleted_at IS NULL
+            ORDER BY seq_created DESC
+            LIMIT 50
+            """,
+            (cid,),
+        )
+        rows = cur.fetchall() or []
+    finally:
+        conn.close()
+    for r in rows:
+        mid, seq, kind, content, payload_json, created_at = r
+        payload = _row_payload_to_obj(payload_json)
+        kind2, preview = _map_kind_and_preview(kind or "", content, payload)
+        # Skip pure kline (mapped to empty preview)
+        if kind2 == "status" and preview == "":
+            continue
+        return {
+            "id": str(mid),
+            "seq": int(seq or 0),
+            "kind": kind2,
+            "preview": str(preview or ""),
+            "created_at": created_at,
+        }
+    return {"id": None, "seq": 0, "kind": "text", "preview": "", "created_at": None}
+
+
+def _unread_count(cid: str, last_read_seq: int) -> int:
+    conn = _sql_conn()
+    try:
+        cur = conn.execute(
+            """
+            SELECT seq_created, kind, content, payload
+            FROM conv_messages
+            WHERE conversation_id=? AND deleted_at IS NULL AND seq_created>?
+            ORDER BY seq_created ASC
+            """,
+            (cid, int(last_read_seq)),
+        )
+        rows = cur.fetchall() or []
+    finally:
+        conn.close()
+    cnt = 0
+    for seq, kind, content, payload_json in rows:
+        payload = _row_payload_to_obj(payload_json)
+        kind2, preview = _map_kind_and_preview(kind or "", content, payload)
+        # Count as unread when it's a visible thread item (text/recommendation/status)
+        if kind2 in {"text", "recommendation", "status"}:
+            # Skip empty preview-only status (e.g., kline)
+            if kind2 == "status" and preview == "":
+                continue
+            cnt += 1
+    return cnt
+
+
+@api.get("/conversations/summaries")
+def api_get_conversation_summaries() -> List[Dict[str, Any]]:
+    items = event_store.list_conversations()
+    out: List[Dict[str, Any]] = []
+    for m in items:
+        cid = str(m.get("id"))
+        title = str(m.get("title") or cid)
+        last_seq = int(m.get("last_seq") or 0)
+        updated_at = m.get("updated_at")
+        last = _last_item_info(cid)
+        last_read = _get_last_read_seq(cid)
+        unread = _unread_count(cid, last_read)
+        out.append(
+            {
+                "id": cid,
+                "title": title,
+                "last_seq": last_seq,
+                "last_item_preview": last.get("preview") or "",
+                "last_item_kind": last.get("kind") or "text",
+                "last_item_ts": last.get("created_at"),
+                "unread_count": unread,
+                "updated_at": updated_at,
+            }
+        )
+    return out
+
+
+def _map_row_to_thread_item(row: tuple, cid: str) -> Optional[Dict[str, Any]]:
+    # row columns: id, seq_created, author_id, kind, content, payload, created_at
+    mid, seq, author_id, kind, content, payload_json, created_at = row
+    payload = _row_payload_to_obj(payload_json)
+    role = "assistant" if (str(author_id or "").lower().strip() == "assistant") else "user"
+    # Status items can be mapped to system role optionally
+    k2, _prev = _map_kind_and_preview(kind or "", content, payload)
+    if k2 == "status" and _prev == "":
+        # skip kline-like cards from thread items
+        return None
+    base = {
+        "id": str(mid),
+        "conversation_id": cid,
+        "seq": int(seq or 0),
+        "created_at": created_at,
+        "role": ("system" if k2 == "status" else role),
+    }
+    if k2 == "text":
+        return {**base, "kind": "text", "content": str(content or "")}
+    if k2 == "recommendation":
+        picks = []
+        try:
+            picks = (payload or {}).get("picks") or []
+        except Exception:
+            picks = []
+        top_symbols: List[str] = []
+        if isinstance(picks, list):
+            for p in picks[:3]:
+                sym = p.get("symbol") if isinstance(p, dict) else None
+                if isinstance(sym, str):
+                    top_symbols.append(sym)
+        return {
+            **base,
+            "kind": "recommendation",
+            "artifact_id": str(mid),
+            "summary": {"total": len(picks) if isinstance(picks, list) else 0, "top_symbols": top_symbols},
+        }
+    if k2 == "status":
+        msg = None
+        code = None
+        try:
+            msg = (payload or {}).get("message") or (payload or {}).get("content")
+            code = (payload or {}).get("code")
+        except Exception:
+            pass
+        return {**base, "kind": "status", "message": (str(msg) if msg is not None else None), "code": (str(code) if code is not None else None)}
+    return None
+
+
+@api.get("/threads/{cid}/items")
+def api_get_thread_items(
+    cid: str,
+    anchor: Optional[int] = Query(default=None),
+    direction: str = Query(default="backward", pattern="^(backward|forward)$"),
+    limit: int = Query(default=60, ge=1, le=500),
+) -> List[Dict[str, Any]]:
+    # Query from conv_messages for stable thread items
+    conn = _sql_conn()
+    try:
+        if direction == "forward":
+            a = int(anchor or 0)
+            cur = conn.execute(
+                """
+                SELECT id, seq_created, author_id, kind, content, payload, created_at
+                FROM conv_messages
+                WHERE conversation_id=? AND deleted_at IS NULL AND seq_created>?
+                ORDER BY seq_created ASC
+                LIMIT ?
+                """,
+                (cid, a, int(limit)),
+            )
+            rows = cur.fetchall() or []
+        else:
+            # backward: take items with seq<=anchor, ordered desc then reverse
+            last = int(anchor or 10**12)
+            cur = conn.execute(
+                """
+                SELECT id, seq_created, author_id, kind, content, payload, created_at
+                FROM conv_messages
+                WHERE conversation_id=? AND deleted_at IS NULL AND seq_created<=?
+                ORDER BY seq_created DESC
+                LIMIT ?
+                """,
+                (cid, last, int(limit)),
+            )
+            rows = list(reversed(cur.fetchall() or []))
+    finally:
+        conn.close()
+    out: List[Dict[str, Any]] = []
+    for r in rows:
+        it = _map_row_to_thread_item(r, cid)
+        if it is not None:
+            out.append(it)
+    return out
+
+
+@api.post("/threads/{cid}/read")
+def api_post_thread_read(cid: str, payload: Dict[str, Any] = Body(...)) -> Dict[str, Any]:
+    try:
+        last_read_seq = int((payload or {}).get("last_read_seq") or 0)
+    except Exception as e:  # noqa: BLE001
+        raise HTTPException(status_code=400, detail=f"invalid last_read_seq: {e}") from e
+    try:
+        event_store.update_read(cid, None, last_read_seq)
+        return {"status": "ok"}
+    except Exception as e:  # noqa: BLE001
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+def _message_text_by_id(mid: str) -> Optional[str]:
+    conn = _sql_conn()
+    try:
+        cur = conn.execute(
+            "SELECT content FROM conv_messages WHERE id=? AND deleted_at IS NULL",
+            (mid,),
+        )
+        row = cur.fetchone()
+        return (row[0] if row else None) or None
+    finally:
+        conn.close()
+
+
+def _build_preview_with_highlight(text: str, q: str, max_len: int = 120) -> Dict[str, Any]:
+    s = text or ""
+    if not q:
+        return {"preview": s[:max_len], "highlights": []}
+    s_low = s.lower()
+    q_low = q.lower()
+    idx = s_low.find(q_low)
+    if idx < 0:
+        return {"preview": s[:max_len], "highlights": []}
+    start = max(0, idx - 16)
+    end = min(len(s), idx + len(q) + 16)
+    snippet = s[start:end]
+    return {"preview": snippet, "highlights": [{"start": idx - start, "length": len(q)}]}
+
+
+@api.get("/search")
+def api_search_hits(
+    q: str = Query(..., description="Search query"),
+    conversation_id: Optional[str] = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=200),
+) -> List[Dict[str, Any]]:
+    # New typed search hits with preview and anchor
+    hits = event_store.search_messages(q, conversation_id=conversation_id, limit=limit)
+    out: List[Dict[str, Any]] = []
+    for h in hits:
+        msg_id = str(h.get("message_id"))
+        cid = str(h.get("conversation_id"))
+        seq = int(h.get("seq") or 0)
+        txt = _message_text_by_id(msg_id) or ""
+        pv = _build_preview_with_highlight(txt, q)
+        out.append(
+            {
+                "conversation_id": cid,
+                "seq": seq,
+                "message_id": msg_id,
+                "preview": pv["preview"],
+                "highlights": pv["highlights"],
+                "anchor": {"conversation_id": cid, "seq": seq},
+            }
+        )
+    return out
+
+
+@api.get("/search_legacy")
+def api_search_legacy(
+    q: str = Query(..., description="Search query"),
+    conversation_id: Optional[str] = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=200),
+) -> List[Dict[str, Any]]:
+    # Preserve old minimal shape for backward compatibility
+    return event_store.search_messages(q, conversation_id=conversation_id, limit=limit)
+
+
+def _get_recommendation_artifact_by_mid(mid: str) -> Dict[str, Any]:
+    conn = _sql_conn()
+    try:
+        cur = conn.execute(
+            """
+            SELECT id, conversation_id, seq_created, author_id, kind, content, payload, created_at
+            FROM conv_messages
+            WHERE id=? AND deleted_at IS NULL
+            """,
+            (mid,),
+        )
+        row = cur.fetchone()
+    finally:
+        conn.close()
+    if not row:
+        raise HTTPException(status_code=404, detail="artifact not found")
+    _id, _cid, _seq, _author, kind, _content, payload_json, _created = row
+    if str(kind or "").lower() != "card":
+        raise HTTPException(status_code=400, detail="not a card artifact")
+    payload = _row_payload_to_obj(payload_json) or {}
+    if str((payload or {}).get("type") or "").lower() != "recommendation":
+        raise HTTPException(status_code=400, detail="not a recommendation artifact")
+    # Normalize to safe subset
+    picks_in = payload.get("picks") or []
+    picks_out: List[Dict[str, Any]] = []
+    if isinstance(picks_in, list):
+        for p in picks_in:
+            if not isinstance(p, dict):
+                continue
+            item = {
+                "symbol": str(p.get("symbol", "")),
+                "name": (p.get("name") if isinstance(p.get("name"), str) else None),
+                "theme": (p.get("theme") if isinstance(p.get("theme"), str) else None),
+            }
+            champ = p.get("champion") if isinstance(p.get("champion"), dict) else None
+            if champ:
+                item["champion"] = {"strategy": str(champ.get("strategy", "")), "score": (champ.get("score") if isinstance(champ.get("score"), (int, float)) else None)}
+            tp = p.get("trade_plan") if isinstance(p.get("trade_plan"), dict) else None
+            if tp:
+                bands = tp.get("bands") if isinstance(tp.get("bands"), dict) else None
+                actions = tp.get("actions") if isinstance(tp.get("actions"), dict) else None
+                risk = tp.get("risk") if isinstance(tp.get("risk"), dict) else None
+                item["trade_plan"] = {
+                    "entry": tp.get("entry"),
+                    "take": tp.get("take"),
+                    "stop": tp.get("stop"),
+                    "bands": {k: v for k, v in (bands or {}).items() if k in {"S1", "S2", "R1", "R2"}},
+                    "actions": {k: v for k, v in (actions or {}).items() if k in {"window_A", "window_B"}},
+                    "risk": {
+                        "stop_loss": (risk or {}).get("stop_loss"),
+                        "time_stop": (risk or {}).get("time_stop"),
+                        "no_averaging_down": (risk or {}).get("no_averaging_down"),
+                    },
+                }
+                # prune undefined keys
+                item["trade_plan"] = {k: v for k, v in item["trade_plan"].items() if v is not None}
+            chip = p.get("chip") if isinstance(p.get("chip"), dict) else None
+            if chip:
+                item["chip"] = {"model_used": chip.get("model_used")}
+            picks_out.append(item)
+    as_of = payload.get("as_of") or None
+    timezone = payload.get("timezone") or "Asia/Shanghai"
+    tradeable = payload.get("tradeable") if isinstance(payload.get("tradeable"), bool) else None
+    disclaimer = payload.get("disclaimer") or None
+    message = payload.get("message") or None
+    meta_env_grade = None
+    try:
+        env = payload.get("env") or {}
+        if isinstance(env, dict):
+            meta_env_grade = env.get("grade")
+    except Exception:
+        pass
+    diagnostics = None
+    try:
+        debug = payload.get("debug") or {}
+        if isinstance(debug, dict):
+            diagnostics = {
+                "degraded": bool(debug.get("degraded") is True),
+                "degrade_reasons": debug.get("degrade_reasons") or [],
+            }
+    except Exception:
+        pass
+    return {
+        "id": str(_id),
+        "as_of": (str(as_of) if as_of is not None else None),
+        "timezone": str(timezone),
+        "picks": picks_out,
+        "tradeable": tradeable,
+        "disclaimer": (str(disclaimer) if disclaimer is not None else None),
+        "message": (str(message) if message is not None else None),
+        "meta": {"env_grade": meta_env_grade} if meta_env_grade is not None else {},
+        "diagnostics": diagnostics,
+    }
+
+
+@api.get("/artifacts/recommendations/{artifact_id}")
+def api_get_recommendation_artifact(artifact_id: str) -> Dict[str, Any]:
+    try:
+        return _get_recommendation_artifact_by_mid(artifact_id)
+    except HTTPException:
+        raise
+    except Exception as e:  # noqa: BLE001
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
 @api.get("/conversations/{cid}/events", response_model=list[EventOut])
 def api_get_events(
     cid: str,
@@ -617,16 +1052,7 @@ def api_cleanup_conversations(payload: Optional[Dict[str, Any]] = None) -> Dict[
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
-@api.get("/search")
-def api_search(
-    q: str = Query(..., description="Search query"),
-    conversation_id: Optional[str] = Query(default=None),
-    limit: int = Query(default=50, ge=1, le=200),
-) -> List[Dict[str, Any]]:
-    try:
-        return event_store.search_messages(q, conversation_id=conversation_id, limit=limit)
-    except Exception as e:  # noqa: BLE001
-        raise HTTPException(status_code=500, detail=str(e)) from e
+# legacy search route is provided as /search_legacy (see below)
 
 
 @api.post("/attachments/sign")

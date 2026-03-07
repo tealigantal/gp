@@ -1,9 +1,8 @@
 import { Card } from 'antd'
-import KlineChart from './KlineChart'
+import KlineChart from '../../components/KlineChart'
+import type { KlineOverlay } from '../artifacts/useSelectedArtifact'
 
-export type KlineOverlay = { bands?: { S1?: number; S2?: number; R1?: number; R2?: number }; chip?: { model_used?: string } }
-
-export default function KlineCard({ symbol, overlay }: { symbol: string; overlay?: KlineOverlay }) {
+export default function KlineView({ symbol, overlay }: { symbol: string; overlay?: KlineOverlay }) {
   if (!symbol) return null
   return (
     <Card size="small" title={`K线 · ${symbol}`} style={{ margin: '8px 0' }}>
@@ -16,3 +15,4 @@ export default function KlineCard({ symbol, overlay }: { symbol: string; overlay
     </Card>
   )
 }
+
