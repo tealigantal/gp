@@ -130,7 +130,7 @@ def build_mainline(indicator: str = "今日", topn: int = 3, snapshot: Optional[
             df = snapshot.copy()
             # Strict mainboard-only universe for mainline aggregation
             try:
-                from ..providers.boards import is_mainboard  # lazy import to avoid cycles
+                from providers.boards import is_mainboard  # lazy import to avoid cycles
                 code_col = "代码" if "代码" in df.columns else ("code" if "code" in df.columns else None)
                 if code_col:
                     df = df[df[code_col].astype(str).map(is_mainboard)]

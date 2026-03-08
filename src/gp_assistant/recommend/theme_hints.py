@@ -5,7 +5,7 @@ from typing import Any, Dict, List, Optional
 import pandas as pd
 
 from .chg_normalize import detect_chg_col, normalize_chg_pct
-from ..providers.boards import is_mainboard
+from providers.boards import is_mainboard
 
 
 def _detect_chg_col(cols) -> Optional[str]:

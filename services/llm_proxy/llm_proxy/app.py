@@ -27,3 +27,8 @@ async def chat_completions(req: Request, cfg: ProxyConfig = Depends(get_cfg), _a
     async with httpx.AsyncClient(timeout=None) as client:
         r = await client.post(url, headers=headers, content=payload)
     return r.json()
+
+
+@app.get('/health')
+async def health() -> dict:
+    return {"status": "ok"}

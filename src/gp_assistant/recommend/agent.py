@@ -30,7 +30,7 @@ from .theme_concept import last_concept_status
 from .mainline import build_mainline
 from ..core.strict import is_strict
 from .candidate_gen import generate_candidates
-from ..providers.boards import is_mainboard
+from providers.boards import is_mainboard
 from ..providers.factory import get_provider
 
 # ---- Execution semantics thresholds (centralized constants) ----

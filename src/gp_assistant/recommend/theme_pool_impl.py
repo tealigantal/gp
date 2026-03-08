@@ -7,7 +7,7 @@ import pandas as pd
 from .datahub import MarketDataHub
 from .theme_concept import build_concept_themes
 from .chg_normalize import detect_chg_col, normalize_chg_pct
-from ..providers.boards import is_mainboard
+from providers.boards import is_mainboard
 
 
 def _detect_chg_col(cols) -> Optional[str]:

@@ -1,67 +1,6 @@
 {
   "timing": {},
-  "sources": [
-    {
-      "symbol": "600900",
-      "data_source": "provider"
-    },
-    {
-      "symbol": "600519",
-      "data_source": "provider"
-    },
-    {
-      "symbol": "000725",
-      "data_source": "provider"
-    },
-    {
-      "symbol": "601919",
-      "data_source": "provider"
-    },
-    {
-      "symbol": "601318",
-      "data_source": "provider"
-    },
-    {
-      "symbol": "002463",
-      "data_source": "provider"
-    },
-    {
-      "symbol": "002594",
-      "data_source": "provider"
-    },
-    {
-      "symbol": "002371",
-      "data_source": "provider"
-    },
-    {
-      "symbol": "000592",
-      "data_source": "provider"
-    },
-    {
-      "symbol": "002714",
-      "data_source": "provider"
-    },
-    {
-      "symbol": "601727",
-      "data_source": "provider"
-    },
-    {
-      "symbol": "600111",
-      "data_source": "provider"
-    },
-    {
-      "symbol": "000100",
-      "data_source": "provider"
-    },
-    {
-      "symbol": "603259",
-      "data_source": "provider"
-    },
-    {
-      "symbol": "002460",
-      "data_source": "provider"
-    }
-  ],
+  "sources": [],
   "failures": [],
   "snapshot": {
     "source": "akshare:sina",
@@ -70,14 +9,14 @@
     "fallback_reason": null,
     "stale": false,
     "missing": false,
-    "elapsed_sec": 156.01,
+    "elapsed_sec": 83.97,
     "cache_age_sec": null,
     "skipped_routes": [],
     "attempts": [
       {
         "source": "akshare:em",
         "ok": false,
-        "err": "ConnectionError: ('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))"
+        "err": "SSLError: HTTPSConnectionPool(host='82.push2.eastmoney.com', port=443): Max retries exceeded with url: /api/qt/clist/get?pn=1&pz=100&po=1&np=1&ut=bd1d9ddb04089700cf9c27f6f7426281&fltt=2&invt=2&fid=f12&fs=m%3A0+t%3A6%2Cm%3A0+t%3A80%2Cm%3A1+t%3A2%2Cm%3A1+t%3A23%2Cm%3A0+t%3A81+s%3A2048&fields=f1%2Cf2%2Cf3%2Cf4%2Cf5%2Cf6%2Cf7%2Cf8%2Cf9%2Cf10%2Cf12%2Cf13%2Cf14%2Cf15%2Cf16%2Cf17%2Cf18%2Cf20%2Cf21%2Cf23%2Cf24%2Cf25%2Cf22%2Cf11%2Cf62%2Cf128%2Cf136%2Cf115%2Cf152 (Caused by SSLError(SSLEOFError(8, '[SSL: UNEXPECTED_EOF_WHILE_READING] EOF occurred in violation of protocol (_ssl.c:1016)')))"
       },
       {
         "source": "akshare:sina",
@@ -133,6 +72,23 @@
       "non_mainboard": 63
     }
   },
+  "snapshot_mainboard_counts": {
+    "before": 5487,
+    "after": 3194
+  },
+  "restrict_to_mainline": true,
+  "thematic_stats": {
+    "pool_unrelated_count": 15,
+    "pool_after_thematic_filter": 0,
+    "theme_source": "akshare:concept_name_em"
+  },
+  "degraded": true,
+  "degrade_reasons": [
+    {
+      "reason_code": "NO_VALID_MAINBOARD_THEME",
+      "detail": {}
+    }
+  ],
   "warnings": [
     {
       "reason_code": "UNIVERSE_DIRTY_INPUT",
