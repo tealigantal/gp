@@ -38,10 +38,20 @@ export default function WorkbenchLayout({
   }
 
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: `${left ? '280px ' : ''}1fr ${right ? '380px' : ''}`, gap: 16, alignItems: 'stretch' }}>
-      {left && <div style={{ minWidth: 0, overflow: 'hidden', height: '100%' }}>{left}</div>}
-      <div style={{ minWidth: 0, overflow: 'hidden', height: '100%' }}>{center}</div>
-      {right && <div style={{ minWidth: 0, overflow: 'hidden', height: '100%' }}>{right}</div>}
+    <div style={{ display: 'grid', gridTemplateColumns: `${left ? '280px ' : ''}1fr ${right ? '380px' : ''}`, gap: 16, alignItems: 'stretch', height: '100%', minHeight: 0 }}>
+      {left && (
+        <div style={{ minWidth: 0, overflow: 'hidden', height: '100%', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+          {left}
+        </div>
+      )}
+      <div style={{ minWidth: 0, overflow: 'hidden', height: '100%', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+        {center}
+      </div>
+      {right && (
+        <div style={{ minWidth: 0, overflow: 'hidden', height: '100%', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+          {right}
+        </div>
+      )}
     </div>
   )
 }

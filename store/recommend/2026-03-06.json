@@ -36,10 +36,10 @@
   "mainline": {
     "indicator": "今日",
     "sectors": [],
-    "as_of_ts": "2026-03-07T00:35:39+08:00",
+    "as_of_ts": "2026-03-08T11:57:59+08:00",
     "errors": [
       "行业资金流:('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))",
-      "概念资金流:HTTPSConnectionPool(host='push2delay.eastmoney.com', port=443): Read timed out. (read timeout=20)"
+      "概念资金流:('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))"
     ],
     "source": "akshare:stock_sector_fund_flow_rank"
   },
@@ -5396,23 +5396,58 @@
     ],
     "failures": [],
     "snapshot": {
-      "source": "cache:file",
-      "cache": "file",
+      "source": "akshare:sina",
+      "cache": null,
       "fallback": false,
       "fallback_reason": null,
       "stale": false,
       "missing": false,
-      "elapsed_sec": 0.0,
-      "cache_age_sec": 114.75,
+      "elapsed_sec": 305.08,
+      "cache_age_sec": null,
       "skipped_routes": [],
       "attempts": [
         {
-          "source": "cache:file",
+          "source": "akshare:em",
+          "ok": false,
+          "err": "ConnectionError: ('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))"
+        },
+        {
+          "source": "akshare:sina",
           "ok": true,
           "rows": 5487
         }
       ],
-      "as_of_ts": null
+      "schema": {
+        "canonical": [
+          "code",
+          "symbol",
+          "name",
+          "price",
+          "pct_chg",
+          "chg",
+          "volume",
+          "amount",
+          "ts"
+        ],
+        "raw_columns": [
+          "代码",
+          "名称",
+          "最新价",
+          "涨跌额",
+          "涨跌幅",
+          "买入",
+          "卖出",
+          "昨收",
+          "今开",
+          "最高",
+          "最低",
+          "成交量",
+          "成交额",
+          "时间戳"
+        ],
+        "route": "sina"
+      },
+      "normalized": true
     },
     "candidate_stats": {
       "universe_in_count": 137,
@@ -5442,8 +5477,8 @@
       }
     ]
   },
-  "tradeable": false,
-  "message": "NOT_TRADEABLE: UNKNOWN",
+  "tradeable": true,
+  "message": "generated 3 picks",
   "mover_hints": [
     {
       "symbol": "301680",
@@ -5476,10 +5511,10 @@
   "data_status": {
     "snapshot": {
       "ok": true,
-      "source": "cache:file",
+      "source": "akshare:sina",
       "rows": 5487,
-      "elapsed_sec": 0.0,
-      "cache": "file",
+      "elapsed_sec": 305.08,
+      "cache": "none",
       "as_of_ts": null,
       "error": null
     },
@@ -5492,7 +5527,7 @@
         "concept_name_em",
         "concept_name_ths"
       ],
-      "error": "industry_name_em:('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'));concept_name_em:HTTPSConnectionPool(host='79.push2.eastmoney.com', port=443): Max retries exceeded with url: /api/qt/clist/get?pn=1&pz=100&po=1&np=1&ut=bd1d9ddb04089700cf9c27f6f7426281&fltt=2&invt=2&fid=f12&fs=m%3A90+t%3A3+f%3A%2150&fields=f2%2Cf3%2Cf4%2Cf8%2Cf12%2Cf14%2Cf15%2Cf16%2Cf17%2Cf18%2Cf20%2Cf21%2Cf24%2Cf25%2Cf22%2Cf33%2Cf11%2Cf62%2Cf128%2Cf124%2Cf107%2Cf104%2Cf105%2Cf136 (Caused by SSLError(SSLEOFError(8, '[SSL: UNEXPECTED_EOF_WHILE_READING] EOF occurred in violation of protocol (_ssl.c:1010)')))",
+      "error": "industry_name_em:('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'));concept_name_em:('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))",
       "as_of_ts": null,
       "stale": false
     },
@@ -5505,8 +5540,8 @@
     "mainline": {
       "ok": false,
       "source": "akshare:stock_sector_fund_flow_rank",
-      "error": "行业资金流:('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'));概念资金流:HTTPSConnectionPool(host='push2delay.eastmoney.com', port=443): Read timed out. (read timeout=20)",
-      "as_of_ts": "2026-03-07T00:35:39+08:00",
+      "error": "行业资金流:('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'));概念资金流:('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))",
+      "as_of_ts": "2026-03-08T11:57:59+08:00",
       "stale": false
     }
   }

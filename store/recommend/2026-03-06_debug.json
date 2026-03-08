@@ -64,23 +64,58 @@
   ],
   "failures": [],
   "snapshot": {
-    "source": "cache:file",
-    "cache": "file",
+    "source": "akshare:sina",
+    "cache": null,
     "fallback": false,
     "fallback_reason": null,
     "stale": false,
     "missing": false,
-    "elapsed_sec": 0.0,
-    "cache_age_sec": 114.75,
+    "elapsed_sec": 305.08,
+    "cache_age_sec": null,
     "skipped_routes": [],
     "attempts": [
       {
-        "source": "cache:file",
+        "source": "akshare:em",
+        "ok": false,
+        "err": "ConnectionError: ('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))"
+      },
+      {
+        "source": "akshare:sina",
         "ok": true,
         "rows": 5487
       }
     ],
-    "as_of_ts": null
+    "schema": {
+      "canonical": [
+        "code",
+        "symbol",
+        "name",
+        "price",
+        "pct_chg",
+        "chg",
+        "volume",
+        "amount",
+        "ts"
+      ],
+      "raw_columns": [
+        "代码",
+        "名称",
+        "最新价",
+        "涨跌额",
+        "涨跌幅",
+        "买入",
+        "卖出",
+        "昨收",
+        "今开",
+        "最高",
+        "最低",
+        "成交量",
+        "成交额",
+        "时间戳"
+      ],
+      "route": "sina"
+    },
+    "normalized": true
   },
   "candidate_stats": {
     "universe_in_count": 137,

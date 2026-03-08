@@ -33,14 +33,16 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             style={{ flex: 1, minWidth: 0 }}
           />
         </Header>
-        <Content style={{ padding: '16px 24px', height: 'calc(100vh - 64px - 64px)' }}>
-          <div style={{ background: token.colorBgContainer, padding: 24, height: '100%', maxWidth: 1400, margin: '0 auto', fontSize: 15, lineHeight: 1.7, overflow: 'hidden' }}>
+        {/* Content fills viewport minus header height; footer is fixed and does not reduce work area */}
+        <Content style={{ padding: '16px 24px', height: 'calc(100vh - 64px)', overflow: 'hidden' }}>
+          <div style={{ background: token.colorBgContainer, padding: 24, paddingBottom: 64, height: '100%', maxWidth: 1400, margin: '0 auto', fontSize: 15, lineHeight: 1.7, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
             <SelectedArtifactProvider>
               {children}
             </SelectedArtifactProvider>
           </div>
         </Content>
-        <Footer style={{ textAlign: 'center' }}>gp assistant · React SPA</Footer>
+        {/* Footer is fixed; it does not compete with main work area height */}
+        <Footer style={{ textAlign: 'center', position: 'fixed', left: 0, right: 0, bottom: 0 }}>gp assistant · React SPA</Footer>
       </Layout>
     </ConfigProvider>
   )

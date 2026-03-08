@@ -156,7 +156,7 @@ export default function Chat() {
   )
 
   return (
-    <Card title="对话" style={{ height: '100%' }}>
+    <Card title="对话" style={{ height: '100%' }} styles={{ body: { height: '100%', display: 'flex', flexDirection: 'column', minHeight: 0, overflow: 'hidden' } }}>
       <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
         <div style={{ flex: 1, minHeight: 0 }}>
           <WorkbenchLayout left={<Conversations />} center={center} right={right} />
