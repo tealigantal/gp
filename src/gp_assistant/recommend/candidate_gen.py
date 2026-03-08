@@ -358,15 +358,17 @@ def generate_candidates(
     def _liq_rank(g: str) -> int:
         return {"A": 0, "B": 1, "C": 2}.get(str(g), 3)
 
-    # composite candidate score: trend quality, soft penalties for noise/overextension, liquidity preference
+    # composite candidate score: trend quality, soft penalties for noise/overextension/support-distance, liquidity preference
     def _cand_score(it: Dict[str, Any]) -> float:
         ind = it.get("indicators", {}) or {}
         slope = float(ind.get("slope20", 0.0))
         atrp = float(ind.get("atr_pct", 0.0))
         gap = float(ind.get("gap_pct", 0.0))
         ext = max(abs(float(ind.get("extension_ma10", 0.0))), abs(float(ind.get("extension_ma20", 0.0))), abs(float(ind.get("extension_from_cost", 0.0))))
+        dist_support = float(ind.get("distance_to_recent_support", 0.0))
         liq = -_liq_rank((it.get("liquidity") or {}).get("grade", "C"))  # A->0 -> higher after minus
-        penalty = 0.5 * atrp + 0.3 * max(0.0, gap) + min(0.5, ext)
+        # soft penalties; keep distance-to-support modest to avoid over-pruning
+        penalty = 0.5 * atrp + 0.3 * max(0.0, gap) + min(0.5, ext) + 0.2 * max(0.0, dist_support)
         return 1.0 * slope - penalty + 0.1 * liq
 
     for it in pool:

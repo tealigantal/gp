@@ -32,6 +32,25 @@ from ..core.strict import is_strict
 from .candidate_gen import generate_candidates
 from ..providers.factory import get_provider
 
+# ---- Execution semantics thresholds (centralized constants) ----
+# Gap thresholds between last_close and S1 for execution state decisions
+EXEC_ACTIONABLE_MAX_GAP_PCT = 0.03  # within 3% around entry area is actionable candidate
+EXEC_WAITING_MAX_GAP_PCT = 0.08     # within 8% considered waiting for pullback
+# If signed gap is below this tolerance, price is considered below support
+EXEC_BELOW_SUPPORT_TOL_PCT = -0.005
+# Minimal reward/risk to consider actionable; missing/invalid RR cannot be actionable
+MIN_RR_FOR_ACTIONABLE = 0.3
+# Rerank penalties by execution state (applied in final score)
+RERANK_STATE_PENALTY = {
+    "actionable": 0.0,
+    "waiting_pullback": -0.3,
+    "observe_only": -0.8,
+    "below_support": -1.0,
+    "breakdown_risk": -1.0,
+}
+# Large divergence ratio to explain structural vs execution bands recentering
+BAND_DIVERGENCE_EXPLAIN_THRESH = 0.25
+
 # Strategy evaluation imports (full integration)
 from ..strategy import library as strat_lib  # type: ignore
 from ..strategy.ts_cv import purged_walk_forward  # type: ignore
@@ -199,6 +218,8 @@ def run(date: Optional[str] = None, topk: int = 3, universe: str = "auto", symbo
             setup = None
         # bands
         band_source = None
+        structural_band_source = None
+        execution_band_source = None
         try:
             kb = getattr(mod, "key_bands", None)
             if callable(kb) and setup is not None:
@@ -209,6 +230,7 @@ def run(date: Optional[str] = None, topk: int = 3, universe: str = "auto", symbo
             bands = {}
         if bands:
             structural_bands = dict(bands)
+            structural_band_source = band_source or "strategy_key_bands"
         if not bands:
             chip = pick.get("chip", {}) or {}
             try:
@@ -217,6 +239,9 @@ def run(date: Optional[str] = None, topk: int = 3, universe: str = "auto", symbo
                 mid = float(chip.get("avg_cost", 0.0)) or ((low + high) / 2.0 if (low and high) else 0.0)
                 bands = {"S1": low, "S2": mid, "R1": high, "R2": (high * 1.02 if high else 0.0)}
                 band_source = "chip_fallback"
+                # chip fallback defines structural bands too
+                structural_bands = dict(bands)
+                structural_band_source = "chip_fallback"
             except Exception:
                 bands = {}
         # stale & sanity fallback (near-end window) + diagnostics
@@ -233,9 +258,11 @@ def run(date: Optional[str] = None, topk: int = 3, universe: str = "auto", symbo
                 s1 = float(x["close"].quantile(0.30)) if "close" in x.columns else 0.0
                 s2 = float(x["close"].quantile(0.50)) if "close" in x.columns else 0.0
                 r1 = float(x["close"].quantile(0.80)) if "close" in x.columns else 0.0
+                # structural remains the earlier one; recenter execution bands from recent window
                 bands = {"S1": s1, "S2": s2, "R1": r1, "R2": (r1 * 1.02 if r1 else 0.0)}
                 diag.update({"setup_age": setup_age, "stale": True, "fallback_reason": "stale_setup"})
                 band_source = "recent_window_fallback"
+                execution_band_source = "recent_window_fallback"
             last_close = float(df_feat["close"].iloc[-1]) if "close" in df_feat.columns else 0.0
             if last_close and bands:
                 s1c = float(bands.get("S1", 0.0)); r1c = float(bands.get("R1", 0.0))
@@ -244,9 +271,11 @@ def run(date: Optional[str] = None, topk: int = 3, universe: str = "auto", symbo
                     s1 = float(x["close"].quantile(0.30)) if "close" in x.columns else 0.0
                     s2 = float(x["close"].quantile(0.50)) if "close" in x.columns else 0.0
                     r1 = float(x["close"].quantile(0.80)) if "close" in x.columns else 0.0
+                    # recenter execution bands; keep structural intact
                     bands = {"S1": s1, "S2": s2, "R1": r1, "R2": (r1 * 1.02 if r1 else 0.0)}
                     diag.update({"sanity_warning": "key_bands_out_of_scale_fallback"})
                     band_source = "recent_window_fallback"
+                    execution_band_source = "recent_window_fallback"
             # Always include setup metrics even if not stale
             diag.setdefault("setup_idx", setup_idx)
             diag.setdefault("setup_age", setup_age)
@@ -255,7 +284,8 @@ def run(date: Optional[str] = None, topk: int = 3, universe: str = "auto", symbo
                 diag["band_source"] = band_source
             # execution vs structural bands separation and execution state
             exec_bands = dict(bands)
-            entry_gap = None
+            entry_gap_abs = None
+            signed_entry_gap = None
             reward_risk = None
             actionable = None
             state = None
@@ -263,21 +293,54 @@ def run(date: Optional[str] = None, topk: int = 3, universe: str = "auto", symbo
                 s1v = float(exec_bands.get("S1", 0.0))
                 r1v = float(exec_bands.get("R1", 0.0))
                 if last_close and s1v:
-                    entry_gap = max(0.0, (last_close - s1v) / last_close)
+                    signed_entry_gap = (last_close - s1v) / last_close
+                    entry_gap_abs = abs(signed_entry_gap)
                 if last_close and s1v and r1v and last_close > s1v:
                     reward_risk = float((r1v - last_close) / max(1e-6, (last_close - s1v)))
-                if entry_gap is None:
+                # decide state using signed gap and RR
+                if signed_entry_gap is None:
                     actionable = False; state = "observe_only"
-                elif entry_gap <= 0.03:
-                    actionable = True; state = "actionable"
-                elif entry_gap <= 0.08:
-                    actionable = False; state = "waiting_pullback"
                 else:
-                    actionable = False; state = "observe_only"
+                    if signed_entry_gap <= EXEC_BELOW_SUPPORT_TOL_PCT:
+                        actionable = False; state = "below_support"
+                    elif signed_entry_gap <= 0.0:  # at/just below S1 but within tolerance
+                        actionable = False; state = "breakdown_risk"
+                    elif entry_gap_abs is not None and entry_gap_abs <= EXEC_ACTIONABLE_MAX_GAP_PCT:
+                        # RR must be valid for actionable
+                        if reward_risk is None or reward_risk < MIN_RR_FOR_ACTIONABLE:
+                            actionable = False; state = "observe_only"
+                        else:
+                            actionable = True; state = "actionable"
+                    elif entry_gap_abs is not None and entry_gap_abs <= EXEC_WAITING_MAX_GAP_PCT:
+                        actionable = False; state = "waiting_pullback"
+                    else:
+                        actionable = False; state = "observe_only"
             except Exception:
                 pass
             if state:
-                diag.update({"execution_state": state, "entry_gap_pct": entry_gap, "reward_risk": reward_risk, "actionable": actionable})
+                diag.update({
+                    "execution_state": state,
+                    "entry_gap_pct": entry_gap_abs,
+                    "signed_entry_gap_pct": signed_entry_gap,
+                    "reward_risk": reward_risk,
+                    "actionable": actionable,
+                })
+            # Explain divergence between structural and execution bands
+            try:
+                if structural_bands and exec_bands:
+                    s_s1 = float(structural_bands.get("S1", 0.0))
+                    e_s1 = float(exec_bands.get("S1", 0.0))
+                    if s_s1 and e_s1:
+                        div = abs(e_s1 - s_s1) / max(s_s1, 1e-6)
+                        if div >= BAND_DIVERGENCE_EXPLAIN_THRESH:
+                            diag["structural_execution_divergence"] = {
+                                "s1_struct": s_s1,
+                                "s1_exec": e_s1,
+                                "ratio": div,
+                                "explain": "execution bands recentered from structural due to stale/out-of-scale",
+                            }
+            except Exception:
+                pass
         except Exception:
             diag = {}
         # actions & invalidation
@@ -321,10 +384,15 @@ def run(date: Optional[str] = None, topk: int = 3, universe: str = "auto", symbo
         except Exception:
             pass
         stop = (risk.get("stop_loss") if isinstance(risk, dict) else None) or stop or "收盘有效跌破支撑带"
+        # Resolve band sources for output clarity
+        structural_band_source = structural_band_source or (band_source or "unknown")
+        execution_band_source = execution_band_source or (band_source or "direct")
         return {
-            "bands": bands,
-            "execution_bands": bands,
+            "bands": exec_bands,
+            "execution_bands": exec_bands,
             "structural_bands": structural_bands,
+            "structural_band_source": structural_band_source,
+            "execution_band_source": execution_band_source,
             "actions": actions,
             "invalidation": invalid,
             "risk": risk,
@@ -365,6 +433,9 @@ def run(date: Optional[str] = None, topk: int = 3, universe: str = "auto", symbo
             "chip": cand.get("chip", {}),
             "indicators": cand.get("indicators", {}),
         }
+        # carry candidate score to pick for transparency
+        if "candidate_score" in cand:
+            it["candidate_score"] = float(cand.get("candidate_score", 0.0))
         champ = champions.get(sym) if isinstance(champions, dict) else None
         if champ:
             it["champion"] = champ
@@ -396,8 +467,8 @@ def run(date: Optional[str] = None, topk: int = 3, universe: str = "auto", symbo
             it.setdefault("last_close", None)
             it.setdefault("last_date", None)
         picks.append(it)
-    # Second-stage rerank by execution/actionability and champion score
-    def _final_score(item: Dict[str, Any]) -> float:
+    # Second-stage rerank by execution/actionability and champion score with breakdown
+    def _score_components(item: Dict[str, Any]) -> Dict[str, float]:
         champ = item.get("champion", {}) or {}
         tp = item.get("trade_plan", {}) or {}
         diag = tp.get("diagnostics", {}) if isinstance(tp, dict) else {}
@@ -407,7 +478,7 @@ def run(date: Optional[str] = None, topk: int = 3, universe: str = "auto", symbo
         entry_gap = float(diag.get("entry_gap_pct") or 0.0)
         rr = float(diag.get("reward_risk") or 0.0)
         state = str(diag.get("execution_state") or "").lower()
-        pen = -0.3 if state == "waiting_pullback" else (-0.8 if state == "observe_only" else 0.0)
+        pen = RERANK_STATE_PENALTY.get(state, 0.0)
         # soft overextension penalty if extension metrics available
         ext_pen = 0.0
         try:
@@ -419,7 +490,32 @@ def run(date: Optional[str] = None, topk: int = 3, universe: str = "auto", symbo
             ext_pen = -min(0.5, ext)
         except Exception:
             ext_pen = 0.0
-        return 0.6 * champ_s + 0.3 * slope + 0.2 * rr - 0.3 * entry_gap + pen + ext_pen
+        # freshness penalty from champion if available
+        fresh_pen = float((champ or {}).get("setup_penalty") or 0.0)
+        return {
+            "champion_component": 0.6 * champ_s,
+            "trend_component": 0.3 * slope,
+            "reward_risk_component": 0.2 * rr,
+            "entry_gap_penalty": -0.3 * entry_gap,
+            "execution_state_penalty": pen,
+            "extension_penalty": float(ext_pen),
+            "freshness_penalty": fresh_pen,
+        }
+
+    def _final_score(item: Dict[str, Any]) -> float:
+        comp = _score_components(item)
+        total = sum(comp.values())
+        # attach breakdown and explain
+        try:
+            item["score_breakdown"] = dict(comp)
+            item["score_breakdown"]["total"] = float(total)
+            # brief explain
+            champ_sc = float((item.get("champion") or {}).get("score") or 0.0)
+            state = str(((item.get("trade_plan") or {}).get("diagnostics") or {}).get("execution_state") or "")
+            item["explain"] = f"champ={champ_sc:.2f}, state={state}, rr={((item.get('trade_plan') or {}).get('diagnostics') or {}).get('reward_risk')}"
+        except Exception:
+            pass
+        return float(total)
 
     for it in picks:
         it["final_score"] = _final_score(it)

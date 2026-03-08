@@ -15,6 +15,13 @@ def choose_champion(candidates: List[Dict[str, Any]]) -> Dict[str, Any]:
       - generic CV (symbol-level) as a weak regularizer
       - strategy metadata (eligibility, penalties)
     """
+    # Freshness thresholds and penalties (centralized here)
+    SETUP_AGE_FRESH_MAX = 5      # bars
+    SETUP_AGE_STALE_BARS = 10    # bars
+    SETUP_AGE_PENALTY_PER_BAR = 0.03
+    SETUP_COUNT_LOW = 3
+    SETUP_COUNT_PENALTY = 0.3
+
     out: Dict[str, Any] = {}
     meta_map = getattr(strat_lib, "METADATA", {}) or {}
 
@@ -55,13 +62,38 @@ def choose_champion(candidates: List[Dict[str, Any]]) -> Dict[str, Any]:
             # Sample size dampening
             sample_boost = 0.0 if k >= 10 else -0.2
 
+            # Setup freshness penalty (strong constraint)
+            setup = meta.get("setup") or {}
+            setup_age = int(setup.get("age", 999)) if isinstance(setup, dict) else 999
+            setup_count = int(setup.get("count", 0)) if isinstance(setup, dict) else 0
+            freshness_state = "missing"
+            if setup_age == 999 and not setup:
+                freshness_state = "missing"
+            elif setup_age <= SETUP_AGE_FRESH_MAX:
+                freshness_state = "fresh"
+            elif setup_age <= SETUP_AGE_STALE_BARS:
+                freshness_state = "aging"
+            else:
+                freshness_state = "stale"
+
+            setup_pen_age = 0.0
+            if setup_age > SETUP_AGE_FRESH_MAX:
+                setup_pen_age = -min(1.5, (setup_age - SETUP_AGE_FRESH_MAX) * SETUP_AGE_PENALTY_PER_BAR)
+                if freshness_state in {"aging", "stale"}:
+                    reasons.append("stale_setup")
+            setup_pen_cnt = 0.0
+            if setup_count < SETUP_COUNT_LOW:
+                setup_pen_cnt = -SETUP_COUNT_PENALTY
+                reasons.append("low_setup_count")
+            setup_penalty = setup_pen_age + setup_pen_cnt
+
             # Final score
-            score = (
+            event_component = (
                 0.50 * wr5 + 0.20 * wr10 + 0.15 * max(0.0, mr5) + 0.05 * max(0.0, mr10)
-                - 0.10 * abs(mdd)
-                + 0.10 * cv_wr + 0.05 * max(0.0, cv_mr) - 0.05 * abs(cv_dd)
-                + pen + sample_boost
             )
+            cv_component = 0.10 * cv_wr + 0.05 * max(0.0, cv_mr) - 0.05 * abs(cv_dd)
+            meta_penalty = pen + sample_boost
+            score = event_component + cv_component + meta_penalty + setup_penalty
             if score > best_score:
                 best_score = score
                 best = {
@@ -69,10 +101,19 @@ def choose_champion(candidates: List[Dict[str, Any]]) -> Dict[str, Any]:
                     "cv": cv,
                     "event": ev,
                     "score": float(score),
-                    "meta_penalty": pen,
+                    "meta_penalty": float(meta_penalty),
+                    "setup_penalty": float(setup_penalty),
+                    "freshness_state": freshness_state,
                     "reasons": reasons,
+                    "score_breakdown": {
+                        "event_component": float(event_component),
+                        "cv_component": float(cv_component),
+                        "meta_penalty": float(meta_penalty),
+                        "setup_penalty": float(setup_penalty),
+                        "total": float(score),
+                    },
                 }
         if best is None:
-            best = {"strategy": "NA", "cv": {}, "event": {}, "score": 0.0, "reasons": ["no_strategies"]}
+            best = {"strategy": "NA", "cv": {}, "event": {}, "score": 0.0, "reasons": ["no_strategies"], "setup_penalty": -0.5, "freshness_state": "missing", "score_breakdown": {"event_component": 0.0, "cv_component": 0.0, "meta_penalty": 0.0, "setup_penalty": -0.5, "total": -0.5}}
         out[sym] = best
     return out
