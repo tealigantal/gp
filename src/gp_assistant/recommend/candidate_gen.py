@@ -262,7 +262,14 @@ def generate_candidates(
         atrp = _safe_float(last.get("atr_pct", 0.0))
         gap = _safe_float(last.get("gap_pct", 0.0))
         close = _safe_float(last.get("close", 0.0))
+        ma10 = _safe_float(last.get("ma10", 0.0)) if "ma10" in feat.columns else _safe_float(last.get("ma20", 0.0))
         ma20 = _safe_float(last.get("ma20", 0.0))
+        # Soft execution hint features (extension / distance)
+        extension_ma10 = (close - ma10) / ma10 if ma10 else 0.0
+        extension_ma20 = (close - ma20) / ma20 if ma20 else 0.0
+        recent = feat.tail(60)
+        supp = _safe_float(recent["close"].quantile(0.30) if "close" in recent.columns else 0.0)
+        distance_to_recent_support = (close - supp) / close if (close and supp) else 0.0
         pressure = {"near_ma20": bool(ma20 and abs((close - ma20) / ma20) <= 0.005)}
 
         # 筹码 + 噪声等级
@@ -286,6 +293,13 @@ def generate_candidates(
             continue
 
         # 构造候选
+        # extension vs chip cost
+        ext_cost = 0.0
+        try:
+            ext_cost = (close - float(getattr(chip_res, "avg_cost", 0.0))) / float(getattr(chip_res, "avg_cost", 0.0) or 1.0)
+        except Exception:
+            ext_cost = 0.0
+
         cand = {
             "symbol": sym,
             "name": entry.get("name"),
@@ -302,6 +316,11 @@ def generate_candidates(
                 "slope20": _safe_float(feat["slope20"].iloc[-1]) if "slope20" in feat.columns else 0.0,
                 "atr_pct": atrp,
                 "gap_pct": gap,
+                "extension_ma10": float(extension_ma10),
+                "extension_ma20": float(extension_ma20),
+                "extension_from_cost": float(ext_cost),
+                "distance_to_recent_support": float(distance_to_recent_support),
+                "chip_vs_cost_pct": float(ext_cost),
             },
             "close": close,
         }
@@ -324,7 +343,14 @@ def generate_candidates(
                 reasons.append("NEAR_CHIP90_HIGH_FORBID")
         except Exception:
             pass
-        cand["flags"] = {"must_observe_only": bool(observe_only), "reasons": reasons}
+        # approximate entry gap hint (how far from candidate execution anchors)
+        try:
+            entry_gap_hint = min(
+                [abs(extension_ma10), abs(extension_ma20), abs(ext_cost)]
+            )
+        except Exception:
+            entry_gap_hint = 0.0
+        cand["flags"] = {"must_observe_only": bool(observe_only), "reasons": reasons, "entry_gap_hint": float(entry_gap_hint)}
 
         pool.append(cand)
 
@@ -332,7 +358,24 @@ def generate_candidates(
     def _liq_rank(g: str) -> int:
         return {"A": 0, "B": 1, "C": 2}.get(str(g), 3)
 
-    pool.sort(key=lambda x: (-(x["indicators"].get("slope20") or 0.0), x["atr_pct"], _liq_rank(x["liquidity"].get("grade"))))
+    # composite candidate score: trend quality, soft penalties for noise/overextension, liquidity preference
+    def _cand_score(it: Dict[str, Any]) -> float:
+        ind = it.get("indicators", {}) or {}
+        slope = float(ind.get("slope20", 0.0))
+        atrp = float(ind.get("atr_pct", 0.0))
+        gap = float(ind.get("gap_pct", 0.0))
+        ext = max(abs(float(ind.get("extension_ma10", 0.0))), abs(float(ind.get("extension_ma20", 0.0))), abs(float(ind.get("extension_from_cost", 0.0))))
+        liq = -_liq_rank((it.get("liquidity") or {}).get("grade", "C"))  # A->0 -> higher after minus
+        penalty = 0.5 * atrp + 0.3 * max(0.0, gap) + min(0.5, ext)
+        return 1.0 * slope - penalty + 0.1 * liq
+
+    for it in pool:
+        try:
+            it["candidate_score"] = float(_cand_score(it))
+        except Exception:
+            it["candidate_score"] = 0.0
+
+    pool.sort(key=lambda x: -float(x.get("candidate_score", 0.0)))
     stats["universe_after_filter_count"] = len(pool)
     stats["candidates_out_count"] = len(pool)
 

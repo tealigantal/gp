@@ -176,11 +176,18 @@ def run(date: Optional[str] = None, topk: int = 3, universe: str = "auto", symbo
                     ev_dict = getattr(ev_stats, "__dict__", {})
             except Exception:
                 ev_dict = {}
-            out[str(sid)] = {"cv": cv_dict, "event": ev_dict}
+            # basic setup summary for freshness
+            try:
+                setup_idx = int(getattr(setups[-1], "idx", len(df_feat) - 1)) if setups else (len(df_feat) - 1)
+            except Exception:
+                setup_idx = len(df_feat) - 1
+            setup_age = max(0, (len(df_feat) - 1) - setup_idx)
+            out[str(sid)] = {"cv": cv_dict, "event": ev_dict, "setup": {"last_idx": setup_idx, "age": setup_age, "count": len(setups)}}
         return out
 
     def _trade_plan_from_strategy(mod: Any, df_feat: pd.DataFrame, pick: Dict[str, Any], q_grade: Optional[str]) -> Dict[str, Any]:
         bands: Dict[str, float] = {}
+        structural_bands: Dict[str, float] = {}
         actions: Dict[str, str] = {}
         invalid: List[str] = []
         # latest setup if available
@@ -200,6 +207,8 @@ def run(date: Optional[str] = None, topk: int = 3, universe: str = "auto", symbo
                     band_source = "strategy_key_bands"
         except Exception:
             bands = {}
+        if bands:
+            structural_bands = dict(bands)
         if not bands:
             chip = pick.get("chip", {}) or {}
             try:
@@ -244,6 +253,31 @@ def run(date: Optional[str] = None, topk: int = 3, universe: str = "auto", symbo
             diag.setdefault("stale", False)
             if band_source:
                 diag["band_source"] = band_source
+            # execution vs structural bands separation and execution state
+            exec_bands = dict(bands)
+            entry_gap = None
+            reward_risk = None
+            actionable = None
+            state = None
+            try:
+                s1v = float(exec_bands.get("S1", 0.0))
+                r1v = float(exec_bands.get("R1", 0.0))
+                if last_close and s1v:
+                    entry_gap = max(0.0, (last_close - s1v) / last_close)
+                if last_close and s1v and r1v and last_close > s1v:
+                    reward_risk = float((r1v - last_close) / max(1e-6, (last_close - s1v)))
+                if entry_gap is None:
+                    actionable = False; state = "observe_only"
+                elif entry_gap <= 0.03:
+                    actionable = True; state = "actionable"
+                elif entry_gap <= 0.08:
+                    actionable = False; state = "waiting_pullback"
+                else:
+                    actionable = False; state = "observe_only"
+            except Exception:
+                pass
+            if state:
+                diag.update({"execution_state": state, "entry_gap_pct": entry_gap, "reward_risk": reward_risk, "actionable": actionable})
         except Exception:
             diag = {}
         # actions & invalidation
@@ -287,7 +321,18 @@ def run(date: Optional[str] = None, topk: int = 3, universe: str = "auto", symbo
         except Exception:
             pass
         stop = (risk.get("stop_loss") if isinstance(risk, dict) else None) or stop or "收盘有效跌破支撑带"
-        return {"bands": bands, "actions": actions, "invalidation": invalid, "risk": risk, "diagnostics": diag, "entry": entry, "stop": stop, "take": take}
+        return {
+            "bands": bands,
+            "execution_bands": bands,
+            "structural_bands": structural_bands,
+            "actions": actions,
+            "invalidation": invalid,
+            "risk": risk,
+            "diagnostics": diag,
+            "entry": entry,
+            "stop": stop,
+            "take": take,
+        }
 
     # Evaluate strategies for pool and choose champion
     feats_by_symbol: Dict[str, pd.DataFrame] = {}
@@ -332,11 +377,53 @@ def run(date: Optional[str] = None, topk: int = 3, universe: str = "auto", symbo
             feat = feats_by_symbol.get(sym)
             if feat is not None and len(feat) > 0:
                 it["last_close"] = float(feat["close"].iloc[-1]) if "close" in feat.columns else None
-                it["last_date"] = str(getattr(feat.index, "__getitem__", lambda i: None)(-1)) if hasattr(feat, "index") else None
+                # last_date: prefer explicit date column, then DatetimeIndex; never integer index
+                last_date_val = None
+                if "date" in feat.columns:
+                    try:
+                        last_date_val = str(pd.to_datetime(feat["date"].iloc[-1]).date())
+                    except Exception:
+                        last_date_val = str(feat["date"].iloc[-1])
+                else:
+                    try:
+                        idx = feat.index
+                        if hasattr(idx, "dtype") and str(getattr(idx, "dtype", "")).startswith("datetime64"):
+                            last_date_val = str(pd.to_datetime(idx[-1]).date())
+                    except Exception:
+                        last_date_val = None
+                it["last_date"] = last_date_val
         except Exception:
             it.setdefault("last_close", None)
             it.setdefault("last_date", None)
         picks.append(it)
+    # Second-stage rerank by execution/actionability and champion score
+    def _final_score(item: Dict[str, Any]) -> float:
+        champ = item.get("champion", {}) or {}
+        tp = item.get("trade_plan", {}) or {}
+        diag = tp.get("diagnostics", {}) if isinstance(tp, dict) else {}
+        indicators = item.get("indicators", {}) or {}
+        slope = float(indicators.get("slope20", 0.0))
+        champ_s = float(champ.get("score", 0.0))
+        entry_gap = float(diag.get("entry_gap_pct") or 0.0)
+        rr = float(diag.get("reward_risk") or 0.0)
+        state = str(diag.get("execution_state") or "").lower()
+        pen = -0.3 if state == "waiting_pullback" else (-0.8 if state == "observe_only" else 0.0)
+        # soft overextension penalty if extension metrics available
+        ext_pen = 0.0
+        try:
+            ext = 0.0
+            for k in ["extension_ma10", "extension_ma20", "extension_from_cost"]:
+                v = item.get("indicators", {}).get(k)
+                if v is not None:
+                    ext = max(ext, abs(float(v)))
+            ext_pen = -min(0.5, ext)
+        except Exception:
+            ext_pen = 0.0
+        return 0.6 * champ_s + 0.3 * slope + 0.2 * rr - 0.3 * entry_gap + pen + ext_pen
+
+    for it in picks:
+        it["final_score"] = _final_score(it)
+    picks.sort(key=lambda x: float(x.get("final_score", 0.0)), reverse=True)
     picks = picks[: topk or 3]
     # Champion availability advisory (soft warning, not affecting tradeable)
     champion_missing_syms: List[str] = []
