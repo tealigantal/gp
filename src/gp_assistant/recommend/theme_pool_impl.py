@@ -7,6 +7,7 @@ import pandas as pd
 from .datahub import MarketDataHub
 from .theme_concept import build_concept_themes
 from .chg_normalize import detect_chg_col, normalize_chg_pct
+from ..providers.boards import is_mainboard
 
 
 def _detect_chg_col(cols) -> Optional[str]:
@@ -26,6 +27,13 @@ def build_themes_impl(hub: MarketDataHub, snapshot: Optional[pd.DataFrame] = Non
         return build_concept_themes(topn=topn, reason="no_chg_col") or []
 
     df = snap.copy()
+    # Strict mainboard-only filter before any thematic computation
+    code_col = "代码" if "代码" in df.columns else ("code" if "code" in df.columns else None)
+    if code_col:
+        try:
+            df = df[df[code_col].astype(str).map(is_mainboard)]
+        except Exception:
+            pass
     df["chg"], ev_scale = normalize_chg_pct(df, chg_col)
 
     cols = set(map(str, df.columns))

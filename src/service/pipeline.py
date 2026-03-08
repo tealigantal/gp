@@ -31,26 +31,16 @@ def _load_cfg() -> Dict:
 
 
 def _select_topk_from_pool(pool_file: Path, topk: int) -> List[str]:
+    """Deprecated: retained only for metrics. Engine no longer uses this pool"""
     if not pool_file.exists():
         return []
     try:
         import pandas as pd  # type: ignore
-
         df = pd.read_csv(pool_file)
         codes = df["ts_code"].astype(str).tolist()
         return codes[:topk]
     except Exception:
-        # fallback csv reader
-        import csv
-
-        rows: List[str] = []
-        with pool_file.open("r", encoding="utf-8") as f:
-            reader = csv.DictReader(f)
-            for r in reader:
-                v = (r.get("ts_code") or "").strip()
-                if v:
-                    rows.append(v)
-        return rows[:topk]
+        return []
 
 
 def _canonical_date(d: str) -> str:
@@ -69,69 +59,27 @@ def service_preopen(date: str, *, topk: int = 10) -> None:
     rec_dir.mkdir(parents=True, exist_ok=True)
     lock_path = rec_dir / ".lock"
     date_c = _canonical_date(date)
-    # ensure candidate pool
-    uni_file = _universe_dir() / f"candidate_pool_{date_c}.csv"
-    if not uni_file.exists():
-        try:
-            from .. import gp_assistant  # noqa: F401
-        except Exception:
-            pass
-        # best-effort: don't fail if cannot build
-    # pick champion from registry
-    reg = read_champion_registry(store_root / "registry" / "champion.json") or {}
-    champ = {
-        "strategy": reg.get("strategy_type", "baseline"),
-        "score": reg.get("robust", {}).get("robust_sharpe_p05", 0.0),
-        "params_hash": reg.get("params_hash", ""),
-        "scenario": reg.get("scenario", "base"),
-    }
-    # top picks
-    cfg = _load_cfg()
-    risk_cfg = ServiceRiskConfig(max_positions=int(cfg.get("max_positions", 10)))
-    picks_codes = limit_picks(_select_topk_from_pool(uni_file, topk), risk_cfg)
-    picks: List[Dict[str, Any]] = []
-    for raw in picks_codes:
-        ts_code, code6, sym = canonicalize_ts_code(raw)
-        picks.append({
-            "symbol": sym,  # keep legacy display
-            "ts_code": ts_code,
-            "code": code6,
-            "name": "",
-            "theme": "",
-            "champion": champ,
-            "trade_plan": {"entry": 0.0, "stop": 0.0, "take": 0.0, "bands": {}, "actions": {}},
-            "tags": [],
-            "risk": {"max_position": 1.0 / max(1, risk_cfg.max_positions), "cooldown": risk_cfg.cooldown_days},
-            "debug": {},
-        })
-    as_of_date = date_c
-    as_of_ts = f"{as_of_date} 09:20:00"
-    paths_meta = {
-        "store_dir": str(_store_dir().resolve()),
-        "results_dir": str(_results_dir().resolve()),
-        "universe_dir": str(_universe_dir().resolve()),
-    }
-    # empty picks enforcement stats
-    pool_count = 0
+    # Generate picks via unified engine (default agent)
     try:
-        if uni_file.exists():
-            import pandas as _pd  # local import to avoid global dependency at import time
-            pool_count = int(len(_pd.read_csv(uni_file)))
+        from ..gp_assistant.recommend.engine import run as engine_run
+        reco = engine_run(date=date_c, topk=topk)
     except Exception:
-        pool_count = 0
-    obj = build_reco_json(
-        as_of_date=as_of_date,
-        as_of_ts=as_of_ts,
-        stage="preopen",
-        picks=picks,
-        tradeable=True,
-        message="preopen",
-        paths_meta=paths_meta,
-        empty_picks_stats=(pool_count, int(topk)),
-    )
+        # Fallback minimal object if engine failed; retain legacy structure fields
+        reco = {"picks": [], "as_of": date_c, "as_of_ts": f"{date_c} 09:20:00", "debug": {"degraded": True, "degrade_reasons": [{"reason_code": "ENGINE_FAILED"}]}}
+    # normalize to v1 shape using service mode normalizer
+    try:
+        from ..gp_assistant.recommend.modes import service as _svc
+        obj = _svc._normalize_to_v1(reco)  # type: ignore[attr-defined]
+    except Exception:
+        obj = {"picks": reco.get("picks", []), "meta": {"as_of": date_c, "as_of_ts": f"{date_c} 09:20:00", "timezone": "Asia/Shanghai", "tradeable": True, "message": "preopen", "debug": {}}}
+    # enforce service stage and timestamps
+    if isinstance(obj.get("meta"), dict):
+        obj["meta"]["stage"] = "preopen"
+        obj["meta"].setdefault("as_of", date_c)
+        obj["meta"].setdefault("as_of_ts", f"{date_c} 09:20:00")
     # write per-date and latest with lock + atomic
     with FileLock(lock_path):
-        write_reco_json(rec_dir / f"{as_of_date}.json", obj)
+        write_reco_json(rec_dir / f"{date_c}.json", obj)
         write_reco_json(rec_dir / "latest.json", obj)
 
 

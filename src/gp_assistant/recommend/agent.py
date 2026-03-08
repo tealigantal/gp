@@ -30,6 +30,7 @@ from .theme_concept import last_concept_status
 from .mainline import build_mainline
 from ..core.strict import is_strict
 from .candidate_gen import generate_candidates
+from ..providers.boards import is_mainboard
 from ..providers.factory import get_provider
 
 # ---- Execution semantics thresholds (centralized constants) ----
@@ -164,6 +165,52 @@ def run(date: Optional[str] = None, topk: int = 3, universe: str = "auto", symbo
 
     # Candidates with stats
     pool, veto, cand_stats = generate_candidates(base, env.get("grade", "C"), topk=topk, snapshot=snapshot_df)
+
+    # Thematic overlap scoring and optional restriction to mainline/themes
+    def _compute_thematic_overlap(cand: Dict[str, Any]) -> Dict[str, Any]:
+        ind = str(cand.get("industry") or "").strip()
+        theme_names = [str(t.get("name")) for t in (themes or []) if isinstance(t, dict)]
+        mainline_names = [str(s.get("name")) for s in (mainline.get("sectors") or []) if isinstance(s, dict)] if isinstance(mainline, dict) else []
+        tscore = 0.0
+        mscore = 0.0
+        treasons: List[str] = []
+        # Theme overlap: strict equals for industry themes; loose contains as fallback
+        if ind:
+            if any(ind == tn for tn in theme_names):
+                tscore = 1.0
+                treasons.append("industry_theme_match")
+            elif any(ind in tn or tn in ind for tn in theme_names):
+                tscore = 0.5
+                treasons.append("industry_theme_partial")
+        # Mainline overlap: loose match with sector names
+        if ind:
+            if any(ind == mn for mn in mainline_names):
+                mscore = 1.0
+            elif any(ind in mn or mn in ind for mn in mainline_names):
+                mscore = 0.6
+        return {"theme_overlap_score": float(tscore), "mainline_overlap_score": float(mscore), "reasons": treasons}
+
+    themed_pool: List[Dict[str, Any]] = []
+    thematic_none_count = 0
+    for cand in pool:
+        th = _compute_thematic_overlap(cand)
+        cand.update({
+            "theme_overlap_score": th["theme_overlap_score"],
+            "mainline_overlap_score": th["mainline_overlap_score"],
+            "thematic_reasons": th.get("reasons", []),
+        })
+        if (cand.get("theme_overlap_score", 0.0) or cand.get("mainline_overlap_score", 0.0)):
+            themed_pool.append(cand)
+        else:
+            thematic_none_count += 1
+
+    restrict_mainline = bool(getattr(cfg, "restrict_to_mainline", False))
+    if restrict_mainline:
+        # Filter pool if unrelated to themes/mainline
+        pool = themed_pool
+        if not pool:
+            # keep empty pool; surface debug later
+            pass
 
     # Strategy evaluation helpers
     def _eval_strategies_for_symbol(sym: str, df_feat: pd.DataFrame, q_grade: Optional[str]) -> Dict[str, Any]:
@@ -467,18 +514,23 @@ def run(date: Optional[str] = None, topk: int = 3, universe: str = "auto", symbo
             it.setdefault("last_close", None)
             it.setdefault("last_date", None)
         picks.append(it)
-    # Second-stage rerank by execution/actionability and champion score with breakdown
+    # Second-stage rerank by candidate/thematic/champion with execution penalties and breakdown
     def _score_components(item: Dict[str, Any]) -> Dict[str, float]:
         champ = item.get("champion", {}) or {}
         tp = item.get("trade_plan", {}) or {}
         diag = tp.get("diagnostics", {}) if isinstance(tp, dict) else {}
         indicators = item.get("indicators", {}) or {}
-        slope = float(indicators.get("slope20", 0.0))
         champ_s = float(champ.get("score", 0.0))
         entry_gap = float(diag.get("entry_gap_pct") or 0.0)
         rr = float(diag.get("reward_risk") or 0.0)
         state = str(diag.get("execution_state") or "").lower()
         pen = RERANK_STATE_PENALTY.get(state, 0.0)
+        # candidate base score
+        cand_s = float(item.get("candidate_score", 0.0))
+        # thematic components
+        theme_s = float(item.get("theme_overlap_score", 0.0))
+        mainline_s = float(item.get("mainline_overlap_score", 0.0))
+        thematic = 0.6 * mainline_s + 0.4 * theme_s
         # soft overextension penalty if extension metrics available
         ext_pen = 0.0
         try:
@@ -494,7 +546,8 @@ def run(date: Optional[str] = None, topk: int = 3, universe: str = "auto", symbo
         fresh_pen = float((champ or {}).get("setup_penalty") or 0.0)
         return {
             "champion_component": 0.6 * champ_s,
-            "trend_component": 0.3 * slope,
+            "candidate_component": 0.4 * cand_s,
+            "thematic_component": 0.2 * thematic,
             "reward_risk_component": 0.2 * rr,
             "entry_gap_penalty": -0.3 * entry_gap,
             "execution_state_penalty": pen,
@@ -512,7 +565,16 @@ def run(date: Optional[str] = None, topk: int = 3, universe: str = "auto", symbo
             # brief explain
             champ_sc = float((item.get("champion") or {}).get("score") or 0.0)
             state = str(((item.get("trade_plan") or {}).get("diagnostics") or {}).get("execution_state") or "")
-            item["explain"] = f"champ={champ_sc:.2f}, state={state}, rr={((item.get('trade_plan') or {}).get('diagnostics') or {}).get('reward_risk')}"
+            # thematic and candidate parts in explain; plus reason text
+            th = float(item.get("theme_overlap_score", 0.0) or 0.0)
+            ml = float(item.get("mainline_overlap_score", 0.0) or 0.0)
+            cand_base = float(item.get("candidate_score", 0.0) or 0.0)
+            reason_parts = []
+            if th > 0 or ml > 0:
+                reason_parts.append("within_mainline")
+            else:
+                reason_parts.append("off_mainline_downrank")
+            item["explain"] = f"champ={champ_sc:.2f}, cand={cand_base:.2f}, th={th:.2f}/ml={ml:.2f}, state={state}, rr={((item.get('trade_plan') or {}).get('diagnostics') or {}).get('reward_risk')}; {' '.join(reason_parts)}"
         except Exception:
             pass
         return float(total)
@@ -562,6 +624,40 @@ def run(date: Optional[str] = None, topk: int = 3, universe: str = "auto", symbo
     # Degradation recording and tradeable decision
     dbg = payload.setdefault("debug", {})
     dbg["candidate_stats"] = cand_stats
+    # snapshot mainboard counts
+    try:
+        if snapshot_df is not None:
+            code_col = None
+            for c in ["代码", "code", "ts_code"]:
+                if c in snapshot_df.columns:
+                    code_col = c
+                    break
+            if code_col:
+                total_n = int(len(snapshot_df))
+                try:
+                    main_n = int(snapshot_df[code_col].astype(str).map(is_mainboard).sum())
+                except Exception:
+                    main_n = 0
+                dbg["snapshot_mainboard_counts"] = {"before": total_n, "after": main_n}
+    except Exception:
+        pass
+    # thematic restriction info
+    try:
+        dbg["restrict_to_mainline"] = bool(restrict_mainline)
+        dbg.setdefault("thematic_stats", {})
+        dbg["thematic_stats"].update({
+            "pool_unrelated_count": int(thematic_none_count),
+            "pool_after_thematic_filter": int(len(pool)),
+        })
+        src = None
+        if isinstance(themes, list) and themes:
+            src = themes[0].get("source")
+        dbg["thematic_stats"]["theme_source"] = src
+    except Exception:
+        pass
+    # surface no valid mainboard theme when restricted and empty pool
+    if restrict_mainline and len(pool) == 0:
+        degrade_record(dbg, "NO_VALID_MAINBOARD_THEME", {})
     if champion_missing_syms:
         dbg.setdefault("advisories", []).append({"code": "CHAMPION_UNAVAILABLE", "symbols": champion_missing_syms})
     # record strategy evaluation failures if any
