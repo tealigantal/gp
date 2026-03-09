@@ -1,0 +1,118 @@
+{
+  "timing": {
+    "candidates_sec": 296.23,
+    "strategy_eval_sec": 0.0
+  },
+  "sources": [],
+  "failures": [],
+  "snapshot": {
+    "source": "akshare:sina",
+    "cache": null,
+    "fallback": false,
+    "fallback_reason": null,
+    "stale": false,
+    "missing": false,
+    "elapsed_sec": 103.5,
+    "cache_age_sec": null,
+    "skipped_routes": [],
+    "attempts": [
+      {
+        "source": "akshare:em",
+        "ok": false,
+        "err": "SSLError: HTTPSConnectionPool(host='82.push2delay.eastmoney.com', port=443): Max retries exceeded with url: /api/qt/clist/get?pn=2&pz=100&po=1&np=1&ut=bd1d9ddb04089700cf9c27f6f7426281&fltt=2&invt=2&fid=f12&fs=m%3A0+t%3A6%2Cm%3A0+t%3A80%2Cm%3A1+t%3A2%2Cm%3A1+t%3A23%2Cm%3A0+t%3A81+s%3A2048&fields=f1%2Cf2%2Cf3%2Cf4%2Cf5%2Cf6%2Cf7%2Cf8%2Cf9%2Cf10%2Cf12%2Cf13%2Cf14%2Cf15%2Cf16%2Cf17%2Cf18%2Cf20%2Cf21%2Cf23%2Cf24%2Cf25%2Cf22%2Cf11%2Cf62%2Cf128%2Cf136%2Cf115%2Cf152 (Caused by SSLError(SSLEOFError(8, '[SSL: UNEXPECTED_EOF_WHILE_READING] EOF occurred in violation of protocol (_ssl.c:1016)')))"
+      },
+      {
+        "source": "akshare:sina",
+        "ok": true,
+        "rows": 5488
+      }
+    ],
+    "schema": {
+      "canonical": [
+        "code",
+        "symbol",
+        "name",
+        "price",
+        "pct_chg",
+        "chg",
+        "volume",
+        "amount",
+        "ts"
+      ],
+      "raw_columns": [
+        "代码",
+        "名称",
+        "最新价",
+        "涨跌额",
+        "涨跌幅",
+        "买入",
+        "卖出",
+        "昨收",
+        "今开",
+        "最高",
+        "最低",
+        "成交量",
+        "成交额",
+        "时间戳"
+      ],
+      "route": "sina"
+    },
+    "normalized": true
+  },
+  "degraded": true,
+  "degrade_reasons": [
+    {
+      "reason_code": "NO_CANDIDATE_AFTER_MAINLINE",
+      "detail": {}
+    },
+    {
+      "reason_code": "NO_VALID_MAINBOARD_THEME",
+      "detail": {}
+    },
+    {
+      "reason_code": "NO_EXECUTABLE_AFTER_CHAMPION",
+      "detail": {}
+    }
+  ],
+  "candidate_stats": {
+    "universe_in_count": 141,
+    "universe_after_filter_count": 141,
+    "bars_missing_count": 0,
+    "bars_too_short_count": 0,
+    "indicator_error_count": 0,
+    "skipped_symbols_sample": [],
+    "candidates_out_count": 141,
+    "daily_attempts_sample": [],
+    "universe_removed_counts": {
+      "bad_code": 0,
+      "insufficient_liquidity": 0,
+      "insufficient_history": 0,
+      "non_mainboard": 59
+    }
+  },
+  "snapshot_mainboard_counts": {
+    "before": 5488,
+    "after": 3194
+  },
+  "restrict_to_mainline": true,
+  "thematic_stats": {
+    "pool_unrelated_count": 15,
+    "pool_after_thematic_filter": 0,
+    "theme_source": "akshare:concept_name_em"
+  },
+  "warnings": [
+    {
+      "reason_code": "UNIVERSE_DIRTY_INPUT",
+      "detail": {
+        "bad_code": 0,
+        "insufficient_liquidity": 0,
+        "insufficient_history": 0,
+        "non_mainboard": 59
+      }
+    }
+  ],
+  "strategy_eval_counts": {
+    "symbols": 0,
+    "strategies": 14
+  }
+}

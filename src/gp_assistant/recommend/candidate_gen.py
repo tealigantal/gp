@@ -79,7 +79,8 @@ def generate_candidates(
     topk: int = 3,
     *,
     snapshot: Optional[pd.DataFrame] = None,
-) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]], Dict[str, Any]]:
+    return_features: bool = False,
+) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]], Dict[str, Any]] | Tuple[List[Dict[str, Any]], List[Dict[str, Any]], Dict[str, Any], Dict[str, pd.DataFrame]]:
     cfg = load_config()
     # Cost controls (env overrides; keep logic local)
     try:
@@ -209,6 +210,8 @@ def generate_candidates(
     # 2) 逐标的构建候选
     pool: List[Dict[str, Any]] = []
     veto_reasons: List[Dict[str, Any]] = []
+    # per-run shared feature map for reuse in later stages
+    feats_by_symbol: Dict[str, pd.DataFrame] = {}
 
     for entry in cleaned:
         sym = str(entry.get("code"))
@@ -246,6 +249,11 @@ def generate_candidates(
                 except Exception:
                     pass
                 continue
+        # cache for reuse by champion evaluation
+        try:
+            feats_by_symbol[sym] = feat
+        except Exception:
+            pass
 
         # 特征提取
         last = feat.iloc[-1]
@@ -350,7 +358,17 @@ def generate_candidates(
             )
         except Exception:
             entry_gap_hint = 0.0
+        # record which soft factors were penalized in candidate score to avoid double-penalizing later
+        cand_penalties = []
+        try:
+            if max(abs(extension_ma10), abs(extension_ma20), abs(ext_cost)) > 0:
+                cand_penalties.append("extension")
+            if distance_to_recent_support > 0:
+                cand_penalties.append("support_distance")
+        except Exception:
+            pass
         cand["flags"] = {"must_observe_only": bool(observe_only), "reasons": reasons, "entry_gap_hint": float(entry_gap_hint)}
+        cand["penalty_tags"] = cand_penalties
 
         pool.append(cand)
 
@@ -381,6 +399,8 @@ def generate_candidates(
     stats["universe_after_filter_count"] = len(pool)
     stats["candidates_out_count"] = len(pool)
 
+    if return_features:
+        return pool[: max(1, topk) * 5], veto_reasons, stats, feats_by_symbol
     return pool[: max(1, topk) * 5], veto_reasons, stats
 
 

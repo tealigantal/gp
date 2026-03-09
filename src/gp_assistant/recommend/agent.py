@@ -11,7 +11,9 @@ This module orchestrates the end-to-end recommendation flow:
 from __future__ import annotations
 
 import json
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
+import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import pandas as pd
 
@@ -163,8 +165,16 @@ def run(date: Optional[str] = None, topk: int = 3, universe: str = "auto", symbo
         universe_syms = None
         universe_meta = None
 
-    # Candidates with stats
-    pool, veto, cand_stats = generate_candidates(base, env.get("grade", "C"), topk=topk, snapshot=snapshot_df)
+    # Candidates with stats (build once; share features in-run to avoid recomputation)
+    t0 = time.perf_counter()
+    gen_out = generate_candidates(base, env.get("grade", "C"), topk=topk, snapshot=snapshot_df, return_features=True)
+    # mypy-friendly unpack
+    if len(gen_out) == 4:  # type: ignore[truthy-function]
+        pool, veto, cand_stats, feats_precomp = gen_out  # type: ignore[misc]
+    else:  # pragma: no cover - compatibility
+        pool, veto, cand_stats = gen_out[:3]  # type: ignore[index]
+        feats_precomp = {}
+    t1 = time.perf_counter()
 
     # Thematic overlap scoring and optional restriction to mainline/themes
     def _compute_thematic_overlap(cand: Dict[str, Any]) -> Dict[str, Any]:
@@ -211,6 +221,12 @@ def run(date: Optional[str] = None, topk: int = 3, universe: str = "auto", symbo
         if not pool:
             # keep empty pool; surface debug later
             pass
+    # Empty-source diagnostics (before strategy evaluation)
+    empty_reason: Optional[str] = None
+    if cand_stats.get("candidates_out_count", 0) == 0:
+        empty_reason = "no_candidate_after_universe"
+    elif restrict_mainline and len(pool) == 0:
+        empty_reason = "no_candidate_after_mainline"
 
     # Strategy evaluation helpers
     def _eval_strategies_for_symbol(sym: str, df_feat: pd.DataFrame, q_grade: Optional[str]) -> Dict[str, Any]:
@@ -225,7 +241,7 @@ def run(date: Optional[str] = None, topk: int = 3, universe: str = "auto", symbo
             cv_dict = getattr(cv, "__dict__", {})
         except Exception:
             cv_dict = {"k": 0, "win_rate_5d_mean": 0.0, "win_rate_5d_std": 0.0, "mean_return_5d_mean": 0.0, "mean_return_5d_std": 0.0, "drawdown_proxy_mean": 0.0}
-        # Iterate all registered strategies
+        # Iterate all registered strategies (lazy/cheap-first gate)
         for sid, mod in (strat_lib.REGISTRY or {}).items():
             # detect setups (best effort)
             try:
@@ -236,8 +252,17 @@ def run(date: Optional[str] = None, topk: int = 3, universe: str = "auto", symbo
             # event study (best effort)
             ev_dict: Dict[str, Any] = {}
             try:
+                # Cheap pass: skip expensive event study when obviously ineligible
+                # - no setups -> skip
+                # - stale setups beyond threshold -> skip
+                # - strategies explicitly prefer observation_only -> still compute minimal metadata only
                 ev = getattr(mod, "event_study", None)
-                if callable(ev):
+                st_meta = (getattr(strat_lib, "METADATA", {}) or {}).get(str(sid), {})
+                prefer_obs = bool(st_meta.get("prefer_observation_only", False))
+                setup_idx = int(getattr(setups[-1], "idx", len(df_feat) - 1)) if setups else (len(df_feat) - 1)
+                setup_age = max(0, (len(df_feat) - 1) - setup_idx)
+                stale_th = 15
+                if callable(ev) and setups and setup_age <= stale_th and not prefer_obs:
                     ev_stats = ev(df_feat, setups)
                     ev_dict = getattr(ev_stats, "__dict__", {})
             except Exception:
@@ -453,16 +478,60 @@ def run(date: Optional[str] = None, topk: int = 3, universe: str = "auto", symbo
     feats_by_symbol: Dict[str, pd.DataFrame] = {}
     strategies_by_symbol: Dict[str, Any] = {}
     strategy_eval_failures: List[Dict[str, Any]] = []
-    for cand in pool:
-        sym = str(cand.get("symbol"))
+    # Seed with precomputed features from candidate stage
+    if isinstance(feats_precomp, dict):
+        feats_by_symbol.update({str(k): v for k, v in feats_precomp.items() if isinstance(k, str)})
+
+    # Optional bounded concurrency for per-symbol evaluation (CPU-bound, safe to parallelize)
+    try:
+        import os  # lazy
+        max_workers_env = int(os.getenv("GP_EVAL_WORKERS", "0") or 0)
+    except Exception:
+        max_workers_env = 0
+    try:
+        cfg_workers = int(getattr(cfg, "parallel_workers", 0) or 0)
+    except Exception:
+        cfg_workers = 0
+    max_workers = max(0, max(max_workers_env, cfg_workers))
+    if max_workers <= 0:
+        max_workers = 1  # conservative default: serial
+
+    def _ensure_feat(sym: str) -> pd.DataFrame:
+        if sym in feats_by_symbol:
+            return feats_by_symbol[sym]
+        df, _meta = hub.daily_ohlcv(sym, None, min_len=250)
+        feat2 = compute_indicators(df)
+        feats_by_symbol[sym] = feat2
+        return feat2
+
+    def _eval_one(sym: str, q_grade: Optional[str]) -> Tuple[str, Dict[str, Any]]:
         try:
-            df, _meta = hub.daily_ohlcv(sym, None, min_len=250)
-            feat = compute_indicators(df)
-            feats_by_symbol[sym] = feat
-            strategies_by_symbol[sym] = _eval_strategies_for_symbol(sym, feat, q_grade=(cand.get("q_grade") or cand.get("indicators", {}).get("q_grade")))
+            feat = _ensure_feat(sym)
+            res = _eval_strategies_for_symbol(sym, feat, q_grade)
+            return sym, res
         except Exception as e:  # noqa: BLE001
             strategy_eval_failures.append({"symbol": sym, "error": str(e)})
-            strategies_by_symbol[sym] = {}
+            return sym, {}
+
+    t2 = time.perf_counter()
+    if pool:
+        if max_workers > 1:
+            with ThreadPoolExecutor(max_workers=max_workers) as ex:
+                futs = []
+                for cand in pool:
+                    sym = str(cand.get("symbol"))
+                    qg = (cand.get("q_grade") or cand.get("indicators", {}).get("q_grade"))
+                    futs.append(ex.submit(_eval_one, sym, qg))
+                for fut in as_completed(futs):
+                    s, strat_res = fut.result()
+                    strategies_by_symbol[s] = strat_res
+        else:
+            for cand in pool:
+                sym = str(cand.get("symbol"))
+                qg = (cand.get("q_grade") or cand.get("indicators", {}).get("q_grade"))
+                s, strat_res = _eval_one(sym, qg)
+                strategies_by_symbol[s] = strat_res
+    t3 = time.perf_counter()
     # attach strategies for champion selection
     for cand in pool:
         cand["strategies"] = strategies_by_symbol.get(str(cand.get("symbol")), {})
@@ -480,6 +549,8 @@ def run(date: Optional[str] = None, topk: int = 3, universe: str = "auto", symbo
             "chip": cand.get("chip", {}),
             "indicators": cand.get("indicators", {}),
         }
+        if cand.get("penalty_tags"):
+            it["penalty_tags"] = list(cand.get("penalty_tags") or [])
         # carry candidate score to pick for transparency
         if "candidate_score" in cand:
             it["candidate_score"] = float(cand.get("candidate_score", 0.0))
@@ -539,7 +610,14 @@ def run(date: Optional[str] = None, topk: int = 3, universe: str = "auto", symbo
                 v = item.get("indicators", {}).get(k)
                 if v is not None:
                     ext = max(ext, abs(float(v)))
-            ext_pen = -min(0.5, ext)
+            # Avoid double-penalizing when candidate_score already included extension
+            cand_penalized = False
+            try:
+                tags = set(item.get("penalty_tags", []) or [])
+                cand_penalized = ("extension" in tags)
+            except Exception:
+                cand_penalized = False
+            ext_pen = 0.0 if cand_penalized else -min(0.5, ext)
         except Exception:
             ext_pen = 0.0
         # freshness penalty from champion if available
@@ -623,6 +701,17 @@ def run(date: Optional[str] = None, topk: int = 3, universe: str = "auto", symbo
 
     # Degradation recording and tradeable decision
     dbg = payload.setdefault("debug", {})
+    # Timing
+    try:
+        dbg["timing"] = {
+            "candidates_sec": round(t1 - t0, 3),
+            "strategy_eval_sec": round(t3 - t2, 3),
+        }
+    except Exception:
+        pass
+    # Empty-result classification (pre-normalize)
+    if empty_reason:
+        degrade_record(dbg, empty_reason.upper(), {})
     dbg["candidate_stats"] = cand_stats
     # snapshot mainboard counts
     try:
@@ -756,6 +845,17 @@ def run(date: Optional[str] = None, topk: int = 3, universe: str = "auto", symbo
 
     # Normalize for strict contract (drop pseudo, set None)
     payload = normalize_payload(payload)
+    # Post-strict empty classification
+    try:
+        if isinstance(payload.get("picks"), list) and len(payload["picks"]) == 0:
+            dropped = (payload.get("debug", {}) or {}).get("dropped_picks") or []
+            if dropped:
+                degrade_record(dbg, "STRICT_DROPPED_ALL", {"dropped": len(dropped)})
+            else:
+                # champion/trade plan missing path
+                degrade_record(dbg, "NO_EXECUTABLE_AFTER_CHAMPION", {})
+    except Exception:
+        pass
 
     # Data status for contract
     ds_snapshot = {
@@ -792,6 +892,17 @@ def run(date: Optional[str] = None, topk: int = 3, universe: str = "auto", symbo
         "symbols_fail": len(locals().get("strategy_eval_failures", []) or []),
         "error_summary": None,
     }
+    # Strategy evaluation counters (rough)
+    try:
+        total_syms = int(len(pool))
+        total_strats = int(len(getattr(strat_lib, "REGISTRY", {}) or {}))
+        dbg.setdefault("strategy_eval_counts", {})
+        dbg["strategy_eval_counts"].update({
+            "symbols": total_syms,
+            "strategies": total_strats,
+        })
+    except Exception:
+        pass
     payload["data_status"] = {"snapshot": ds_snapshot, "themes": ds_themes, "daily": ds_daily, "mainline": ds_mainline}
 
     _write_outputs(as_of, payload)
