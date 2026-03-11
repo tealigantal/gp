@@ -1,4 +1,4 @@
-# Python
+### Python
 __pycache__/
 *.py[cod]
 *.egg-info/
@@ -8,39 +8,57 @@ venv/
 .mypy_cache/
 .ruff_cache/
 
-# Node / frontend
+### Node / frontend
 frontend/node_modules/
 frontend/dist/
 frontend/.vite/
+frontend/.env.local
 
-# Data/outputs
+### Data & runtime outputs (do not version)
 data/
 universe/
 results/
+cache/
+_tmp_gp/
 
-# IDE
+# store runtime layers
+store/cache/
+store/backtest/
+store/snapshots/
+store/sessions/
+store/search/
+store/*.duckdb
+*.duckdb
+*.db
+
+# recommendation outputs (whitelist only latest + readme + minimal sample)
+store/recommend/**
+!store/recommend/README.md
+!store/recommend/latest.json
+!store/recommend/2026-03-11.json
+
+# static registry allowed
+!store/registry/champion.json
+
+### IDE / OS
 .vscode/
 .idea/
+.DS_Store
+Thumbs.db
 
-# Local secrets (do not commit)
+### Secrets
+.env
 local_secrets.py
 configs/config.yaml
 
-# Logs
+### Logs & temp
 *.log
-.env
-.env.example
+tmp_*.txt
+*_patch*
+*_before*
+*.bak
+error.txt
 
-# local search history / sqlite
-store/search/*.db
-store/search/history.db
-*.db
-
-# local search history / sqlite
-store/search/*.db
-store/search/history.db
-*.db
-# local sqlite history
-store/search/history.db
-store/search/*.db
+### Vendored bundles to avoid tracking
+EMQuantAPI_Python/
 

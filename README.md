@@ -198,3 +198,7 @@
 
 自检
 - 一键自检（含单测/服务链路/实验）：`python gpbt.py gate --level ALL`
+
+### 运行态与保留策略
+- 运行态目录：`store/{recommend,search,sessions,cache,snapshots}`, 根 `cache/` 等默认不纳入版本；仅放行 `store/recommend/latest.json` 与一个最小样例（当前为 2026-03-11.json）。
+- 定期清理：`python -m scripts.retention --keep-days 14` 可清理过期会话/搜索历史与旧推荐产物，防止无限膨胀。

@@ -1,5 +1,5 @@
 {
-  "as_of": "2026-03-09",
+  "as_of": "2026-03-11",
   "timezone": "Asia/Shanghai",
   "env": {
     "grade": "D",
@@ -154,7 +154,7 @@
         "indicator": "今日"
       }
     ],
-    "as_of_ts": "2026-03-11T15:37:47+08:00",
+    "as_of_ts": "2026-03-11T16:02:59+08:00",
     "errors": [],
     "source": "akshare:stock_sector_fund_flow_rank"
   },
@@ -168,7 +168,7 @@
   "disclaimer": "本内容仅供研究与教育，不构成任何投资建议或收益承诺；市场有风险，决策需独立承担",
   "debug": {
     "timing": {
-      "candidates_sec": 0.1,
+      "candidates_sec": 0.084,
       "strategy_eval_sec": 0.0
     },
     "sources": [],
@@ -180,7 +180,7 @@
       "fallback_reason": null,
       "stale": false,
       "missing": false,
-      "elapsed_sec": 71.28,
+      "elapsed_sec": 67.79,
       "cache_age_sec": null,
       "skipped_routes": [],
       "attempts": [
@@ -339,7 +339,7 @@
       "ok": true,
       "source": "akshare:em",
       "rows": 5816,
-      "elapsed_sec": 71.28,
+      "elapsed_sec": 67.79,
       "cache": "none",
       "as_of_ts": null,
       "error": null
@@ -365,7 +365,7 @@
       "ok": true,
       "source": "akshare:stock_sector_fund_flow_rank",
       "error": null,
-      "as_of_ts": "2026-03-11T15:37:47+08:00",
+      "as_of_ts": "2026-03-11T16:02:59+08:00",
       "stale": false
     }
   }
