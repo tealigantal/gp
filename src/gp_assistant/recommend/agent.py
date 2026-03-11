@@ -64,9 +64,70 @@ from ..strategy.indicators import compute_indicators  # type: ignore
 def _write_outputs(as_of: str, payload: Dict[str, Any]) -> None:
     out_dir = store_dir() / "recommend"
     out_dir.mkdir(parents=True, exist_ok=True)
+    # main files
     (out_dir / f"{as_of}.json").write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
     (out_dir / f"{as_of}_debug.json").write_text(json.dumps(payload.get("debug", {}), ensure_ascii=False, indent=2), encoding="utf-8")
-    (out_dir / f"{as_of}_sources.json").write_text(json.dumps(payload.get("debug", {}).get("sources", []), ensure_ascii=False, indent=2), encoding="utf-8")
+    # stage-oriented source summary (never empty)
+    dbg = payload.get("debug", {}) or {}
+    ds = payload.get("data_status", {}) or {}
+    cand_stats = (dbg.get("candidate_stats") or {})
+    them_stats = (dbg.get("thematic_stats") or {})
+    strat_counts = (dbg.get("strategy_eval_counts") or {})
+    reasons = [r.get("reason_code") for r in (dbg.get("degrade_reasons") or []) if isinstance(r, dict)]
+    snap = (ds.get("snapshot") or {})
+    th = (ds.get("themes") or {})
+    ml = (ds.get("mainline") or {})
+    sources_obj = {
+        "snapshot": {
+            "ok": bool(snap.get("ok")),
+            "source": snap.get("source"),
+            "elapsed_sec": snap.get("elapsed_sec"),
+            "cache": snap.get("cache"),
+            "as_of_ts": snap.get("as_of_ts"),
+            "error": snap.get("error"),
+        },
+        "themes": {
+            "ok": bool(th.get("ok")),
+            "source": th.get("source"),
+            "attempted": th.get("attempted"),
+            "error": th.get("error"),
+            "as_of_ts": th.get("as_of_ts"),
+            "stale": th.get("stale"),
+        },
+        "mainline": {
+            "ok": bool(ml.get("ok")),
+            "source": ml.get("source"),
+            "error": ml.get("error"),
+            "as_of_ts": ml.get("as_of_ts"),
+            "stale": ml.get("stale"),
+            "restrict_to_mainline": bool(dbg.get("restrict_to_mainline")),
+            "restrict_effective": bool(dbg.get("restrict_to_mainline_effective")),
+        },
+        "candidate": {
+            "universe_in_count": cand_stats.get("universe_in_count"),
+            "universe_after_mainboard_filter_count": cand_stats.get("universe_after_mainboard_filter_count"),
+            "universe_after_code_clean_count": cand_stats.get("universe_after_code_clean_count"),
+            "bars_missing_count": cand_stats.get("bars_missing_count"),
+            "bars_too_short_count": cand_stats.get("bars_too_short_count"),
+            "indicator_error_count": cand_stats.get("indicator_error_count"),
+            "pool_pre_thematic_count": cand_stats.get("pool_pre_thematic_count") or cand_stats.get("candidates_out_count"),
+        },
+        "filters": {
+            "pool_before_thematic_filter": them_stats.get("pool_before_thematic_filter"),
+            "pool_after_theme_filter": them_stats.get("pool_after_theme_filter"),
+            "pool_after_mainline_filter": them_stats.get("pool_after_mainline_filter"),
+            "pool_after_thematic_mainline_filter": them_stats.get("pool_after_thematic_mainline_filter"),
+        },
+        "strategy": {
+            "symbols": strat_counts.get("symbols", 0),
+            "strategies": strat_counts.get("strategies"),
+        },
+        "final": {
+            "degraded": bool(dbg.get("degraded")),
+            "reasons": reasons,
+        },
+    }
+    (out_dir / f"{as_of}_sources.json").write_text(json.dumps(sources_obj, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
 def run(date: Optional[str] = None, topk: int = 3, universe: str = "auto", symbols: Optional[List[str]] = None, risk_profile: str = "normal") -> Dict[str, Any]:  # noqa: D401
@@ -165,9 +226,21 @@ def run(date: Optional[str] = None, topk: int = 3, universe: str = "auto", symbo
         universe_syms = None
         universe_meta = None
 
+    # Prepare early thematic/mainline prefilter (cheap shrink)
+    try:
+        theme_names_pref = [str(t.get("name")) for t in (themes or []) if isinstance(t, dict)]
+    except Exception:
+        theme_names_pref = []
+    try:
+        mainline_names_pref = [str(s.get("name")) for s in (mainline.get("sectors") or [])] if isinstance(mainline, dict) else []
+    except Exception:
+        mainline_names_pref = []
+    restrict_for_prefilter = bool(getattr(cfg, "restrict_to_mainline", False) and (isinstance(mainline, dict) and (mainline.get("sectors") or [])))
+    industry_prefilter = list({*theme_names_pref, *mainline_names_pref}) if restrict_for_prefilter else None
+
     # Candidates with stats (build once; share features in-run to avoid recomputation)
     t0 = time.perf_counter()
-    gen_out = generate_candidates(base, env.get("grade", "C"), topk=topk, snapshot=snapshot_df, return_features=True)
+    gen_out = generate_candidates(base, env.get("grade", "C"), topk=topk, snapshot=snapshot_df, return_features=True, industry_filter=industry_prefilter)
     # mypy-friendly unpack
     if len(gen_out) == 4:  # type: ignore[truthy-function]
         pool, veto, cand_stats, feats_precomp = gen_out  # type: ignore[misc]
@@ -202,6 +275,8 @@ def run(date: Optional[str] = None, topk: int = 3, universe: str = "auto", symbo
 
     themed_pool: List[Dict[str, Any]] = []
     thematic_none_count = 0
+    theme_only_pool: List[Dict[str, Any]] = []
+    mainline_only_pool: List[Dict[str, Any]] = []
     for cand in pool:
         th = _compute_thematic_overlap(cand)
         cand.update({
@@ -213,20 +288,34 @@ def run(date: Optional[str] = None, topk: int = 3, universe: str = "auto", symbo
             themed_pool.append(cand)
         else:
             thematic_none_count += 1
+        # collect per-dimension pools for diagnostics
+        try:
+            if float(th["theme_overlap_score"]) > 0.0:
+                theme_only_pool.append(cand)
+            if float(th["mainline_overlap_score"]) > 0.0:
+                mainline_only_pool.append(cand)
+        except Exception:
+            pass
 
     restrict_mainline = bool(getattr(cfg, "restrict_to_mainline", False))
-    if restrict_mainline:
-        # Filter pool if unrelated to themes/mainline
+    # detect mainline availability: sectors present -> available; errors + empty sectors -> unavailable
+    mainline_available = bool(isinstance(mainline, dict) and (mainline.get("sectors") or []))
+    mainline_errors = (list(mainline.get("errors") or []) if isinstance(mainline, dict) else [])
+    restrict_effective = bool(restrict_mainline and mainline_available)
+    pool_before_thematic = int(len(pool))
+    if restrict_effective:
+        # Filter pool only when mainline is available (union with themes)
         pool = themed_pool
-        if not pool:
-            # keep empty pool; surface debug later
-            pass
+    else:
+        # mainline unavailable or restriction disabled -> do not hard filter here
+        pass
     # Empty-source diagnostics (before strategy evaluation)
     empty_reason: Optional[str] = None
     if cand_stats.get("candidates_out_count", 0) == 0:
         empty_reason = "no_candidate_after_universe"
-    elif restrict_mainline and len(pool) == 0:
-        empty_reason = "no_candidate_after_mainline"
+    elif restrict_effective and len(pool) == 0:
+        # handled via MAINLINE_FILTERED_ALL below to avoid duplicate/conflicting reasons
+        empty_reason = None
 
     # Strategy evaluation helpers
     def _eval_strategies_for_symbol(sym: str, df_feat: pd.DataFrame, q_grade: Optional[str]) -> Dict[str, Any]:
@@ -730,23 +819,28 @@ def run(date: Optional[str] = None, topk: int = 3, universe: str = "auto", symbo
                 dbg["snapshot_mainboard_counts"] = {"before": total_n, "after": main_n}
     except Exception:
         pass
-    # thematic restriction info
+    # thematic/mainline diagnostic stats
     try:
-        dbg["restrict_to_mainline"] = bool(restrict_mainline)
         dbg.setdefault("thematic_stats", {})
+        dbg["restrict_to_mainline"] = bool(restrict_mainline)
+        dbg["restrict_to_mainline_effective"] = bool(restrict_effective)
         dbg["thematic_stats"].update({
+            "pool_before_thematic_filter": int(pool_before_thematic),
             "pool_unrelated_count": int(thematic_none_count),
-            "pool_after_thematic_filter": int(len(pool)),
+            "pool_after_theme_filter": int(len(theme_only_pool)),
+            "pool_after_mainline_filter": (int(len(mainline_only_pool)) if ("mainline_only_pool" in locals()) and mainline_available else None),
+            "pool_after_thematic_mainline_filter": (int(len(pool)) if restrict_effective else None),
+            "theme_source": (themes[0].get("source") if isinstance(themes, list) and themes else None),
+            "mainline_ok": bool(mainline_available),
+            "mainline_errors": (";".join(mainline_errors) if mainline_errors else None),
         })
-        src = None
-        if isinstance(themes, list) and themes:
-            src = themes[0].get("source")
-        dbg["thematic_stats"]["theme_source"] = src
     except Exception:
         pass
-    # surface no valid mainboard theme when restricted and empty pool
-    if restrict_mainline and len(pool) == 0:
-        degrade_record(dbg, "NO_VALID_MAINBOARD_THEME", {})
+    # Stage-specific degrade reasons for thematic/mainline
+    if restrict_mainline and (not restrict_effective):
+        degrade_record(dbg, "MAINLINE_UNAVAILABLE", {"errors": mainline_errors, "restrict_to_mainline": True})
+    if restrict_effective and len(pool) == 0:
+        degrade_record(dbg, "MAINLINE_FILTERED_ALL", {})
     if champion_missing_syms:
         dbg.setdefault("advisories", []).append({"code": "CHAMPION_UNAVAILABLE", "symbols": champion_missing_syms})
     # record strategy evaluation failures if any
@@ -852,8 +946,13 @@ def run(date: Optional[str] = None, topk: int = 3, universe: str = "auto", symbo
             if dropped:
                 degrade_record(dbg, "STRICT_DROPPED_ALL", {"dropped": len(dropped)})
             else:
-                # champion/trade plan missing path
-                degrade_record(dbg, "NO_EXECUTABLE_AFTER_CHAMPION", {})
+                # champion/trade plan missing only if strategies actually evaluated
+                try:
+                    _sym_eval_cnt = int((dbg.get("strategy_eval_counts") or {}).get("symbols", 0))
+                except Exception:
+                    _sym_eval_cnt = 0
+                if _sym_eval_cnt > 0:
+                    degrade_record(dbg, "NO_EXECUTABLE_AFTER_CHAMPION", {})
     except Exception:
         pass
 

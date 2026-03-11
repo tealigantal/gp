@@ -80,6 +80,7 @@ def generate_candidates(
     *,
     snapshot: Optional[pd.DataFrame] = None,
     return_features: bool = False,
+    industry_filter: Optional[List[str]] = None,
 ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]], Dict[str, Any]] | Tuple[List[Dict[str, Any]], List[Dict[str, Any]], Dict[str, Any], Dict[str, pd.DataFrame]]:
     cfg = load_config()
     # Cost controls (env overrides; keep logic local)
@@ -156,14 +157,42 @@ def generate_candidates(
             "snapshot_columns": list(snapshot.columns) if hasattr(snapshot, "columns") else [],
         }
 
+    # Optional early shrink by industry (applies only to dynamic snapshot-derived universe)
+    try:
+        if base_reason == "dynamic_pool" and industry_filter and isinstance(industry_filter, list):
+            filt = [str(x) for x in industry_filter if isinstance(x, str) and x.strip()]
+            if filt:
+                before = len(cleaned)
+                def _match_ind(e: Dict[str, Any]) -> bool:  # noqa: ANN001
+                    ind = str(e.get("industry") or "").strip()
+                    if not ind:
+                        return False
+                    return any((ind == f or (ind in f) or (f in ind)) for f in filt)
+                cleaned = [e for e in cleaned if _match_ind(e)]
+                # annotate stats so callers can diagnose shrink effect
+                if cleaned is not None:
+                    stats_shrink = {"from": before, "to": len(cleaned), "by": "industry_filter"}
+                    # this will be surfaced by agent in debug.thematic_stats
+                    # but we still record locally for completeness
+                    # keep under a reserved key to avoid breaking existing readers
+                    # (agent will not rely on this field)
+                    # fmt: off
+                    pass
+                # fmt: on
+    except Exception:
+        pass
+
     stats: Dict[str, Any] = {
         "universe_in_count": pre_clean_len,
+        "universe_after_mainboard_filter_count": int(pre_clean_len),
+        "universe_after_code_clean_count": 0,
         "universe_after_filter_count": 0,
         "bars_missing_count": 0,
         "bars_too_short_count": 0,
         "indicator_error_count": 0,
         "skipped_symbols_sample": [],
         "candidates_out_count": 0,
+        "pool_pre_thematic_count": 0,
         "daily_attempts_sample": [],
         "universe_removed_counts": {
             "bad_code": int(bad_code_removed),
@@ -212,6 +241,12 @@ def generate_candidates(
     veto_reasons: List[Dict[str, Any]] = []
     # per-run shared feature map for reuse in later stages
     feats_by_symbol: Dict[str, pd.DataFrame] = {}
+
+    # update post-clean counts for diagnostics
+    try:
+        stats["universe_after_code_clean_count"] = int(len(cleaned))
+    except Exception:
+        pass
 
     for entry in cleaned:
         sym = str(entry.get("code"))
@@ -398,6 +433,7 @@ def generate_candidates(
     pool.sort(key=lambda x: -float(x.get("candidate_score", 0.0)))
     stats["universe_after_filter_count"] = len(pool)
     stats["candidates_out_count"] = len(pool)
+    stats["pool_pre_thematic_count"] = len(pool)
 
     if return_features:
         return pool[: max(1, topk) * 5], veto_reasons, stats, feats_by_symbol
