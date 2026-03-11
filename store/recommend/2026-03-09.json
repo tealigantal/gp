@@ -4,8 +4,8 @@
   "env": {
     "grade": "D",
     "reasons": [
-      "全市场均值涨跌幅=-0.75%",
-      "上涨占比=25.93%"
+      "全市场均值涨跌幅=-0.04%",
+      "上涨占比=37.57%"
     ],
     "recovery_conditions": [
       "上涨家数占比>55%",
@@ -13,66 +13,149 @@
     ],
     "raw": {
       "breadth": {
-        "mean_chg": -0.7455502915451895,
-        "up_ratio": 0.2592930029154519
+        "mean_chg": -0.037574320627393715,
+        "up_ratio": 0.3757067298923947
       }
     }
   },
   "themes": [
     {
-      "name": "概念-昨日连板_含一字",
-      "strength": "5.38%",
+      "name": "行业-逆变器",
+      "strength": "8.30%",
       "evidence": {
-        "board_code": "BK1051",
-        "leader_stock": "顺钠股份",
+        "board_code": "BK1320",
+        "leader_stock": "首航新能",
         "leaders": [
           {
-            "code": "600545",
-            "name": "卓郎智能",
-            "pct_chg": "10.08%"
+            "code": "301658",
+            "name": "首航新能",
+            "pct_chg": "20.01%"
           },
           {
-            "code": "605268",
-            "name": "王力安防",
-            "pct_chg": "10.02%"
+            "code": "300763",
+            "name": "锦浪科技",
+            "pct_chg": "11.11%"
           },
           {
-            "code": "000533",
-            "name": "顺钠股份",
-            "pct_chg": "9.98%"
+            "code": "605117",
+            "name": "德业股份",
+            "pct_chg": "10.00%"
           },
           {
-            "code": "002498",
-            "name": "汉缆股份",
-            "pct_chg": "9.96%"
+            "code": "300274",
+            "name": "阳光电源",
+            "pct_chg": "9.49%"
           },
           {
-            "code": "000711",
-            "name": "ST京蓝",
-            "pct_chg": "3.74%"
+            "code": "688390",
+            "name": "固德威",
+            "pct_chg": "5.15%"
+          }
+        ]
+      },
+      "source": "akshare:industry_name_em"
+    },
+    {
+      "name": "行业-储能",
+      "strength": "7.60%",
+      "evidence": {
+        "board_code": "BK1324",
+        "leader_stock": "艾罗能源"
+      },
+      "source": "akshare:industry_name_em"
+    },
+    {
+      "name": "概念-钛白粉概念",
+      "strength": "3.06%",
+      "evidence": {
+        "board_code": "BK0805",
+        "leader_stock": "金浦钛业",
+        "leaders": [
+          {
+            "code": "000545",
+            "name": "金浦钛业",
+            "pct_chg": "10.06%"
+          },
+          {
+            "code": "002145",
+            "name": "钛能化学",
+            "pct_chg": "7.84%"
+          },
+          {
+            "code": "300891",
+            "name": "惠云钛业",
+            "pct_chg": "5.74%"
+          },
+          {
+            "code": "002386",
+            "name": "天原股份",
+            "pct_chg": "3.73%"
+          },
+          {
+            "code": "002601",
+            "name": "龙佰集团",
+            "pct_chg": "3.49%"
           }
         ]
       },
       "source": "akshare:concept_name_em"
     },
     {
-      "name": "概念-环氧丙烷",
-      "strength": "4.64%",
+      "name": "概念-草甘膦",
+      "strength": "2.65%",
       "evidence": {
-        "board_code": "BK1011",
-        "leader_stock": "红 宝 丽"
+        "board_code": "BK0950",
+        "leader_stock": "江山股份"
       },
       "source": "akshare:concept_name_em"
     }
   ],
   "mainline": {
     "indicator": "今日",
-    "sectors": [],
-    "as_of_ts": "2026-03-09T23:02:44+08:00",
-    "errors": [
-      "行业资金流:HTTPSConnectionPool(host='push2.eastmoney.com', port=443): Max retries exceeded with url: /api/qt/clist/get?pn=1&pz=100&po=1&np=1&ut=b2884a393a59ad64002292a3e90d46a5&fltt=2&invt=2&fid0=f62&fs=m%3A90+t%3A2&stat=1&fields=f12%2Cf14%2Cf2%2Cf3%2Cf62%2Cf184%2Cf66%2Cf69%2Cf72%2Cf75%2Cf78%2Cf81%2Cf84%2Cf87%2Cf204%2Cf205%2Cf124&rt=52975239&_=1773068500458 (Caused by SSLError(SSLEOFError(8, '[SSL: UNEXPECTED_EOF_WHILE_READING] EOF occurred in violation of protocol (_ssl.c:1016)')))",
-      "概念资金流:HTTPSConnectionPool(host='push2.eastmoney.com', port=443): Max retries exceeded with url: /api/qt/clist/get?pn=1&pz=100&po=1&np=1&ut=b2884a393a59ad64002292a3e90d46a5&fltt=2&invt=2&fid0=f62&fs=m%3A90+t%3A3&stat=1&fields=f12%2Cf14%2Cf2%2Cf3%2Cf62%2Cf184%2Cf66%2Cf69%2Cf72%2Cf75%2Cf78%2Cf81%2Cf84%2Cf87%2Cf204%2Cf205%2Cf124&rt=52975239&_=1773068549077 (Caused by SSLError(SSLEOFError(8, '[SSL: UNEXPECTED_EOF_WHILE_READING] EOF occurred in violation of protocol (_ssl.c:1016)')))"
+    "sectors": [
+      {
+        "sector_type": "行业资金流",
+        "name": "电池",
+        "pct_chg": null,
+        "main_inflow": "7569064960.0",
+        "main_inflow_pct": "6.35",
+        "leader_stock": null,
+        "source": "akshare:stock_sector_fund_flow_rank",
+        "indicator": "今日"
+      },
+      {
+        "sector_type": "行业资金流",
+        "name": "基础化工",
+        "pct_chg": null,
+        "main_inflow": "5776766720.0",
+        "main_inflow_pct": "3.5",
+        "leader_stock": null,
+        "source": "akshare:stock_sector_fund_flow_rank",
+        "indicator": "今日"
+      },
+      {
+        "sector_type": "概念资金流",
+        "name": "固态电池",
+        "pct_chg": null,
+        "main_inflow": "6728931072.0",
+        "main_inflow_pct": "3.4",
+        "leader_stock": null,
+        "source": "akshare:stock_sector_fund_flow_rank",
+        "indicator": "今日"
+      },
+      {
+        "sector_type": "概念资金流",
+        "name": "钠离子电池",
+        "pct_chg": null,
+        "main_inflow": "6626167552.0",
+        "main_inflow_pct": "7.44",
+        "leader_stock": null,
+        "source": "akshare:stock_sector_fund_flow_rank",
+        "indicator": "今日"
+      }
     ],
+    "as_of_ts": "2026-03-11T15:37:47+08:00",
+    "errors": [],
     "source": "akshare:stock_sector_fund_flow_rank"
   },
   "candidate_pool": [],
@@ -85,31 +168,26 @@
   "disclaimer": "本内容仅供研究与教育，不构成任何投资建议或收益承诺；市场有风险，决策需独立承担",
   "debug": {
     "timing": {
-      "candidates_sec": 296.23,
+      "candidates_sec": 0.1,
       "strategy_eval_sec": 0.0
     },
     "sources": [],
     "failures": [],
     "snapshot": {
-      "source": "akshare:sina",
+      "source": "akshare:em",
       "cache": null,
       "fallback": false,
       "fallback_reason": null,
       "stale": false,
       "missing": false,
-      "elapsed_sec": 103.5,
+      "elapsed_sec": 71.28,
       "cache_age_sec": null,
       "skipped_routes": [],
       "attempts": [
         {
           "source": "akshare:em",
-          "ok": false,
-          "err": "SSLError: HTTPSConnectionPool(host='82.push2delay.eastmoney.com', port=443): Max retries exceeded with url: /api/qt/clist/get?pn=2&pz=100&po=1&np=1&ut=bd1d9ddb04089700cf9c27f6f7426281&fltt=2&invt=2&fid=f12&fs=m%3A0+t%3A6%2Cm%3A0+t%3A80%2Cm%3A1+t%3A2%2Cm%3A1+t%3A23%2Cm%3A0+t%3A81+s%3A2048&fields=f1%2Cf2%2Cf3%2Cf4%2Cf5%2Cf6%2Cf7%2Cf8%2Cf9%2Cf10%2Cf12%2Cf13%2Cf14%2Cf15%2Cf16%2Cf17%2Cf18%2Cf20%2Cf21%2Cf23%2Cf24%2Cf25%2Cf22%2Cf11%2Cf62%2Cf128%2Cf136%2Cf115%2Cf152 (Caused by SSLError(SSLEOFError(8, '[SSL: UNEXPECTED_EOF_WHILE_READING] EOF occurred in violation of protocol (_ssl.c:1016)')))"
-        },
-        {
-          "source": "akshare:sina",
           "ok": true,
-          "rows": 5488
+          "rows": 5816
         }
       ],
       "schema": {
@@ -125,66 +203,90 @@
           "ts"
         ],
         "raw_columns": [
+          "序号",
           "代码",
           "名称",
           "最新价",
-          "涨跌额",
           "涨跌幅",
-          "买入",
-          "卖出",
-          "昨收",
-          "今开",
-          "最高",
-          "最低",
+          "涨跌额",
           "成交量",
           "成交额",
-          "时间戳"
+          "振幅",
+          "最高",
+          "最低",
+          "今开",
+          "昨收",
+          "量比",
+          "换手率",
+          "市盈率-动态",
+          "市净率",
+          "总市值",
+          "流通市值",
+          "涨速",
+          "5分钟涨跌",
+          "60日涨跌幅",
+          "年初至今涨跌幅"
         ],
-        "route": "sina"
+        "route": "em"
       },
       "normalized": true
     },
     "degraded": true,
     "degrade_reasons": [
       {
-        "reason_code": "NO_CANDIDATE_AFTER_MAINLINE",
+        "reason_code": "NO_CANDIDATE_AFTER_UNIVERSE",
         "detail": {}
       },
       {
-        "reason_code": "NO_VALID_MAINBOARD_THEME",
-        "detail": {}
+        "reason_code": "UNIVERSE_TOO_SMALL",
+        "detail": {
+          "count": 0,
+          "min": 50
+        }
       },
       {
-        "reason_code": "NO_EXECUTABLE_AFTER_CHAMPION",
-        "detail": {}
+        "reason_code": "CANDIDATE_TOO_SMALL",
+        "detail": {
+          "count": 0,
+          "min": 20
+        }
       }
     ],
     "candidate_stats": {
-      "universe_in_count": 141,
-      "universe_after_filter_count": 141,
+      "universe_in_count": 133,
+      "universe_after_mainboard_filter_count": 133,
+      "universe_after_code_clean_count": 0,
+      "universe_after_filter_count": 0,
       "bars_missing_count": 0,
       "bars_too_short_count": 0,
       "indicator_error_count": 0,
       "skipped_symbols_sample": [],
-      "candidates_out_count": 141,
+      "candidates_out_count": 0,
+      "pool_pre_thematic_count": 0,
       "daily_attempts_sample": [],
       "universe_removed_counts": {
         "bad_code": 0,
         "insufficient_liquidity": 0,
         "insufficient_history": 0,
-        "non_mainboard": 59
+        "non_mainboard": 67
       }
     },
     "snapshot_mainboard_counts": {
-      "before": 5488,
-      "after": 3194
+      "before": 5816,
+      "after": 3470
+    },
+    "thematic_stats": {
+      "pool_before_thematic_filter": 0,
+      "pool_unrelated_count": 0,
+      "pool_after_theme_filter": 0,
+      "pool_after_mainline_filter": 0,
+      "pool_after_thematic_mainline_filter": 0,
+      "theme_source": "akshare:industry_name_em",
+      "mainline_ok": true,
+      "mainline_errors": null
     },
     "restrict_to_mainline": true,
-    "thematic_stats": {
-      "pool_unrelated_count": 15,
-      "pool_after_thematic_filter": 0,
-      "theme_source": "akshare:concept_name_em"
-    },
+    "restrict_to_mainline_effective": true,
     "warnings": [
       {
         "reason_code": "UNIVERSE_DIRTY_INPUT",
@@ -192,7 +294,7 @@
           "bad_code": 0,
           "insufficient_liquidity": 0,
           "insufficient_history": 0,
-          "non_mainboard": 59
+          "non_mainboard": 67
         }
       }
     ],
@@ -202,30 +304,30 @@
     }
   },
   "tradeable": false,
-  "message": "NOT_TRADEABLE: NO_CANDIDATE_AFTER_MAINLINE, NO_VALID_MAINBOARD_THEME",
+  "message": "NOT_TRADEABLE: NO_CANDIDATE_AFTER_UNIVERSE, UNIVERSE_TOO_SMALL",
   "mover_hints": [
     {
+      "symbol": "601016",
+      "chg": "10.11%",
+      "chg_num": 10.11,
+      "source": "snapshot",
+      "evidence": [
+        "scale:assume_pct_no_evidence"
+      ]
+    },
+    {
       "symbol": "002445",
+      "chg": "10.09%",
+      "chg_num": 10.09,
+      "source": "snapshot",
+      "evidence": [
+        "scale:assume_pct_no_evidence"
+      ]
+    },
+    {
+      "symbol": "000626",
       "chg": "10.07%",
-      "chg_num": 10.072,
-      "source": "snapshot",
-      "evidence": [
-        "scale:assume_pct_no_evidence"
-      ]
-    },
-    {
-      "symbol": "002068",
-      "chg": "10.06%",
-      "chg_num": 10.058,
-      "source": "snapshot",
-      "evidence": [
-        "scale:assume_pct_no_evidence"
-      ]
-    },
-    {
-      "symbol": "600268",
-      "chg": "10.03%",
-      "chg_num": 10.034,
+      "chg_num": 10.07,
       "source": "snapshot",
       "evidence": [
         "scale:assume_pct_no_evidence"
@@ -235,38 +337,35 @@
   "data_status": {
     "snapshot": {
       "ok": true,
-      "source": "akshare:sina",
-      "rows": 5488,
-      "elapsed_sec": 103.5,
+      "source": "akshare:em",
+      "rows": 5816,
+      "elapsed_sec": 71.28,
       "cache": "none",
       "as_of_ts": null,
       "error": null
     },
     "themes": {
       "ok": true,
-      "source": "cache:file",
+      "source": "akshare:concept_name_em,akshare:industry_name_em",
       "attempted": [
         "industry_name_em",
-        "industry_name_ths",
-        "concept_name_em",
-        "concept_name_ths",
-        "cache:file"
+        "concept_name_em"
       ],
-      "error": "stale_cache_used;industry_name_em:HTTPSConnectionPool(host='17.push2.eastmoney.com', port=443): Max retries exceeded with url: /api/qt/clist/get?pn=1&pz=100&po=1&np=1&ut=bd1d9ddb04089700cf9c27f6f7426281&fltt=2&invt=2&fid=f3&fs=m%3A90+t%3A2+f%3A%2150&fields=f1%2Cf2%2Cf3%2Cf4%2Cf5%2Cf6%2Cf7%2Cf8%2Cf9%2Cf10%2Cf12%2Cf13%2Cf14%2Cf15%2Cf16%2Cf17%2Cf18%2Cf20%2Cf21%2Cf23%2Cf24%2Cf25%2Cf26%2Cf22%2Cf33%2Cf11%2Cf62%2Cf128%2Cf136%2Cf115%2Cf152%2Cf124%2Cf107%2Cf104%2Cf105%2Cf140%2Cf141%2Cf207%2Cf208%2Cf209%2Cf222 (Caused by NameResolutionError(\"HTTPSConnection(host='17.push2.eastmoney.com', port=443): Failed to resolve '17.push2.eastmoney.com' ([Errno -5] No address associated with hostname)\"));industry_name_ths:HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /thshy/detail/code/881272/ (Caused by NameResolutionError(\"HTTPSConnection(host='q.10jqka.com.cn', port=443): Failed to resolve 'q.10jqka.com.cn' ([Errno -5] No address associated with hostname)\"));concept_name_em:HTTPSConnectionPool(host='79.push2.eastmoney.com', port=443): Max retries exceeded with url: /api/qt/clist/get?pn=1&pz=100&po=1&np=1&ut=bd1d9ddb04089700cf9c27f6f7426281&fltt=2&invt=2&fid=f12&fs=m%3A90+t%3A3+f%3A%2150&fields=f2%2Cf3%2Cf4%2Cf8%2Cf12%2Cf14%2Cf15%2Cf16%2Cf17%2Cf18%2Cf20%2Cf21%2Cf24%2Cf25%2Cf22%2Cf33%2Cf11%2Cf62%2Cf128%2Cf124%2Cf107%2Cf104%2Cf105%2Cf136 (Caused by SSLError(SSLEOFError(8, '[SSL: UNEXPECTED_EOF_WHILE_READING] EOF occurred in violation of protocol (_ssl.c:1016)')))",
+      "error": null,
       "as_of_ts": null,
-      "stale": true
+      "stale": false
     },
     "daily": {
       "ok": true,
-      "symbols_ok": 141,
+      "symbols_ok": 0,
       "symbols_fail": 0,
       "error_summary": null
     },
     "mainline": {
-      "ok": false,
+      "ok": true,
       "source": "akshare:stock_sector_fund_flow_rank",
-      "error": "行业资金流:HTTPSConnectionPool(host='push2.eastmoney.com', port=443): Max retries exceeded with url: /api/qt/clist/get?pn=1&pz=100&po=1&np=1&ut=b2884a393a59ad64002292a3e90d46a5&fltt=2&invt=2&fid0=f62&fs=m%3A90+t%3A2&stat=1&fields=f12%2Cf14%2Cf2%2Cf3%2Cf62%2Cf184%2Cf66%2Cf69%2Cf72%2Cf75%2Cf78%2Cf81%2Cf84%2Cf87%2Cf204%2Cf205%2Cf124&rt=52975239&_=1773068500458 (Caused by SSLError(SSLEOFError(8, '[SSL: UNEXPECTED_EOF_WHILE_READING] EOF occurred in violation of protocol (_ssl.c:1016)')));概念资金流:HTTPSConnectionPool(host='push2.eastmoney.com', port=443): Max retries exceeded with url: /api/qt/clist/get?pn=1&pz=100&po=1&np=1&ut=b2884a393a59ad64002292a3e90d46a5&fltt=2&invt=2&fid0=f62&fs=m%3A90+t%3A3&stat=1&fields=f12%2Cf14%2Cf2%2Cf3%2Cf62%2Cf184%2Cf66%2Cf69%2Cf72%2Cf75%2Cf78%2Cf81%2Cf84%2Cf87%2Cf204%2Cf205%2Cf124&rt=52975239&_=1773068549077 (Caused by SSLError(SSLEOFError(8, '[SSL: UNEXPECTED_EOF_WHILE_READING] EOF occurred in violation of protocol (_ssl.c:1016)')))",
-      "as_of_ts": "2026-03-09T23:02:44+08:00",
+      "error": null,
+      "as_of_ts": "2026-03-11T15:37:47+08:00",
       "stale": false
     }
   }

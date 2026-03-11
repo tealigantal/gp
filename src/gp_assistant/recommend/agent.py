@@ -127,7 +127,13 @@ def _write_outputs(as_of: str, payload: Dict[str, Any]) -> None:
             "reasons": reasons,
         },
     }
-    (out_dir / f"{as_of}_sources.json").write_text(json.dumps(sources_obj, ensure_ascii=False, indent=2), encoding="utf-8")
+    p_sources = out_dir / f"{as_of}_sources.json"
+    p_sources.write_text(json.dumps(sources_obj, ensure_ascii=False, indent=2), encoding="utf-8")
+    # Backward/alternative filename for tooling convenience
+    try:
+        (out_dir / f"{as_of}_source.json").write_text(p_sources.read_text(encoding="utf-8"), encoding="utf-8")
+    except Exception:
+        pass
 
 
 def run(date: Optional[str] = None, topk: int = 3, universe: str = "auto", symbols: Optional[List[str]] = None, risk_profile: str = "normal") -> Dict[str, Any]:  # noqa: D401
@@ -839,7 +845,8 @@ def run(date: Optional[str] = None, topk: int = 3, universe: str = "auto", symbo
     # Stage-specific degrade reasons for thematic/mainline
     if restrict_mainline and (not restrict_effective):
         degrade_record(dbg, "MAINLINE_UNAVAILABLE", {"errors": mainline_errors, "restrict_to_mainline": True})
-    if restrict_effective and len(pool) == 0:
+    # Only claim filtered-all if there were candidates before thematic and restriction was effectively applied
+    if restrict_effective and int(pool_before_thematic) > 0 and len(pool) == 0:
         degrade_record(dbg, "MAINLINE_FILTERED_ALL", {})
     if champion_missing_syms:
         dbg.setdefault("advisories", []).append({"code": "CHAMPION_UNAVAILABLE", "symbols": champion_missing_syms})

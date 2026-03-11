@@ -1,0 +1,49 @@
+{
+  "indicator": "今日",
+  "sectors": [
+    {
+      "sector_type": "行业资金流",
+      "name": "电池",
+      "pct_chg": null,
+      "main_inflow": "7569064960.0",
+      "main_inflow_pct": "6.35",
+      "leader_stock": null,
+      "source": "akshare:stock_sector_fund_flow_rank",
+      "indicator": "今日"
+    },
+    {
+      "sector_type": "行业资金流",
+      "name": "基础化工",
+      "pct_chg": null,
+      "main_inflow": "5776766720.0",
+      "main_inflow_pct": "3.5",
+      "leader_stock": null,
+      "source": "akshare:stock_sector_fund_flow_rank",
+      "indicator": "今日"
+    },
+    {
+      "sector_type": "概念资金流",
+      "name": "固态电池",
+      "pct_chg": null,
+      "main_inflow": "6728931072.0",
+      "main_inflow_pct": "3.4",
+      "leader_stock": null,
+      "source": "akshare:stock_sector_fund_flow_rank",
+      "indicator": "今日"
+    },
+    {
+      "sector_type": "概念资金流",
+      "name": "钠离子电池",
+      "pct_chg": null,
+      "main_inflow": "6626167552.0",
+      "main_inflow_pct": "7.44",
+      "leader_stock": null,
+      "source": "akshare:stock_sector_fund_flow_rank",
+      "indicator": "今日"
+    }
+  ],
+  "as_of_ts": "2026-03-11T15:37:47+08:00",
+  "errors": [],
+  "source": "akshare:stock_sector_fund_flow_rank",
+  "ts": 1773214667.9136262
+}

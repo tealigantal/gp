@@ -1,48 +1,93 @@
 {
-  "ts": 1772979204.6492882,
+  "ts": 1773214652.843867,
   "themes": [
     {
-      "name": "概念-昨日连板_含一字",
-      "strength": "5.38%",
+      "name": "行业-逆变器",
+      "strength": "8.30%",
       "evidence": {
-        "board_code": "BK1051",
-        "leader_stock": "顺钠股份",
+        "board_code": "BK1320",
+        "leader_stock": "首航新能",
         "leaders": [
           {
-            "code": "600545",
-            "name": "卓郎智能",
-            "pct_chg": "10.08%"
+            "code": "301658",
+            "name": "首航新能",
+            "pct_chg": "20.01%"
           },
           {
-            "code": "605268",
-            "name": "王力安防",
-            "pct_chg": "10.02%"
+            "code": "300763",
+            "name": "锦浪科技",
+            "pct_chg": "11.11%"
           },
           {
-            "code": "000533",
-            "name": "顺钠股份",
-            "pct_chg": "9.98%"
+            "code": "605117",
+            "name": "德业股份",
+            "pct_chg": "10.00%"
           },
           {
-            "code": "002498",
-            "name": "汉缆股份",
-            "pct_chg": "9.96%"
+            "code": "300274",
+            "name": "阳光电源",
+            "pct_chg": "9.49%"
           },
           {
-            "code": "000711",
-            "name": "ST京蓝",
-            "pct_chg": "3.74%"
+            "code": "688390",
+            "name": "固德威",
+            "pct_chg": "5.15%"
+          }
+        ]
+      },
+      "source": "akshare:industry_name_em"
+    },
+    {
+      "name": "行业-储能",
+      "strength": "7.60%",
+      "evidence": {
+        "board_code": "BK1324",
+        "leader_stock": "艾罗能源"
+      },
+      "source": "akshare:industry_name_em"
+    },
+    {
+      "name": "概念-钛白粉概念",
+      "strength": "3.06%",
+      "evidence": {
+        "board_code": "BK0805",
+        "leader_stock": "金浦钛业",
+        "leaders": [
+          {
+            "code": "000545",
+            "name": "金浦钛业",
+            "pct_chg": "10.06%"
+          },
+          {
+            "code": "002145",
+            "name": "钛能化学",
+            "pct_chg": "7.84%"
+          },
+          {
+            "code": "300891",
+            "name": "惠云钛业",
+            "pct_chg": "5.74%"
+          },
+          {
+            "code": "002386",
+            "name": "天原股份",
+            "pct_chg": "3.73%"
+          },
+          {
+            "code": "002601",
+            "name": "龙佰集团",
+            "pct_chg": "3.49%"
           }
         ]
       },
       "source": "akshare:concept_name_em"
     },
     {
-      "name": "概念-环氧丙烷",
-      "strength": "4.64%",
+      "name": "概念-草甘膦",
+      "strength": "2.65%",
       "evidence": {
-        "board_code": "BK1011",
-        "leader_stock": "红 宝 丽"
+        "board_code": "BK0950",
+        "leader_stock": "江山股份"
       },
       "source": "akshare:concept_name_em"
     }
