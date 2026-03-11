@@ -62,3 +62,24 @@ error.txt
 ### Vendored bundles to avoid tracking
 EMQuantAPI_Python/
 
+cache/
+_tmp_gp/
+EMQuantAPI_Python/
+store/cache/
+store/backtest/
+store/snapshots/
+store/sessions/
+store/search/
+*.db
+*.duckdb
+store/recommend/**
+!store/recommend/README.md
+!store/recommend/latest.json
+!store/recommend/2026-03-11.json
+frontend/node_modules/
+frontend/dist/
+*.bak
+error.txt
+tmp_*.txt
+_patch*
+_before*

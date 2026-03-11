@@ -15,8 +15,8 @@ from ..core.paths import store_dir
 _WRITE_LOCK = threading.RLock()
 
 _SCHEMA_LOCK = threading.Lock()
-_SCHEMA_INIT = False
-_ENSURED_QUERIES: set[str] = set()
+_SCHEMA_INIT_PATHS: set[str] = set()
+_ENSURED_QUERIES: set[tuple[str, str]] = set()
 
 
 def _db_path() -> Path:
@@ -26,18 +26,19 @@ def _db_path() -> Path:
 
 
 def _connect() -> sqlite3.Connection:
-    conn = sqlite3.connect(str(_db_path()), timeout=15.0)
+    dbp = str(_db_path())
+    conn = sqlite3.connect(dbp, timeout=15.0)
     try:
         conn.execute("PRAGMA journal_mode=WAL")
         conn.execute("PRAGMA synchronous=NORMAL")
         conn.execute("PRAGMA busy_timeout=10000")
     except Exception:
         pass
-    # Schema init once per process (idempotent across processes via IF NOT EXISTS)
-    global _SCHEMA_INIT
-    if not _SCHEMA_INIT:
+
+    # Schema init per database path (important for tests that monkeypatch GP_STORE_DIR)
+    if dbp not in _SCHEMA_INIT_PATHS:
         with _SCHEMA_LOCK:
-            if not _SCHEMA_INIT:
+            if dbp not in _SCHEMA_INIT_PATHS:
                 conn.execute(
                     """
                     CREATE TABLE IF NOT EXISTS queries(
@@ -67,7 +68,7 @@ def _connect() -> sqlite3.Connection:
                     "CREATE INDEX IF NOT EXISTS idx_items_query_time ON items(query_id, item_time)"
                 )
                 conn.commit()
-                _SCHEMA_INIT = True
+                _SCHEMA_INIT_PATHS.add(dbp)
     return conn
 
 
@@ -106,12 +107,15 @@ def canonical_query_id(params: Dict[str, Any]) -> str:
 
 
 def ensure_query(query_id: str, params: Dict[str, Any]) -> None:
-    # Fast path: canonical_query_id is derived from params, so a query_id is immutable.
-    if query_id in _ENSURED_QUERIES:
+    # Cache must be scoped by DB path, otherwise tests / alternate GP_STORE_DIR
+    # may reuse an ensured query_id from a different sqlite file.
+    key = (str(_db_path()), query_id)
+    if key in _ENSURED_QUERIES:
         return
+
     pjson = json.dumps(params, ensure_ascii=False, sort_keys=True)
     with _WRITE_LOCK:
-        if query_id in _ENSURED_QUERIES:
+        if key in _ENSURED_QUERIES:
             return
         conn = _connect()
         try:
@@ -131,7 +135,7 @@ def ensure_query(query_id: str, params: Dict[str, Any]) -> None:
                 conn.commit()
 
             _retry_on_locked(_write)
-            _ENSURED_QUERIES.add(query_id)
+            _ENSURED_QUERIES.add(key)
         finally:
             conn.close()
 
@@ -241,7 +245,7 @@ def upsert_items(
     - payload_mapper: optional function to reduce payload before storing
     Returns statistics and new watermark.
     """
-    (lambda _m=query_meta(query_id): ensure_query(query_id, params={}) if (_m.get('params') is None) else None)()
+    (lambda _m=query_meta(query_id): ensure_query(query_id, params={}) if (_m.get("params") is None) else None)()
     now = _now_iso()
     n_total = 0
     n_insert = 0
@@ -404,6 +408,3 @@ def vacuum() -> None:
             _retry_on_locked(_write)
         finally:
             conn.close()
-
-
-
