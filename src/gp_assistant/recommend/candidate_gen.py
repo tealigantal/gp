@@ -80,6 +80,7 @@ def generate_candidates(
     *,
     snapshot: Optional[pd.DataFrame] = None,
     return_features: bool = False,
+    as_of: Optional[str] = None,
     industry_filter: Optional[List[str]] = None,
 ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]], Dict[str, Any]] | Tuple[List[Dict[str, Any]], List[Dict[str, Any]], Dict[str, Any], Dict[str, pd.DataFrame]]:
     cfg = load_config()
@@ -228,7 +229,7 @@ def generate_candidates(
     try:
         syms = [str(e.get("code")) for e in cleaned if e.get("code")]
         if syms:
-            _ = hub.daily_ohlcv_batch(syms, as_of=None, safety_lookback_days=prefetch_lookback_days)
+            _ = hub.daily_ohlcv_batch(syms, as_of=as_of, safety_lookback_days=prefetch_lookback_days)
             try:
                 print(f"[预取] 已批量入库日线：{len(syms)} 个标的 lookback_days={prefetch_lookback_days}", flush=True)
             except Exception:
@@ -253,10 +254,14 @@ def generate_candidates(
         if not sym:
             continue
         try:
-            # cache 优先，长度不足时再允许回源补齐
-            df, meta = hub.daily_ohlcv(sym, None, min_len=250, prefer_cache_only=True)
-            if bool(meta.get("insufficient_history")) or int(meta.get("len", 0) or 0) < 120:
-                df, meta = hub.daily_ohlcv(sym, None, min_len=250, prefer_cache_only=False)
+            # cache 优先，长度不足或缓存缺失时再允许回源补齐
+            try:
+                df, meta = hub.daily_ohlcv(sym, as_of, min_len=250, prefer_cache_only=True)
+            except Exception:
+                df, meta = hub.daily_ohlcv(sym, as_of, min_len=250, prefer_cache_only=False)
+            else:
+                if bool(meta.get("insufficient_history")) or int(meta.get("len", 0) or 0) < 120:
+                    df, meta = hub.daily_ohlcv(sym, as_of, min_len=250, prefer_cache_only=False)
         except Exception as e:  # noqa: BLE001
             stats["bars_missing_count"] += 1
             if len(stats["skipped_symbols_sample"]) < 10:

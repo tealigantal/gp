@@ -67,6 +67,44 @@ class MarketDataHub:
                     continue
         return None
 
+    def _normalize_as_of(self, as_of: Optional[str]) -> Optional[pd.Timestamp]:
+        if as_of is None:
+            return None
+        try:
+            return pd.to_datetime(as_of).normalize()
+        except Exception:
+            try:
+                return pd.to_datetime(str(as_of).split("T", 1)[0]).normalize()
+            except Exception:
+                return None
+
+    def _apply_as_of(self, df: Optional[pd.DataFrame], as_of: Optional[str]) -> Optional[pd.DataFrame]:
+        if df is None:
+            return None
+        if as_of is None or len(df) == 0:
+            return df
+        cutoff = self._normalize_as_of(as_of)
+        if cutoff is None:
+            return df
+        out = df.copy()
+        if "date" in out.columns:
+            try:
+                out["date"] = pd.to_datetime(out["date"], errors="coerce")
+                out = out[out["date"].notna() & (out["date"] <= cutoff)]
+                if len(out) == 0:
+                    return out.reset_index(drop=True)
+                return out.sort_values("date").reset_index(drop=True)
+            except Exception:
+                return df
+        try:
+            idx = out.index
+            if hasattr(idx, "dtype") and str(getattr(idx, "dtype", "")).startswith("datetime64"):
+                out = out[idx <= cutoff]
+                return out.reset_index(drop=False) if len(out) == 0 else out
+        except Exception:
+            pass
+        return df
+
     def daily_ohlcv(self, symbol: str, as_of: Optional[str] = None, min_len: int = 250, *, prefer_cache_only: bool = False) -> Tuple[pd.DataFrame, Dict[str, Any]]:
         cfg = load_config()
         df: Optional[pd.DataFrame] = None if cfg.strict_real_data else self._from_fixtures(symbol)
@@ -146,6 +184,7 @@ class MarketDataHub:
                 if c in df.columns:
                     df[c] = pd.to_numeric(df[c], errors="coerce")
             df = df.sort_values("date").reset_index(drop=True)
+            df = self._apply_as_of(df, as_of)
             meta["source"] = ("store+network_merge" if network_attempted and rows_new_from_network > 0 else (meta.get("source") or f"store:daily:{provider.name}"))
             meta["rows_total"] = len(df)
             try:
@@ -158,7 +197,7 @@ class MarketDataHub:
         else:
             if df is None and not prefer_cache_only:
                 raw = provider.get_daily(symbol, start=None, end=as_of)
-                df = raw
+                df = self._apply_as_of(raw, as_of)
                 src = getattr(provider, "_last_daily_source", None)
                 meta["source"] = src or f"provider:{provider.name}"
                 try:
@@ -167,7 +206,7 @@ class MarketDataHub:
                         meta["attempts"] = atts
                 except Exception:
                     pass
-        if df is None or len(df) == 0:
+        if df is None:
             raise ValueError(f"daily_ohlcv: 无法获取真实数据 symbol={symbol}")
         # Optional full backfill when history too short and network allowed
         if not prefer_cache_only:
@@ -175,6 +214,7 @@ class MarketDataHub:
                 if df is not None and len(df) < max(1, int(min_len)):
                     raw_full = provider.get_daily(symbol, start=None, end=as_of)
                     df_full, _ = normalize_daily_ohlcv(raw_full)
+                    df_full = self._apply_as_of(df_full, as_of)
                     items_full = []
                     for _, r in df_full.iterrows():
                         d = pd.to_datetime(r["date"]).date().isoformat()
@@ -197,6 +237,7 @@ class MarketDataHub:
                             if c in df2.columns:
                                 df2[c] = pd.to_numeric(df2[c], errors="coerce")
                         df2 = df2.sort_values("date").reset_index(drop=True)
+                        df2 = self._apply_as_of(df2, as_of)
                         df = df2
                         meta["source"] = "store+network_merge"
                         meta["rows_total"] = len(df)
@@ -209,8 +250,10 @@ class MarketDataHub:
             except Exception as e:  # noqa: BLE001
                 meta.setdefault("errors", []).append({"stage": "backfill", "error": f"{type(e).__name__}: {e}"})
 
+        df = self._apply_as_of(df, as_of)
         df_norm, m = normalize_daily_ohlcv(df)
         meta.update(m)
+        meta["requested_as_of"] = as_of
         meta["len"] = len(df_norm)
         meta["insufficient_history"] = len(df_norm) < min_len
         df_norm.attrs.update(meta)
@@ -297,8 +340,9 @@ class MarketDataHub:
                 if c in df.columns:
                     df[c] = pd.to_numeric(df[c], errors="coerce")
             df = df.sort_values("date").reset_index(drop=True)
+            df = self._apply_as_of(df, as_of)
             df_norm, m = normalize_daily_ohlcv(df)
-            meta = {"source": f"store:daily:{provider.name}", **m, "len": len(df_norm), "insufficient_history": False}
+            meta = {"source": f"store:daily:{provider.name}", **m, "requested_as_of": as_of, "len": len(df_norm), "insufficient_history": False}
             df_norm.attrs.update(meta)
             out[s] = (df_norm, meta)
         return out

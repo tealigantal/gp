@@ -246,7 +246,7 @@ def run(date: Optional[str] = None, topk: int = 3, universe: str = "auto", symbo
 
     # Candidates with stats (build once; share features in-run to avoid recomputation)
     t0 = time.perf_counter()
-    gen_out = generate_candidates(base, env.get("grade", "C"), topk=topk, snapshot=snapshot_df, return_features=True, industry_filter=industry_prefilter)
+    gen_out = generate_candidates(base, env.get("grade", "C"), topk=topk, snapshot=snapshot_df, return_features=True, as_of=as_of, industry_filter=industry_prefilter)
     # mypy-friendly unpack
     if len(gen_out) == 4:  # type: ignore[truthy-function]
         pool, veto, cand_stats, feats_precomp = gen_out  # type: ignore[misc]
@@ -594,7 +594,7 @@ def run(date: Optional[str] = None, topk: int = 3, universe: str = "auto", symbo
     def _ensure_feat(sym: str) -> pd.DataFrame:
         if sym in feats_by_symbol:
             return feats_by_symbol[sym]
-        df, _meta = hub.daily_ohlcv(sym, None, min_len=250)
+        df, _meta = hub.daily_ohlcv(sym, as_of=as_of, min_len=250)
         feat2 = compute_indicators(df)
         feats_by_symbol[sym] = feat2
         return feat2
@@ -643,9 +643,13 @@ def run(date: Optional[str] = None, topk: int = 3, universe: str = "auto", symbo
             "flags": cand.get("flags", {}),
             "chip": cand.get("chip", {}),
             "indicators": cand.get("indicators", {}),
+            "theme_overlap_score": float(cand.get("theme_overlap_score", 0.0) or 0.0),
+            "mainline_overlap_score": float(cand.get("mainline_overlap_score", 0.0) or 0.0),
         }
         if cand.get("penalty_tags"):
             it["penalty_tags"] = list(cand.get("penalty_tags") or [])
+        if cand.get("thematic_reasons"):
+            it["thematic_reasons"] = list(cand.get("thematic_reasons") or [])
         # carry candidate score to pick for transparency
         if "candidate_score" in cand:
             it["candidate_score"] = float(cand.get("candidate_score", 0.0))
