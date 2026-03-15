@@ -17,6 +17,12 @@ class ChatResp(BaseModel):
     reply: str
     tool_trace: Dict[str, Any] = Field(default_factory=dict)
     assistant_message_id: Optional[str] = None
+    # Optional agent fields (backward compatible)
+    agent_trace: Optional[List[Dict[str, Any]]] = None
+    resolved_symbol: Optional[str] = None
+    degraded: Optional[bool] = None
+    degrade_reason: Optional[str] = None
+    followup_context: Optional[Dict[str, Any]] = None
 
 
 class RecommendReq(BaseModel):

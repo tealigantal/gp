@@ -87,6 +87,11 @@ def _handle_chat(req: ChatReq) -> ChatResp:
         reply=str(data.get("reply", "")),
         tool_trace=data.get("tool_trace", {}),
         assistant_message_id=data.get("assistant_message_id"),
+        agent_trace=data.get("agent_trace"),
+        resolved_symbol=data.get("resolved_symbol"),
+        degraded=data.get("degraded"),
+        degrade_reason=data.get("degrade_reason"),
+        followup_context=data.get("followup_context"),
     )
 
 

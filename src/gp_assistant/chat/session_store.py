@@ -45,10 +45,20 @@ def _connect() -> sqlite3.Connection:
         CREATE TABLE IF NOT EXISTS sessions(
             session_id TEXT PRIMARY KEY,
             created_at TEXT,
-            last_recommend_json TEXT
+            last_recommend_json TEXT,
+            state_json TEXT
         )
         """
     )
+    # Best-effort migration: add state_json when missing
+    try:
+        cur = conn.execute("PRAGMA table_info(sessions)")
+        cols = {str(r[1]) for r in cur.fetchall()}
+        if "state_json" not in cols:
+            conn.execute("ALTER TABLE sessions ADD COLUMN state_json TEXT")
+            conn.commit()
+    except Exception:
+        pass
     conn.commit()
     return conn
 
@@ -75,8 +85,8 @@ def ensure_session(session_id: Optional[str] = None) -> str:
                 cur = conn.execute("SELECT session_id FROM sessions WHERE session_id=?", (sid,))
                 if cur.fetchone() is None:
                     conn.execute(
-                        "INSERT INTO sessions(session_id, created_at, last_recommend_json) VALUES (?,?,?)",
-                        (sid, _now_iso(), None),
+                        "INSERT INTO sessions(session_id, created_at, last_recommend_json, state_json) VALUES (?,?,?,?)",
+                        (sid, _now_iso(), None, None),
                     )
                     conn.commit()
                 break
@@ -171,3 +181,137 @@ def load_last_recommend(session_id: str) -> Optional[Dict[str, Any]]:
         return json.loads(row[0])
     except Exception:
         return None
+
+
+# ---------------- Structured session state ----------------
+
+_STATE_DEFAULTS = {
+    "current_focus_symbol": None,
+    "current_focus_name": None,
+    "last_recommend_symbols": [],
+    "last_analyze_symbol": None,
+    "last_tool_trace": None,
+    "last_as_of": None,
+    "pending_ambiguity": None,
+    "last_followup_type": None,
+}
+
+
+def _load_state_raw(session_id: str) -> Dict[str, Any]:
+    conn = _connect()
+    try:
+        cur = conn.execute("SELECT state_json FROM sessions WHERE session_id=?", (session_id,))
+        row = cur.fetchone()
+    finally:
+        conn.close()
+    if not row:
+        return {}
+    try:
+        return json.loads(row[0] or "{}") if row[0] else {}
+    except Exception:
+        return {}
+
+
+def _save_state_raw(session_id: str, state: Dict[str, Any]) -> None:
+    conn = _connect()
+    try:
+        for i in range(6):
+            try:
+                conn.execute(
+                    "UPDATE sessions SET state_json=? WHERE session_id=?",
+                    (json.dumps(state, ensure_ascii=False), session_id),
+                )
+                conn.commit()
+                break
+            except sqlite3.OperationalError as e:
+                if "locked" in str(e).lower() or "busy" in str(e).lower():
+                    import time as _t
+                    _t.sleep(0.05 * (2 ** i))
+                    continue
+                raise
+    finally:
+        conn.close()
+
+
+def get_state(session_id: str) -> Dict[str, Any]:
+    st = dict(_STATE_DEFAULTS)
+    raw = _load_state_raw(session_id)
+    if isinstance(raw, dict):
+        st.update({k: raw.get(k) for k in _STATE_DEFAULTS.keys()})
+    # derive last_recommend_symbols from last_recommend if missing
+    if not st.get("last_recommend_symbols"):
+        try:
+            last = load_last_recommend(session_id)
+            picks = (last or {}).get("picks") or []
+            if isinstance(picks, list):
+                syms = []
+                for p in picks:
+                    try:
+                        s = str((p or {}).get("symbol") or "").strip()
+                        if s:
+                            syms.append(s)
+                    except Exception:
+                        continue
+                st["last_recommend_symbols"] = syms
+        except Exception:
+            pass
+    return st
+
+
+def update_state(session_id: str, updates: Dict[str, Any]) -> Dict[str, Any]:
+    cur = get_state(session_id)
+    cur.update({k: v for k, v in updates.items() if k in _STATE_DEFAULTS})
+    _save_state_raw(session_id, cur)
+    return cur
+
+
+def set_focus(session_id: str, symbol: Optional[str], reason: Optional[str] = None, name: Optional[str] = None) -> Dict[str, Any]:
+    st = update_state(session_id, {
+        "current_focus_symbol": symbol,
+        "current_focus_name": name,
+        "last_analyze_symbol": symbol,
+    })
+    try:
+        # log a small event message for focus change (best-effort)
+        if symbol:
+            event_store.append_event(
+                session_id,
+                event_id=f"focus-{datetime.utcnow().strftime('%Y%m%d%H%M%S%f')}",
+                type="message.created",
+                data={
+                    "kind": "note",
+                    "message_id": f"focus-{datetime.utcnow().strftime('%Y%m%d%H%M%S%f')}",
+                    "content": f"[focus] {symbol} {('('+reason+')') if reason else ''}",
+                },
+                actor_id="assistant",
+            )
+    except Exception:
+        pass
+    return st
+
+
+def get_focus(session_id: str) -> Optional[str]:
+    st = get_state(session_id)
+    s = st.get("current_focus_symbol")
+    return str(s) if s else None
+
+
+def set_last_recommend_and_symbols(session_id: str, obj: Dict[str, Any]) -> None:
+    save_last_recommend(session_id, obj)
+    syms: list[str] = []
+    try:
+        picks = (obj or {}).get("picks") or []
+        if isinstance(picks, list):
+            for p in picks:
+                s = str((p or {}).get("symbol") or "").strip()
+                if s:
+                    syms.append(s)
+    except Exception:
+        pass
+    update_state(session_id, {"last_recommend_symbols": syms, "last_as_of": (obj or {}).get("as_of")})
+
+
+def get_last_symbols(session_id: str) -> list[str]:
+    st = get_state(session_id)
+    syms = st.get("last_recommend_symbols") or []
+    return list(syms) if isinstance(syms, list) else []
