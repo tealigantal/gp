@@ -191,6 +191,7 @@ _STATE_DEFAULTS = {
     "last_recommend_symbols": [],
     "last_analyze_symbol": None,
     "last_tool_trace": None,
+    "last_agent_trace": None,
     "last_as_of": None,
     "pending_ambiguity": None,
     "last_followup_type": None,

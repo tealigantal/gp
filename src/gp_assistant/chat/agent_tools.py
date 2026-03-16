@@ -168,6 +168,32 @@ def t_resolve_symbol_from_message(args: dict, _state: Any) -> ToolResult:  # noq
     return _err("unable_to_resolve_symbol", code="NO_MATCH")
 
 
+def t_resolve_ordinal_symbol(args: dict, _state: Any) -> ToolResult:  # noqa: ANN401
+    sid = str(args.get("session_id", "")).strip()
+    n = int(args.get("ordinal", 1))
+    if not sid:
+        return _err("missing session_id", code="MISSING_ARG")
+    if n < 1:
+        return _err("invalid ordinal", code="INVALID_ARG", detail={"ordinal": n})
+    syms = store.get_last_symbols(sid)
+    if not syms or len(syms) < n:
+        return _err("ordinal_out_of_range", code="ORDINAL_OUT_OF_RANGE", detail={"n": n, "available": syms})
+    return _ok("resolved_ordinal", {"symbol": syms[n - 1], "reason": f"ordinal_{n}"})
+
+
+def t_resolve_focus_or_default(args: dict, _state: Any) -> ToolResult:  # noqa: ANN401
+    sid = str(args.get("session_id", "")).strip()
+    if not sid:
+        return _err("missing session_id", code="MISSING_ARG")
+    focus = store.get_focus(sid)
+    if focus:
+        return _ok("focus_symbol", {"symbol": focus, "reason": "focus"})
+    syms = store.get_last_symbols(sid)
+    if syms:
+        return _ok("default_first", {"symbol": syms[0], "reason": "default_first"})
+    return _err("no_symbol_context", code="NO_CONTEXT")
+
+
 # ---------------- Market data tools ----------------
 
 
@@ -351,6 +377,30 @@ def t_get_key_bands(args: dict, _state: Any) -> ToolResult:  # noqa: ANN401
     return _ok("bands_from_bars", {"symbol": symbol, "bands": bands, "source": "atr14"})
 
 
+def t_get_trade_plan_summary(args: dict, _state: Any) -> ToolResult:  # noqa: ANN401
+    symbol = str(args.get("symbol", "")).strip()
+    as_of = args.get("as_of")
+    heavy = bool(args.get("heavy", False))
+    if not symbol:
+        return _err("missing symbol", code="MISSING_ARG")
+    if heavy:
+        r = t_recompute_trade_plan({"symbol": symbol, "as_of": as_of}, _state)
+        if not r.ok:
+            return r
+        pick = (r.data or {}).get("pick") if isinstance(r.data, dict) else None
+        bands = ((pick or {}).get("trade_plan") or {}).get("bands") if isinstance(pick, dict) else None
+        if not bands:
+            # fallback to light summary
+            heavy = False
+        else:
+            return _ok("trade_plan_summary", {"symbol": symbol, "bands": bands, "heavy": True})
+    # light summary
+    r2 = t_get_key_bands({"symbol": symbol}, _state)
+    if not r2.ok:
+        return r2
+    return _ok("trade_plan_summary", {"symbol": symbol, "bands": (r2.data or {}).get("bands"), "heavy": False})
+
+
 def t_get_strategy_context(args: dict, _state: Any) -> ToolResult:  # noqa: ANN401
     symbol = str(args.get("symbol", "")).strip()
     as_of = args.get("as_of")
@@ -446,6 +496,22 @@ def t_explain_tool_trace(args: dict, _state: Any) -> ToolResult:  # noqa: ANN401
     return _ok("tool_trace", {"last_tool_trace": st.get("last_tool_trace")})
 
 
+def t_explain_agent_trace(args: dict, _state: Any) -> ToolResult:  # noqa: ANN401
+    sid = str(args.get("session_id", "")).strip()
+    if not sid:
+        return _err("missing session_id", code="MISSING_ARG")
+    st = store.get_state(sid)
+    return _ok("agent_trace", {"last_agent_trace": st.get("last_agent_trace")})
+
+
+def t_dump_session_state(args: dict, _state: Any) -> ToolResult:  # noqa: ANN401
+    sid = str(args.get("session_id", "")).strip()
+    if not sid:
+        return _err("missing session_id", code="MISSING_ARG")
+    st = store.get_state(sid)
+    return _ok("session_state", {"state": st})
+
+
 def build_registry() -> ToolRegistry:
     reg = ToolRegistry()
 
@@ -495,6 +561,22 @@ def build_registry() -> ToolRegistry:
             description="Resolve target symbol from follow-up message using context",
             args_schema={"session_id": "str", "message": "str"},
             run=t_resolve_symbol_from_message,
+        )
+    )
+    reg.add(
+        Tool(
+            name="resolve_ordinal_symbol",
+            description="Resolve nth symbol from last recommendation",
+            args_schema={"session_id": "str", "ordinal": "int"},
+            run=t_resolve_ordinal_symbol,
+        )
+    )
+    reg.add(
+        Tool(
+            name="resolve_focus_or_default",
+            description="Resolve current focus or default to first symbol",
+            args_schema={"session_id": "str"},
+            run=t_resolve_focus_or_default,
         )
     )
     # Market data
@@ -579,6 +661,14 @@ def build_registry() -> ToolRegistry:
             run=t_get_support_resistance_summary,
         )
     )
+    reg.add(
+        Tool(
+            name="get_trade_plan_summary",
+            description="Summarize trade plan bands; heavy=True triggers recomputation",
+            args_schema={"symbol": "str", "as_of": "str?", "heavy": "bool?"},
+            run=t_get_trade_plan_summary,
+        )
+    )
     # Debug
     reg.add(
         Tool(
@@ -594,6 +684,22 @@ def build_registry() -> ToolRegistry:
             description="Read last tool trace from session",
             args_schema={"session_id": "str"},
             run=t_explain_tool_trace,
+        )
+    )
+    reg.add(
+        Tool(
+            name="explain_agent_trace",
+            description="Read last agent trace from session",
+            args_schema={"session_id": "str"},
+            run=t_explain_agent_trace,
+        )
+    )
+    reg.add(
+        Tool(
+            name="dump_session_state",
+            description="Dump structured session state for debugging",
+            args_schema={"session_id": "str"},
+            run=t_dump_session_state,
         )
     )
 

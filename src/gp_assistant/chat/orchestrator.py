@@ -219,6 +219,12 @@ def handle_message(session_id: Optional[str], message: str, message_id: Optional
                     gathered[tool_name] = rr.data
                     agent_trace.append({"step": tool_name, "status": "ok" if rr.ok else "error"})
 
+                # Optional heavy mode for trade plan recompute
+                import os as _os
+                if (_os.getenv("CHAT_AGENT_USE_HEAVY_PLAN") or "0").strip().lower() in {"1", "true", "yes"}:
+                    rr_h = call("get_trade_plan_summary", {"symbol": resolved_symbol, "heavy": True})
+                    gathered["get_trade_plan_summary"] = rr_h.data
+
                 # 3) Synthesize
                 client = LLMClient()
                 ok, reason_ok = client.available()
@@ -280,7 +286,7 @@ def handle_message(session_id: Optional[str], message: str, message_id: Optional
 
     # Save tool trace for debugging
     try:
-        store.update_state(sid, {"last_tool_trace": tool_trace})
+        store.update_state(sid, {"last_tool_trace": tool_trace, "last_agent_trace": agent_trace})
     except Exception:
         pass
 
