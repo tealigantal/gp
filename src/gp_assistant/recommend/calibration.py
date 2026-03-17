@@ -21,7 +21,8 @@ from typing import Any, Dict
 # --- Named constants (documented for gating and calibration) ---
 ALPHA_CHAMPION_SCALE = 1.5          # champ_score / scale -> [0, ~]
 EXEC_RR_SATURATE = 2.0              # reward_risk capped contribution
-EXEC_ACTIONABLE_BONUS = 0.4
+# keep constants but avoid saturating actionable branch
+EXEC_ACTIONABLE_BONUS = 0.0         # no direct additive bonus to avoid saturation
 EXEC_WAITING_BASE = 0.5
 EXEC_OBSERVE_BASE = 0.2
 EXEC_BELOW_BASE = 0.0
@@ -66,12 +67,15 @@ def calibrate_item_scores(item: Dict[str, Any], *, degraded: bool = False) -> Di
         rr = float(item.get("reward_risk") if item.get("reward_risk") is not None else (basis.get("reward_risk_raw") or 0.0))
     except Exception:
         rr = 0.0
+    # Reward/risk contributes headroom without saturating actionable items
     rr_contrib = min(0.4, max(0.0, rr / EXEC_RR_SATURATE))
     base = EXEC_OBSERVE_BASE
     if state == "actionable":
-        base = 0.6 + EXEC_ACTIONABLE_BONUS
+        # Leave headroom so rr still differentiates actionable items
+        base = 0.5
     elif state == "waiting_pullback":
-        base = EXEC_WAITING_BASE
+        # Slightly below actionable baseline
+        base = min(EXEC_WAITING_BASE, 0.45)
     elif state in {"below_support", "breakdown_risk"}:
         base = EXEC_BELOW_BASE
     exec_score = _clamp01(base + rr_contrib)

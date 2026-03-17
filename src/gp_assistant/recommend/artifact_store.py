@@ -23,6 +23,10 @@ from ..core.paths import store_dir
 from .contracts import build_v2_from_v1
 from .validators import validate_pick_artifact_v2
 from .calibration import apply_scores_to_v2_item, compute_no_trade_gate
+from ..validation.event_stats import load_event_stats
+from ..validation.walkforward_stats import load_walkforward
+from ..validation.paper_trade import load_paperfolio
+from ..validation.strategy_health import load_strategy_health
 
 
 def _read_v2_from_store(run_id: Optional[str], as_of: Optional[str]) -> Dict[str, Any] | None:
@@ -87,6 +91,44 @@ def _enrich_scores_and_gate(obj: Dict[str, Any]) -> None:
         for it in (obj.get("items") or []):
             if isinstance(it, dict):
                 apply_scores_to_v2_item(it, degraded=degraded)
+                # Attach evidence blocks (best-effort)
+                strat = str(it.get("strategy") or "")
+                ev = it.get("evidence") or {}
+                ev.setdefault("available", True)
+                try:
+                    if strat:
+                        ev["event_stats"] = load_event_stats(strat)
+                        ev["walk_forward"] = load_walkforward(strat)
+                        sh = load_strategy_health(strat)
+                        ev["strategy_health"] = sh
+                        # reliability penalty on degraded/killed strategies (deterministic)
+                        if sh.get("status") in {"degraded", "killed"}:
+                            try:
+                                rel = float(it.get("reliability_score") or 0.6)
+                                penalty = 0.2 if sh["status"] == "degraded" else 0.4
+                                it["reliability_score"] = max(0.2, rel - penalty)
+                                # update final score after penalty
+                                sc = apply_scores_to_v2_item.__globals__.get('calibrate_item_scores')  # type: ignore
+                                if sc:
+                                    s2 = sc(it, degraded=degraded)
+                                    it.update({k: s2[k] for k in ["final_score", "confidence", "reliability_score"]})
+                            except Exception:
+                                pass
+                except Exception:
+                    pass
+                try:
+                    # Attach paper trade summary at symbol level when available
+                    pf = load_paperfolio()
+                    sym = str(it.get("symbol"))
+                    match = None
+                    for pk in (pf.get("picks") or []):
+                        if str(pk.get("symbol")) == sym:
+                            match = pk; break
+                    if match:
+                        ev["paper_trade"] = match
+                except Exception:
+                    pass
+                it["evidence"] = ev
     except Exception:
         pass
     gate = compute_no_trade_gate(obj)

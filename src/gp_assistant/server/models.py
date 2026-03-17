@@ -186,3 +186,22 @@ class RecommendV2Resp(BaseModel):
     items: List[Dict[str, Any]] = Field(default_factory=list)
     fallback_used: bool = False
     errors: Optional[List[str]] = None
+
+
+# --- Phase 3: Validation read-only API ---
+
+
+class StrategyValidationResp(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    strategy: str
+    event_stats: Dict[str, Any] = Field(default_factory=dict)
+    walk_forward: Dict[str, Any] = Field(default_factory=dict)
+    strategy_health: Dict[str, Any] = Field(default_factory=dict)
+
+
+class PaperfolioResp(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    available: bool = True
+    picks: List[Dict[str, Any]] = Field(default_factory=list)

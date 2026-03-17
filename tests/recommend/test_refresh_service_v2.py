@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import types
 import pandas as pd
+import numpy as np
 from gp_assistant.recommend.refresh_service import refresh_symbols_v2
 from src.gp_assistant.strategy import library as strat_lib
 from gp_assistant.chat.refresh_service import refresh_symbols as chat_refresh
@@ -21,7 +22,7 @@ def test_refresh_symbols_v2_and_chat_compat(monkeypatch):
     # Stable market data
     n = 180
     dates = pd.date_range("2025-01-01", periods=n, freq="B")
-    close = pd.Series(pd.linspace(50, 60, n))
+    close = pd.Series(np.linspace(50, 60, n))
     df = pd.DataFrame({
         "date": dates,
         "open": close.values,
@@ -45,4 +46,3 @@ def test_refresh_symbols_v2_and_chat_compat(monkeypatch):
     chat = chat_refresh(syms)
     assert chat.get("ok") is True
     assert isinstance(chat.get("picks"), list)
-

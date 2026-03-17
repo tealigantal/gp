@@ -34,6 +34,10 @@ from ..dev.fixtures import dev_ohlcv_bars
 from ..recommend.compact_payload import compact_recommend_payload
 from ..recommend.compare_service import compare_symbols as compare_service
 from ..recommend.compare_service import pick_detail as pick_detail_service
+from ..validation.event_stats import load_event_stats
+from ..validation.walkforward_stats import load_walkforward
+from ..validation.strategy_health import load_strategy_health
+from ..validation.paper_trade import load_paperfolio
 from .models import (
     ChatReq,
     ChatResp,
@@ -47,8 +51,11 @@ from .models import (
     CompareResp,
     PickDetailReq,
     PickDetailResp,
+    RecommendV2Resp,
     SyncReq,
     SyncResp,
+    StrategyValidationResp,
+    PaperfolioResp,
 )
 
 app = FastAPI(title="gp_assistant", version="1.1.0")
@@ -877,6 +884,28 @@ def api_get_recommend_v2(
     except Exception as e:  # noqa: BLE001
         # sanitize raw error leakage
         return {"artifact_version": "v2", "ok": False, "error": "recommend_v2_unavailable"}
+
+
+# ---- Phase 3: Validation read-only endpoints ----
+
+
+@api.get("/validation/strategy/{strategy}", response_model=StrategyValidationResp)
+def api_get_strategy_validation(strategy: str) -> Dict[str, Any]:
+    try:
+        ev = load_event_stats(strategy)
+        wf = load_walkforward(strategy)
+        sh = load_strategy_health(strategy)
+        return {"strategy": strategy, "event_stats": ev, "walk_forward": wf, "strategy_health": sh}
+    except Exception:
+        return {"strategy": strategy, "event_stats": {"available": False}, "walk_forward": {"available": False}, "strategy_health": {"available": False}}
+
+
+@api.get("/paperfolio", response_model=PaperfolioResp)
+def api_get_paperfolio() -> Dict[str, Any]:
+    try:
+        return load_paperfolio()
+    except Exception:
+        return {"available": False, "picks": []}
 
 
 def _message_text_by_id(mid: str) -> Optional[str]:

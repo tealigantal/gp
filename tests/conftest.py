@@ -41,6 +41,19 @@ def pytest_collection_modifyitems(config, items):
         "test_theme_pool_snapshot_paths.py",
         "test_theme_pool_impl_nan_and_scale.py",
         "test_strict_no_pseudo_output.py",
+        # Phase 2.6 gate additions
+        "test_calibration.py",
+        "test_contracts_v2.py",
+        "test_refresh_service_v2.py",
+        "test_recommend_v2_endpoint.py",
+        "test_compare_and_pick_endpoints.py",
+        # Phase 3 gate additions (validation)
+        "test_event_stats.py",
+        "test_walkforward_stats.py",
+        "test_paper_trade.py",
+        "test_strategy_health.py",
+        "test_lifecycle.py",
+        "test_validation_endpoints.py",
     )
     for item in items:
         fn = item.location[0]

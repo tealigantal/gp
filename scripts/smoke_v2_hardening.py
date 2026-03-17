@@ -10,7 +10,7 @@ Validates:
 - compare returns fallback_used correctly
 - chat refresh failure does not leak raw exception
 
-Run: python -m scripts.smoke_v2_hardening
+Run: python scripts/smoke_v2_hardening.py
 """
 
 import json
@@ -49,22 +49,24 @@ def main() -> None:
         persist_artifact_v2,
         read_artifact_v2,
         compare_subset,
+        pick_detail as pick_detail_helper,
     )
     from gp_assistant.recommend.validators import validate_pick_artifact_v2
+    from gp_assistant.recommend.calibration import calibrate_item_scores
     from gp_assistant.chat import refresh_service as chat_refresh
 
     # a) build_v2 -> scores present (non-default structure)
     v1 = _load_latest_v1()
     v2 = build_v2_dict_from_v1(v1)
     items = v2.get("items") or []
-    if items:
-        # ensure scores exist when items exist
-        sc_keys = {"alpha_score", "execution_score", "reliability_score", "final_score"}
-        if not all(all(k in it for k in sc_keys) for it in items):
-            _fail("scores missing on some items")
-        _ok("build_v2 -> scores present")
-    else:
-        _ok("build_v2 -> no items in latest v1 (skipped score check)")
+    # Non-skippable core score check using synthetic actionable items
+    lo = {"execution_state": "actionable", "reward_risk": 0.2, "liquidity_grade": "A"}
+    hi = {"execution_state": "actionable", "reward_risk": 1.2, "liquidity_grade": "A"}
+    slo = calibrate_item_scores(lo, degraded=False)["execution_score"]
+    shi = calibrate_item_scores(hi, degraded=False)["execution_score"]
+    if not (shi > slo):
+        _fail("execution_score does not order actionable items by reward_risk")
+    _ok("execution_score orders actionable items by reward_risk")
 
     # b) invalidation list alone must not block actionable
     fake = {
@@ -123,11 +125,34 @@ def main() -> None:
         _fail("persisted v2 unexpectedly marked fallback_used")
     _ok("persisted v2 preferred over fallback")
 
-    # d) compare uses fallback_used correctly when no persisted v2
+    # d) compare uses fallback_used correctly when no explicit run_id (fallback path)
     comp = compare_subset(run_id=None, symbols=v2.get("symbols", [])[:2])
     if "fallback_used" not in comp:
         _fail("compare response missing fallback_used")
     _ok("compare returns fallback_used flag")
+    # e) build a deterministic 2-item artifact and verify compare ranking
+    as_of2 = "2099-01-04"
+    det = {
+        "run_id": as_of2,
+        "as_of": as_of2,
+        "degraded": False,
+        "tradeable": True,
+        "symbols": ["AAA", "BBB"],
+        "themes": [],
+        "items": [
+            {"pick_id": f"{as_of2}:AAA", "symbol": "AAA", "execution_state": "actionable", "actionable": True, "reward_risk": 0.3, "liquidity_grade": "A", "invalidated_now": False, "invalidation": []},
+            {"pick_id": f"{as_of2}:BBB", "symbol": "BBB", "execution_state": "actionable", "actionable": True, "reward_risk": 1.2, "liquidity_grade": "A", "invalidated_now": False, "invalidation": []},
+        ],
+        "artifact_version": "v2",
+        "fallback_used": False,
+    }
+    persist_artifact_v2(as_of2, det)
+    comp2 = compare_subset(run_id=as_of2, symbols=["AAA", "BBB"])
+    if comp2.get("ranking") != ["BBB", "AAA"]:
+        _fail(f"compare ranking unexpected: {comp2.get('ranking')}")
+    _ok("compare winners reflect execution_score ordering for actionable items")
+    pd = pick_detail_helper(run_id=as_of2, symbol="AAA")
+    assert pd.get("ok") is True
 
     # e) chat refresh failure sanitization by monkey-patching callee
     def _boom(*_a: Any, **_k: Any) -> Dict[str, Any]:  # noqa: ANN001
@@ -141,6 +166,13 @@ def main() -> None:
         _fail("chat refresh leaked raw exception string")
     _ok("chat refresh failure sanitized")
 
+    # Print brief JSON summaries as artifacts for human inspection
+    import json as _json
+    print("\n--- Summaries ---")
+    print("persisted_v2:", _json.dumps({k: persisted.get(k) for k in ["run_id","as_of","fallback_used","items"]}, ensure_ascii=False)[:300])
+    print("fallback_v1_to_v2:", _json.dumps({k: v2.get(k) for k in ["as_of","fallback_used","items"]}, ensure_ascii=False)[:300])
+    print("compare_subset:", _json.dumps({k: comp.get(k) for k in ["symbols","ranking","winner_symbol","fallback_used"]}, ensure_ascii=False))
+    print("chat_refresh_failure:", _json.dumps(rs, ensure_ascii=False))
     print("\nSmoke passed.")
 
 

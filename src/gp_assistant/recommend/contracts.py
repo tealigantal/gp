@@ -32,6 +32,11 @@ VOLATILITY_GRADES = {"low", "medium", "high"}
 class EvidencePlaceholder:
     available: bool = False
     status: str = "pending_phase3"
+    # Phase 3 evidence blocks (optional; keep placeholders)
+    event_stats: Dict[str, Any] = field(default_factory=dict)
+    walk_forward: Dict[str, Any] = field(default_factory=dict)
+    paper_trade: Dict[str, Any] = field(default_factory=dict)
+    strategy_health: Dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
