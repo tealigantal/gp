@@ -138,6 +138,7 @@ class CompareResp(BaseModel):
     model_config = ConfigDict(extra="allow")
 
     ok: bool
+    artifact_version: Optional[str] = None
     run_id: Optional[str] = None
     symbols: List[str]
     items: List[Dict[str, Any]]
@@ -145,6 +146,8 @@ class CompareResp(BaseModel):
     winner_symbol: Optional[str] = None
     summary: Optional[str] = None
     degraded: bool = False
+    fallback_used: bool = False
+    errors: Optional[List[str]] = None
 
 
 class PickDetailReq(BaseModel):
@@ -156,11 +159,13 @@ class PickDetailResp(BaseModel):
     model_config = ConfigDict(extra="allow")
 
     ok: bool
+    artifact_version: Optional[str] = None
     run_id: Optional[str] = None
     as_of: Optional[str] = None
     degraded: bool = False
     fallback_used: bool = False
     item: Dict[str, Any] | None = None
+    error: Optional[str] = None
 
 
 class RecommendV2Resp(BaseModel):
@@ -180,3 +185,4 @@ class RecommendV2Resp(BaseModel):
     themes: List[str] = Field(default_factory=list)
     items: List[Dict[str, Any]] = Field(default_factory=list)
     fallback_used: bool = False
+    errors: Optional[List[str]] = None

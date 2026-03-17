@@ -11,8 +11,13 @@ Checks:
 - reward_risk >= 0, signal_age_days >= 0
 - Scores in [0,1]
 - execution_state / liquidity_grade / volatility_grade in enums
-- actionable=true cannot be observe_only/breakdown/invalidated
+- actionable=true cannot be observe_only/below_support/breakdown_risk/invalidated_now
 - tradeable=false should not carry actionable=true items
+
+Phase 2.6 semantics:
+- invalidation: list of rule descriptors (conditions), not immediate status.
+- invalidated_now: boolean current status; only this can block actionable.
+  When absent, it is treated as False by default.
 """
 
 from typing import Any, Dict, List, Tuple
@@ -127,9 +132,10 @@ def validate_pick_artifact_v2(obj: Dict[str, Any]) -> Tuple[bool, List[str], Dic
         if it.get("actionable") is True:
             if str(it.get("execution_state")) in {"observe_only", "breakdown_risk", "below_support"}:
                 errors.append(f"item_{i}_actionable_state_conflict")
-            inv = it.get("invalidation") or []
-            if isinstance(inv, list) and inv:
-                errors.append(f"item_{i}_actionable_invalidated_conflict")
+            # Phase 2.6: only invalidated_now blocks actionable; rule list alone does not
+            inv_now = bool(it.get("invalidated_now") is True)
+            if inv_now:
+                errors.append(f"item_{i}_actionable_invalidated_now_conflict")
         fixed_items.append(it)
 
     # tradeable false with actionable items -> conflict
@@ -145,4 +151,3 @@ def validate_pick_artifact_v2(obj: Dict[str, Any]) -> Tuple[bool, List[str], Dic
     fixed["items"] = fixed_items
     ok = len(errors) == 0
     return ok, errors, fixed
-

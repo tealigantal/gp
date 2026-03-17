@@ -3,9 +3,14 @@ from __future__ import annotations
 """
 Centralized calibration for Phase 2 three-part scoring.
 
-alpha_score: opportunity quality (champion/candidate/thematic)
-execution_score: executability at current time (entry_gap/reward_risk/state)
+alpha_score: opportunity quality (based on deterministic inputs)
+execution_score: executability at current time (reward_risk/state)
 reliability_score: confidence (degraded/data completeness/liquidity/freshness)
+
+Notes for Phase 2.6 hardening:
+- Scoring must rely only on V2 item explicit fields and/or an internal
+  basis container ("_score_inputs"), not on v1 sub-structures like
+  champion/trade_plan/diagnostics which are not present on V2 artifacts.
 
 All thresholds/constants live here to avoid scattering.
 """
@@ -35,20 +40,30 @@ def _clamp01(x: float) -> float:
 
 
 def calibrate_item_scores(item: Dict[str, Any], *, degraded: bool = False) -> Dict[str, float]:
-    champ = (item.get("champion") or {}) if isinstance(item, dict) else {}
+    """
+    Compute scores using only V2-available inputs.
+
+    Inputs used:
+    - item["execution_state"], item["reward_risk"]
+    - item["liquidity_grade"]
+    - optional internal basis from item["_score_inputs"], including
+      champion_score_raw (for alpha proxy) and reward_risk_raw fallback.
+    """
+    basis = (item.get("_score_inputs") or {}) if isinstance(item, dict) else {}
+
+    # alpha: simple conservative squash from champion_score_raw when present
     champ_score = 0.0
     try:
-        champ_score = float(champ.get("score") or 0.0)
+        champ_score = float(basis.get("champion_score_raw") or 0.0)
     except Exception:
         champ_score = 0.0
-    # alpha: simple conservative squash
     alpha = _clamp01(max(0.0, champ_score / ALPHA_CHAMPION_SCALE))
 
-    # execution: base from state + rr contribution
-    state = str(((item.get("trade_plan") or {}).get("diagnostics") or {}).get("execution_state") or "")
+    # execution: base from V2 execution_state + reward_risk
+    state = str(item.get("execution_state") or "")
     rr = 0.0
     try:
-        rr = float(((item.get("trade_plan") or {}).get("diagnostics") or {}).get("reward_risk") or 0.0)
+        rr = float(item.get("reward_risk") if item.get("reward_risk") is not None else (basis.get("reward_risk_raw") or 0.0))
     except Exception:
         rr = 0.0
     rr_contrib = min(0.4, max(0.0, rr / EXEC_RR_SATURATE))
@@ -107,4 +122,3 @@ def compute_no_trade_gate(artifact: Dict[str, Any]) -> Dict[str, Any]:
         return {"tradeable": True}
     except Exception:
         return {"tradeable": False, "reason": "评估失败"}
-

@@ -49,6 +49,7 @@ class PickItemV2:
     reward_risk: Optional[float] = None
     execution_state: Optional[str] = None
     actionable: Optional[bool] = None
+    # Scores (Phase 2)
     alpha_score: Optional[float] = None
     execution_score: Optional[float] = None
     reliability_score: Optional[float] = None
@@ -59,8 +60,12 @@ class PickItemV2:
     volatility_grade: Optional[str] = None
     risk_flags: List[str] = field(default_factory=list)
     invalidation: List[str] = field(default_factory=list)
+    # Phase 2.6: separate current invalidated status from rule list
+    invalidated_now: bool = False
     notes: Optional[str] = None
     evidence: Dict[str, Any] = field(default_factory=lambda: EvidencePlaceholder().__dict__)
+    # Phase 2.6: internal score basis (not for frontend reliance)
+    _score_inputs: Dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
@@ -291,6 +296,42 @@ def build_v2_from_v1(payload: Dict[str, Any], *, risk_profile: Optional[str] = N
             except Exception:
                 thesis = None
             # build item
+            # build internal score basis
+            basis: Dict[str, Any] = {}
+            try:
+                if champ.get("score") is not None:
+                    basis["champion_score_raw"] = _safe_float(champ.get("score")) or 0.0
+            except Exception:
+                pass
+            try:
+                if rr is not None:
+                    basis["reward_risk_raw"] = rr
+            except Exception:
+                pass
+            try:
+                if age is not None:
+                    basis["setup_age_raw"] = age
+            except Exception:
+                pass
+            try:
+                basis["degraded_input"] = bool(degraded)
+            except Exception:
+                pass
+            try:
+                if liq is not None:
+                    basis["liquidity_raw"] = liq
+            except Exception:
+                pass
+            # Optional entry gap percent when entry_zone & price_ref present
+            try:
+                if price_ref is not None and entry_zone is not None:
+                    lo, hi = entry_zone
+                    mid = (float(lo) + float(hi)) / 2.0
+                    if mid:
+                        basis["entry_gap_pct"] = (float(price_ref) - mid) / mid
+            except Exception:
+                pass
+
             item = PickItemV2(
                 pick_id=f"{run_id}:{sym}",
                 symbol=sym,
@@ -305,11 +346,14 @@ def build_v2_from_v1(payload: Dict[str, Any], *, risk_profile: Optional[str] = N
                 reward_risk=rr,
                 execution_state=state,
                 actionable=actionable,
+                # Phase 2.6: default not invalidated unless we can prove otherwise
+                invalidated_now=False,
                 signal_age_days=age,
                 liquidity_grade=liq,
                 volatility_grade=vol,
                 risk_flags=risk_flags,
                 invalidation=invalid,
+                _score_inputs=basis,
             )
             items.append(item)
         except Exception:
@@ -329,4 +373,3 @@ def build_v2_from_v1(payload: Dict[str, Any], *, risk_profile: Optional[str] = N
         themes=theme_names,
         items=items,
     )
-

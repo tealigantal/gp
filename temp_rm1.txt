@@ -1,0 +1,29 @@
+    base = store_dir() / "recommend"
+    cand = []
+    if run_id:
+        cand.append(base / f"{run_id}_v2.json")
+        try:
+            if len(str(run_id)) == 8 and str(run_id).isdigit():
+                cand.append(base / f"{str(run_id)[:4]}-{str(run_id)[4:6]}-{str(run_id)[6:8]}_v2.json")
+        except Exception:
+            pass
+    if as_of and not run_id:
+        cand.append(base / f"{as_of}_v2.json")
+        try:
+            if len(str(as_of)) == 8 and str(as_of).isdigit():
+                cand.append(base / f"{str(as_of)[:4]}-{str(as_of)[4:6]}-{str(as_of)[6:8]}_v2.json")
+        except Exception:
+            pass
+    if not run_id and not as_of:
+        cand.append(base / "latest_v2.json")
+    for p in cand:
+        if p.exists():
+            try:
+                return json.loads(p.read_text(encoding="utf-8"))
+            except Exception:
+                return None
+    return None
+
+
+def _read_v1_from_store(run_id: Optional[str], as_of: Optional[str]) -> Dict[str, Any] | None:
+    base = store_dir() / "recommend"

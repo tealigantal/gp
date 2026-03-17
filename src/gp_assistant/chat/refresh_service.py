@@ -38,5 +38,6 @@ def refresh_symbols(symbols: List[str], *, as_of: Optional[str] = None) -> Dict[
             },
         }
         return out
-    except Exception as e:  # noqa: BLE001
-        return {"ok": False, "error": f"REFRESH_FAILED:{e}"}
+    except Exception:  # noqa: BLE001
+        # sanitize: do not leak internal exception string
+        return {"ok": False, "error": "refresh_unavailable"}

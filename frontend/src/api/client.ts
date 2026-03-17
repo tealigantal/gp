@@ -1,5 +1,5 @@
 import axios from 'axios'
-import type { ChatReq, ChatResp, RecommendReq, RecommendResp, HealthResp, OHLCVResp, SyncReq, SyncResp, EventOut } from './types'
+import type { ChatReq, ChatResp, RecommendReq, RecommendResp, HealthResp, OHLCVResp, SyncReq, SyncResp, EventOut, RecommendV2, CompareResp, PickDetailResp } from './types'
 import type { ConversationSummary, ThreadItem, RecommendationArtifact, SearchHit } from './contracts'
 
 const baseURL = import.meta.env.VITE_API_BASE || '/api'
@@ -90,5 +90,22 @@ export async function searchHits(params: { q: string; conversation_id?: string; 
 export async function cleanupConversations(mode: 'all' | 'events_only' = 'all') {
   const { data } = await api.post<{ status: string; mode: string }>(`/conversations/cleanup`, { mode },
     { headers: { 'X-Delete-Reason': 'user_click_cleanup_all' } })
+  return data
+}
+
+// ---- Phase 2.6: minimal V2 read-only client ----
+
+export async function getRecommendV2(params: { run_id?: string; as_of?: string } = {}) {
+  const { data } = await api.get<RecommendV2>('/recommend_v2', { params })
+  return data
+}
+
+export async function compareSymbols(body: { run_id?: string; symbols: string[] }) {
+  const { data } = await api.post<CompareResp>('/compare', body)
+  return data
+}
+
+export async function getPickDetail(params: { run_id?: string; symbol: string }) {
+  const { data } = await api.get<PickDetailResp>('/pick', { params })
   return data
 }

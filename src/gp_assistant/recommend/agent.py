@@ -137,48 +137,12 @@ def _write_outputs(as_of: str, payload: Dict[str, Any]) -> None:
         (out_dir / f"{as_of}_source.json").write_text(p_sources.read_text(encoding="utf-8"), encoding="utf-8")
     except Exception:
         pass
-    # --- Phase 2.5: also persist V2 artifact ---
+    # --- Phase 2.6: also persist V2 artifact via unified helper ---
     try:
-        v2 = build_v2_from_v1(payload)
-        top = {
-            "run_id": v2.run_id,
-            "as_of": v2.as_of,
-            "snapshot_id": v2.snapshot_id,
-            "market_regime": v2.market_regime,
-            "degraded": v2.degraded,
-            "tradeable": v2.tradeable,
-            "reason": v2.reason,
-            "risk_profile": v2.risk_profile,
-            "universe_name": v2.universe_name,
-            "symbols": v2.symbols,
-            "themes": v2.themes,
-            "items": [it.__dict__ for it in v2.items],
-        }
-        # scores and gating
-        for it in top["items"]:
-            apply_scores_to_v2_item(it, degraded=bool(top.get("degraded")))
-        gate = compute_no_trade_gate(top)
-        if gate.get("tradeable") is False:
-            top["tradeable"] = False
-            top["reason"] = gate.get("reason")
-        ok, errs, fixed = validate_pick_artifact_v2(top)
-        fixed["artifact_version"] = "v2"
-        fixed["fallback_used"] = False
-        if not ok:
-            # Validation failed -> mark degraded; do not raise to avoid breaking v1 path
-            try:
-                logger.error(f"[V2_WRITE] validation_failed as_of={as_of} errors={errs}")
-            except Exception:
-                pass
-            fixed["degraded"] = True
-            fixed.setdefault("reason", "artifact_validation_failed")
-            fixed.setdefault("errors", errs)
-        # write {as_of}_v2.json and latest_v2.json
-        (out_dir / f"{as_of}_v2.json").write_text(json.dumps(fixed, ensure_ascii=False, indent=2), encoding="utf-8")
-        try:
-            (out_dir / "latest_v2.json").write_text(json.dumps(fixed, ensure_ascii=False, indent=2), encoding="utf-8")
-        except Exception:
-            pass
+        from .artifact_store import build_v2_dict_from_v1, persist_artifact_v2
+
+        v2_fixed = build_v2_dict_from_v1(payload)
+        persist_artifact_v2(as_of, v2_fixed)
     except Exception as e:  # noqa: BLE001
         try:
             logger.error(f"[V2_WRITE] failed as_of={as_of} err={type(e).__name__}:{e}")
@@ -1067,7 +1031,6 @@ def run(date: Optional[str] = None, topk: int = 3, universe: str = "auto", symbo
 
     _write_outputs(as_of, payload)
     return payload
-
 
 
 

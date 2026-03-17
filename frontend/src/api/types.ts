@@ -127,4 +127,32 @@ export type RecommendV2 = {
   themes: string[]
   items: PickV2Item[]
   fallback_used?: boolean
+  errors?: string[]
+}
+
+// Minimal compare/pick detail read-only contracts
+export type CompareResp = {
+  ok: boolean
+  artifact_version?: 'v2'
+  run_id?: string | null
+  symbols: string[]
+  items?: Record<string, unknown>[]
+  ranking?: string[]
+  winner_symbol?: string | null
+  summary?: string | null
+  degraded?: boolean
+  fallback_used?: boolean
+  errors?: string[]
+  error?: string
+}
+
+export type PickDetailResp = {
+  ok: boolean
+  artifact_version?: 'v2'
+  run_id?: string | null
+  as_of?: string | null
+  degraded?: boolean
+  fallback_used?: boolean
+  item?: Record<string, unknown> | null
+  error?: string
 }
