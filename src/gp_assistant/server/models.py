@@ -23,6 +23,11 @@ class ChatResp(BaseModel):
     degraded: Optional[bool] = None
     degrade_reason: Optional[str] = None
     followup_context: Optional[Dict[str, Any]] = None
+    # Phase 1 additions (optional)
+    run_id: Optional[str] = None
+    symbols: Optional[List[str]] = None
+    fallback_used: Optional[bool] = None
+    summary: Optional[Dict[str, Any]] = None
 
 
 class RecommendReq(BaseModel):

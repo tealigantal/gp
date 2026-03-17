@@ -186,6 +186,7 @@ def load_last_recommend(session_id: str) -> Optional[Dict[str, Any]]:
 # ---------------- Structured session state ----------------
 
 _STATE_DEFAULTS = {
+    # Legacy fields (kept for backward compatibility)
     "current_focus_symbol": None,
     "current_focus_name": None,
     "last_recommend_symbols": [],
@@ -195,6 +196,14 @@ _STATE_DEFAULTS = {
     "last_as_of": None,
     "pending_ambiguity": None,
     "last_followup_type": None,
+    # Phase 1: run-aware, multi-symbol aware session fields
+    "active_run_id": None,            # 当前有效推荐run_id（或as_of）
+    "active_symbols": [],             # 当前run涉及的全部symbols（顺序稳定）
+    "focused_symbol": None,           # 当前焦点标的（替代 current_focus_symbol）
+    "compare_symbols": [],            # 最近一次比较涉及的symbols集合
+    "last_intent": None,              # 最近解析的意图
+    "last_message_type": None,        # 最近一次用户消息的类型（text/status等）
+    "last_refresh_at": None,          # 最近一次refresh时间
 }
 
 
@@ -261,28 +270,48 @@ def get_state(session_id: str) -> Dict[str, Any]:
 
 def update_state(session_id: str, updates: Dict[str, Any]) -> Dict[str, Any]:
     cur = get_state(session_id)
-    cur.update({k: v for k, v in updates.items() if k in _STATE_DEFAULTS})
+    # Accept only known keys; keep lists as lists
+    sanitized: Dict[str, Any] = {}
+    for k, v in updates.items():
+        if k not in _STATE_DEFAULTS:
+            continue
+        if isinstance(_STATE_DEFAULTS[k], list):
+            try:
+                vv = list(v) if v is not None else []
+            except Exception:
+                vv = []
+            sanitized[k] = vv
+        else:
+            sanitized[k] = v
+    # Mirror focused_symbol to legacy field for backward compatibility
+    if "focused_symbol" in sanitized and sanitized.get("focused_symbol") is not None:
+        sanitized.setdefault("current_focus_symbol", sanitized.get("focused_symbol"))
+    cur.update(sanitized)
     _save_state_raw(session_id, cur)
     return cur
 
 
 def set_focus(session_id: str, symbol: Optional[str], reason: Optional[str] = None, name: Optional[str] = None) -> Dict[str, Any]:
-    st = update_state(session_id, {
-        "current_focus_symbol": symbol,
-        "current_focus_name": name,
-        "last_analyze_symbol": symbol,
-    })
+    st = update_state(
+        session_id,
+        {
+            "current_focus_symbol": symbol,
+            "focused_symbol": symbol,
+            "current_focus_name": name,
+            "last_analyze_symbol": symbol,
+        },
+    )
+    # Internal-only event: do NOT materialize into user-visible message stream
     try:
-        # log a small event message for focus change (best-effort)
         if symbol:
             event_store.append_event(
                 session_id,
                 event_id=f"focus-{datetime.utcnow().strftime('%Y%m%d%H%M%S%f')}",
-                type="message.created",
+                type="internal.focus_changed",
                 data={
-                    "kind": "note",
-                    "message_id": f"focus-{datetime.utcnow().strftime('%Y%m%d%H%M%S%f')}",
-                    "content": f"[focus] {symbol} {('('+reason+')') if reason else ''}",
+                    "symbol": symbol,
+                    "name": name,
+                    "reason": reason,
                 },
                 actor_id="assistant",
             )
@@ -293,7 +322,7 @@ def set_focus(session_id: str, symbol: Optional[str], reason: Optional[str] = No
 
 def get_focus(session_id: str) -> Optional[str]:
     st = get_state(session_id)
-    s = st.get("current_focus_symbol")
+    s = st.get("focused_symbol") or st.get("current_focus_symbol")
     return str(s) if s else None
 
 
@@ -309,10 +338,42 @@ def set_last_recommend_and_symbols(session_id: str, obj: Dict[str, Any]) -> None
                     syms.append(s)
     except Exception:
         pass
-    update_state(session_id, {"last_recommend_symbols": syms, "last_as_of": (obj or {}).get("as_of")})
+    update_state(
+        session_id,
+        {
+            "last_recommend_symbols": syms,
+            "active_symbols": syms,
+            "last_as_of": (obj or {}).get("as_of"),
+            "active_run_id": (obj or {}).get("as_of") or (obj or {}).get("run_id"),
+        },
+    )
 
 
 def get_last_symbols(session_id: str) -> list[str]:
     st = get_state(session_id)
     syms = st.get("last_recommend_symbols") or []
     return list(syms) if isinstance(syms, list) else []
+
+
+# Phase 1 helpers (minimal API)
+
+def set_active_run(session_id: str, run_id: Optional[str], symbols: Optional[List[str]] = None) -> Dict[str, Any]:
+    return update_state(
+        session_id,
+        {
+            "active_run_id": run_id,
+            "active_symbols": list(symbols or []),
+        },
+    )
+
+
+def set_compare_symbols(session_id: str, symbols: List[str]) -> Dict[str, Any]:
+    return update_state(session_id, {"compare_symbols": list(symbols or [])})
+
+
+def set_last_intent(session_id: str, name: Optional[str], message_type: Optional[str] = None) -> Dict[str, Any]:
+    return update_state(session_id, {"last_intent": name, "last_message_type": message_type})
+
+
+def set_last_refresh(session_id: str) -> Dict[str, Any]:
+    return update_state(session_id, {"last_refresh_at": datetime.now(timezone.utc).isoformat()})

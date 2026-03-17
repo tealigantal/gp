@@ -15,6 +15,10 @@ export type ChatResp = {
   reply: string
   tool_trace: ToolTrace
   assistant_message_id?: string
+  // Phase 1 additions (optional)
+  run_id?: string
+  symbols?: string[]
+  fallback_used?: boolean
 }
 
 export type RecommendReq = {

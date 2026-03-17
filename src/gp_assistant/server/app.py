@@ -82,6 +82,7 @@ def _compact_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
 
 def _handle_chat(req: ChatReq) -> ChatResp:
     data = handle_message(req.session_id, req.message, getattr(req, "message_id", None))
+    ctx = data.get("followup_context") or {}
     return ChatResp(
         session_id=data.get("session_id"),
         reply=str(data.get("reply", "")),
@@ -91,7 +92,10 @@ def _handle_chat(req: ChatReq) -> ChatResp:
         resolved_symbol=data.get("resolved_symbol"),
         degraded=data.get("degraded"),
         degrade_reason=data.get("degrade_reason"),
-        followup_context=data.get("followup_context"),
+        followup_context=ctx,
+        run_id=ctx.get("active_run_id"),
+        symbols=(ctx.get("active_symbols") if isinstance(ctx.get("active_symbols"), list) else None),
+        fallback_used=bool(data.get("degraded") is True),
     )
 
 

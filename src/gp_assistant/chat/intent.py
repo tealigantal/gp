@@ -23,6 +23,22 @@ def detect_intent(text: str) -> Dict[str, Any]:
             slots["topk"] = max(1, min(5, topk))
         return {"name": "recommend", "slots": slots}
 
+    # refresh_trade_plan (Phase 1)
+    if re.search(r"(重新给买点|更新一下买点|重新算|最新买点|今天重算|现在还能买|再看一下现在怎么做|刷新)", s):
+        return {"name": "refresh_trade_plan", "slots": {}}
+
+    # assess_rr: "这个合理吗" / "值不值得做" / "基本不赚钱吧"
+    if re.search(r"(合理吗|值不值得做|赚钱吧|盈亏比|RR|风险收益)", s, re.IGNORECASE):
+        return {"name": "assess_rr", "slots": {}}
+
+    # compare_symbols
+    if re.search(r"(哪个好|对比|比较|更强|更适合)", s):
+        return {"name": "compare_symbols", "slots": {}}
+
+    # ask_no_trade_reason
+    if re.search(r"(为什么没票|为什么不给买入|为什么只是观察|不建议买)", s):
+        return {"name": "ask_no_trade_reason", "slots": {}}
+
     # ask for nth pick
     m2 = re.search(r"第\s*(\d+)\s*(只|个)", s)
     if m2:
@@ -39,8 +55,8 @@ def detect_intent(text: str) -> Dict[str, Any]:
     if re.search(r"(第三只|第三个|第3只|第3个|third)", s, re.IGNORECASE):
         return {"name": "ask_nth", "slots": {"n": 3}}
 
-    # follow-up: why / reasoning
-    if re.search(r"(为什么|理由|原因)", s):
+    # follow-up: why / reasoning (symbol-specific)
+    if re.search(r"(为什么|理由|原因)", s) and not re.search(r"(不建议买|没票)", s):
         return {"name": "followup_why", "slots": {}}
 
     # follow-up: trade points / SL/TP / support-resistance / timing

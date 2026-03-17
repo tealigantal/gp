@@ -142,14 +142,12 @@ def t_resolve_symbol_from_message(args: dict, _state: Any) -> ToolResult:  # noq
             return _err("ordinal_out_of_range", code="ORDINAL_OUT_OF_RANGE", detail={"n": n, "available": syms})
         return _ok("resolved_ordinal", {"symbol": syms[n - 1], "reason": f"ordinal_{n}"})
 
-    # 3) pronoun resolution based on focus / previous
+    # 3) pronoun resolution based on focus only (no default-first)
     pronouns = ["这只", "这票", "刚才那只", "上一只", "那只", "这一个", "这个"]
     if any(k in msg for k in pronouns):
         focus = store.get_focus(sid)
         if focus:
             return _ok("resolved_focus", {"symbol": focus, "reason": "pronoun_focus"})
-        if syms:
-            return _ok("resolved_first_default", {"symbol": syms[0], "reason": "pronoun_fallback_first"})
         return _err("pronoun_but_no_context", code="AMBIGUOUS", detail={"candidates": []})
 
     # 4) name matching within last picks
@@ -159,10 +157,8 @@ def t_resolve_symbol_from_message(args: dict, _state: Any) -> ToolResult:  # noq
         if p is not None:
             return _ok("resolved_name_match", {"symbol": p[0], "reason": p[1]})
 
-    # 5) fallback to first symbol if user asked to analyze without specifying
+    # 5) explicit requirement to specify symbol for analysis when ambiguous
     if any(k in msg for k in ["研究", "K线", "日线", "买卖点", "支撑", "阻力", "止损", "止盈"]):
-        if syms:
-            return _ok("resolved_default_first", {"symbol": syms[0], "reason": "default_first"})
         return _err("no_symbol_context", code="NO_CONTEXT")
 
     return _err("unable_to_resolve_symbol", code="NO_MATCH")
@@ -188,9 +184,6 @@ def t_resolve_focus_or_default(args: dict, _state: Any) -> ToolResult:  # noqa: 
     focus = store.get_focus(sid)
     if focus:
         return _ok("focus_symbol", {"symbol": focus, "reason": "focus"})
-    syms = store.get_last_symbols(sid)
-    if syms:
-        return _ok("default_first", {"symbol": syms[0], "reason": "default_first"})
     return _err("no_symbol_context", code="NO_CONTEXT")
 
 
