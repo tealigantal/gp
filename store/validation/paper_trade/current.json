@@ -11,9 +11,9 @@
       "hit_take": true,
       "mfe": 0.5999999999999996,
       "mae": 0.0,
-      "holding_days": 2,
+      "holding_days": 6,
       "final_state": "target_hit",
-      "updated_at": "2026-03-17T08:52:24.012816"
+      "updated_at": "2026-03-17T10:37:41.339290"
     }
   ]
 }

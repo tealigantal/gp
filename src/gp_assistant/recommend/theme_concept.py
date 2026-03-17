@@ -145,76 +145,99 @@ def build_concept_themes(topn: int = 2, reason: Optional[str] = None) -> List[Di
     - Optional enrichment: top 1 for each fetch constituents and attach leaders
     """
     now = time.time()
+    # Strict mode: when snapshot change column is missing at caller side,
+    # do NOT inject pseudo themes from industry boards or stale caches.
+    # Only accept concept boards with detectable rank/strength.
+    strict = (str(reason) == "no_chg_col")
     _LAST_STATUS.update({"attempted": [], "error": None, "ts": now})
-    try:
-        if (_CACHE.get("themes") is not None) and (now - float(_CACHE.get("ts", 0.0)) <= _ttl()):
-            return list(_CACHE.get("themes") or [])
-    except Exception:
-        pass
+    if not strict:
+        try:
+            if (_CACHE.get("themes") is not None) and (now - float(_CACHE.get("ts", 0.0)) <= _ttl()):
+                return list(_CACHE.get("themes") or [])
+        except Exception:
+            pass
     try:
         import akshare as ak  # type: ignore
     except Exception as e:  # noqa: BLE001
         _LAST_STATUS.update({"error": f"akshare_import_failed: {e}"})
-        # try disk cache when import fails
-        cache_p = store_dir() / "cache" / "theme_concept_themes.json"
-        try:
-            if cache_p.exists():
-                obj = json.loads(cache_p.read_text(encoding="utf-8"))
-                max_stale = int(os.getenv("GP_THEME_CONCEPT_MAX_STALE_SEC", "86400"))
-                if time.time() - float(obj.get("ts", 0.0)) <= max_stale:
-                    _LAST_STATUS["attempted"].append("disk_cache")
+        if not strict:
+            # try disk cache when import fails (non-strict only)
+            cache_p = store_dir() / "cache" / "theme_concept_themes.json"
+            try:
+                if cache_p.exists():
+                    obj = json.loads(cache_p.read_text(encoding="utf-8"))
+                    max_stale = int(os.getenv("GP_THEME_CONCEPT_MAX_STALE_SEC", "86400"))
+                    if time.time() - float(obj.get("ts", 0.0)) <= max_stale:
+                        _LAST_STATUS["attempted"].append("disk_cache")
+                        _LAST_STATUS["error"] = f"stale_cache_used;{_LAST_STATUS.get('error')}"
+                        _LAST_STATUS["source"] = "cache:file"
+                        _LAST_STATUS["stale"] = True
+                        _LAST_STATUS["as_of_ts"] = None
+                        return list(obj.get("themes") or [])
+            except Exception:
+                pass
+            # new cache_dir pkl fallback
+            try:
+                pkl = cache_dir() / "themes.pkl"
+                if pkl.exists():
+                    data = pd.read_pickle(pkl)
+                    _LAST_STATUS["attempted"].append("cache:file")
                     _LAST_STATUS["error"] = f"stale_cache_used;{_LAST_STATUS.get('error')}"
                     _LAST_STATUS["source"] = "cache:file"
                     _LAST_STATUS["stale"] = True
                     _LAST_STATUS["as_of_ts"] = None
-                    return list(obj.get("themes") or [])
-        except Exception:
-            pass
-        # new cache_dir pkl fallback
-        try:
-            pkl = cache_dir() / "themes.pkl"
-            if pkl.exists():
-                data = pd.read_pickle(pkl)
-                _LAST_STATUS["attempted"].append("cache:file")
-                _LAST_STATUS["error"] = f"stale_cache_used;{_LAST_STATUS.get('error')}"
-                _LAST_STATUS["source"] = "cache:file"
-                _LAST_STATUS["stale"] = True
-                _LAST_STATUS["as_of_ts"] = None
-                return list(data) if isinstance(data, list) else []
-        except Exception:
-            pass
+                    return list(data) if isinstance(data, list) else []
+            except Exception:
+                pass
         return []
 
     themes: List[Dict[str, Any]] = []
     errors: List[str] = []
-    try:
-        _LAST_STATUS["attempted"].append("industry_name_em")
-        df_ind = _call_with_retry(lambda: _with_requests_timeout(lambda: ak.stock_board_industry_name_em()), retries=3)  # type: ignore[attr-defined]
-        themes += _build_from_board_df(df_ind, board_type="industry", topn=topn, source="akshare:industry_name_em")
-    except Exception as e:  # noqa: BLE001
-        errors.append(f"industry_name_em:{e}")
-        # THS fallback if available
+    if strict:
+        # Strict: only concept boards with rank
         try:
-            if hasattr(ak, "stock_board_industry_name_ths"):
-                _LAST_STATUS["attempted"].append("industry_name_ths")
-                df_ind2 = ak.stock_board_industry_name_ths()  # type: ignore[attr-defined]
-                themes += _build_from_board_df(df_ind2, board_type="industry", topn=topn, source="akshare:industry_name_ths")
-        except Exception as e2:  # noqa: BLE001
-            errors.append(f"industry_name_ths:{e2}")
-    try:
-        _LAST_STATUS["attempted"].append("concept_name_em")
-        df_con = _call_with_retry(lambda: _with_requests_timeout(lambda: ak.stock_board_concept_name_em()), retries=3)  # type: ignore[attr-defined]
-        themes += _build_from_board_df(df_con, board_type="concept", topn=topn, source="akshare:concept_name_em")
-    except Exception as e:  # noqa: BLE001
-        errors.append(f"concept_name_em:{e}")
-        # THS fallback if available
+            _LAST_STATUS["attempted"].append("concept_name_em")
+            df_con = _call_with_retry(lambda: _with_requests_timeout(lambda: ak.stock_board_concept_name_em()), retries=2)  # type: ignore[attr-defined]
+            themes += _build_from_board_df(df_con, board_type="concept", topn=topn, source="akshare:concept_name_em")
+        except Exception as e:  # noqa: BLE001
+            errors.append(f"concept_name_em:{e}")
+        if not themes:
+            try:
+                if hasattr(ak, "stock_board_concept_name_ths"):
+                    _LAST_STATUS["attempted"].append("concept_name_ths")
+                    df_con2 = ak.stock_board_concept_name_ths()  # type: ignore[attr-defined]
+                    themes += _build_from_board_df(df_con2, board_type="concept", topn=topn, source="akshare:concept_name_ths")
+            except Exception as e2:  # noqa: BLE001
+                errors.append(f"concept_name_ths:{e2}")
+    else:
         try:
-            if hasattr(ak, "stock_board_concept_name_ths"):
-                _LAST_STATUS["attempted"].append("concept_name_ths")
-                df_con2 = ak.stock_board_concept_name_ths()  # type: ignore[attr-defined]
-                themes += _build_from_board_df(df_con2, board_type="concept", topn=topn, source="akshare:concept_name_ths")
-        except Exception as e2:  # noqa: BLE001
-            errors.append(f"concept_name_ths:{e2}")
+            _LAST_STATUS["attempted"].append("industry_name_em")
+            df_ind = _call_with_retry(lambda: _with_requests_timeout(lambda: ak.stock_board_industry_name_em()), retries=3)  # type: ignore[attr-defined]
+            themes += _build_from_board_df(df_ind, board_type="industry", topn=topn, source="akshare:industry_name_em")
+        except Exception as e:  # noqa: BLE001
+            errors.append(f"industry_name_em:{e}")
+            # THS fallback if available
+            try:
+                if hasattr(ak, "stock_board_industry_name_ths"):
+                    _LAST_STATUS["attempted"].append("industry_name_ths")
+                    df_ind2 = ak.stock_board_industry_name_ths()  # type: ignore[attr-defined]
+                    themes += _build_from_board_df(df_ind2, board_type="industry", topn=topn, source="akshare:industry_name_ths")
+            except Exception as e2:  # noqa: BLE001
+                errors.append(f"industry_name_ths:{e2}")
+        try:
+            _LAST_STATUS["attempted"].append("concept_name_em")
+            df_con = _call_with_retry(lambda: _with_requests_timeout(lambda: ak.stock_board_concept_name_em()), retries=3)  # type: ignore[attr-defined]
+            themes += _build_from_board_df(df_con, board_type="concept", topn=topn, source="akshare:concept_name_em")
+        except Exception as e:  # noqa: BLE001
+            errors.append(f"concept_name_em:{e}")
+            # THS fallback if available
+            try:
+                if hasattr(ak, "stock_board_concept_name_ths"):
+                    _LAST_STATUS["attempted"].append("concept_name_ths")
+                    df_con2 = ak.stock_board_concept_name_ths()  # type: ignore[attr-defined]
+                    themes += _build_from_board_df(df_con2, board_type="concept", topn=topn, source="akshare:concept_name_ths")
+            except Exception as e2:  # noqa: BLE001
+                errors.append(f"concept_name_ths:{e2}")
 
     # Optional enrichment for top 1 of each type (fast, TTL cache on disk)
     try:
@@ -311,32 +334,33 @@ def build_concept_themes(topn: int = 2, reason: Optional[str] = None) -> List[Di
         return themes
     if errors:
         _LAST_STATUS.update({"error": ";".join(errors)})
-    # final: try disk cache when we failed to build anything
-    try:
-        cache_p = store_dir() / "cache" / "theme_concept_themes.json"
-        if cache_p.exists():
-            obj = json.loads(cache_p.read_text(encoding="utf-8"))
-            max_stale = int(os.getenv("GP_THEME_CONCEPT_MAX_STALE_SEC", "86400"))
-            if time.time() - float(obj.get("ts", 0.0)) <= max_stale:
-                _LAST_STATUS["attempted"].append("disk_cache")
+    if not strict:
+        # final: try disk cache when we failed to build anything (non-strict only)
+        try:
+            cache_p = store_dir() / "cache" / "theme_concept_themes.json"
+            if cache_p.exists():
+                obj = json.loads(cache_p.read_text(encoding="utf-8"))
+                max_stale = int(os.getenv("GP_THEME_CONCEPT_MAX_STALE_SEC", "86400"))
+                if time.time() - float(obj.get("ts", 0.0)) <= max_stale:
+                    _LAST_STATUS["attempted"].append("disk_cache")
+                    _LAST_STATUS["error"] = f"stale_cache_used;{_LAST_STATUS.get('error')}"
+                    _LAST_STATUS["source"] = "cache:file"
+                    _LAST_STATUS["stale"] = True
+                    _LAST_STATUS["as_of_ts"] = None
+                    return list(obj.get("themes") or [])
+        except Exception:
+            pass
+        # last resort: pickle fallback
+        try:
+            pkl = cache_dir() / "themes.pkl"
+            if pkl.exists():
+                data = pd.read_pickle(pkl)
+                _LAST_STATUS["attempted"].append("cache:file")
                 _LAST_STATUS["error"] = f"stale_cache_used;{_LAST_STATUS.get('error')}"
                 _LAST_STATUS["source"] = "cache:file"
                 _LAST_STATUS["stale"] = True
                 _LAST_STATUS["as_of_ts"] = None
-                return list(obj.get("themes") or [])
-    except Exception:
-        pass
-    # last resort: pickle fallback
-    try:
-        pkl = cache_dir() / "themes.pkl"
-        if pkl.exists():
-            data = pd.read_pickle(pkl)
-            _LAST_STATUS["attempted"].append("cache:file")
-            _LAST_STATUS["error"] = f"stale_cache_used;{_LAST_STATUS.get('error')}"
-            _LAST_STATUS["source"] = "cache:file"
-            _LAST_STATUS["stale"] = True
-            _LAST_STATUS["as_of_ts"] = None
-            return list(data) if isinstance(data, list) else []
-    except Exception:
-        pass
+                return list(data) if isinstance(data, list) else []
+        except Exception:
+            pass
     return []

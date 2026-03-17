@@ -106,12 +106,24 @@ def _enrich_scores_and_gate(obj: Dict[str, Any]) -> None:
                             try:
                                 rel = float(it.get("reliability_score") or 0.6)
                                 penalty = 0.2 if sh["status"] == "degraded" else 0.4
-                                it["reliability_score"] = max(0.2, rel - penalty)
-                                # update final score after penalty
-                                sc = apply_scores_to_v2_item.__globals__.get('calibrate_item_scores')  # type: ignore
-                                if sc:
-                                    s2 = sc(it, degraded=degraded)
-                                    it.update({k: s2[k] for k in ["final_score", "confidence", "reliability_score"]})
+                                new_rel = max(0.2, rel - penalty)
+                                it["reliability_score"] = new_rel
+                                # deterministically recompute final using existing alpha/execution and new reliability
+                                try:
+                                    alpha = float(it.get("alpha_score") or 0.0)
+                                except Exception:
+                                    alpha = 0.0
+                                try:
+                                    exec_score = float(it.get("execution_score") or 0.0)
+                                except Exception:
+                                    exec_score = 0.0
+                                final = 0.45 * exec_score + 0.35 * alpha + 0.20 * new_rel
+                                if final < 0.0:
+                                    final = 0.0
+                                if final > 1.0:
+                                    final = 1.0
+                                it["final_score"] = final
+                                it["confidence"] = new_rel
                             except Exception:
                                 pass
                 except Exception:
