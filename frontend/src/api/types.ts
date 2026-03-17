@@ -110,6 +110,12 @@ export type PickV2Item = {
   invalidation?: string[]
   notes?: string
   evidence?: { available: boolean; status: string; [k: string]: unknown }
+  gating_decision?: {
+    decision: 'allow' | 'degraded' | 'blocked'
+    reasons?: string[]
+    triggered_rules?: string[]
+    warnings?: string[]
+  }
 }
 
 export type RecommendV2 = {
@@ -128,6 +134,11 @@ export type RecommendV2 = {
   items: PickV2Item[]
   fallback_used?: boolean
   errors?: string[]
+  run_gating?: {
+    decision: 'allow' | 'degraded' | 'blocked'
+    reasons?: string[]
+    warnings?: string[]
+  }
 }
 
 // Phase 3/4: validation + live shadow
@@ -145,6 +156,53 @@ export type LiveShadowResp = {
   dates: string[]
   latest_date?: string | null
   summary?: { files?: string[]; sample?: unknown }
+}
+
+export type ValidationSummary = {
+  as_of?: string | null
+  parts: Record<string, unknown>
+}
+
+// ---- Phase 7: Execution/Portfolio ----
+export type OrderIntent = {
+  intent_id: string
+  run_id?: string
+  as_of?: string
+  symbol: string
+  side: 'buy' | 'sell'
+  status: 'proposed' | 'admitted' | 'rejected' | 'executed' | 'expired' | 'cancelled'
+  priority: number
+  sizing_hint?: number
+  gating_decision?: { decision: 'allow' | 'degraded' | 'blocked'; reasons?: string[] }
+}
+
+export type ExecutionEvent = {
+  event_id: string
+  intent_id: string
+  event_type: 'created' | 'admitted' | 'rejected' | 'paper_filled' | 'cancelled' | 'expired'
+  timestamp: string
+  symbol: string
+  notes?: string
+}
+
+export type PortfolioState = {
+  as_of?: string
+  positions: Array<Record<string, unknown>>
+  pending_intents: OrderIntent[]
+  recent_events: ExecutionEvent[]
+}
+
+// ---- Phase 8: Workbench Snapshot ----
+export type WorkbenchSnapshot = {
+  as_of?: string | null
+  recommend: RecommendV2 | Record<string, unknown>
+  validation_summary: ValidationSummary
+  portfolio: PortfolioState
+  intents_preview: OrderIntent[]
+  execution_events: ExecutionEvent[]
+  live_shadow_summary: { available: boolean; dates: string[]; latest_date?: string | null; summary?: unknown }
+  warnings: string[]
+  source_status: Record<string, unknown>
 }
 
 // Minimal compare/pick detail read-only contracts

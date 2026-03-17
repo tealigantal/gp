@@ -56,6 +56,12 @@ def pytest_collection_modifyitems(config, items):
         "test_validation_endpoints.py",
         # Phase 4 kernel consolidation gate additions
         "test_kernel_facade_smoke.py",
+        # Phase 5 validation automation gate additions
+        "test_runner_summary.py",
+        # Phase 6 gating gate additions
+        "test_evaluator.py",
+        # Phase 7 execution/portfolio gate additions
+        "test_mainline.py",
     )
     for item in items:
         fn = item.location[0]

@@ -214,3 +214,63 @@ class LiveShadowResp(BaseModel):
     dates: List[str] = Field(default_factory=list)
     latest_date: Optional[str] = None
     summary: Dict[str, Any] = Field(default_factory=dict)
+
+
+class ValidationSummaryResp(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    as_of: Optional[str] = None
+    parts: Dict[str, Any] = Field(default_factory=dict)
+
+
+# --- Phase 7: Execution/Portfolio ---
+
+
+class OrderIntentOut(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    intent_id: str
+    symbol: str
+    side: str
+    status: str
+    priority: float
+    sizing_hint: Optional[float] = None
+    gating_decision: Dict[str, Any] = Field(default_factory=dict)
+
+
+class PortfolioResp(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    as_of: Optional[str] = None
+    positions: List[Dict[str, Any]] = Field(default_factory=list)
+    pending_intents: List[Dict[str, Any]] = Field(default_factory=list)
+    recent_events: List[Dict[str, Any]] = Field(default_factory=list)
+
+
+class WorkbenchResp(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    as_of: Optional[str] = None
+    recommend: Dict[str, Any] = Field(default_factory=dict)
+    validation_summary: Dict[str, Any] = Field(default_factory=dict)
+    portfolio: Dict[str, Any] = Field(default_factory=dict)
+    intents_preview: List[Dict[str, Any]] = Field(default_factory=list)
+    execution_events: List[Dict[str, Any]] = Field(default_factory=list)
+    live_shadow_summary: Dict[str, Any] = Field(default_factory=dict)
+    warnings: List[str] = Field(default_factory=list)
+    source_status: Dict[str, Any] = Field(default_factory=dict)
+
+
+class OperatorIntentActionReq(BaseModel):
+    action: str  # 'admit' | 'reject' | 'cancel'
+    run_id: Optional[str] = None
+    as_of: Optional[str] = None
+    symbol: Optional[str] = None
+    intent_id: Optional[str] = None
+    operator_note: Optional[str] = None
+
+
+class OperatorIntentActionResp(BaseModel):
+    ok: bool
+    error: Optional[str] = None
+    intent_id: Optional[str] = None

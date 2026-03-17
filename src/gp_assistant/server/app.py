@@ -58,6 +58,11 @@ from .models import (
     StrategyValidationResp,
     PaperfolioResp,
     LiveShadowResp,
+    ValidationSummaryResp,
+    PortfolioResp,
+    WorkbenchResp,
+    OperatorIntentActionReq,
+    OperatorIntentActionResp,
 )
 
 app = FastAPI(title="gp_assistant", version="1.1.0")
@@ -913,6 +918,92 @@ def api_get_live_shadow_summary() -> Dict[str, Any]:
         return get_live_shadow_latest_summary()
     except Exception:
         return {"available": False, "dates": [], "summary": {}}
+
+
+@api.get("/validation/summary", response_model=ValidationSummaryResp)
+def api_get_validation_summary() -> Dict[str, Any]:
+    try:
+        from ..kernel.facade import get_validation_summary
+        return get_validation_summary()
+    except Exception:
+        return {"as_of": None, "parts": {}}
+
+
+@api.get("/recommend_v2/gated")
+def api_get_recommend_v2_gated(
+    run_id: Optional[str] = Query(default=None),
+    as_of: Optional[str] = Query(default=None),
+) -> Dict[str, Any]:
+    try:
+        from ..kernel.facade import get_gated_artifact_v2
+        return get_gated_artifact_v2(run_id=run_id, as_of=as_of)
+    except Exception:
+        return {"artifact_version": "v2", "ok": False, "error": "recommend_v2_unavailable"}
+
+
+# ---- Phase 7: Execution/Portfolio ----
+
+
+@api.get("/portfolio", response_model=PortfolioResp)
+def api_get_portfolio() -> Dict[str, Any]:
+    try:
+        from ..kernel.facade import get_portfolio_state
+        return get_portfolio_state()
+    except Exception:
+        return {"as_of": None, "positions": [], "pending_intents": [], "recent_events": []}
+
+
+@api.get("/execution/events")
+def api_get_execution_events(limit: int = Query(100, ge=1, le=1000)) -> List[Dict[str, Any]]:
+    try:
+        from ..kernel.facade import get_execution_events
+        return get_execution_events(limit)
+    except Exception:
+        return []
+
+
+@api.post("/execution/paper/run")
+def api_post_run_paper_execution(run_id: Optional[str] = Query(default=None), as_of: Optional[str] = Query(default=None)) -> Dict[str, Any]:
+    try:
+        from ..kernel.facade import run_paper_execution
+        res = run_paper_execution(run_id=run_id, as_of=as_of)
+        return res
+    except Exception as e:  # noqa: BLE001
+        return {"ok": False, "error": "paper_execution_failed"}
+
+
+# ---- Phase 8: Operator / Workbench ----
+
+
+@api.get("/workbench", response_model=WorkbenchResp)
+def api_get_workbench(run_id: Optional[str] = Query(default=None), as_of: Optional[str] = Query(default=None), event_limit: int = Query(100, ge=1, le=1000)) -> Dict[str, Any]:
+    try:
+        from ..operator.facade import get_workbench_snapshot
+        return get_workbench_snapshot(run_id=run_id, as_of=as_of, event_limit=event_limit)
+    except Exception:
+        return {"as_of": None, "warnings": ["workbench_unavailable"]}
+
+
+@api.post("/operator/intent/action", response_model=OperatorIntentActionResp)
+def api_post_operator_intent_action(payload: OperatorIntentActionReq) -> Dict[str, Any]:
+    try:
+        from ..execution.actions import admit_intent, reject_intent, cancel_intent
+        act = str(payload.action)
+        if act == 'admit':
+            if not payload.symbol:
+                return {"ok": False, "error": "SYMBOL_REQUIRED"}
+            return admit_intent(run_id=payload.run_id, as_of=payload.as_of, symbol=payload.symbol, note=payload.operator_note)
+        elif act == 'reject':
+            if not payload.symbol:
+                return {"ok": False, "error": "SYMBOL_REQUIRED"}
+            return reject_intent(run_id=payload.run_id, as_of=payload.as_of, symbol=payload.symbol, note=payload.operator_note)
+        elif act == 'cancel':
+            if not payload.intent_id:
+                return {"ok": False, "error": "INTENT_ID_REQUIRED"}
+            return cancel_intent(intent_id=payload.intent_id, note=payload.operator_note)
+        return {"ok": False, "error": "UNKNOWN_ACTION"}
+    except Exception:
+        return {"ok": False, "error": "operator_action_failed"}
 
 
 def _message_text_by_id(mid: str) -> Optional[str]:

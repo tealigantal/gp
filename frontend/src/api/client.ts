@@ -1,5 +1,5 @@
 import axios from 'axios'
-import type { ChatReq, ChatResp, RecommendReq, RecommendResp, HealthResp, OHLCVResp, SyncReq, SyncResp, EventOut, RecommendV2, CompareResp, PickDetailResp, StrategyValidationResp, PaperfolioResp, LiveShadowResp } from './types'
+import type { ChatReq, ChatResp, RecommendReq, RecommendResp, HealthResp, OHLCVResp, SyncReq, SyncResp, EventOut, RecommendV2, CompareResp, PickDetailResp, StrategyValidationResp, PaperfolioResp, LiveShadowResp, ValidationSummary, PortfolioState, ExecutionEvent, OrderIntent, WorkbenchSnapshot } from './types'
 import type { ConversationSummary, ThreadItem, RecommendationArtifact, SearchHit } from './contracts'
 
 const baseURL = import.meta.env.VITE_API_BASE || '/api'
@@ -124,5 +124,37 @@ export async function getPaperfolio() {
 
 export async function getLiveShadowSummary() {
   const { data } = await api.get<LiveShadowResp>('/live_shadow/summary')
+  return data
+}
+
+export async function getValidationSummary() {
+  const { data } = await api.get<ValidationSummary>('/validation/summary')
+  return data
+}
+
+// ---- Phase 7: Execution/Portfolio ----
+export async function getPortfolio() {
+  const { data } = await api.get<PortfolioState>('/portfolio')
+  return data
+}
+
+export async function getExecutionEvents(limit = 100) {
+  const { data } = await api.get<ExecutionEvent[]>('/execution/events', { params: { limit } })
+  return data
+}
+
+export async function runPaperExecution(params: { run_id?: string; as_of?: string } = {}) {
+  const { data } = await api.post<{ ok: boolean; admitted?: number; events?: number; error?: string }>(`/execution/paper/run`, null, { params })
+  return data
+}
+
+// ---- Phase 8: Workbench + Operator actions ----
+export async function getWorkbench(params: { run_id?: string; as_of?: string; event_limit?: number } = {}) {
+  const { data } = await api.get<WorkbenchSnapshot>('/workbench', { params })
+  return data
+}
+
+export async function postOperatorIntentAction(body: { action: 'admit'|'reject'|'cancel'; run_id?: string; as_of?: string; symbol?: string; intent_id?: string; operator_note?: string }) {
+  const { data } = await api.post<{ ok: boolean; error?: string; intent_id?: string }>(`/operator/intent/action`, body)
   return data
 }

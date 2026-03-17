@@ -1,6 +1,7 @@
 import { Route, Routes } from 'react-router-dom'
 import Chat from './pages/Chat'
 import Health from './pages/Health'
+import Workbench from './pages/Workbench'
 import History from './pages/History'
 import { Navigate } from 'react-router-dom'
 import AppLayout from './components/AppLayout'
@@ -15,6 +16,7 @@ export default function App() {
         <Route path="/search" element={<Navigate to="/history?tab=search" replace />} />
         <Route path="/chat" element={<Chat />} />
         <Route path="/health" element={<Health />} />
+        <Route path="/workbench" element={<Workbench />} />
       </Routes>
     </AppLayout>
   )
