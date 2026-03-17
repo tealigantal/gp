@@ -124,3 +124,40 @@ class SyncResp(BaseModel):
     deltas: Dict[str, List[EventOut]] = Field(default_factory=dict)
     conversations_delta: List[Dict[str, Any]] = Field(default_factory=list)
     user_settings_delta: List[Dict[str, Any]] = Field(default_factory=list)
+
+
+# --- Phase 2: Compare & Pick Detail (minimal models) ---
+
+
+class CompareReq(BaseModel):
+    run_id: Optional[str] = None
+    symbols: List[str]
+
+
+class CompareResp(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    ok: bool
+    run_id: Optional[str] = None
+    symbols: List[str]
+    items: List[Dict[str, Any]]
+    ranking: List[str]
+    winner_symbol: Optional[str] = None
+    summary: Optional[str] = None
+    degraded: bool = False
+
+
+class PickDetailReq(BaseModel):
+    run_id: Optional[str] = None
+    symbol: str
+
+
+class PickDetailResp(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    ok: bool
+    run_id: Optional[str] = None
+    as_of: Optional[str] = None
+    degraded: bool = False
+    fallback_used: bool = False
+    item: Dict[str, Any] | None = None

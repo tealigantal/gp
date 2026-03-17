@@ -35,6 +35,8 @@ from ..recommend.datahub import MarketDataHub
 from ..recommend.runner import list_modes as recommend_list_modes
 from ..recommend.runner import run as recommend_run
 from ..recommend.compact_payload import compact_recommend_payload
+from ..recommend.compare_service import compare_symbols as compare_service
+from ..recommend.compare_service import pick_detail as pick_detail_service
 from .models import (
     ChatReq,
     ChatResp,
@@ -44,6 +46,10 @@ from .models import (
     OHLCVResp,
     RecommendReq,
     RecommendResp,
+    CompareReq,
+    CompareResp,
+    PickDetailReq,
+    PickDetailResp,
     SyncReq,
     SyncResp,
 )
@@ -828,6 +834,25 @@ def api_post_thread_read(cid: str, payload: Dict[str, Any] = Body(...)) -> Dict[
     try:
         event_store.update_read(cid, None, last_read_seq)
         return {"status": "ok"}
+    except Exception as e:  # noqa: BLE001
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@api.post("/compare")
+def api_post_compare(req: 'CompareReq') -> Dict[str, Any]:
+    """Structured compare directly from artifact (no LLM)."""
+    try:
+        out = compare_service(req.run_id, req.symbols)
+        return out
+    except Exception as e:  # noqa: BLE001
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@api.get("/pick")
+def api_get_pick_detail(run_id: Optional[str] = Query(default=None), symbol: str = Query(...)) -> Dict[str, Any]:
+    try:
+        out = pick_detail_service(run_id, symbol)
+        return out
     except Exception as e:  # noqa: BLE001
         raise HTTPException(status_code=500, detail=str(e)) from e
 
