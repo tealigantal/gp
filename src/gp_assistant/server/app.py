@@ -32,12 +32,13 @@ from ..core.errors import APIError
 from ..core.paths import store_dir, results_dir
 from ..dev.fixtures import dev_ohlcv_bars
 from ..recommend.compact_payload import compact_recommend_payload
-from ..recommend.compare_service import compare_symbols as compare_service
-from ..recommend.compare_service import pick_detail as pick_detail_service
-from ..validation.event_stats import load_event_stats
-from ..validation.walkforward_stats import load_walkforward
-from ..validation.strategy_health import load_strategy_health
-from ..validation.paper_trade import load_paperfolio
+from ..kernel.facade import (
+    get_artifact_v2 as kernel_get_artifact_v2,
+    compare_symbols as kernel_compare_symbols,
+    get_pick_detail as kernel_pick_detail,
+    get_strategy_validation as kernel_strategy_validation,
+    get_paperfolio as kernel_get_paperfolio,
+)
 from .models import (
     ChatReq,
     ChatResp,
@@ -56,6 +57,7 @@ from .models import (
     SyncResp,
     StrategyValidationResp,
     PaperfolioResp,
+    LiveShadowResp,
 )
 
 app = FastAPI(title="gp_assistant", version="1.1.0")
@@ -848,7 +850,7 @@ def api_post_thread_read(cid: str, payload: Dict[str, Any] = Body(...)) -> Dict[
 def api_post_compare(req: 'CompareReq') -> Dict[str, Any]:
     """Structured compare directly from artifact (no LLM)."""
     try:
-        out = compare_service(req.run_id, req.symbols)
+        out = kernel_compare_symbols(req.run_id, req.symbols)
         return out
     except Exception as e:  # noqa: BLE001
         # sanitize: do not leak raw exception
@@ -858,7 +860,7 @@ def api_post_compare(req: 'CompareReq') -> Dict[str, Any]:
 @api.get("/pick", response_model=PickDetailResp)
 def api_get_pick_detail(run_id: Optional[str] = Query(default=None), symbol: str = Query(...)) -> Dict[str, Any]:
     try:
-        out = pick_detail_service(run_id, symbol)
+        out = kernel_pick_detail(run_id, symbol)
         return out
     except Exception as e:  # noqa: BLE001
         return {"ok": False, "error": "pick_detail_unavailable"}
@@ -868,8 +870,7 @@ def api_get_pick_detail(run_id: Optional[str] = Query(default=None), symbol: str
 
 
 def _recommend_v2_read(run_id: Optional[str], as_of: Optional[str]) -> Dict[str, Any]:
-    from ..recommend.artifact_store import read_artifact_v2
-    return read_artifact_v2(run_id=run_id, as_of=as_of)
+    return kernel_get_artifact_v2(run_id=run_id, as_of=as_of)
 
 
 @api.get("/recommend_v2", response_model=RecommendV2Resp)
@@ -892,10 +893,7 @@ def api_get_recommend_v2(
 @api.get("/validation/strategy/{strategy}", response_model=StrategyValidationResp)
 def api_get_strategy_validation(strategy: str) -> Dict[str, Any]:
     try:
-        ev = load_event_stats(strategy)
-        wf = load_walkforward(strategy)
-        sh = load_strategy_health(strategy)
-        return {"strategy": strategy, "event_stats": ev, "walk_forward": wf, "strategy_health": sh}
+        return kernel_strategy_validation(strategy)
     except Exception:
         return {"strategy": strategy, "event_stats": {"available": False}, "walk_forward": {"available": False}, "strategy_health": {"available": False}}
 
@@ -903,9 +901,18 @@ def api_get_strategy_validation(strategy: str) -> Dict[str, Any]:
 @api.get("/paperfolio", response_model=PaperfolioResp)
 def api_get_paperfolio() -> Dict[str, Any]:
     try:
-        return load_paperfolio()
+        return kernel_get_paperfolio()
     except Exception:
         return {"available": False, "picks": []}
+
+
+@api.get("/live_shadow/summary", response_model=LiveShadowResp)
+def api_get_live_shadow_summary() -> Dict[str, Any]:
+    from ..kernel.facade import get_live_shadow_latest_summary
+    try:
+        return get_live_shadow_latest_summary()
+    except Exception:
+        return {"available": False, "dates": [], "summary": {}}
 
 
 def _message_text_by_id(mid: str) -> Optional[str]:

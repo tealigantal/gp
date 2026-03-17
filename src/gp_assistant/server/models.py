@@ -205,3 +205,12 @@ class PaperfolioResp(BaseModel):
 
     available: bool = True
     picks: List[Dict[str, Any]] = Field(default_factory=list)
+
+
+class LiveShadowResp(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    available: bool = False
+    dates: List[str] = Field(default_factory=list)
+    latest_date: Optional[str] = None
+    summary: Dict[str, Any] = Field(default_factory=dict)

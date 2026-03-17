@@ -54,6 +54,8 @@ def pytest_collection_modifyitems(config, items):
         "test_strategy_health.py",
         "test_lifecycle.py",
         "test_validation_endpoints.py",
+        # Phase 4 kernel consolidation gate additions
+        "test_kernel_facade_smoke.py",
     )
     for item in items:
         fn = item.location[0]

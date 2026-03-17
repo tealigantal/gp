@@ -130,6 +130,23 @@ export type RecommendV2 = {
   errors?: string[]
 }
 
+// Phase 3/4: validation + live shadow
+export type StrategyValidationResp = {
+  strategy: string
+  event_stats: Record<string, unknown>
+  walk_forward: Record<string, unknown>
+  strategy_health: Record<string, unknown>
+}
+
+export type PaperfolioResp = { available: boolean; picks: Array<Record<string, unknown>> }
+
+export type LiveShadowResp = {
+  available: boolean
+  dates: string[]
+  latest_date?: string | null
+  summary?: { files?: string[]; sample?: unknown }
+}
+
 // Minimal compare/pick detail read-only contracts
 export type CompareResp = {
   ok: boolean

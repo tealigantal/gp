@@ -1,5 +1,5 @@
 import axios from 'axios'
-import type { ChatReq, ChatResp, RecommendReq, RecommendResp, HealthResp, OHLCVResp, SyncReq, SyncResp, EventOut, RecommendV2, CompareResp, PickDetailResp } from './types'
+import type { ChatReq, ChatResp, RecommendReq, RecommendResp, HealthResp, OHLCVResp, SyncReq, SyncResp, EventOut, RecommendV2, CompareResp, PickDetailResp, StrategyValidationResp, PaperfolioResp, LiveShadowResp } from './types'
 import type { ConversationSummary, ThreadItem, RecommendationArtifact, SearchHit } from './contracts'
 
 const baseURL = import.meta.env.VITE_API_BASE || '/api'
@@ -107,5 +107,22 @@ export async function compareSymbols(body: { run_id?: string; symbols: string[] 
 
 export async function getPickDetail(params: { run_id?: string; symbol: string }) {
   const { data } = await api.get<PickDetailResp>('/pick', { params })
+  return data
+}
+
+// ---- Validation + Live Shadow ----
+
+export async function getStrategyValidation(strategy: string) {
+  const { data } = await api.get<StrategyValidationResp>(`/validation/strategy/${encodeURIComponent(strategy)}`)
+  return data
+}
+
+export async function getPaperfolio() {
+  const { data } = await api.get<PaperfolioResp>('/paperfolio')
+  return data
+}
+
+export async function getLiveShadowSummary() {
+  const { data } = await api.get<LiveShadowResp>('/live_shadow/summary')
   return data
 }
