@@ -31,9 +31,6 @@ from ..core.config import load_config
 from ..core.errors import APIError
 from ..core.paths import store_dir, results_dir
 from ..dev.fixtures import dev_ohlcv_bars
-from ..recommend.datahub import MarketDataHub
-from ..recommend.runner import list_modes as recommend_list_modes
-from ..recommend.runner import run as recommend_run
 from ..recommend.compact_payload import compact_recommend_payload
 from ..recommend.compare_service import compare_symbols as compare_service
 from ..recommend.compare_service import pick_detail as pick_detail_service
@@ -107,6 +104,7 @@ def _handle_chat(req: ChatReq) -> ChatResp:
 
 def _handle_recommend(req: RecommendReq) -> Dict[str, Any]:
     # IMPORTANT: use runner (multi-mode)
+    from ..recommend.runner import run as recommend_run  # lazy import
     result = recommend_run(
         mode=req.mode,
         date=req.date,
@@ -241,7 +239,8 @@ def _handle_ohlcv(symbol: str, start: Optional[str], end: Optional[str], limit: 
         meta_out["filtered"].update({k: v for k, v in {"start": start, "end": end, "limit": limit, "mode": "dev"}.items() if v is not None})
         return OHLCVResp(symbol=symbol, meta=meta_out, bars=[OHLCVBar(**b) for b in bars])
 
-    # real mode
+    # real mode (lazy import to avoid heavy deps on app import)
+    from ..recommend.datahub import MarketDataHub  # local import
     hub = MarketDataHub()
     as_of = end  # prefer end as as_of boundary if provided
     df, meta = hub.daily_ohlcv(symbol, as_of=as_of, min_len=0)
@@ -853,6 +852,124 @@ def api_get_pick_detail(run_id: Optional[str] = Query(default=None), symbol: str
     try:
         out = pick_detail_service(run_id, symbol)
         return out
+    except Exception as e:  # noqa: BLE001
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+def _read_v2_from_store(run_id: Optional[str], as_of: Optional[str]) -> Dict[str, Any] | None:
+    base = store_dir() / "recommend"
+    cand = []
+    if run_id:
+        cand.append(base / f"{run_id}_v2.json")
+        try:
+            if len(str(run_id)) == 8 and str(run_id).isdigit():
+                cand.append(base / f"{str(run_id)[:4]}-{str(run_id)[4:6]}-{str(run_id)[6:8]}_v2.json")
+        except Exception:
+            pass
+    if as_of and not run_id:
+        cand.append(base / f"{as_of}_v2.json")
+        try:
+            if len(str(as_of)) == 8 and str(as_of).isdigit():
+                cand.append(base / f"{str(as_of)[:4]}-{str(as_of)[4:6]}-{str(as_of)[6:8]}_v2.json")
+        except Exception:
+            pass
+    if not run_id and not as_of:
+        cand.append(base / "latest_v2.json")
+    for p in cand:
+        if p.exists():
+            try:
+                return json.loads(p.read_text(encoding="utf-8"))
+            except Exception:
+                return None
+    return None
+
+
+def _read_v1_from_store(run_id: Optional[str], as_of: Optional[str]) -> Dict[str, Any] | None:
+    base = store_dir() / "recommend"
+    cand = []
+    if run_id:
+        cand.append(base / f"{run_id}.json")
+        try:
+            if len(str(run_id)) == 8 and str(run_id).isdigit():
+                cand.append(base / f"{str(run_id)[:4]}-{str(run_id)[4:6]}-{str(run_id)[6:8]}.json")
+        except Exception:
+            pass
+    if as_of and not run_id:
+        cand.append(base / f"{as_of}.json")
+        try:
+            if len(str(as_of)) == 8 and str(as_of).isdigit():
+                cand.append(base / f"{str(as_of)[:4]}-{str(as_of)[4:6]}-{str(as_of)[6:8]}.json")
+        except Exception:
+            pass
+    if not run_id and not as_of:
+        cand.append(base / "latest.json")
+    for p in cand:
+        if p.exists():
+            try:
+                return json.loads(p.read_text(encoding="utf-8"))
+            except Exception:
+                return None
+    return None
+
+
+def _recommend_v2_read(run_id: Optional[str], as_of: Optional[str]) -> Dict[str, Any]:
+    from ..recommend.contracts import build_v2_from_v1
+    from ..recommend.validators import validate_pick_artifact_v2
+    from ..recommend.calibration import apply_scores_to_v2_item
+    # 1) Prefer v2 persisted
+    v2p = _read_v2_from_store(run_id, as_of)
+    if isinstance(v2p, dict):
+        ok, errs, fixed = validate_pick_artifact_v2(v2p)
+        if not ok:
+            fixed["degraded"] = True
+            fixed.setdefault("reason", "artifact_validation_failed")
+            fixed.setdefault("errors", errs)
+        fixed.setdefault("artifact_version", "v2")
+        fixed.setdefault("fallback_used", False)
+        return fixed
+    # 2) Fallback convert from v1
+    v1 = _read_v1_from_store(run_id, as_of)
+    if not isinstance(v1, dict):
+        raise HTTPException(status_code=404, detail="artifact not found")
+    v2 = build_v2_from_v1(v1)
+    out = {
+        "run_id": v2.run_id,
+        "as_of": v2.as_of,
+        "snapshot_id": v2.snapshot_id,
+        "market_regime": v2.market_regime,
+        "degraded": v2.degraded,
+        "tradeable": v2.tradeable,
+        "reason": v2.reason,
+        "risk_profile": v2.risk_profile,
+        "universe_name": v2.universe_name,
+        "symbols": v2.symbols,
+        "themes": v2.themes,
+        "items": [it.__dict__ for it in v2.items],
+        "artifact_version": "v2",
+        "fallback_used": True,
+    }
+    try:
+        for it in out["items"]:
+            apply_scores_to_v2_item(it, degraded=bool(out.get("degraded")))
+    except Exception:
+        pass
+    ok, errs, fixed = validate_pick_artifact_v2(out)
+    if not ok:
+        fixed["degraded"] = True
+        fixed.setdefault("reason", "artifact_validation_failed")
+        fixed.setdefault("errors", errs)
+    return fixed
+
+
+@api.get("/recommend_v2")
+def api_get_recommend_v2(
+    run_id: Optional[str] = Query(default=None),
+    as_of: Optional[str] = Query(default=None),
+) -> Dict[str, Any]:
+    try:
+        return _recommend_v2_read(run_id, as_of)
+    except HTTPException:
+        raise
     except Exception as e:  # noqa: BLE001
         raise HTTPException(status_code=500, detail=str(e)) from e
 

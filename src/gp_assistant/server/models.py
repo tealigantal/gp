@@ -161,3 +161,22 @@ class PickDetailResp(BaseModel):
     degraded: bool = False
     fallback_used: bool = False
     item: Dict[str, Any] | None = None
+
+
+class RecommendV2Resp(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    artifact_version: str = "v2"
+    run_id: Optional[str] = None
+    as_of: Optional[str] = None
+    snapshot_id: Optional[str] = None
+    market_regime: Optional[str] = None
+    degraded: bool = False
+    tradeable: bool = False
+    reason: Optional[str] = None
+    risk_profile: Optional[str] = None
+    universe_name: Optional[str] = None
+    symbols: List[str] = Field(default_factory=list)
+    themes: List[str] = Field(default_factory=list)
+    items: List[Dict[str, Any]] = Field(default_factory=list)
+    fallback_used: bool = False

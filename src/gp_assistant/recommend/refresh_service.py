@@ -66,5 +66,10 @@ def refresh_symbols_v2(symbols: List[str], *, as_of: Optional[str] = None, risk_
         fixed.setdefault("reason", "artifact_validation_failed")
         fixed.setdefault("errors", errs)
     fixed["ok"] = ok
+    # Provide a compatibility picks array for chat card (from original v1 res)
+    try:
+        fixed["compat_picks"] = list(res.get("picks") or []) if isinstance(res, dict) else []
+    except Exception:
+        fixed["compat_picks"] = []
+    fixed["artifact_version"] = "v2"
     return fixed
-

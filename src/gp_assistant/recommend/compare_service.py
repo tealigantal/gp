@@ -37,7 +37,38 @@ def _read_v1_by_run(run_id: str) -> Dict[str, Any] | None:
     return None
 
 
+def _read_v2_by_run(run_id: Optional[str]) -> Dict[str, Any] | None:
+    base = store_dir() / "recommend"
+    if run_id:
+        cand = [base / f"{run_id}_v2.json"]
+        try:
+            if len(run_id) == 8 and run_id.isdigit():
+                cand.append(base / f"{run_id[:4]}-{run_id[4:6]}-{run_id[6:8]}_v2.json")
+        except Exception:
+            pass
+        for p in cand:
+            if p.exists():
+                try:
+                    return json.loads(p.read_text(encoding="utf-8"))
+                except Exception:
+                    return None
+    else:
+        p = base / "latest_v2.json"
+        if p.exists():
+            try:
+                return json.loads(p.read_text(encoding="utf-8"))
+            except Exception:
+                return None
+    return None
+
+
 def _artifact_v2_from_store(run_id: Optional[str]) -> Dict[str, Any] | None:
+    # Prefer v2 persisted
+    v2p = _read_v2_by_run(run_id)
+    if isinstance(v2p, dict):
+        v2p.setdefault("fallback_used", False)
+        return v2p
+    # Fallback: v1 -> v2 online conversion
     obj = _read_v1_by_run(run_id) if run_id else _read_latest_v1()
     if not isinstance(obj, dict):
         return None
@@ -55,6 +86,7 @@ def _artifact_v2_from_store(run_id: Optional[str]) -> Dict[str, Any] | None:
         "symbols": v2.symbols,
         "themes": v2.themes,
         "items": [it.__dict__ for it in v2.items],
+        "fallback_used": True,
     }
     # enrich scores
     try:
@@ -106,6 +138,7 @@ def compare_symbols(run_id: Optional[str], symbols: List[str]) -> Dict[str, Any]
         "summary": f"winner={winner}",
         "degraded": bool(fixed.get("degraded")),
         "errors": errs if not ok else [],
+        "fallback_used": bool(fixed.get("fallback_used", False)),
     }
 
 
@@ -128,7 +161,6 @@ def pick_detail(run_id: Optional[str], symbol: str) -> Dict[str, Any]:
         "run_id": fixed.get("run_id"),
         "as_of": fixed.get("as_of"),
         "degraded": fixed.get("degraded"),
-        "fallback_used": False,
+        "fallback_used": bool(fixed.get("fallback_used", False)),
         "item": target,
     }
-

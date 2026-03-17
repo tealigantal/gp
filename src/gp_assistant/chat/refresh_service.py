@@ -10,7 +10,7 @@ in symbols mode (no reuse of previous artifacts).
 from typing import Any, Dict, List, Optional
 from datetime import datetime, timezone
 
-from ..recommend.runner import run as recommend_run
+from ..recommend.refresh_service import refresh_symbols_v2
 
 
 def _now_iso() -> str:
@@ -22,20 +22,21 @@ def refresh_symbols(symbols: List[str], *, as_of: Optional[str] = None) -> Dict[
     if not syms:
         return {"ok": False, "error": "NO_SYMBOLS"}
     try:
-        res = recommend_run(universe="symbols", symbols=syms, date=as_of, topk=len(syms))
-        # Minimal normalized envelope for Phase 1
-        return {
-            "ok": True,
-            "as_of": res.get("as_of"),
-            "run_id": res.get("as_of") or res.get("run_id") or _now_iso(),
+        v2 = refresh_symbols_v2(syms, as_of=as_of)
+        # Thin compatibility layer for existing chat card consumers
+        out = {
+            "ok": bool(v2.get("ok", True)),
+            "as_of": v2.get("as_of"),
+            "run_id": v2.get("run_id") or v2.get("as_of") or _now_iso(),
             "symbols": syms,
-            "picks": res.get("picks") or [],
-            "tradeable": res.get("tradeable"),
+            # Use compat picks provided by canonical refresh to avoid re‑implementing logic here
+            "picks": list(v2.get("compat_picks") or []),
+            "tradeable": v2.get("tradeable"),
             "diagnostics": {
-                "degraded": bool((res.get("debug") or {}).get("degraded") is True),
-                "degrade_reasons": (res.get("debug") or {}).get("degrade_reasons") or [],
+                "degraded": bool(v2.get("degraded") is True),
+                "degrade_reasons": v2.get("errors") or [],
             },
         }
+        return out
     except Exception as e:  # noqa: BLE001
         return {"ok": False, "error": f"REFRESH_FAILED:{e}"}
-

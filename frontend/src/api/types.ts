@@ -82,3 +82,49 @@ export type SyncResp = {
   conversations_delta: Array<Record<string, unknown>>
   user_settings_delta: Array<Record<string, unknown>>
 }
+
+// ---- V2 (read-only, canonical) ----
+export type PickV2Item = {
+  pick_id: string
+  symbol: string
+  name?: string
+  strategy?: string
+  strategy_label?: string
+  thesis?: string
+  price_ref?: number
+  entry_zone?: [number, number]
+  stop?: number
+  take_profit?: number[]
+  reward_risk?: number
+  execution_state?: 'actionable' | 'waiting_pullback' | 'observe_only' | 'below_support' | 'breakdown_risk'
+  actionable?: boolean
+  alpha_score?: number
+  execution_score?: number
+  reliability_score?: number
+  final_score?: number
+  confidence?: number
+  signal_age_days?: number
+  liquidity_grade?: 'A' | 'B' | 'C'
+  volatility_grade?: 'low' | 'medium' | 'high'
+  risk_flags?: string[]
+  invalidation?: string[]
+  notes?: string
+  evidence?: { available: boolean; status: string; [k: string]: unknown }
+}
+
+export type RecommendV2 = {
+  artifact_version: 'v2'
+  run_id?: string | null
+  as_of?: string | null
+  snapshot_id?: string | null
+  market_regime?: string | null
+  degraded: boolean
+  tradeable: boolean
+  reason?: string | null
+  risk_profile?: string | null
+  universe_name?: string | null
+  symbols: string[]
+  themes: string[]
+  items: PickV2Item[]
+  fallback_used?: boolean
+}

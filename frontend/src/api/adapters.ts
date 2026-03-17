@@ -157,3 +157,37 @@ export function asSearchHits(arr: unknown): SearchHit[] {
   if (!Array.isArray(arr)) return []
   return arr.map(asSearchHit)
 }
+
+// --- V2 -> existing RecommendationArtifact adapter (minimal) ---
+import type { RecommendV2 } from './types'
+
+export function adaptV2ToRecommendationArtifact(v2: RecommendV2): RecommendationArtifact {
+  // Map a V2 artifact into a shape compatible with RecommendationCard
+  const picks = (v2.items || []).map((it) => {
+    const out: RecommendationArtifact['picks'][number] = {
+      symbol: it.symbol,
+      name: it.name,
+      champion: it.strategy ? { strategy: String(it.strategy) } : undefined,
+      trade_plan: {
+        // Minimal mapping: render entry/stop/take as strings; bands unavailable in V2
+        entry: it.entry_zone ? it.entry_zone.map((x) => String(x)) : undefined,
+        take: Array.isArray(it.take_profit) ? it.take_profit.map((x) => String(x)) : undefined,
+        stop: typeof it.stop === 'number' ? String(it.stop) : undefined,
+        bands: {},
+        actions: {},
+        risk: { no_averaging_down: undefined },
+      },
+    }
+    return out
+  })
+  return {
+    id: v2.run_id || '',
+    as_of: v2.as_of || null,
+    timezone: 'Asia/Shanghai',
+    picks,
+    tradeable: v2.tradeable,
+    disclaimer: null,
+    message: v2.reason || null,
+    meta: {},
+  }
+}
