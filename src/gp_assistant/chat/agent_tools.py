@@ -143,7 +143,7 @@ def t_resolve_symbol_from_message(args: dict, _state: Any) -> ToolResult:  # noq
         return _ok("resolved_ordinal", {"symbol": syms[n - 1], "reason": f"ordinal_{n}"})
 
     # 3) pronoun resolution based on focus only (no default-first)
-    pronouns = ["这只", "这票", "刚才那只", "上一只", "那只", "这一个", "这个"]
+    pronouns = ["这只", "这票", "刚才那只", "上一只", "那只", "这一个", "这个", "它"]
     if any(k in msg for k in pronouns):
         focus = store.get_focus(sid)
         if focus:

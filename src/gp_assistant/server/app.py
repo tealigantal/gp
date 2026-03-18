@@ -32,6 +32,7 @@ from ..core.errors import APIError
 from ..core.paths import store_dir, results_dir
 from ..dev.fixtures import dev_ohlcv_bars
 from ..recommend.compact_payload import compact_recommend_payload
+from ..recommend.runner import list_modes as recommend_list_modes
 from ..kernel.facade import (
     get_artifact_v2 as kernel_get_artifact_v2,
     compare_symbols as kernel_compare_symbols,
@@ -190,26 +191,110 @@ def _service_health_status() -> Dict[str, Any]:
     }
 
 
-def _handle_health() -> Dict[str, Any]:
-    cfg = load_config()
-    from ..providers.factory import get_provider
-
-    provider = get_provider()
+def _health_live() -> Dict[str, Any]:
+    """Extremely lightweight liveness: process responds and config parses minimally."""
     now = datetime.now().isoformat()
+    status = {
+        "ok": True,
+        "status": "live",
+        "service": "gp-assistant",
+        "ts": now,
+    }
+    return status
 
-    llm_ready = bool(cfg.llm_base_url and cfg.llm_api_key)
 
+def _check_store_rw() -> Dict[str, Any]:
+    try:
+        base = store_dir()
+        base.mkdir(parents=True, exist_ok=True)
+        p = base / ".probe"
+        p.write_text("ok", encoding="utf-8")
+        try:
+            p.unlink(missing_ok=True)  # type: ignore[arg-type]
+        except TypeError:
+            try:
+                if p.exists():
+                    p.unlink()
+            except Exception:
+                pass
+        return {"ok": True, "path": str(base)}
+    except Exception as e:  # noqa: BLE001
+        return {"ok": False, "error": str(e)}
+
+
+def _check_config() -> Dict[str, Any]:
+    try:
+        cfg = load_config()
+        return {"ok": True, "run_mode": cfg.run_mode, "dev_mode": cfg.dev_mode}
+    except Exception as e:  # noqa: BLE001
+        return {"ok": False, "error": str(e)}
+
+
+def _llm_proxy_health_url() -> Optional[str]:
+    base = os.getenv("LLM_BASE_URL", "").strip()
+    if not base:
+        return None
+    # typical: http://llm-proxy:8080/v1 -> http://llm-proxy:8080/health
+    if base.endswith("/v1"):
+        return base[:-3] + "health"
+    # else try appending /health
+    if base.endswith("/"):
+        return base + "health"
+    return base + "/health"
+
+
+def _check_llm_proxy(timeout: float = 0.8) -> Dict[str, Any]:
+    url = _llm_proxy_health_url()
+    if not url:
+        return {"ok": False, "skipped": True, "reason": "LLM_BASE_URL_missing"}
+    try:
+        import urllib.request  # noqa: PLC0415
+
+        req = urllib.request.Request(url, method="GET")
+        with urllib.request.urlopen(req, timeout=timeout) as resp:  # noqa: S310
+            code = int(getattr(resp, "status", 0) or 0)
+            return {"ok": (200 <= code < 500), "status": code, "url": url}
+    except Exception as e:  # noqa: BLE001
+        return {"ok": False, "error": str(e), "url": url}
+
+
+def _health_ready() -> Dict[str, Any]:
+    now = datetime.now().isoformat()
+    checks = {
+        "store": _check_store_rw(),
+        "config": _check_config(),
+        "llm_proxy": _check_llm_proxy(),
+    }
+    ok = all(v.get("ok") for v in checks.values())
     return {
-        "status": "ok",
-        "llm_ready": llm_ready,
-        "provider": provider.healthcheck(),
-        "time": now,
-        # extras (safe; HealthResp allows extra)
-        "run_mode": cfg.run_mode,
-        "dev_mode": cfg.dev_mode,
-        "recommend_mode": cfg.recommend_mode,
+        "ok": bool(ok),
+        "status": "ready" if ok else "degraded",
+        "service": "gp-assistant",
+        "ts": now,
+        "checks": checks,
+        "service_state": _service_health_status(),
+    }
+
+
+def _handle_health() -> Dict[str, Any]:
+    # Backward-compat lightweight health; do NOT call external providers.
+    ready = _health_ready()
+    cfg = None
+    try:
+        cfg = load_config()
+    except Exception:
+        pass
+    return {
+        "status": ("ok" if ready.get("ok") else "degraded"),
+        "llm_ready": bool(((ready.get("checks") or {}).get("llm_proxy") or {}).get("ok")),
+        "provider": {"note": "skipped_in_light_health"},
+        "time": str(ready.get("ts") or datetime.now().isoformat()),
+        # extras for richer UI
+        "run_mode": getattr(cfg, "run_mode", None),
+        "dev_mode": getattr(cfg, "dev_mode", None),
+        "recommend_mode": getattr(cfg, "recommend_mode", None),
         "recommend_modes": recommend_list_modes(),
-        "service": _service_health_status(),
+        "service": ready,
     }
 
 
@@ -409,6 +494,23 @@ def api_get_health() -> HealthResp:
         return HealthResp(**_handle_health())
     except Exception as e:  # noqa: BLE001
         raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@api.get("/health/live")
+def api_get_health_live() -> Dict[str, Any]:
+    try:
+        return _health_live()
+    except Exception as e:  # noqa: BLE001
+        # liveness must be extremely robust
+        return {"ok": False, "status": "error", "service": "gp-assistant", "ts": datetime.now().isoformat(), "error": str(e)}
+
+
+@api.get("/health/ready")
+def api_get_health_ready() -> Dict[str, Any]:
+    try:
+        return _health_ready()
+    except Exception as e:  # noqa: BLE001
+        return {"ok": False, "status": "error", "service": "gp-assistant", "ts": datetime.now().isoformat(), "error": str(e)}
 
 
 @api.get("/ohlcv/{symbol}", response_model=OHLCVResp)
@@ -762,6 +864,22 @@ def _map_row_to_thread_item(row: tuple, cid: str) -> Optional[Dict[str, Any]]:
     if k2 == "text":
         return {**base, "kind": "text", "content": str(content or "")}
     if k2 == "recommendation":
+        # Prefer v2 summary embedded in payload
+        try:
+            summ = (payload or {}).get("summary") or {}
+            if isinstance(summ, dict) and summ.get("top_symbols") is not None:
+                return {
+                    **base,
+                    "kind": "recommendation",
+                    "artifact_id": str(mid),
+                    "summary": {
+                        "total": int(summ.get("total") or 0),
+                        "top_symbols": [str(s) for s in (summ.get("top_symbols") or []) if isinstance(s, (str, int))],
+                    },
+                }
+        except Exception:
+            pass
+        # Fallback: infer from legacy picks in payload
         picks = []
         try:
             picks = (payload or {}).get("picks") or []
@@ -1094,6 +1212,105 @@ def _get_recommendation_artifact_by_mid(mid: str) -> Dict[str, Any]:
     payload = _row_payload_to_obj(payload_json) or {}
     if str((payload or {}).get("type") or "").lower() != "recommendation":
         raise HTTPException(status_code=400, detail="not a recommendation artifact")
+    # New: V2 run_id-based recommendation card -> read gated artifact and map to safe structure
+    try:
+        if str((payload or {}).get("artifact_version") or "").lower() == "v2" and (payload or {}).get("run_id"):
+            from ..kernel.facade import get_gated_artifact_v2 as _get_gated  # local import to avoid heavy deps on app import
+            run_id = str((payload or {}).get("run_id") or "")
+            as_of = (payload or {}).get("as_of")
+            art = _get_gated(run_id=run_id or None, as_of=as_of)
+            # sanitize fields for frontend (do not leak internals)
+            items_out: List[Dict[str, Any]] = []
+            for it in (art.get("items") or []):
+                if not isinstance(it, dict):
+                    continue
+                item = {
+                    "symbol": str(it.get("symbol", "")),
+                    "name": (it.get("name") if isinstance(it.get("name"), str) else None),
+                    "strategy": (it.get("strategy") if isinstance(it.get("strategy"), str) else None),
+                    "strategy_label": (it.get("strategy_label") if isinstance(it.get("strategy_label"), str) else None),
+                    "thesis": (it.get("thesis") if isinstance(it.get("thesis"), str) else None),
+                    "entry_zone": it.get("entry_zone"),
+                    "stop": it.get("stop"),
+                    "take_profit": it.get("take_profit"),
+                    "reward_risk": it.get("reward_risk"),
+                    "execution_state": it.get("execution_state"),
+                    "actionable": it.get("actionable"),
+                    "alpha_score": it.get("alpha_score"),
+                    "execution_score": it.get("execution_score"),
+                    "reliability_score": it.get("reliability_score"),
+                    "final_score": it.get("final_score"),
+                    "confidence": it.get("confidence"),
+                    "risk_flags": it.get("risk_flags"),
+                    "invalidation": it.get("invalidation"),
+                    "gating_decision": (lambda gd: ({
+                        "decision": gd.get("decision"),
+                        "reasons": gd.get("reasons"),
+                        "warnings": gd.get("warnings"),
+                    } if isinstance(gd, dict) else None))(it.get("gating_decision")),
+                }
+                items_out.append(item)
+            # Lightweight rationale summaries
+            try:
+                items = art.get("items") or []
+                allow_n = sum(1 for it in items if isinstance(it, dict) and ((it.get("gating_decision") or {}).get("decision") == "allow"))
+                blocked_n = sum(1 for it in items if isinstance(it, dict) and ((it.get("gating_decision") or {}).get("decision") == "blocked"))
+                degraded_n = sum(1 for it in items if isinstance(it, dict) and ((it.get("gating_decision") or {}).get("decision") == "degraded"))
+                run_reasons = ((art.get("run_gating") or {}).get("reasons") or [])
+                selection_rationale = f"allow={allow_n}, degraded={degraded_n}; run_rules={', '.join(run_reasons or [])}"
+                rejection_summary = f"blocked={blocked_n}"
+            except Exception:
+                selection_rationale = None
+                rejection_summary = None
+
+            v2_out = {
+                "artifact_version": "v2",
+                "run_id": art.get("run_id"),
+                "as_of": art.get("as_of"),
+                "market_regime": art.get("market_regime"),
+                "degraded": bool(art.get("degraded")),
+                "tradeable": bool(art.get("tradeable")),
+                "reason": art.get("reason"),
+                "risk_profile": art.get("risk_profile"),
+                "universe_name": art.get("universe_name"),
+                "symbols": art.get("symbols") or [],
+                "themes": art.get("themes") or [],
+                "items": items_out,
+                "fallback_used": bool(art.get("fallback_used", False)),
+                "run_gating": (lambda rg: ({
+                    "decision": rg.get("decision"),
+                    "reasons": rg.get("reasons"),
+                    "warnings": rg.get("warnings"),
+                } if isinstance(rg, dict) else None))(art.get("run_gating")),
+                "selection_rationale": selection_rationale,
+                "rejection_summary": rejection_summary,
+            }
+            top_syms: List[str] = []
+            try:
+                for it in (art.get("items") or [])[:3]:
+                    if isinstance(it, dict) and isinstance(it.get("symbol"), str):
+                        top_syms.append(str(it.get("symbol")))
+            except Exception:
+                pass
+            return {
+                "id": str(_id),
+                "artifact_version": "v2",
+                "run_id": v2_out.get("run_id"),
+                "as_of": v2_out.get("as_of"),
+                "source": "gated_v2",
+                "summary": {
+                    "total": len(v2_out.get("items") or []),
+                    "top_symbols": top_syms,
+                    "tradeable": v2_out.get("tradeable"),
+                    "market_regime": v2_out.get("market_regime"),
+                    "run_gating": v2_out.get("run_gating"),
+                    "reason": v2_out.get("reason"),
+                },
+                "v2": v2_out,
+            }
+    except Exception:
+        # fall through to legacy mapping
+        pass
     # Normalize to safe subset
     picks_in = payload.get("picks") or []
     picks_out: List[Dict[str, Any]] = []

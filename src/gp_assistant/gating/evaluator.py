@@ -11,27 +11,34 @@ from .contracts import (
     attach_run_gating,
 )
 from . import policies as P
+from ..validation.walkforward_stats import load_walkforward as _load_walkforward
+from ..validation.strategy_health import load_strategy_health as _load_strategy_health
 
 
 def _get_strategy_health(summary: Dict[str, Any], strategy: Optional[str]) -> Optional[str]:
     try:
         if not strategy:
             return None
-        sec = (summary.get("parts") or {}).get("strategy_health") or {}
-        st = sec.get(str(strategy)) or {}
-        return st.get("status")
+        # Prefer direct read to avoid stale cached summary
+        try:
+            direct = _load_strategy_health(str(strategy)) or {}
+            status = direct.get("status")
+        except Exception:
+            status = None
+        if not status:
+            sec = (summary.get("parts") or {}).get("strategy_health") or {}
+            st = sec.get(str(strategy)) or {}
+            status = st.get("status")
+        return status
     except Exception:
         return None
 
 
 def _has_walkforward(summary: Dict[str, Any], strategy: str) -> bool:
+    # Prefer direct read to avoid stale cache
     try:
-        sec = (summary.get("parts") or {}).get("walkforward") or {}
-        obj = sec.get(str(strategy))
-        if obj is None:
-            return False
-        # if an object exists but explicitly marks available False
-        return bool(obj.get("available", True))
+        obj = _load_walkforward(str(strategy)) or {}
+        return bool(obj.get("available", False))
     except Exception:
         return False
 
@@ -108,14 +115,10 @@ def evaluate_run_gating(artifact: Dict[str, Any], *, summary: Dict[str, Any]) ->
         s = it.get("strategy")
         if isinstance(s, str) and s:
             strategies.add(s)
-    # walkforward available ratio
+    # walkforward availability (prefer direct files)
     if strategies:
-        wf_missing = 0
-        for s in strategies:
-            if not _has_walkforward(summary, s):
-                wf_missing += 1
-        ratio = wf_missing / max(1, len(strategies))
-        if ratio > P.WALKFORWARD_MISSING_DEGRADE_RATIO:
+        wf_avail = [bool((_load_walkforward(s) or {}).get("available", False)) for s in strategies]
+        if all(not v for v in wf_avail):
             d["decision"] = DECISION_DEGRADED
             d["reasons"].append("walkforward_missing_majority")
             d["triggered_rules"].append("run.walkforward->degraded")
@@ -140,4 +143,3 @@ def apply_gating_to_artifact(artifact: Dict[str, Any], *, summary: Dict[str, Any
     run_dec = evaluate_run_gating(out, summary=summary)
     attach_run_gating(out, run_dec)
     return out
-

@@ -27,13 +27,28 @@ class LLMClient:
         self.timeout = cfg.request_timeout_sec
 
     @staticmethod
-    def build_payload(model: str, messages: List[Dict[str, Any]], temperature: float = 0.2, stream: bool = False) -> Dict[str, Any]:
-        return {
+    def build_payload(
+        model: str,
+        messages: List[Dict[str, Any]],
+        *,
+        temperature: float = 0.2,
+        stream: bool = False,
+        response_format: Optional[Dict[str, Any]] = None,
+        extra: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        payload: Dict[str, Any] = {
             "model": model,
             "messages": messages,
             "temperature": float(temperature),
             "stream": bool(stream),
         }
+        if response_format:
+            payload["response_format"] = response_format
+        if extra:
+            for k, v in extra.items():
+                if k not in payload and v is not None:
+                    payload[k] = v
+        return payload
 
     def available(self) -> Tuple[bool, str]:
         if not self.base_url:
@@ -42,13 +57,29 @@ class LLMClient:
             return False, "LLM_API_KEY 未配置"
         return True, "ok"
 
-    def chat(self, messages: List[Dict[str, Any]], temperature: float = 0.2, stream: bool = False) -> Dict[str, Any]:
+    def chat(
+        self,
+        messages: List[Dict[str, Any]],
+        *,
+        temperature: float = 0.2,
+        stream: bool = False,
+        json_mode: bool = False,
+        extra: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
         ok, reason = self.available()
         if not ok:
             raise RuntimeError(f"LLM 未就绪：{reason}")
 
         url = self.base_url.rstrip("/") + "/chat/completions"
-        payload = self.build_payload(self.model, messages, temperature=temperature, stream=stream)
+        response_format = {"type": "json_object"} if json_mode else None
+        payload = self.build_payload(
+            self.model,
+            messages,
+            temperature=temperature,
+            stream=stream,
+            response_format=response_format,
+            extra=extra,
+        )
         headers = {
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json",

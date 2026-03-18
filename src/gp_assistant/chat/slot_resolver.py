@@ -88,7 +88,7 @@ def resolve_targets(session_id: str, message: str) -> Dict[str, Any]:
         return {"kind": "none", "reason": "collection_but_empty"}
 
     # 4) pronouns -> focused
-    pronouns = ["这只", "这票", "刚才那只", "上一只", "那只", "这一个", "这个"]
+    pronouns = ["这只", "这票", "刚才那只", "上一只", "那只", "这一个", "这个", "它"]
     if any(k in msg for k in pronouns):
         focus = store.get_focus(session_id)
         if focus:
@@ -99,4 +99,3 @@ def resolve_targets(session_id: str, message: str) -> Dict[str, Any]:
         return {"kind": "none", "reason": "pronoun_but_no_context"}
 
     return {"kind": "none", "reason": "unresolved"}
-

@@ -96,7 +96,13 @@ export async function cleanupConversations(mode: 'all' | 'events_only' = 'all') 
 // ---- Phase 2.6: minimal V2 read-only client ----
 
 export async function getRecommendV2(params: { run_id?: string; as_of?: string } = {}) {
+  // internal/raw read; prefer getRecommendV2Gated for user-visible surfaces
   const { data } = await api.get<RecommendV2>('/recommend_v2', { params })
+  return data
+}
+
+export async function getRecommendV2Gated(params: { run_id?: string; as_of?: string } = {}) {
+  const { data } = await api.get<RecommendV2>('/recommend_v2/gated', { params })
   return data
 }
 

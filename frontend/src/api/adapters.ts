@@ -65,6 +65,44 @@ export function asThreadItem(x: unknown): ThreadItem | null {
 
 export function asRecommendationArtifact(x: unknown): RecommendationArtifact {
   const o = isRecord(x) ? x : {}
+  const diagnostics = isRecord(o.diagnostics) ? (o.diagnostics as Record<string, unknown>) : undefined
+  const meta = isRecord(o.meta) ? (o.meta as Record<string, unknown>) : undefined
+  // V2 card: adapt v2 artifact for picks, attach v2 for decision-chain UI
+  if (o.artifact_version === 'v2' && isRecord((o as any).v2)) {
+    const v2 = (o as any).v2 as unknown as import('./types').RecommendV2
+    const compat = adaptV2ToRecommendationArtifact(v2)
+    return {
+      id: asString(o.id, ''),
+      artifact_version: 'v2',
+      run_id: typeof (o as any).run_id === 'string' ? (o as any).run_id : (v2.run_id || null),
+      source: typeof (o as any).source === 'string' ? (o as any).source : 'gated_v2',
+      summary: isRecord((o as any).summary)
+        ? {
+            total: asNumber(((o as any).summary as any).total, 0),
+            top_symbols: arrOf(((o as any).summary as any).top_symbols, (s) => String(s)),
+            tradeable: typeof ((o as any).summary as any).tradeable === 'boolean' ? (((o as any).summary as any).tradeable as boolean) : undefined,
+            market_regime: typeof ((o as any).summary as any).market_regime === 'string' ? String(((o as any).summary as any).market_regime) : undefined,
+            reason: typeof ((o as any).summary as any).reason === 'string' ? String(((o as any).summary as any).reason) : undefined,
+            run_gating: isRecord(((o as any).summary as any).run_gating)
+              ? {
+                  decision: String((((o as any).summary as any).run_gating as any).decision) as any,
+                  reasons: arrOf((((o as any).summary as any).run_gating as any).reasons, (r) => String(r)),
+                  warnings: arrOf((((o as any).summary as any).run_gating as any).warnings, (r) => String(r)),
+                }
+              : undefined,
+          }
+        : undefined,
+      as_of: compat.as_of,
+      timezone: compat.timezone,
+      picks: compat.picks,
+      tradeable: compat.tradeable,
+      disclaimer: compat.disclaimer,
+      message: compat.message,
+      meta: compat.meta,
+      v2,
+    }
+  }
+  // Legacy card
   const picksIn = Array.isArray(o.picks) ? (o.picks as unknown[]) : []
   const picksOut = picksIn.map((p) => {
     const pr = isRecord(p) ? p : {}
@@ -106,8 +144,6 @@ export function asRecommendationArtifact(x: unknown): RecommendationArtifact {
     }
     return item
   })
-  const diagnostics = isRecord(o.diagnostics) ? (o.diagnostics as Record<string, unknown>) : undefined
-  const meta = isRecord(o.meta) ? (o.meta as Record<string, unknown>) : undefined
   return {
     id: asString(o.id, ''),
     as_of: o.as_of != null ? String(o.as_of) : null,

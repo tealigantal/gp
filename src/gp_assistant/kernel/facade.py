@@ -115,15 +115,7 @@ def get_validation_summary() -> Dict[str, Any]:
     Preferred path: read store/validation/latest_summary.json. If missing,
     synthesize an in-memory summary from available pieces.
     """
-    import json
-    from ..core.paths import store_dir
-    p = store_dir() / "validation" / "latest_summary.json"
-    if p.exists():
-        try:
-            return json.loads(p.read_text(encoding="utf-8"))
-        except Exception:
-            pass
-    # Graceful synthesize
+    # Always rebuild to ensure the freshest view for gating (avoid stale cache)
     return _build_validation_summary()
 
 

@@ -1,0 +1,62 @@
+{
+  "run_id": "6d492fb84a0b46ed83036f70ca610003",
+  "as_of": "2099-01-01",
+  "snapshot_id": null,
+  "market_regime": "C",
+  "degraded": true,
+  "tradeable": false,
+  "reason": "当前候选整体执行性不足，建议观望",
+  "risk_profile": null,
+  "universe_name": null,
+  "symbols": [
+    "sz000001"
+  ],
+  "themes": [
+    "半导体"
+  ],
+  "items": [
+    {
+      "pick_id": "2099-01-01:sz000001",
+      "symbol": "sz000001",
+      "name": null,
+      "strategy": null,
+      "strategy_label": null,
+      "thesis": null,
+      "price_ref": null,
+      "entry_zone": null,
+      "stop": 10.0,
+      "take_profit": [],
+      "reward_risk": null,
+      "execution_state": null,
+      "actionable": false,
+      "alpha_score": 0.0,
+      "execution_score": 0.2,
+      "reliability_score": 0.2,
+      "final_score": 0.13,
+      "confidence": 0.2,
+      "signal_age_days": null,
+      "liquidity_grade": null,
+      "volatility_grade": null,
+      "risk_flags": [],
+      "invalidation": [],
+      "invalidated_now": false,
+      "notes": null,
+      "evidence": {
+        "available": false,
+        "status": "pending_phase3",
+        "event_stats": {},
+        "walk_forward": {},
+        "paper_trade": {},
+        "strategy_health": {}
+      },
+      "_score_inputs": {
+        "degraded_input": false
+      }
+    }
+  ],
+  "artifact_version": "v2",
+  "fallback_used": false,
+  "errors": [
+    "item_0_take_profit_empty"
+  ]
+}

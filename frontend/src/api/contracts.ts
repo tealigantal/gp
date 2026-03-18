@@ -40,6 +40,12 @@ export type ThreadItem = TextItem | RecommendationItem | StatusItem
 
 export type RecommendationArtifact = {
   id: string
+  // V2-aware metadata (when available)
+  artifact_version?: 'v2'
+  run_id?: string | null
+  source?: string
+  summary?: { total: number; top_symbols: string[]; tradeable?: boolean; market_regime?: string; reason?: string; run_gating?: { decision: 'allow' | 'degraded' | 'blocked'; reasons?: string[]; warnings?: string[] } }
+  // legacy compatibility
   as_of: string | null
   timezone: string
   picks: Array<{
@@ -62,6 +68,8 @@ export type RecommendationArtifact = {
   message?: string | null
   meta?: { env_grade?: string }
   diagnostics?: { degraded?: boolean; degrade_reasons?: Array<{ reason_code: string; detail?: unknown }> }
+  // attached canonical v2 artifact for decision-chain UI (when artifact_version==='v2')
+  v2?: import('./types').RecommendV2
 }
 
 export type SearchHit = {
@@ -72,4 +80,3 @@ export type SearchHit = {
   highlights?: Array<{ start: number; length: number }>
   anchor: { conversation_id: string; seq: number }
 }
-

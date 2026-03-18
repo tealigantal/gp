@@ -142,7 +142,8 @@ def _write_outputs(as_of: str, payload: Dict[str, Any]) -> None:
         from .artifact_store import build_v2_dict_from_v1, persist_artifact_v2
 
         v2_fixed = build_v2_dict_from_v1(payload)
-        persist_artifact_v2(as_of, v2_fixed)
+        rid = str(v2_fixed.get("run_id") or as_of)
+        persist_artifact_v2(rid, v2_fixed)
     except Exception as e:  # noqa: BLE001
         try:
             logger.error(f"[V2_WRITE] failed as_of={as_of} err={type(e).__name__}:{e}")
@@ -1031,7 +1032,6 @@ def run(date: Optional[str] = None, topk: int = 3, universe: str = "auto", symbo
 
     _write_outputs(as_of, payload)
     return payload
-
 
 
 

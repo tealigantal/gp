@@ -18,6 +18,7 @@ Reading priority:
 
 from typing import Any, Dict, List, Optional
 import json
+import uuid
 
 from ..core.paths import store_dir
 from .contracts import build_v2_from_v1
@@ -167,6 +168,15 @@ def build_v2_dict_from_v1(payload: Dict[str, Any], *, risk_profile: Optional[str
         "artifact_version": "v2",
         "fallback_used": False,
     }
+    # Ensure a unique run_id not tied to as_of
+    try:
+        rid = str(out.get("run_id") or "")
+        # treat pure date-like IDs as insufficient; replace with uuid4
+        if (not rid) or rid.isdigit() or (len(rid) == 10 and rid[4] == '-' and rid[7] == '-'):
+            out["run_id"] = uuid.uuid4().hex
+    except Exception:
+        out["run_id"] = uuid.uuid4().hex
+
     _enrich_scores_and_gate(out)
     ok, errs, fixed = validate_pick_artifact_v2(out)
     if not ok:
@@ -199,7 +209,7 @@ def read_artifact_v2(run_id: Optional[str] = None, as_of: Optional[str] = None) 
     return out
 
 
-def persist_artifact_v2(as_of: str, v2_obj: Dict[str, Any]) -> None:
+def persist_artifact_v2(run_id: str, v2_obj: Dict[str, Any]) -> None:
     base = store_dir() / "recommend"
     base.mkdir(parents=True, exist_ok=True)
     # enrich scores/gating if necessary then validate and write
@@ -214,7 +224,7 @@ def persist_artifact_v2(as_of: str, v2_obj: Dict[str, Any]) -> None:
         fixed.setdefault("errors", errs)
     fixed.setdefault("artifact_version", "v2")
     fixed.setdefault("fallback_used", False)
-    (base / f"{as_of}_v2.json").write_text(json.dumps(fixed, ensure_ascii=False, indent=2), encoding="utf-8")
+    (base / f"{run_id}_v2.json").write_text(json.dumps(fixed, ensure_ascii=False, indent=2), encoding="utf-8")
     try:
         (base / "latest_v2.json").write_text(json.dumps(fixed, ensure_ascii=False, indent=2), encoding="utf-8")
     except Exception:

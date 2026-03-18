@@ -14,9 +14,31 @@ def detect_intent(text: str) -> Dict[str, Any]:
     """
     s = (text or "").strip()
     slots: dict[str, Any] = {}
+    # Pre-parse Chinese numerals for topk (e.g., “给我推荐一支/两只/三只/五只”)
+    try:
+        cn_map = {"一":1, "壹":1, "两":2, "俩":2, "二":2, "三":3, "叁":3, "五":5, "伍":5}
+        if ("推荐" in s) or ("荐股" in s):
+            if ("只" in s) or ("支" in s):
+                for k, v in cn_map.items():
+                    if k in s:
+                        slots["topk"] = v
+                        break
+    except Exception:
+        pass
 
-    # recommend keywords
-    if ("荐" in s) or ("latest" in s.lower()) or re.search(r"(荐股|买什么|推荐|建议|持仓|低吸|二买|服务荐股|服务推荐|最新推荐|今日推荐)", s):
+    # ask_no_trade_reason first (must not fall into recommend)
+    if re.search(
+        r"(为什么\s*空仓|为什么今天不操作|为什么不行|为什么建议观望|为什么当前建议空仓|为什么不给买|为什么不给买入|为什么没票|为什么只是观察|不建议买)",
+        s,
+    ):
+        return {"name": "ask_no_trade_reason", "slots": {}}
+
+    # ranking explanation before ask_nth/followups
+    if re.search(r"(为什么是第一只|为什么第一只排(前|第一)|第二只为什么不是第一只|第二只为什么)", s):
+        return {"name": "ranking_explain", "slots": {}}
+
+    # recommend keywords (do not match bare '建议')
+    if ("荐" in s) or ("latest" in s.lower()) or re.search(r"(荐股|买什么|推荐|持仓|低吸|二买|服务荐股|服务推荐|最新推荐|今日推荐)", s):
         m = re.search(r"(\d+)只|topk\s*=?\s*(\d+)", s, re.IGNORECASE)
         if m:
             topk = int(m.group(1) or m.group(2))
@@ -35,9 +57,11 @@ def detect_intent(text: str) -> Dict[str, Any]:
     if re.search(r"(哪个好|对比|比较|更强|更适合)", s):
         return {"name": "compare_symbols", "slots": {}}
 
-    # ask_no_trade_reason
-    if re.search(r"(为什么没票|为什么不给买入|为什么只是观察|不建议买)", s):
-        return {"name": "ask_no_trade_reason", "slots": {}}
+    # exit/sell decision
+    if re.search(r"(该不该卖|要不要卖|卖出|清仓|减仓|要不要减仓|拿还是走|继续拿还是走)", s):
+        return {"name": "exit_decision", "slots": {}}
+
+    # (moved earlier) ask_no_trade_reason handled above
 
     # ask for nth pick
     m2 = re.search(r"第\s*(\d+)\s*(只|个)", s)
@@ -56,7 +80,7 @@ def detect_intent(text: str) -> Dict[str, Any]:
         return {"name": "ask_nth", "slots": {"n": 3}}
 
     # follow-up: why / reasoning (symbol-specific)
-    if re.search(r"(为什么|理由|原因)", s) and not re.search(r"(不建议买|没票)", s):
+    if re.search(r"(为什么|理由|原因)", s) and not re.search(r"(不建议买|没票|空仓|观望|不操作)", s):
         return {"name": "followup_why", "slots": {}}
 
     # follow-up: trade points / SL/TP / support-resistance / timing

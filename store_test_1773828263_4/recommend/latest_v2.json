@@ -1,0 +1,16 @@
+{
+  "run_id": "f38cefe6b5794473a4f0d627c1ef1729",
+  "as_of": "2099-01-01",
+  "snapshot_id": null,
+  "market_regime": "C",
+  "degraded": true,
+  "tradeable": false,
+  "reason": "候选为空",
+  "risk_profile": null,
+  "universe_name": null,
+  "symbols": [],
+  "themes": [],
+  "items": [],
+  "artifact_version": "v2",
+  "fallback_used": false
+}

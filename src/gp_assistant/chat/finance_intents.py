@@ -9,6 +9,7 @@ Guarantees:
 """
 
 from typing import Any, Dict, List, Optional, Tuple
+import re
 
 import pandas as pd
 
@@ -297,3 +298,115 @@ def refresh_trade_plan(session_id: str, message: str) -> Dict[str, Any]:
         "picks": out.get("picks") or [],
         "degraded": (out.get("diagnostics") or {}).get("degraded"),
     }
+
+
+def exit_decision(session_id: str, message: str) -> Dict[str, Any]:
+    """Decide exit action deterministically based on structure data.
+
+    Output action in {HOLD, REDUCE, SELL, WATCH}.
+    Consider: invalidation, below key bands, RR deterioration after TP1, time-stop 1–3 days window.
+    """
+    tgt = resolve_targets(session_id, message)
+    symbol: Optional[str] = None
+    if tgt.get("kind") == "symbol":
+        symbol = str(tgt.get("symbol"))
+    else:
+        # inherit focus if available
+        focus = store.get_focus(session_id)
+        if focus:
+            symbol = str(focus)
+    if not symbol:
+        return {"ok": False, "message": "需要明确标的，可输入代码/名称或使用‘这只’/‘第几只’", "code": "NO_SYMBOL"}
+    # Gather minimal context
+    bands = _bands_from_last_pick(session_id, symbol)
+    close = _latest_close(symbol)
+    decision = "WATCH"
+    reasons: List[str] = []
+
+    # 1) Below key band => SELL
+    try:
+        s1 = float(bands.get("S1")) if bands and bands.get("S1") is not None else None  # type: ignore[arg-type]
+    except Exception:
+        s1 = None
+    if close is not None and s1 is not None and close < s1:
+        decision = "SELL"; reasons.append("跌破关键支撑S1")
+
+    # 2) Use pick details if active run available
+    try:
+        from ..kernel.facade import get_pick_detail as _pick_detail, get_gated_artifact_v2 as _get_art
+        st = store.get_state(session_id)
+        run_id = st.get("active_run_id")
+        it = None
+        art_as_of = None
+        if run_id:
+            det = _pick_detail(run_id, symbol)
+            if det.get("ok"):
+                it = (det.get("item") or {})
+            art = _get_art(run_id=run_id)
+            art_as_of = art.get("as_of")
+        # invalidation
+        inv_now = None
+        try:
+            inv_now = bool(it.get("invalidated_now")) if isinstance(it, dict) else None
+        except Exception:
+            inv_now = None
+        if inv_now:
+            decision = "SELL"; reasons.append("失效条件触发")
+        # execution state
+        try:
+            state = str(it.get("execution_state") or "") if isinstance(it, dict) else ""
+            if state == "below_support" and "SELL" not in decision:
+                decision = "SELL"; reasons.append("状态：跌破支撑")
+        except Exception:
+            pass
+        # TP1 reached + RR deteriorated
+        try:
+            tp = (it.get("take_profit") or []) if isinstance(it, dict) else []
+            rr = float(it.get("reward_risk")) if isinstance(it, dict) and it.get("reward_risk") is not None else None
+            if close is not None and isinstance(tp, list) and tp:
+                tp1 = float(tp[0]) if tp[0] is not None else None
+                if tp1 is not None and close >= tp1 and (rr is None or rr < 0.6):
+                    # prefer reduce first when profits likely taken
+                    if decision != "SELL":
+                        decision = "REDUCE"
+                        reasons.append("达成一目标且RR下降")
+        except Exception:
+            pass
+        # time-stop window (as_of older than 3 days)
+        try:
+            if art_as_of:
+                import datetime as _dt
+                y, m, d = [int(x) for x in str(art_as_of).replace('-', '')[:8].split('') if False]  # placeholder to satisfy linter
+        except Exception:
+            pass
+        try:
+            if art_as_of and isinstance(art_as_of, str):
+                s = art_as_of.replace('-', '')
+                if len(s) >= 8 and s[:8].isdigit():
+                    y = int(s[:4]); m = int(s[4:6]); d = int(s[6:8])
+                    from datetime import date as _date
+                    dt_asof = _date(y, m, d)
+                    today = _date.today()
+                    days = (today - dt_asof).days
+                    if days >= 3 and decision not in {"SELL", "REDUCE"}:
+                        decision = "SELL"
+                        reasons.append("超出1-3日窗口")
+        except Exception:
+            pass
+    except Exception:
+        pass
+
+    # 3) Default if actionable and no sell cues => HOLD
+    if decision == "WATCH":
+        # If we can infer actionable from last pick trade plan or bands proximity
+        try:
+            if close is not None and s1 is not None and 0 <= (close - s1) / max(close, 1e-6) <= _ACT_GAP:
+                decision = "HOLD"; reasons.append("仍在可执行带附近")
+        except Exception:
+            pass
+
+    # sanitize final
+    if decision not in {"HOLD", "REDUCE", "SELL", "WATCH"}:
+        decision = "WATCH"
+
+    return {"ok": True, "symbol": symbol, "decision": decision, "reasons": reasons}
