@@ -19,6 +19,10 @@ export type ChatResp = {
   run_id?: string
   symbols?: string[]
   fallback_used?: boolean
+  // Phase 2 additions
+  ui_items?: Array<Record<string, unknown>>
+  right_panel?: Record<string, unknown>
+  planner_trace?: Record<string, unknown>
 }
 
 export type RecommendReq = {

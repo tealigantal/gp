@@ -717,3 +717,289 @@ def handle_message(session_id: Optional[str], message: str, message_id: Optional
         "degrade_reason": degrade_reason,
         "followup_context": {"active_run_id": store.get_state(sid).get("active_run_id"), "active_symbols": store.get_state(sid).get("active_symbols")},
     }
+
+# ------------------------
+# New tri-phase orchestrator (planner -> executor -> renderer)
+# ------------------------
+
+from .intent_classifier import plan_message as _plan_message
+from .intent_schema import PlannerPlan as _PlannerPlan
+from .run_reuse import decide as _decide_run_reuse
+from .run_diff_service import diff_runs as _diff_runs
+
+
+def handle_message_v2(session_id: Optional[str], message: str, message_id: Optional[str] = None) -> Dict[str, Any]:
+    sid = store.ensure_session(session_id)
+    store.append_message(sid, "user", message, message_id=message_id)
+
+    # Planner
+    fallback_used = False
+    try:
+        plan: _PlannerPlan = _plan_message(sid, message)
+    except Exception:
+        # Fallback to rule plan
+        from .intent import detect_intent as _detect
+
+        plan = _detect_intent_from_rules(_detect, sid, message)
+        fallback_used = True
+    try:
+        store.update_state(sid, {"last_planner_output": plan.to_dict()})  # type: ignore[arg-type]
+    except Exception:
+        pass
+
+    # Run reuse
+    reuse_dec = _decide_run_reuse(sid, plan.to_dict(), message)
+
+    tool_trace: Dict[str, Any] = {"calls": [], "intent_debug": {"final_intent": plan.intent, "confidence": plan.confidence, "reason": plan.reason, "fallback_used": fallback_used}, "run_reuse": reuse_dec.__dict__}
+    agent_trace: List[Dict[str, Any]] = []
+    reply = ""
+    ui_items: List[Dict[str, Any]] = []
+    right_panel: Dict[str, Any] = {}
+
+    # Executor paths (deterministic)
+    try:
+        if plan.intent in {"recommend_topn", "refresh_recommend"}:
+            # recommend
+            if reuse_dec.action == "reuse" and reuse_dec.run_id:
+                gated = get_gated_artifact_v2(run_id=reuse_dec.run_id)
+                run_id = str(gated.get("run_id") or reuse_dec.run_id or "")
+            else:
+                res = recommend_run(topk=int(plan.topk or 3))
+                v2 = build_v2_dict_from_v1(res if isinstance(res, dict) else {})
+                run_id = str(v2.get("run_id") or v2.get("as_of") or "")
+                if run_id:
+                    try:
+                        persist_artifact_v2(run_id, v2)
+                    except Exception:
+                        pass
+                gated = get_gated_artifact_v2(run_id=run_id)
+                agent_trace.append({"step": "recommend", "status": "completed", "topk": int(plan.topk or 3)})
+
+            items = (gated.get("items") or []) if isinstance(gated, dict) else []
+            symbols: List[str] = [str((it or {}).get("symbol") or "") for it in items if isinstance(it, dict)]
+            st0 = store.get_state(sid)
+            store.update_state(sid, {"previous_run_id": st0.get("active_run_id"), "previous_active_symbols": list(st0.get("active_symbols") or [])})
+            store.set_active_run(sid, run_id, symbols)
+            try:
+                if plan.topk is not None:
+                    store.update_state(sid, {"last_topk": int(plan.topk)})
+            except Exception:
+                pass
+
+            # append event card
+            try:
+                top_syms = [s for s in symbols[:3] if s]
+                eid = f"card-reco-{datetime.utcnow().strftime('%Y%m%d%H%M%S%f')}"
+                event_store.append_event(
+                    sid,
+                    event_id=eid,
+                    type="message.created",
+                    data={
+                        "message_id": eid,
+                        "kind": "card",
+                        "content": "recommendation",
+                        "payload": {"type": "recommendation", "artifact_version": "v2", "run_id": run_id, "summary": {"total": len(symbols), "top_symbols": top_syms}},
+                    },
+                    actor_id="assistant",
+                )
+            except Exception:
+                pass
+
+            reply = "已生成推荐清单，请查看卡片。"
+            ui_items.append({"type": "recommendation", "data": {"run_id": run_id, "artifact_version": "v2"}, "run_id": run_id})
+            right_panel.update({
+                "active_run_id": run_id,
+                "previous_run_id": store.get_state(sid).get("previous_run_id"),
+                "focus_symbol": store.get_state(sid).get("focused_symbol") or store.get_state(sid).get("current_focus_symbol"),
+                "active_symbols": store.get_state(sid).get("active_symbols") or [],
+                "planner_intent": plan.intent,
+                "executor_path": "recommend",
+                "top_symbols": [str(s) for s in (store.get_state(sid).get("active_symbols") or [])][:3],
+            })
+            right_panel.update(reuse_dec.to_right_panel())
+
+        elif plan.intent == "explain_no_trade":
+            run_id = store.get_state(sid).get("active_run_id") or reuse_dec.run_id
+            if run_id:
+                art = get_gated_artifact_v2(run_id=run_id)
+                rg = (art.get("run_gating") or {})
+                card = {"type": "no_trade", "run_id": run_id, "reason": art.get("reason"), "run_gating": {"decision": rg.get("decision"), "reasons": rg.get("reasons"), "warnings": rg.get("warnings")}}
+                eid = f"card-notrade-{datetime.utcnow().strftime('%Y%m%d%H%M%S%f')}"
+                event_store.append_event(sid, event_id=eid, type="message.created", data={"message_id": eid, "kind": "card", "content": "no_trade", "payload": card}, actor_id="assistant")
+                ui_items.append({"type": "no_trade", "data": card, "run_id": run_id})
+                reply = "当前为空仓或不可交易，原因已在卡片中说明。"
+                right_panel.update({"active_run_id": run_id, "planner_intent": plan.intent, "executor_path": "explain_no_trade"})
+                right_panel.update(reuse_dec.to_right_panel())
+
+        elif plan.intent in {"analyze_symbol", "analyze_nth_pick"}:
+            run_id = store.get_state(sid).get("active_run_id") or reuse_dec.run_id
+            symbol = plan.symbol
+            if plan.intent == "analyze_nth_pick" and not symbol:
+                stx = store.get_state(sid)
+                syms0 = list(stx.get("active_symbols") or [])
+                if plan.ordinal and syms0 and len(syms0) >= int(plan.ordinal):
+                    symbol = str(syms0[int(plan.ordinal) - 1])
+            if run_id and symbol:
+                det = kernel_pick_detail(run_id, symbol)
+                card = {"type": "pick_detail", "run_id": run_id, "item": det.get("item"), "symbol": symbol}
+                eid = f"card-pick-{datetime.utcnow().strftime('%Y%m%d%H%M%S%f')}"
+                event_store.append_event(sid, event_id=eid, type="message.created", data={"message_id": eid, "kind": "card", "content": "pick_detail", "payload": card}, actor_id="assistant")
+                ui_items.append({"type": "pick_detail", "data": card, "focus_symbol": symbol, "run_id": run_id})
+                reply = f"已整理 {symbol} 的要点。"
+                store.set_focus(sid, symbol, reason="analyze_symbol")
+                right_panel.update({"active_run_id": run_id, "focus_symbol": symbol, "planner_intent": plan.intent, "executor_path": "pick_detail"})
+                right_panel.update(reuse_dec.to_right_panel())
+
+        elif plan.intent == "compare_symbols":
+            run_id = store.get_state(sid).get("active_run_id") or reuse_dec.run_id
+            syms = plan.compare_symbols or plan.symbols
+            if run_id and syms and len(syms) >= 2:
+                cmpres = kernel_compare_symbols(run_id, syms)
+                card = {"type": "compare", "run_id": run_id, "symbols": syms, "winner_symbol": cmpres.get("winner_symbol"), "items": cmpres.get("items")}
+                eid = f"card-compare-{datetime.utcnow().strftime('%Y%m%d%H%M%S%f')}"
+                event_store.append_event(sid, event_id=eid, type="message.created", data={"message_id": eid, "kind": "card", "content": "compare", "payload": card}, actor_id="assistant")
+                ui_items.append({"type": "compare", "data": card, "run_id": run_id})
+                reply = "对比结果已生成。"
+                right_panel.update({"active_run_id": run_id, "planner_intent": plan.intent, "executor_path": "compare"})
+                right_panel.update(reuse_dec.to_right_panel())
+
+        elif plan.intent == "exit_decision":
+            run_id = store.get_state(sid).get("active_run_id") or reuse_dec.run_id
+            symbol = plan.symbol or store.get_state(sid).get("focused_symbol") or store.get_state(sid).get("current_focus_symbol")
+            if run_id and symbol:
+                det = kernel_pick_detail(run_id, symbol)
+                item = det.get("item") or {}
+                gd = (item.get("gating_decision") or {}) if isinstance(item, dict) else {}
+                thesis = item.get("thesis") if isinstance(item, dict) else None
+                entry_zone = item.get("entry_zone") if isinstance(item, dict) else None
+                stop = item.get("stop") if isinstance(item, dict) else None
+                take = item.get("take_profit") if isinstance(item, dict) else None
+                rr = item.get("reward_risk") if isinstance(item, dict) else None
+                inval = item.get("invalidation") if isinstance(item, dict) else None
+                risk_flags = item.get("risk_flags") if isinstance(item, dict) else None
+                exec_state = item.get("execution_state") if isinstance(item, dict) else None
+
+                reasons: List[str] = []
+                triggers: List[str] = []
+                risk_notes: List[str] = []
+                action = "HOLD"
+                if (gd.get("decision") == "blocked"):
+                    action = "WATCH"; reasons.append("门控阻断")
+                if isinstance(inval, list) and len(inval) > 0:
+                    action = "SELL"; reasons.append("交易假设失效"); triggers.extend([str(x) for x in inval[:3]])
+                if exec_state in {"below_support", "breakdown_risk"}:
+                    action = "REDUCE" if action != "SELL" else action; reasons.append("跌破关键支撑/结构破坏")
+                try:
+                    if rr is not None and float(rr) < 1.0 and action not in {"SELL"}:
+                        action = "REDUCE"; reasons.append("RR 低于 1")
+                except Exception:
+                    pass
+                if not bool(item.get("actionable")) and exec_state in {"waiting_pullback", "observe_only"} and action not in {"SELL"}:
+                    action = "WATCH"; reasons.append("当前不可执行/等待回撤")
+                if stop is not None:
+                    triggers.append(f"跌破止损 {stop}")
+                if isinstance(take, list) and len(take) > 0:
+                    triggers.append(f"触达止盈 {take[0]}")
+                if isinstance(risk_flags, list) and risk_flags:
+                    risk_notes.extend([str(x) for x in risk_flags[:4]])
+
+                summary = (reasons[0] if reasons else (thesis or ""))
+                card = {
+                    "type": "exit_decision",
+                    "run_id": run_id,
+                    "symbol": symbol,
+                    "action": action,
+                    "summary_reason": summary,
+                    "primary_reasons": reasons[:4],
+                    "trigger_conditions": triggers[:4],
+                    "risk_notes": risk_notes[:4],
+                    "supports_new_entry": bool(item.get("actionable")),
+                    "source_fields": [k for k in ["execution_state", "gating_decision", "reward_risk", "invalidation", "stop", "take_profit", "entry_zone"] if k in item],
+                }
+                eid = f"card-exit-{datetime.utcnow().strftime('%Y%m%d%H%M%S%f')}"
+                event_store.append_event(sid, event_id=eid, type="message.created", data={"message_id": eid, "kind": "card", "content": "exit_decision", "payload": card}, actor_id="assistant")
+                ui_items.append({"type": "exit_decision", "data": card, "focus_symbol": symbol, "run_id": run_id})
+                reply = f"关于 {symbol} 的持仓建议：{card['action']}。"
+                right_panel.update({"active_run_id": run_id, "focus_symbol": symbol, "planner_intent": plan.intent, "executor_path": "exit_decision"})
+                right_panel.update(reuse_dec.to_right_panel())
+                tool_trace.get("intent_debug", {}).update({"final_symbol": symbol})
+
+        elif plan.intent == "explain_run_change":
+            stx = store.get_state(sid)
+            cur_run = stx.get("active_run_id")
+            prev_run = stx.get("previous_run_id")
+            d = _diff_runs(cur_run, prev_run)
+            card = {"type": "run_change", "current_run_id": cur_run, "previous_run_id": prev_run, **d}
+            eid = f"card-runchg-{datetime.utcnow().strftime('%Y%m%d%H%M%S%f')}"
+            event_store.append_event(sid, event_id=eid, type="message.created", data={"message_id": eid, "kind": "card", "content": "run_change", "payload": card}, actor_id="assistant")
+            ui_items.append({"type": "run_change", "data": card, "run_id": cur_run})
+            reply = "已对比本轮与上一轮的变化。"
+            right_panel.update({"active_run_id": cur_run, "previous_run_id": prev_run, "planner_intent": plan.intent, "executor_path": "run_change"})
+            right_panel.update(reuse_dec.to_right_panel())
+
+        else:
+            # General chat renderer (LLM for text only)
+            try:
+                hist = store.load_history(sid, limit=12)
+                msgs = _llm_messages_for_general(hist)
+                client = LLMClient()
+                resp = client.chat(msgs, temperature=0.3, json_mode=False)
+                content = ((resp.get("choices", [{}])[0].get("message", {}) or {}).get("content") if isinstance(resp, dict) else None)
+                reply = str(content or "好的。")
+            except Exception:
+                reply = "收到。"
+            ui_items.append({"type": "text", "data": {"text": reply}})
+    except Exception as e:  # noqa: BLE001
+        reply = f"[degraded] {e}"
+
+    # Right panel enrich
+    try:
+        stf = store.get_state(sid)
+        right_panel.setdefault("active_run_id", stf.get("active_run_id"))
+        right_panel.setdefault("previous_run_id", stf.get("previous_run_id"))
+        right_panel.setdefault("focus_symbol", stf.get("focused_symbol") or stf.get("current_focus_symbol"))
+        right_panel.setdefault("active_symbols", stf.get("active_symbols") or [])
+        right_panel.setdefault("planner_intent", plan.intent)
+    except Exception:
+        pass
+
+    # Persist a status card with right_panel/planner/ui snapshot for thread replay
+    try:
+        eid_status = f"card-status-{datetime.utcnow().strftime('%Y%m%d%H%M%S%f')}"
+        event_store.append_event(
+            sid,
+            event_id=eid_status,
+            type="message.created",
+            data={
+                "message_id": eid_status,
+                "kind": "card",
+                "content": "status",
+                "payload": {"type": "status", "message": reply, "right_panel": right_panel, "planner_trace": plan.to_dict(), "ui_items": ui_items},
+            },
+            actor_id="assistant",
+        )
+    except Exception:
+        pass
+    # Do not append a separate assistant text message; status card carries the text for thread replay
+    assistant_mid = None
+    return {
+        "session_id": sid,
+        "reply": reply,
+        "tool_trace": tool_trace,
+        "assistant_message_id": assistant_mid,
+        "agent_trace": agent_trace,
+        "resolved_symbol": None,
+        "degraded": False,
+        "degrade_reason": None,
+        "followup_context": store.get_state(sid),
+        # New UI protocol
+        "ui_items": ui_items,
+        "right_panel": right_panel,
+        "planner_trace": plan.to_dict(),
+        "run_id": right_panel.get("active_run_id"),
+        "symbols": right_panel.get("active_symbols") or [],
+        "fallback_used": bool(fallback_used),
+    }
+
+# Replace legacy entry with v2
+handle_message = handle_message_v2

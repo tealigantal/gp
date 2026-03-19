@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Badge, Button, Card, List, Space, Typography, Popconfirm, message } from 'antd'
 import dayjs from 'dayjs'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { deleteConversation, cleanupConversations, getConversationSummaries } from '../api/client'
 import { asConversationSummary } from '../api/adapters'
 import type { ConversationSummary } from '../api/contracts'
@@ -13,6 +13,9 @@ export default function Conversations() {
   const [items, setItems] = useState<Item[]>([])
   const [loading, setLoading] = useState(false)
   const nav = useNavigate()
+  const loc = useLocation()
+  const params = new URLSearchParams(loc.search)
+  const currentCid = params.get('cid') || null
 
   async function load() {
     setLoading(true)
@@ -67,6 +70,18 @@ export default function Conversations() {
       await deleteConversation(cid)
       message.success('已删除会话')
       await load()
+      // If deleting current conversation, switch to latest or create new
+      if (currentCid && currentCid === cid) {
+        if (items.length > 0) {
+          const next = items[0]
+          persistSessionId(next.id)
+          nav(`/chat?cid=${encodeURIComponent(next.id)}`)
+        } else {
+          const id = newSid()
+          persistSessionId(id)
+          nav(`/chat?cid=${encodeURIComponent(id)}`)
+        }
+      }
     } catch (e: unknown) {
       const err = e as { message?: string }
       message.error(err?.message || '删除失败')
@@ -148,4 +163,3 @@ export default function Conversations() {
     </Card>
   )
 }
-

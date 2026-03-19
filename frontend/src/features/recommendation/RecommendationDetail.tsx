@@ -1,7 +1,7 @@
 import { Card, Collapse, List, Space, Tag, Typography } from 'antd'
 import type { RecommendationArtifact } from '../../api/contracts'
 
-export default function RecommendationDetail({ artifact, onShowKline, onAsk }: { artifact: RecommendationArtifact; onShowKline?: (symbol: string) => void; onAsk?: (text: string) => void }) {
+export default function RecommendationDetail({ artifact, onShowKline, onAsk, onFocus }: { artifact: RecommendationArtifact; onShowKline?: (symbol: string) => void; onAsk?: (text: string) => void; onFocus?: (symbol: string) => void }) {
   // V2 decision-chain preferred view
   if (artifact.artifact_version === 'v2' && artifact.v2) {
     const art = artifact.v2
@@ -57,7 +57,7 @@ export default function RecommendationDetail({ artifact, onShowKline, onAsk }: {
               <Space direction="vertical" size={2} style={{ width: '100%' }}>
                 <Space style={{ justifyContent: 'space-between', width: '100%' }}>
                   <Typography.Text strong>
-                    {String((it as any).symbol)}{(it as any).name ? ` · ${(it as any).name}` : ''}
+                    <a onClick={() => onFocus?.(String((it as any).symbol))}>{String((it as any).symbol)}</a>{(it as any).name ? ` · ${(it as any).name}` : ''}
                   </Typography.Text>
                   {(it as any).strategy && <Tag color="geekblue">{String((it as any).strategy)}</Tag>}
                   {(it as any).gating_decision?.decision && <Tag color={(it as any).gating_decision.decision === 'allow' ? 'green' : ((it as any).gating_decision.decision === 'degraded' ? 'orange' : 'red')}>{String((it as any).gating_decision.decision).toUpperCase()}</Tag>}
@@ -100,9 +100,9 @@ export default function RecommendationDetail({ artifact, onShowKline, onAsk }: {
           <List.Item key={it.symbol} actions={[
             <a key="k" onClick={() => onShowKline?.(it.symbol)}>查看K线</a>
           ]}>
-            <Space direction="vertical" size={2} style={{ width: '100%' }}>
+              <Space direction="vertical" size={2} style={{ width: '100%' }}>
               <Space style={{ justifyContent: 'space-between', width: '100%' }}>
-                <Typography.Text strong>{it.symbol}{it.name ? ` · ${it.name}` : ''}</Typography.Text>
+                <Typography.Text strong><a onClick={() => onFocus?.(String(it.symbol))}>{it.symbol}</a>{it.name ? ` · ${it.name}` : ''}</Typography.Text>
                 {it.theme && <Tag color="geekblue">{it.theme}</Tag>}
               </Space>
               {it.champion?.strategy && (

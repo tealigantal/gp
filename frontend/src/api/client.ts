@@ -22,6 +22,11 @@ export async function chat(body: ChatReq) {
   return data
 }
 
+export async function setChatFocus(body: { session_id?: string | null; focus_symbol: string }) {
+  const { data } = await api.post<{ ok: boolean; session_id: string; focus_symbol: string; state: Record<string, unknown> }>('/chat/focus', body)
+  return data
+}
+
 export async function recommend(body: RecommendReq) {
   const { data } = await api.post<RecommendResp>('/recommend', body)
   return data

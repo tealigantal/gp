@@ -5,7 +5,7 @@ export type ConversationSummary = {
   title: string
   last_seq: number
   last_item_preview: string
-  last_item_kind: 'text' | 'recommendation' | 'status'
+  last_item_kind: 'text' | 'recommendation' | 'status' | 'no_trade' | 'pick_detail' | 'compare' | 'exit_decision' | 'run_change'
   last_item_ts: string | null
   unread_count: number
   updated_at: string | null
@@ -36,7 +36,21 @@ export type StatusItem = ThreadBase & {
   message?: string
 }
 
-export type ThreadItem = TextItem | RecommendationItem | StatusItem
+export type NoTradeItem = ThreadBase & { kind: 'no_trade' }
+export type PickDetailItem = ThreadBase & { kind: 'pick_detail'; artifact_id: string }
+export type CompareItem = ThreadBase & { kind: 'compare'; artifact_id: string }
+export type ExitDecisionItem = ThreadBase & { kind: 'exit_decision'; artifact_id: string }
+export type RunChangeItem = ThreadBase & { kind: 'run_change'; artifact_id: string }
+
+export type ThreadItem =
+  | TextItem
+  | RecommendationItem
+  | StatusItem
+  | NoTradeItem
+  | PickDetailItem
+  | CompareItem
+  | ExitDecisionItem
+  | RunChangeItem
 
 export type RecommendationArtifact = {
   id: string

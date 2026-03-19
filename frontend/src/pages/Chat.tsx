@@ -5,16 +5,22 @@ import MessageBubble from '../components/MessageBubble'
 import RecommendationDetail from '../features/recommendation/RecommendationDetail'
 import WorkbenchLayout from '../components/WorkbenchLayout'
 import ToolsPanel from '../components/ToolsPanel'
+import RightContextPanel from '../features/chat/RightContextPanel'
 import Conversations from './Conversations'
 import KlineInspector from '../features/artifacts/KlineInspector'
 import { setSessionId as persistSessionId } from '../utils/session'
 import { useConversationThread } from '../features/thread/useConversationThread'
 import { useSendMessage } from '../features/thread/useSendMessage'
-import { chat as chatApi, getRecommendationArtifact } from '../api/client'
+import { chat as chatApi, getRecommendationArtifact, setChatFocus } from '../api/client'
 import { asRecommendationArtifact } from '../api/adapters'
 import { useSelectedArtifact } from '../features/artifacts/useSelectedArtifact'
 import { getOrCreateSessionId } from '../utils/session'
 import type { ThreadItem, RecommendationArtifact } from '../api/contracts'
+import NoTradeCard from '../features/chat/cards/NoTradeCard'
+import PickDetailCard from '../features/chat/cards/PickDetailCard'
+import CompareCard from '../features/chat/cards/CompareCard'
+import ExitDecisionCard from '../features/chat/cards/ExitDecisionCard'
+import RunChangeCard from '../features/chat/cards/RunChangeCard'
 
 export default function Chat() {
   const nav = useNavigate()
@@ -22,6 +28,7 @@ export default function Chat() {
   const [sessionId, setSessionId] = useState<string | null>(null)
   const [input, setInput] = useState('')
   const [pendingTexts, setPendingTexts] = useState<string[]>([])
+  const [rightPanel, setRightPanel] = useState<Record<string, unknown> | null>(null)
   const listRef = useRef<HTMLDivElement>(null)
   const [atBottom, setAtBottom] = useState(true)
   const [hasNew, setHasNew] = useState(false)
@@ -59,6 +66,28 @@ export default function Chat() {
 
   // K线独立 Inspector 后续接入；不再写入消息流。
 
+  // Restore right panel from latest assistant status/card payload
+  useEffect(() => {
+    for (let i = items.length - 1; i >= 0; i--) {
+      const it: any = items[i]
+      const p = it?.payload
+      if (p && typeof p === 'object' && p.right_panel) {
+        setRightPanel(p.right_panel as Record<string, unknown>)
+        break
+      }
+    }
+  }, [items])
+
+  async function focusSymbol(sym: string) {
+    const s = (sym || '').trim()
+    if (!s) return
+    const sid = sessionId || getOrCreateSessionId()
+    try {
+      await setChatFocus({ session_id: sid, focus_symbol: s })
+      setRightPanel((prev) => ({ ...(prev || {}), focus_symbol: s }))
+    } catch { /* ignore */ }
+  }
+
   async function handleSubmit(raw: string) {
     const text = raw.trim()
     if (!text) return
@@ -76,6 +105,7 @@ export default function Chat() {
             nav(`/chat?cid=${encodeURIComponent(cid)}`)
           }
           setPendingTexts((prev) => prev.slice(1))
+          try { setRightPanel((resp as any)?.right_panel || null) } catch {}
           // 拉取新项
           setTimeout(() => { loadNewer().catch(() => undefined) }, 100)
         },
@@ -96,8 +126,9 @@ export default function Chat() {
     sendMutation.mutate(
       { session_id: sessionId, message: t },
       {
-        onSuccess: () => {
+        onSuccess: (resp) => {
           setPendingTexts((prev) => prev.slice(1))
+          try { setRightPanel((resp as any)?.right_panel || null) } catch {}
           setTimeout(() => { loadNewer().catch(() => undefined) }, 80)
         },
         onError: () => {
@@ -127,7 +158,7 @@ export default function Chat() {
         {(items.length === 0 && pendingTexts.length === 0) && <Typography.Text type="secondary">示例：给我推荐3只低估值</Typography.Text>}
         <List dataSource={items} renderItem={(it: ThreadItem) => (
           <List.Item key={`${it.seq}`} data-seq={it.seq} style={{ display: 'block', border: 'none', padding: 0, background: (highlightSeq && it.seq === highlightSeq) ? 'rgba(255, 247, 173, 0.5)' : undefined }}>
-            <ThreadItemRenderer item={it} onAsk={sendFollowup} />
+            <ThreadItemRenderer item={it} onAsk={sendFollowup} onFocus={(s) => focusSymbol(s)} />
           </List.Item>
         )} />
         {pendingTexts.map((t, i) => (
@@ -184,46 +215,8 @@ export default function Chat() {
 
   const right = (
     <div style={{ height: '100%', overflow: 'auto', display: 'flex', flexDirection: 'column', gap: 12 }}>
-      <Card size="small" title="Decision Snapshot">
-        {snapshot && snapshot.v2 ? (
-          <div>
-            <div>run_id: {snapshot.v2.run_id || '-'}</div>
-            <div>as_of: {snapshot.v2.as_of || '-'}</div>
-            <div>tradeable: {String(!!snapshot.v2.tradeable)}</div>
-            {snapshot.v2.run_gating && <div>run_gating: {String((snapshot.v2 as any).run_gating.decision)}</div>}
-            {!snapshot.v2.tradeable && snapshot.v2.reason && <div>reason: {snapshot.v2.reason}</div>}
-            {Array.isArray((snapshot.v2 as any).items) && (snapshot.v2 as any).items.length > 0 && (
-              <div style={{ marginTop: 4 }}>top symbols: {(snapshot.v2 as any).items.slice(0,3).map((it: any) => String(it.symbol)).join(', ')}</div>
-            )}
-            {Array.isArray((snapshot.v2 as any).themes) && (snapshot.v2 as any).themes.length > 0 && (
-              <div style={{ marginTop: 4 }}>themes: {(snapshot.v2 as any).themes.slice(0,6).map((t: any) => String(t)).join(', ')}</div>
-            )}
-            <div style={{ marginTop: 8 }}>
-              {snapshot.v2.run_id && (
-                <Space size={8}>
-                  <a onClick={() => {
-                    const q = new URLSearchParams(); q.set('run_id', String(snapshot.v2!.run_id));
-                    if (Array.isArray((snapshot.v2 as any).items) && (snapshot.v2 as any).items.length >= 2) {
-                      const pair = (snapshot.v2 as any).items.slice(0,2).map((it:any)=>String(it.symbol))
-                      q.set('symbols', pair.join(','))
-                    }
-                    window.location.assign(`/compare?${q.toString()}`)
-                  }}>对比页</a>
-                  <a onClick={() => { const q=new URLSearchParams(); q.set('run_id', String(snapshot.v2!.run_id)); window.location.assign(`/sim?${q.toString()}`) }}>研究台</a>
-                </Space>
-              )}
-            </div>
-          </div>
-        ) : (
-          <Typography.Text type="secondary">暂无</Typography.Text>
-        )}
-      </Card>
+      <RightContextPanel panel={rightPanel} />
       <KlineInspector />
-      <ToolsPanel
-        conversationId={sessionId}
-        onEnsureConversation={(cid) => { setSessionId(cid); persistSessionId(cid) }}
-        onRefresh={() => { /* no-op for new model; polling handles newer items */ }}
-      />
     </div>
   )
 
@@ -238,7 +231,7 @@ export default function Chat() {
   )
 }
 
-function ThreadItemRenderer({ item, onAsk }: { item: ThreadItem; onAsk?: (text: string) => void }) {
+function ThreadItemRenderer({ item, onAsk, onFocus }: { item: ThreadItem; onAsk?: (text: string) => void; onFocus?: (symbol: string) => void }) {
   if (item.kind === 'text') {
     return <MessageBubble role={item.role === 'system' ? 'assistant' : item.role} content={item.content} />
   }
@@ -246,12 +239,29 @@ function ThreadItemRenderer({ item, onAsk }: { item: ThreadItem; onAsk?: (text: 
     return <MessageBubble role="assistant" content={item.message || ''} />
   }
   if (item.kind === 'recommendation') {
-    return <RecommendationItemView artifactId={item.artifact_id} onAsk={onAsk} />
+    return <RecommendationItemView artifactId={item.artifact_id} onAsk={onAsk} onFocus={(s) => onFocus?.(s)} />
+  }
+  if (item.kind === 'no_trade') {
+    // Minimal: rely on preview; server may include decision later
+    return <NoTradeCard decision={(item as any).decision} />
+  }
+  if (item.kind === 'pick_detail') {
+    return <PickDetailCard symbol={(item as any).symbol} item={(item as any).payload?.item} onFocus={(s) => onFocus?.(s)} />
+  }
+  if (item.kind === 'compare') {
+    return <CompareCard symbols={(item as any).symbols} winner_symbol={(item as any).winner_symbol} onFocus={(s) => onFocus?.(s)} />
+  }
+  if (item.kind === 'exit_decision') {
+    const p: any = (item as any).payload || {}
+    return <ExitDecisionCard symbol={(item as any).symbol} decision={(item as any).decision} summary_reason={p.summary_reason} primary_reasons={p.primary_reasons} trigger_conditions={p.trigger_conditions} risk_notes={p.risk_notes} onFocus={(s) => onFocus?.(s)} />
+  }
+  if (item.kind === 'run_change') {
+    return <RunChangeCard summary_reason={(item as any).summary_reason} payload={(item as any).payload} onFocus={(s) => onFocus?.(s)} />
   }
   return null
 }
 
-function RecommendationItemView({ artifactId, onAsk }: { artifactId: string; onAsk?: (text: string) => void }) {
+function RecommendationItemView({ artifactId, onAsk, onFocus }: { artifactId: string; onAsk?: (text: string) => void; onFocus?: (symbol: string) => void }) {
   const [data, setData] = useState<RecommendationArtifact | null>(null)
   const { openKline } = useSelectedArtifact()
   useEffect(() => {
@@ -269,6 +279,7 @@ function RecommendationItemView({ artifactId, onAsk }: { artifactId: string; onA
         const sid = getOrCreateSessionId()
         try { await chatApi({ session_id: sid, message: text }) } catch (e) { /* ignore */ }
       })}
+      onFocus={onFocus}
       onShowKline={(sym) => {
         const p = data.picks.find((x) => x.symbol === sym)
         const overlay = p?.trade_plan ? { bands: p.trade_plan.bands, chip: p.chip } : { chip: p?.chip }

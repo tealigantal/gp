@@ -204,6 +204,10 @@ _STATE_DEFAULTS = {
     "last_intent": None,              # 最近解析的意图
     "last_message_type": None,        # 最近一次用户消息的类型（text/status等）
     "last_refresh_at": None,          # 最近一次refresh时间
+    # Phase 2: run reuse + planner trace
+    "previous_run_id": None,
+    "previous_active_symbols": [],
+    "last_planner_output": None,
 }
 
 
@@ -338,13 +342,19 @@ def set_last_recommend_and_symbols(session_id: str, obj: Dict[str, Any]) -> None
                     syms.append(s)
     except Exception:
         pass
+    # Migrate previous context then set active
+    st0 = get_state(session_id)
+    prev_run = st0.get("active_run_id")
+    prev_syms = st0.get("active_symbols") or []
+    update_state(session_id, {"previous_run_id": prev_run, "previous_active_symbols": list(prev_syms or [])})
     update_state(
         session_id,
         {
             "last_recommend_symbols": syms,
             "active_symbols": syms,
             "last_as_of": (obj or {}).get("as_of"),
-            "active_run_id": (obj or {}).get("as_of") or (obj or {}).get("run_id"),
+            # Fix: prefer run_id first, fallback to as_of
+            "active_run_id": (obj or {}).get("run_id") or (obj or {}).get("as_of"),
         },
     )
 

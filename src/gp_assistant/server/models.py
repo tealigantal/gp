@@ -28,6 +28,22 @@ class ChatResp(BaseModel):
     symbols: Optional[List[str]] = None
     fallback_used: Optional[bool] = None
     summary: Optional[Dict[str, Any]] = None
+    # Phase 2: unified UI protocol
+    ui_items: Optional[List[Dict[str, Any]]] = None
+    right_panel: Optional[Dict[str, Any]] = None
+    planner_trace: Optional[Dict[str, Any]] = None
+
+
+# Focus update
+class FocusReq(BaseModel):
+    session_id: Optional[str] = None
+    focus_symbol: str
+
+class FocusResp(BaseModel):
+    ok: bool
+    session_id: str
+    focus_symbol: str
+    state: Dict[str, Any] = Field(default_factory=dict)
 
 
 class RecommendReq(BaseModel):

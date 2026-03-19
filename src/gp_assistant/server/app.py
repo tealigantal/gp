@@ -43,6 +43,8 @@ from ..kernel.facade import (
 from .models import (
     ChatReq,
     ChatResp,
+    FocusReq,
+    FocusResp,
     EventOut,
     HealthResp,
     OHLCVBar,
@@ -111,10 +113,16 @@ def _handle_chat(req: ChatReq) -> ChatResp:
         degraded=data.get("degraded"),
         degrade_reason=data.get("degrade_reason"),
         followup_context=ctx,
-        run_id=ctx.get("active_run_id"),
-        symbols=(ctx.get("active_symbols") if isinstance(ctx.get("active_symbols"), list) else None),
-        fallback_used=bool(data.get("degraded") is True),
+        run_id=data.get("run_id") or ctx.get("active_run_id"),
+        symbols=(data.get("symbols") if isinstance(data.get("symbols"), list) else (ctx.get("active_symbols") if isinstance(ctx.get("active_symbols"), list) else None)),
+        fallback_used=bool(data.get("fallback_used") is True),
+        ui_items=(data.get("ui_items") if isinstance(data.get("ui_items"), list) else None),
+        right_panel=(data.get("right_panel") if isinstance(data.get("right_panel"), dict) else None),
+        planner_trace=(data.get("planner_trace") if isinstance(data.get("planner_trace"), dict) else None),
     )
+
+
+# moved below after router creation
 
 
 def _handle_recommend(req: RecommendReq) -> Dict[str, Any]:
@@ -459,6 +467,14 @@ def _handle_live_file(date: str, name: str) -> Dict[str, Any] | list[Dict[str, A
 api = APIRouter(prefix="/api")
 
 
+@api.post("/chat/focus", response_model=FocusResp)
+def api_post_chat_focus(req: FocusReq) -> Dict[str, Any]:
+    from ..chat import session_store as store
+    sid = store.ensure_session(req.session_id)
+    st = store.set_focus(sid, req.focus_symbol, reason="api_chat_focus")
+    return {"ok": True, "session_id": sid, "focus_symbol": req.focus_symbol, "state": st}
+
+
 @api.post("/chat", response_model=ChatResp)
 def api_post_chat(req: ChatReq) -> ChatResp:
     try:
@@ -749,6 +765,25 @@ def _map_kind_and_preview(kind: str, content: Optional[str], payload: Optional[D
         if ptype == "status":
             msg = str((payload or {}).get("message") or (payload or {}).get("content") or "状态更新")
             return "status", msg
+        if ptype == "no_trade":
+            return "no_trade", "空仓原因"
+        if ptype == "pick_detail":
+            sym = str((payload or {}).get("symbol") or "")
+            return "pick_detail", (f"研究 {sym}" if sym else "标的研究")
+        if ptype == "compare":
+            syms = (payload or {}).get("symbols") or []
+            pv = "对比"
+            try:
+                if isinstance(syms, list) and len(syms) >= 2:
+                    pv = f"对比 {syms[0]} vs {syms[1]}"
+            except Exception:
+                pass
+            return "compare", pv
+        if ptype == "exit_decision":
+            sym = str((payload or {}).get("symbol") or "")
+            return "exit_decision", (f"卖出判断 {sym}" if sym else "卖出判断")
+        if ptype == "run_change":
+            return "run_change", "推荐变化说明"
         if ptype == "kline":
             # Do not treat K线为主要线程项；预览保守返回空
             return "status", ""
@@ -808,8 +843,8 @@ def _unread_count(cid: str, last_read_seq: int) -> int:
     for seq, kind, content, payload_json in rows:
         payload = _row_payload_to_obj(payload_json)
         kind2, preview = _map_kind_and_preview(kind or "", content, payload)
-        # Count as unread when it's a visible thread item (text/recommendation/status)
-        if kind2 in {"text", "recommendation", "status"}:
+        # Count as unread when it's a visible thread item
+        if kind2 in {"text", "recommendation", "status", "no_trade", "pick_detail", "compare", "exit_decision", "run_change"}:
             # Skip empty preview-only status (e.g., kline)
             if kind2 == "status" and preview == "":
                 continue
@@ -896,6 +931,7 @@ def _map_row_to_thread_item(row: tuple, cid: str) -> Optional[Dict[str, Any]]:
             "kind": "recommendation",
             "artifact_id": str(mid),
             "summary": {"total": len(picks) if isinstance(picks, list) else 0, "top_symbols": top_symbols},
+            "payload": payload,
         }
     if k2 == "status":
         msg = None
@@ -905,7 +941,43 @@ def _map_row_to_thread_item(row: tuple, cid: str) -> Optional[Dict[str, Any]]:
             code = (payload or {}).get("code")
         except Exception:
             pass
-        return {**base, "kind": "status", "message": (str(msg) if msg is not None else None), "code": (str(code) if code is not None else None)}
+        return {**base, "kind": "status", "message": (str(msg) if msg is not None else None), "code": (str(code) if code is not None else None), "payload": payload}
+    if k2 == "no_trade":
+        try:
+            rg = (payload or {}).get("run_gating") or {}
+            decision = rg.get("decision")
+            return {**base, "kind": "no_trade", "decision": decision, "payload": payload}
+        except Exception:
+            return {**base, "kind": "no_trade", "payload": payload}
+    if k2 == "pick_detail":
+        sym = None
+        try:
+            sym = (payload or {}).get("symbol")
+        except Exception:
+            sym = None
+        return {**base, "kind": "pick_detail", "artifact_id": str(mid), "symbol": (str(sym) if sym is not None else None), "payload": payload}
+    if k2 == "compare":
+        syms = None; winner = None
+        try:
+            syms = (payload or {}).get("symbols")
+            winner = (payload or {}).get("winner_symbol")
+        except Exception:
+            pass
+        return {**base, "kind": "compare", "artifact_id": str(mid), "symbols": syms, "winner_symbol": winner, "payload": payload}
+    if k2 == "exit_decision":
+        sym = None; decision = None
+        try:
+            sym = (payload or {}).get("symbol"); decision = (payload or {}).get("action") or (payload or {}).get("decision")
+        except Exception:
+            pass
+        return {**base, "kind": "exit_decision", "artifact_id": str(mid), "symbol": (str(sym) if sym is not None else None), "decision": (str(decision) if decision is not None else None), "payload": payload}
+    if k2 == "run_change":
+        summary_reason = None
+        try:
+            summary_reason = (payload or {}).get("summary_reason")
+        except Exception:
+            pass
+        return {**base, "kind": "run_change", "artifact_id": str(mid), "summary_reason": (str(summary_reason) if summary_reason is not None else None), "payload": payload}
     return None
 
 
