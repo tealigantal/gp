@@ -53,9 +53,9 @@ services:
       GP_TRADEABLE_MIN_UNIVERSE: ${GP_TRADEABLE_MIN_UNIVERSE:-50}
       GP_TRADEABLE_MIN_CANDIDATES: ${GP_TRADEABLE_MIN_CANDIDATES:-20}
 
-      # ---- LLM (optional) ----
-      # Default to local llm-proxy; override in .env to use provider directly
-      LLM_BASE_URL: ${LLM_BASE_URL:-http://llm-proxy:8080/v1}
+      # ---- LLM (strict tools via beta) ----
+      # Default to local llm-proxy beta endpoint (strict tools). Override in .env if needed.
+      LLM_BASE_URL: ${LLM_BASE_URL:-http://llm-proxy:8080/beta}
       LLM_API_KEY: ${LLM_API_KEY:-}
       CHAT_MODEL: ${CHAT_MODEL:-deepseek-chat}
 
@@ -74,7 +74,8 @@ services:
       context: ./services/llm_proxy
     environment:
       # Upstream provider credentials (can reuse LLM_* from .env)
-      UPSTREAM_BASE_URL: ${UPSTREAM_BASE_URL:-https://api.deepseek.com/v1}
+      # Forward to DeepSeek beta by default to support strict tool schemas
+      UPSTREAM_BASE_URL: ${UPSTREAM_BASE_URL:-https://api.deepseek.com/beta}
       UPSTREAM_API_KEY: ${UPSTREAM_API_KEY:-${LLM_API_KEY:-}}
       # Optional client auth for proxy itself
       PROXY_REQUIRE_AUTH: ${PROXY_REQUIRE_AUTH:-false}

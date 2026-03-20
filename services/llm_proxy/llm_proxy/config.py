@@ -13,9 +13,9 @@ class ProxyConfig:
 
     @classmethod
     def load(cls) -> "ProxyConfig":
-        base = os.getenv('UPSTREAM_BASE_URL', 'https://api.openai.com/v1')
+        # Default upstream to DeepSeek beta for strict tool schemas
+        base = os.getenv('UPSTREAM_BASE_URL', 'https://api.deepseek.com/beta')
         key = os.getenv('UPSTREAM_API_KEY', '')
         require = os.getenv('PROXY_REQUIRE_AUTH', 'false').lower() == 'true'
         tokens = [t.strip() for t in os.getenv('PROXY_CLIENT_TOKENS', '').split(',') if t.strip()]
         return cls(base, key, require, tokens)
-

@@ -231,9 +231,13 @@ def _llm_proxy_health_url() -> Optional[str]:
     base = os.getenv("LLM_BASE_URL", "").strip()
     if not base:
         return None
-    # typical: http://llm-proxy:8080/v1 -> http://llm-proxy:8080/health
+    # typical:
+    #  - http://llm-proxy:8080/v1   -> http://llm-proxy:8080/health
+    #  - http://llm-proxy:8080/beta -> http://llm-proxy:8080/health
     if base.endswith("/v1"):
         return base[:-3] + "health"
+    if base.endswith("/beta"):
+        return base[:-5] + "health"
     # else try appending /health
     if base.endswith("/"):
         return base + "health"
