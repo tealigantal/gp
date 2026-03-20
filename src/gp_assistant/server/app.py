@@ -26,7 +26,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from ..chat import event_store
-from ..chat.orchestrator import handle_message
+from ..chat.tool_calling_agent import run_agent_turn
 from ..core.config import load_config
 from ..core.errors import APIError
 from ..core.paths import store_dir, results_dir
@@ -101,24 +101,13 @@ def _compact_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def _handle_chat(req: ChatReq) -> ChatResp:
-    data = handle_message(req.session_id, req.message, getattr(req, "message_id", None))
-    ctx = data.get("followup_context") or {}
+    data = run_agent_turn(req.session_id, req.message)
     return ChatResp(
         session_id=data.get("session_id"),
         reply=str(data.get("reply", "")),
-        tool_trace=data.get("tool_trace", {}),
-        assistant_message_id=data.get("assistant_message_id"),
-        agent_trace=data.get("agent_trace"),
-        resolved_symbol=data.get("resolved_symbol"),
-        degraded=data.get("degraded"),
-        degrade_reason=data.get("degrade_reason"),
-        followup_context=ctx,
-        run_id=data.get("run_id") or ctx.get("active_run_id"),
-        symbols=(data.get("symbols") if isinstance(data.get("symbols"), list) else (ctx.get("active_symbols") if isinstance(ctx.get("active_symbols"), list) else None)),
-        fallback_used=bool(data.get("fallback_used") is True),
-        ui_items=(data.get("ui_items") if isinstance(data.get("ui_items"), list) else None),
+        tool_trace={},
+        assistant_message_id=None,
         right_panel=(data.get("right_panel") if isinstance(data.get("right_panel"), dict) else None),
-        planner_trace=(data.get("planner_trace") if isinstance(data.get("planner_trace"), dict) else None),
     )
 
 
@@ -884,100 +873,22 @@ def _map_row_to_thread_item(row: tuple, cid: str) -> Optional[Dict[str, Any]]:
     mid, seq, author_id, kind, content, payload_json, created_at = row
     payload = _row_payload_to_obj(payload_json)
     role = "assistant" if (str(author_id or "").lower().strip() == "assistant") else "user"
-    # Status items can be mapped to system role optionally
-    k2, _prev = _map_kind_and_preview(kind or "", content, payload)
-    if k2 == "status" and _prev == "":
-        # skip kline-like cards from thread items
-        return None
+    k = (kind or "text").strip().lower()
+
     base = {
         "id": str(mid),
         "conversation_id": cid,
         "seq": int(seq or 0),
         "created_at": created_at,
-        "role": ("system" if k2 == "status" else role),
+        "role": role,
     }
-    if k2 == "text":
+
+    # Only allow two kinds in thread timeline: user text and canonical assistant_bundle
+    if k == "text" and role == "user":
         return {**base, "kind": "text", "content": str(content or "")}
-    if k2 == "recommendation":
-        # Prefer v2 summary embedded in payload
-        try:
-            summ = (payload or {}).get("summary") or {}
-            if isinstance(summ, dict) and summ.get("top_symbols") is not None:
-                return {
-                    **base,
-                    "kind": "recommendation",
-                    "artifact_id": str(mid),
-                    "summary": {
-                        "total": int(summ.get("total") or 0),
-                        "top_symbols": [str(s) for s in (summ.get("top_symbols") or []) if isinstance(s, (str, int))],
-                    },
-                }
-        except Exception:
-            pass
-        # Fallback: infer from legacy picks in payload
-        picks = []
-        try:
-            picks = (payload or {}).get("picks") or []
-        except Exception:
-            picks = []
-        top_symbols: List[str] = []
-        if isinstance(picks, list):
-            for p in picks[:3]:
-                sym = p.get("symbol") if isinstance(p, dict) else None
-                if isinstance(sym, str):
-                    top_symbols.append(sym)
-        return {
-            **base,
-            "kind": "recommendation",
-            "artifact_id": str(mid),
-            "summary": {"total": len(picks) if isinstance(picks, list) else 0, "top_symbols": top_symbols},
-            "payload": payload,
-        }
-    if k2 == "status":
-        msg = None
-        code = None
-        try:
-            msg = (payload or {}).get("message") or (payload or {}).get("content")
-            code = (payload or {}).get("code")
-        except Exception:
-            pass
-        return {**base, "kind": "status", "message": (str(msg) if msg is not None else None), "code": (str(code) if code is not None else None), "payload": payload}
-    if k2 == "no_trade":
-        try:
-            rg = (payload or {}).get("run_gating") or {}
-            decision = rg.get("decision")
-            return {**base, "kind": "no_trade", "decision": decision, "payload": payload}
-        except Exception:
-            return {**base, "kind": "no_trade", "payload": payload}
-    if k2 == "pick_detail":
-        sym = None
-        try:
-            sym = (payload or {}).get("symbol")
-        except Exception:
-            sym = None
-        return {**base, "kind": "pick_detail", "artifact_id": str(mid), "symbol": (str(sym) if sym is not None else None), "payload": payload}
-    if k2 == "compare":
-        syms = None; winner = None
-        try:
-            syms = (payload or {}).get("symbols")
-            winner = (payload or {}).get("winner_symbol")
-        except Exception:
-            pass
-        return {**base, "kind": "compare", "artifact_id": str(mid), "symbols": syms, "winner_symbol": winner, "payload": payload}
-    if k2 == "exit_decision":
-        sym = None; decision = None
-        try:
-            sym = (payload or {}).get("symbol"); decision = (payload or {}).get("action") or (payload or {}).get("decision")
-        except Exception:
-            pass
-        return {**base, "kind": "exit_decision", "artifact_id": str(mid), "symbol": (str(sym) if sym is not None else None), "decision": (str(decision) if decision is not None else None), "payload": payload}
-    if k2 == "run_change":
-        summary_reason = None
-        try:
-            summary_reason = (payload or {}).get("summary_reason")
-        except Exception:
-            pass
-        return {**base, "kind": "run_change", "artifact_id": str(mid), "summary_reason": (str(summary_reason) if summary_reason is not None else None), "payload": payload}
+    if k == "assistant_bundle" and role == "assistant":
+        # Return the payload as-is under bundle field for frontend rendering
+        return {**base, "kind": "assistant_bundle", "bundle": payload}
     return None
 
 

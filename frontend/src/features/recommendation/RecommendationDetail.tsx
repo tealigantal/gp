@@ -61,7 +61,22 @@ export default function RecommendationDetail({ artifact, onShowKline, onAsk, onF
                   </Typography.Text>
                   {(it as any).strategy && <Tag color="geekblue">{String((it as any).strategy)}</Tag>}
                   {(it as any).gating_decision?.decision && <Tag color={(it as any).gating_decision.decision === 'allow' ? 'green' : ((it as any).gating_decision.decision === 'degraded' ? 'orange' : 'red')}>{String((it as any).gating_decision.decision).toUpperCase()}</Tag>}
-                  <Tag color={(it as any).actionable ? 'green' : 'default'}>{(it as any).actionable ? 'BUY' : 'WATCH'}</Tag>
+                  {(() => {
+                    const gate = (it as any).gating_decision?.decision
+                    const actionable = !!(it as any).actionable
+                    const runAllow = tradeable && (runGate?.decision === 'allow')
+                    const itemAllow = gate === 'allow'
+                    let label = 'WATCH'; let color: any = 'default'
+                    if (!runAllow || !itemAllow) {
+                      label = gate === 'blocked' ? 'BLOCKED' : (gate === 'degraded' ? 'OBSERVE' : 'CANDIDATE')
+                      color = gate === 'blocked' ? 'red' : (gate === 'degraded' ? 'orange' : 'default')
+                    } else if (runAllow && itemAllow && actionable) {
+                      label = 'BUY'; color = 'green'
+                    } else {
+                      label = 'WATCH'; color = 'default'
+                    }
+                    return <Tag color={color}>{label}</Tag>
+                  })()}
                 </Space>
                 {(it as any).thesis && (<Typography.Text type="secondary">{String((it as any).thesis)}</Typography.Text>)}
                 <div style={{ color: 'rgba(0,0,0,0.65)' }}>

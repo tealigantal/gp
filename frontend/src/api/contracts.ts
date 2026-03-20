@@ -5,7 +5,7 @@ export type ConversationSummary = {
   title: string
   last_seq: number
   last_item_preview: string
-  last_item_kind: 'text' | 'recommendation' | 'status' | 'no_trade' | 'pick_detail' | 'compare' | 'exit_decision' | 'run_change'
+  last_item_kind: 'text' | 'assistant_bundle'
   last_item_ts: string | null
   unread_count: number
   updated_at: string | null
@@ -16,7 +16,7 @@ export type ThreadBase = {
   conversation_id: string
   seq: number
   created_at: string
-  role: 'user' | 'assistant' | 'system'
+  role: 'user' | 'assistant'
 }
 
 export type TextItem = ThreadBase & {
@@ -24,33 +24,32 @@ export type TextItem = ThreadBase & {
   content: string
 }
 
-export type RecommendationItem = ThreadBase & {
-  kind: 'recommendation'
-  artifact_id: string
-  summary?: { total: number; top_symbols: string[] }
+export type AssistantBundle = {
+  kind: 'assistant_bundle'
+  text: string
+  cards: Array<Record<string, unknown>>
+  right_panel: Record<string, unknown>
+  tool_calls: Array<Record<string, unknown>>
+  tool_results: Array<Record<string, unknown>>
+  grounding: {
+    source: 'tool_calling_agent'
+    active_run_id?: string | null
+    previous_run_id?: string | null
+    focus_symbol?: string | null
+    active_symbols?: string[]
+    used_symbols?: string[]
+    tradeable?: boolean
+    run_gating?: Record<string, unknown>
+    tools_used?: string[]
+  }
 }
 
-export type StatusItem = ThreadBase & {
-  kind: 'status'
-  code?: string
-  message?: string
+export type AssistantBundleItem = ThreadBase & {
+  kind: 'assistant_bundle'
+  bundle: AssistantBundle
 }
 
-export type NoTradeItem = ThreadBase & { kind: 'no_trade' }
-export type PickDetailItem = ThreadBase & { kind: 'pick_detail'; artifact_id: string }
-export type CompareItem = ThreadBase & { kind: 'compare'; artifact_id: string }
-export type ExitDecisionItem = ThreadBase & { kind: 'exit_decision'; artifact_id: string }
-export type RunChangeItem = ThreadBase & { kind: 'run_change'; artifact_id: string }
-
-export type ThreadItem =
-  | TextItem
-  | RecommendationItem
-  | StatusItem
-  | NoTradeItem
-  | PickDetailItem
-  | CompareItem
-  | ExitDecisionItem
-  | RunChangeItem
+export type ThreadItem = TextItem | AssistantBundleItem
 
 export type RecommendationArtifact = {
   id: string

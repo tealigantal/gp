@@ -1,25 +1,21 @@
 {
-  "as_of": "2026-03-18T10:04:18.637207+00:00",
+  "as_of": "2026-03-20T06:11:17.895657+00:00",
   "cash": null,
   "equity": null,
   "positions": [],
   "pending_intents": [
     {
-      "intent_id": "intent-960b2681f55b",
+      "intent_id": "intent-1bf76c67a6a1",
       "run_id": "2099-07-01-PE",
       "as_of": "2099-07-01-PE",
       "symbol": "Q",
       "side": "buy",
       "decision_source": "gated_recommendation",
       "gating_decision": {
-        "decision": "degraded",
+        "decision": "allow",
         "level": "item",
-        "reasons": [
-          "strategy_health=degraded"
-        ],
-        "triggered_rules": [
-          "item.strategy_health=degraded->degraded"
-        ],
+        "reasons": [],
+        "triggered_rules": [],
         "warnings": [],
         "inputs_snapshot": {
           "final_score": 0.605,
@@ -30,19 +26,17 @@
         },
         "fallback_used": false
       },
-      "priority": 0.5,
+      "priority": 1.0,
       "thesis": "S_OK8",
       "entry_hint": null,
       "stop_hint": null,
       "invalidation": [],
       "confidence": 1.0,
-      "sizing_hint": 0.5,
+      "sizing_hint": 1.0,
       "status": "admitted",
-      "warnings": [
-        "degraded_gating"
-      ],
+      "warnings": [],
       "metadata": {
-        "created_at": "2026-03-18T10:04:18.637207+00:00"
+        "created_at": "2026-03-20T06:11:17.895657+00:00"
       },
       "provenance": {
         "artifact_version": "v2",

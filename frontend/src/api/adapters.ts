@@ -25,8 +25,8 @@ export function asConversationSummary(x: unknown): ConversationSummary {
     title: asString(o.title, asString(o.id, '')),
     last_seq: asNumber(o.last_seq, 0),
     last_item_preview: asString(o.last_item_preview, ''),
-    last_item_kind: (typeof o.last_item_kind === 'string' && (['text','recommendation','status'] as readonly string[]).includes(o.last_item_kind))
-      ? (o.last_item_kind as 'text'|'recommendation'|'status')
+    last_item_kind: (typeof o.last_item_kind === 'string' && (['text','assistant_bundle'] as readonly string[]).includes(o.last_item_kind))
+      ? (o.last_item_kind as 'text'|'assistant_bundle')
       : 'text',
     last_item_ts: o.last_item_ts != null ? String(o.last_item_ts) : null,
     unread_count: asNumber(o.unread_count, 0),
@@ -42,22 +42,13 @@ export function asThreadItem(x: unknown): ThreadItem | null {
     conversation_id: asString(o.conversation_id, ''),
     seq: asNumber(o.seq, 0),
     created_at: asString(o.created_at, ''),
-    role: (typeof o.role === 'string' && (['user','assistant','system'] as readonly string[]).includes(o.role)) ? (o.role as 'user'|'assistant'|'system') : 'user',
+    role: (typeof o.role === 'string' && (['user','assistant'] as readonly string[]).includes(o.role)) ? (o.role as 'user'|'assistant') : 'user',
   }
   switch (o.kind) {
     case 'text':
       return { ...base, kind: 'text', content: asString(o.content, '') }
-    case 'recommendation':
-      return {
-        ...base,
-        kind: 'recommendation',
-        artifact_id: asString(o.artifact_id, base.id),
-        summary: isRecord(o.summary)
-          ? { total: asNumber(o.summary.total, 0), top_symbols: arrOf(o.summary.top_symbols, (s) => asString(s)) }
-          : undefined,
-      }
-    case 'status':
-      return { ...base, kind: 'status', code: o.code != null ? String(o.code) : undefined, message: o.message != null ? String(o.message) : undefined }
+    case 'assistant_bundle':
+      return { ...base, kind: 'assistant_bundle', bundle: isRecord(o.bundle) ? (o.bundle as any) : { kind: 'assistant_bundle', text: '', cards: [], right_panel: {}, tool_calls: [], tool_results: [], grounding: { source: 'tool_calling_agent' } } }
     default:
       return null
   }

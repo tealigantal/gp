@@ -117,8 +117,10 @@ def evaluate_run_gating(artifact: Dict[str, Any], *, summary: Dict[str, Any]) ->
             strategies.add(s)
     # walkforward availability (prefer direct files)
     if strategies:
-        wf_avail = [bool((_load_walkforward(s) or {}).get("available", False)) for s in strategies]
-        if all(not v for v in wf_avail):
+        wf_list = [(_load_walkforward(s) or {}) for s in strategies]
+        wf_ok = [bool((w.get("available", False)) and (len(w.get("windows") or []) > 0)) for w in wf_list]
+        # degrade when no strategy has meaningful walkforward windows
+        if all(not v for v in wf_ok):
             d["decision"] = DECISION_DEGRADED
             d["reasons"].append("walkforward_missing_majority")
             d["triggered_rules"].append("run.walkforward->degraded")
