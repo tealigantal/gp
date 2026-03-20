@@ -29,6 +29,18 @@ class ToolRegistry:
     def get_session_context(self, session_id: str) -> Dict[str, Any]:
         sid = store.ensure_session(session_id)
         st = store.get_state(sid)
+        tradeable = None
+        run_gating = None
+        reason = None
+        try:
+            from ..kernel.facade import get_gated_artifact_v2 as _gated
+            if st.get("active_run_id"):
+                art = _gated(run_id=st.get("active_run_id"))
+                tradeable = art.get("tradeable")
+                run_gating = art.get("run_gating")
+                reason = art.get("reason")
+        except Exception:
+            pass
         # Last bundle summary can be attached by agent (best-effort via right_panel)
         last_bundle_summary = None
         try:
@@ -47,6 +59,9 @@ class ToolRegistry:
             "previous_run_id": st.get("previous_run_id"),
             "focus_symbol": st.get("focused_symbol") or st.get("current_focus_symbol"),
             "active_symbols": st.get("active_symbols") or [],
+            "tradeable": tradeable,
+            "run_gating": run_gating,
+            "reason": reason,
             "last_topk": None,
             "last_bundle_id": None,
             "market_session": None,
@@ -90,6 +105,7 @@ class ToolRegistry:
             "active_run_id": art.get("run_id"),
             "tradeable": bool(art.get("tradeable")),
             "run_gating": art.get("run_gating"),
+            "reason": art.get("reason"),
             "items": items,
             "as_of": art.get("as_of"),
             "reused_run": (run_id is not None and run_id == art.get("run_id")),
@@ -147,12 +163,13 @@ class ToolRegistry:
             except Exception:
                 continue
         out = {
-            "top_symbols": top,
+            "tradeable": bool(art.get("tradeable")),
+            "run_gating": art.get("run_gating"),
+            "selection_set_symbols": [str((it or {}).get("symbol") or "") for it in items if isinstance(it, dict)],
             "per_symbol_rationale": per_symbol,
             "ranking_rationale": "derived_from_scores",
+            "mode": "tradeable_recommendation" if bool(art.get("tradeable")) else "observe_only_selection",
         }
-        if not bool(art.get("tradeable")):
-            out["note"] = "NO-TRADE: 候选观察/排序解释，不是可执行推荐"
         return out
 
     # 5. get_pick_detail
@@ -233,4 +250,3 @@ class ToolRegistry:
 
 def build_registry() -> ToolRegistry:
     return ToolRegistry()
-

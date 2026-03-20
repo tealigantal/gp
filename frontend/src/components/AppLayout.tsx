@@ -8,14 +8,11 @@ const { Header, Content, Footer } = Layout
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const loc = useLocation()
-  // Chat-first nav; Workbench is research page
+  // Chat-first nav (only chat/health are visible)
   const selected = useMemo(() => {
     const p = loc.pathname
-    const key = (p === '/' || p.startsWith('/chat') || p.startsWith('/pick')) ? 'chat'
-      : p.startsWith('/compare') ? 'compare'
-      : p.startsWith('/chat') ? 'chat'
+    const key = (p === '/' || p.startsWith('/chat')) ? 'chat'
       : p.startsWith('/health') ? 'health'
-      : p.startsWith('/sim') ? 'sim'
       : 'chat'
     return [key]
   }, [loc.pathname])
@@ -32,12 +29,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             theme="dark"
             mode="horizontal"
             selectedKeys={selected}
-            items={[
-              { key: 'chat', label: <Link to="/chat">对话</Link> },
-              { key: 'compare', label: <Link to="/compare">对比</Link> },
-              { key: 'sim', label: <Link to="/sim">研究</Link> },
-              { key: 'health', label: <Link to="/health">健康</Link> }
-            ]}
+            items={[{ key: 'chat', label: <Link to="/chat">对话</Link> }, { key: 'health', label: <Link to="/health">健康</Link> }]}
             style={{ flex: 1, minWidth: 0 }}
           />
         </Header>

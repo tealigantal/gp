@@ -90,3 +90,48 @@ class LLMClient:
         resp = requests.post(url, headers=headers, data=data, timeout=timeout)
         resp.raise_for_status()
         return resp.json()
+
+    def run_chat_with_tools(
+        self,
+        messages: List[Dict[str, Any]],
+        tools: List[Dict[str, Any]] | None = None,
+        *,
+        temperature: float = 0.2,
+        model: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Single chat/completions step with optional tools exposure.
+
+        Returns a dict like { role: 'assistant', content: str|None, tool_calls: [ ... ]|None }
+        """
+        ok, reason = self.available()
+        if not ok:
+            raise RuntimeError(f"LLM 未就绪：{reason}")
+
+        url = self.base_url.rstrip("/") + "/chat/completions"
+        payload: Dict[str, Any] = {
+            "model": (model or self.model or "deepseek-chat"),
+            "messages": messages,
+            "temperature": float(temperature),
+            "stream": False,
+        }
+        if tools:
+            payload["tools"] = tools
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+        }
+        data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+        timeout = None if (isinstance(self.timeout, (int, float)) and self.timeout <= 0) else self.timeout
+        resp = requests.post(url, headers=headers, data=data, timeout=timeout)
+        resp.raise_for_status()
+        obj = resp.json()
+        ch = ((obj or {}).get("choices") or [{}])[0]
+        msg = ch.get("message") or {}
+        # Normalize minimal surface
+        out = {
+            "role": msg.get("role") or "assistant",
+            "content": msg.get("content"),
+            "tool_calls": msg.get("tool_calls") or [],
+        }
+        return out

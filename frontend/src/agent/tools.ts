@@ -1,12 +1,6 @@
 // Canonical agent tool layer for frontend (LLM orchestration uses backend chat).
 // Keep input/output simple and composable.
-import {
-  getRecommendV2Gated as getRecommendV2,
-  getPickDetail,
-  compareSymbols as apiCompare,
-  getStrategyValidation,
-  getValidationSummary,
-} from '../api/client'
+import { getRecommendV2Gated as getRecommendV2, getPickDetail, getStrategyValidation, getValidationSummary } from '../api/client'
 
 export async function get_market_summary() {
   const v2 = await getRecommendV2()
@@ -58,14 +52,7 @@ export async function get_pick_detail(symbol: string) {
   }
 }
 
-export async function compare_symbols(symbols: string[]) {
-  const resp = await apiCompare({ symbols })
-  return {
-    symbols: resp.symbols,
-    summary: resp.summary || null,
-    winner: resp.winner_symbol || null,
-  }
-}
+// compare_symbols removed from primary UI flow
 
 export async function get_strategy_health(strategy: string) {
   return getStrategyValidation(strategy)

@@ -24,10 +24,19 @@ export type TextItem = ThreadBase & {
   content: string
 }
 
+export type CardVM = {
+  type: 'recommendation' | 'selection_explain' | 'no_trade' | 'pick_detail' | 'compare' | 'exit_decision' | 'run_change'
+  title: string
+  data: Record<string, unknown>
+  focus_symbol?: string
+  symbols?: string[]
+  run_id?: string
+}
+
 export type AssistantBundle = {
   kind: 'assistant_bundle'
   text: string
-  cards: Array<Record<string, unknown>>
+  cards: CardVM[]
   right_panel: Record<string, unknown>
   tool_calls: Array<Record<string, unknown>>
   tool_results: Array<Record<string, unknown>>

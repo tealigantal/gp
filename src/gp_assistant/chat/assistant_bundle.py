@@ -18,6 +18,21 @@ def _str_list(v: Optional[List[str]]) -> List[str]:
     return out
 
 
+def _card(type_: str, title: str, data: Dict[str, Any], *, focus_symbol: Optional[str] = None, symbols: Optional[List[str]] = None, run_id: Optional[str] = None) -> Dict[str, Any]:
+    out: Dict[str, Any] = {
+        "type": str(type_),
+        "title": str(title or ""),
+        "data": dict(data or {}),
+    }
+    if focus_symbol:
+        out["focus_symbol"] = str(focus_symbol)
+    if symbols:
+        out["symbols"] = _str_list(symbols)
+    if run_id:
+        out["run_id"] = str(run_id)
+    return out
+
+
 @dataclass
 class AssistantBundle:
     id: Optional[str]
@@ -80,6 +95,7 @@ class AssistantBundle:
         return {
             "kind": "assistant_bundle",
             "text": str(self.text or ""),
+            # canonical card view-models only; do not rely on tool_results/right_panel to push UI
             "cards": list(self.cards or []),
             "right_panel": rp,
             "tool_calls": list(self.tool_calls or []),
@@ -97,3 +113,5 @@ class AssistantBundle:
             },
         }
 
+# re-export card builder for agent
+Card = _card

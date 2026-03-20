@@ -1,5 +1,5 @@
 {
-  "as_of": "2026-03-20T06:11:20.925863+00:00",
+  "as_of": "2026-03-20T11:33:11.971810+00:00",
   "parts": {
     "event_stats": {
       "S1": {
@@ -649,9 +649,9 @@
           "hit_take": true,
           "mfe": 0.5999999999999996,
           "mae": 0.0,
-          "holding_days": 10,
+          "holding_days": 18,
           "final_state": "target_hit",
-          "updated_at": "2026-03-20T06:11:20.861866"
+          "updated_at": "2026-03-20T11:33:11.906059"
         }
       ],
       "available": true

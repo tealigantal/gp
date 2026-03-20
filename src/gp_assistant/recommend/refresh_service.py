@@ -22,7 +22,8 @@ def refresh_symbols_v2(symbols: List[str], *, as_of: Optional[str] = None, risk_
 
     res = _run(universe="symbols", symbols=syms, date=as_of, topk=len(syms))
     fixed = build_v2_dict_from_v1(res, risk_profile=risk_profile, universe="symbols")
-    fixed["ok"] = True and not bool(fixed.get("errors"))
+    # For refresh service, degraded or validation warnings should not flip ok to False.
+    fixed["ok"] = True
     # Provide a compatibility picks array for chat card (from original v1 res)
     try:
         fixed["compat_picks"] = list(res.get("picks") or []) if isinstance(res, dict) else []

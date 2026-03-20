@@ -111,10 +111,7 @@ export async function getRecommendV2Gated(params: { run_id?: string; as_of?: str
   return data
 }
 
-export async function compareSymbols(body: { run_id?: string; symbols: string[] }) {
-  const { data } = await api.post<CompareResp>('/compare', body)
-  return data
-}
+// compareSymbols is no longer exposed in the primary UI
 
 export async function getPickDetail(params: { run_id?: string; symbol: string }) {
   const { data } = await api.get<PickDetailResp>('/pick', { params })

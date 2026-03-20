@@ -26,7 +26,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from ..chat import event_store
-from ..chat.tool_calling_agent import run_agent_turn
+from ..chat.deepseek_agent import run_agent_turn
 from ..core.config import load_config
 from ..core.errors import APIError
 from ..core.paths import store_dir, results_dir

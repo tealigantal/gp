@@ -187,9 +187,9 @@ function ThreadItemRenderer({ item }: { item: ThreadItem }) {
         )}
         {Array.isArray(b?.cards) && b.cards.map((c: any, idx: number) => {
           if (c?.type === 'recommendation') {
-            const items = Array.isArray(c.items) ? c.items : []
+            const items = Array.isArray(c?.data?.items) ? c.data.items : []
             return (
-              <Card key={`card-${idx}`} size="small" title={`推荐清单 · ${items.length}`}>
+              <Card key={`card-${idx}`} size="small" title={c.title || `推荐清单 · ${items.length}`}>
                 <List dataSource={items} renderItem={(it: any) => (
                   <List.Item key={String(it.symbol)}>
                     <Space>
@@ -203,10 +203,53 @@ function ThreadItemRenderer({ item }: { item: ThreadItem }) {
             )
           }
           if (c?.type === 'pick_detail') {
-            return <Card key={`card-${idx}`} size="small" title={`标的 ${String(c.symbol)}`}>研究摘要：{String((c.item || {}).thesis || '')}</Card>
+            return (
+              <Card key={`card-${idx}`} size="small" title={c.title || `标的 ${String(c.focus_symbol || '')}`}>
+                研究摘要：{String((c.data || {}).thesis || '')}
+              </Card>
+            )
           }
           if (c?.type === 'exit_decision') {
-            return <Card key={`card-${idx}`} size="small" title={`卖出判断 ${String(c.symbol)}`}>{String(c.summary_reason || '')}</Card>
+            return (
+              <Card key={`card-${idx}`} size="small" title={c.title || `卖出判断`}>
+                {String((c.data || {}).summary_reason || '')}
+              </Card>
+            )
+          }
+          if (c?.type === 'selection_explain') {
+            const d = c.data || {}
+            return (
+              <Card key={`card-${idx}`} size="small" title={c.title || '入选说明'}>
+                <div>symbols: {(d.selection_set_symbols || []).join(', ')}</div>
+                <div>rationale: {String(d.ranking_rationale || '')}</div>
+              </Card>
+            )
+          }
+          if (c?.type === 'no_trade') {
+            const d = c.data || {}
+            return (
+              <Card key={`card-${idx}`} size="small" title={c.title || '今日不交易'}>
+                <div>reason: {String(d.reason || '')}</div>
+              </Card>
+            )
+          }
+          if (c?.type === 'compare') {
+            const d = c.data || {}
+            return (
+              <Card key={`card-${idx}`} size="small" title={c.title || '对比'}>
+                <div>symbols: {(c.symbols || []).join(', ')}</div>
+                <div>winner: {String(d.winner || '')}</div>
+              </Card>
+            )
+          }
+          if (c?.type === 'run_change') {
+            const d = c.data || {}
+            return (
+              <Card key={`card-${idx}`} size="small" title={c.title || '本轮变更'}>
+                <div>added: {(d.added_symbols || []).join(', ')}</div>
+                <div>removed: {(d.removed_symbols || []).join(', ')}</div>
+              </Card>
+            )
           }
           return null
         })}
@@ -215,4 +258,3 @@ function ThreadItemRenderer({ item }: { item: ThreadItem }) {
   }
   return null
 }
-
