@@ -98,6 +98,7 @@ class LLMClient:
         *,
         temperature: float = 0.2,
         model: Optional[str] = None,
+        tool_choice: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Single chat/completions step with optional tools exposure.
 
@@ -116,6 +117,8 @@ class LLMClient:
         }
         if tools:
             payload["tools"] = tools
+        if tool_choice:
+            payload["tool_choice"] = str(tool_choice)
         headers = {
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json",

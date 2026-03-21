@@ -25,6 +25,26 @@ class ToolRegistry:
     def __init__(self) -> None:
         pass
 
+    # 0. chat (non-finance small talk)
+    def chat(self, session_id: str, query: str) -> Dict[str, Any]:
+        # Lightweight helper: classify at a high level and echo safe hints.
+        # No state writes; no data provider calls.
+        sid = store.ensure_session(session_id)
+        q = (query or "").strip()
+        category = "other"
+        lowered = q.lower()
+        if any(k in lowered for k in ["hello", "hi", "hey", "你好", "您好", "嗨"]):
+            category = "greeting"
+        elif any(k in lowered for k in ["怎么用", "如何使用", "usage", "help", "帮助", "说明", "文档"]):
+            category = "usage"
+        elif any(k in lowered for k in ["你是谁", "关于你", "about", "meta"]):
+            category = "meta"
+        return {
+            "session_id": sid,
+            "category": category,
+            "reply_hints": [],
+        }
+
     # 1. get_session_context
     def get_session_context(self, session_id: str) -> Dict[str, Any]:
         sid = store.ensure_session(session_id)
@@ -80,8 +100,24 @@ class ToolRegistry:
         except Exception:
             art = {}
 
-        # If missing or refresh requested, compute a fresh run via runner and persist to v2
-        if refresh or not isinstance(art, dict) or not art.get("items"):
+        # Auto-refresh policy: if current run is degraded/no-trade, refresh once
+        auto_reason: Optional[str] = None
+        try:
+            if isinstance(art, dict) and not refresh:
+                rg = (art.get("run_gating") or {}).get("decision") if isinstance(art.get("run_gating"), dict) else None
+                if (not art.get("items")):
+                    auto_reason = "auto_empty_items"
+                elif art.get("degraded") is True:
+                    auto_reason = "auto_degraded"
+                elif art.get("tradeable") is False:
+                    auto_reason = "auto_not_tradeable"
+                elif isinstance(rg, str) and rg != "allow":
+                    auto_reason = "auto_run_gating_not_allow"
+        except Exception:
+            pass
+
+        # If missing or refresh requested (manual/auto), compute a fresh run via runner and persist to v2
+        if refresh or auto_reason or not isinstance(art, dict) or not art.get("items"):
             v1 = _recommend_run(mode="default", date=None, topk=topk or 3, universe="auto", symbols=None, risk_profile="normal")
             v2 = build_v2_dict_from_v1(v1)
             rid = str(v2.get("run_id") or v2.get("as_of") or "")
@@ -110,7 +146,7 @@ class ToolRegistry:
             "as_of": art.get("as_of"),
             "reused_run": (run_id is not None and run_id == art.get("run_id")),
             "stale": False,
-            "refresh_reason": ("force_refresh" if refresh else None),
+            "refresh_reason": ("force_refresh" if refresh else auto_reason),
         }
 
     # 3. resolve_reference

@@ -195,10 +195,10 @@ class ToolCallingFinanceAgent:
             )
             GroundingRequiredValidator(tool_results=tool_results)
             used_symbols = allowed
-        except Exception:
-            # One retry path could be added; for now, fail safe by emitting a guarded error reply.
+        except Exception as e:
+            # 不再兜底，直接报错并附带错误码/原因
             composed = {
-                "text": "抱歉，当前无法生成合规的金融回复。请稍后重试。",
+                "text": f"错误：{str(e) or 'validation_failed'}。",
                 "cards": [],
                 "right_panel": {},
             }
@@ -254,4 +254,3 @@ class ToolCallingFinanceAgent:
 def run_agent_turn(session_id: Optional[str], user_message: str) -> Dict[str, Any]:
     agent = ToolCallingFinanceAgent()
     return agent.run_turn(session_id, user_message)
-

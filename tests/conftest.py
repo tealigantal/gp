@@ -15,8 +15,6 @@ collect_ignore = [
     "test_cli_output_string_only.py",
     "test_constraints_core.py",
     "test_json_protocol_flow.py",
-    "test_llm_proxy_import.py",
-    "test_llm_proxy_smoke.py",
     "test_pipeline_mock.py",
     "test_prompt_prefix_clean.py",
     "test_require_trades.py",

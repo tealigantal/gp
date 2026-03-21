@@ -875,24 +875,41 @@ def run(date: Optional[str] = None, topk: int = 3, universe: str = "auto", symbo
             degrade_record(dbg, "STRATEGY_EVAL_FAILED", {"symbol": f.get("symbol"), "error": f.get("error")})
     except Exception:
         pass
+    # 非交易日：关于快照可用性的降级只记为警告，不触发 tradeable=false
+    _is_non_trading = False
+    try:
+        from datetime import datetime as _dt
+        from .calendar import is_trading_day as _is_td
+        _is_non_trading = not _is_td(_dt.now())
+    except Exception:
+        _is_non_trading = False
+
     if snap_meta.get("missing"):
-        degrade_record(dbg, "SNAPSHOT_MISSING", {k: v for k, v in snap_meta.items() if k != "missing"})
+        degrade_record(dbg, "SNAPSHOT_MISSING", {k: v for k, v in snap_meta.items() if k != "missing"}, severity=("warn" if _is_non_trading else "degrade"))
     if snap_meta.get("cache") == "memory":
-        degrade_record(dbg, "SNAPSHOT_MEMORY_CACHE", {})
+        degrade_record(dbg, "SNAPSHOT_MEMORY_CACHE", {}, severity=("warn" if _is_non_trading else "degrade"))
     if snap_meta.get("cache") == "disk":
-        degrade_record(dbg, "SNAPSHOT_DISK_CACHE", {"age_sec": snap_meta.get("cache_age_sec")})
+        degrade_record(dbg, "SNAPSHOT_DISK_CACHE", {"age_sec": snap_meta.get("cache_age_sec")}, severity=("warn" if _is_non_trading else "degrade"))
     if bool(snap_meta.get("fallback")):
-        degrade_record(dbg, "SNAPSHOT_FALLBACK", {"to": snap_meta.get("source"), "reason": snap_meta.get("fallback_reason")})
+        degrade_record(dbg, "SNAPSHOT_FALLBACK", {"to": snap_meta.get("source"), "reason": snap_meta.get("fallback_reason")}, severity=("warn" if _is_non_trading else "degrade"))
     if snap_meta.get("skipped_routes"):
-        degrade_record(dbg, "SNAPSHOT_ROUTE_SKIPPED", {"routes": snap_meta.get("skipped_routes")})
+        degrade_record(dbg, "SNAPSHOT_ROUTE_SKIPPED", {"routes": snap_meta.get("skipped_routes")}, severity=("warn" if _is_non_trading else "degrade"))
     if snapshot_df is None:
-        degrade_record(dbg, "ENV_NEUTRALIZED", {})
-        degrade_record(dbg, "THEMES_EMPTY", {})
-        degrade_record(dbg, "MARKET_STATS_MISSING", {})
+        degrade_record(dbg, "ENV_NEUTRALIZED", {}, severity=("warn" if _is_non_trading else "degrade"))
+        degrade_record(dbg, "THEMES_EMPTY", {}, severity=("warn" if _is_non_trading else "degrade"))
+        degrade_record(dbg, "MARKET_STATS_MISSING", {}, severity=("warn" if _is_non_trading else "degrade"))
 
     # Structured cleanliness check (do not rely on source text)
     def _is_clean_live_snapshot(meta: Dict[str, Any]) -> bool:
         try:
+            # 非交易日放宽门槛：不因为缓存/回退/路线跳过而判定为不干净
+            try:
+                from datetime import datetime as _dt
+                from .calendar import is_trading_day as _is_td  # weekday Mon-Fri
+                if not _is_td(_dt.now()):
+                    return True
+            except Exception:
+                pass
             if meta.get("missing") is True:
                 return False
             if meta.get("cache"):
@@ -1032,6 +1049,4 @@ def run(date: Optional[str] = None, topk: int = 3, universe: str = "auto", symbo
 
     _write_outputs(as_of, payload)
     return payload
-
-
 

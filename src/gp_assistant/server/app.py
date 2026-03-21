@@ -19,6 +19,7 @@ import json
 import os
 from datetime import datetime
 from typing import Any, Dict, List, Optional
+from urllib.parse import urlsplit
 
 import pandas as pd
 from fastapi import APIRouter, FastAPI, HTTPException, Query, Body
@@ -227,27 +228,40 @@ def _check_config() -> Dict[str, Any]:
         return {"ok": False, "error": str(e)}
 
 
-def _llm_proxy_health_url() -> Optional[str]:
+def _is_local_url(u: str) -> bool:
+    try:
+        p = urlsplit(u)
+        host = (p.hostname or "").lower()
+        if not host:
+            return True
+        if host in {"localhost", "127.0.0.1", "0.0.0.0"}:
+            return True
+        # Container-local names typically have no dots (e.g., "llm", "proxy")
+        if "." not in host:
+            return True
+        return False
+    except Exception:
+        return False
+
+
+def _llm_health_url(base: str) -> str:
+    b = base.rstrip("/")
+    if b.endswith("/v1") or b.endswith("/beta"):
+        return b.rsplit("/", 1)[0] + "/health"
+    return b + "/health"
+
+
+def _check_llm(timeout: float = 0.8) -> Dict[str, Any]:
     base = os.getenv("LLM_BASE_URL", "").strip()
+    key = os.getenv("LLM_API_KEY", "").strip()
     if not base:
-        return None
-    # typical:
-    #  - http://llm-proxy:8080/v1   -> http://llm-proxy:8080/health
-    #  - http://llm-proxy:8080/beta -> http://llm-proxy:8080/health
-    if base.endswith("/v1"):
-        return base[:-3] + "health"
-    if base.endswith("/beta"):
-        return base[:-5] + "health"
-    # else try appending /health
-    if base.endswith("/"):
-        return base + "health"
-    return base + "/health"
-
-
-def _check_llm_proxy(timeout: float = 0.8) -> Dict[str, Any]:
-    url = _llm_proxy_health_url()
-    if not url:
-        return {"ok": False, "skipped": True, "reason": "LLM_BASE_URL_missing"}
+        return {"ok": False, "skipped": False, "reason": "LLM_BASE_URL_missing"}
+    if not key:
+        return {"ok": False, "skipped": False, "reason": "LLM_API_KEY_missing"}
+    # Only probe when pointing to a local endpoint; skip external providers
+    if not _is_local_url(base):
+        return {"ok": True, "skipped": True, "reason": "external_provider_not_probed", "base": base}
+    url = _llm_health_url(base)
     try:
         import urllib.request  # noqa: PLC0415
 
@@ -264,7 +278,7 @@ def _health_ready() -> Dict[str, Any]:
     checks = {
         "store": _check_store_rw(),
         "config": _check_config(),
-        "llm_proxy": _check_llm_proxy(),
+        "llm": _check_llm(),
     }
     ok = all(v.get("ok") for v in checks.values())
     return {
@@ -287,7 +301,7 @@ def _handle_health() -> Dict[str, Any]:
         pass
     return {
         "status": ("ok" if ready.get("ok") else "degraded"),
-        "llm_ready": bool(((ready.get("checks") or {}).get("llm_proxy") or {}).get("ok")),
+        "llm_ready": bool(((ready.get("checks") or {}).get("llm") or {}).get("ok")),
         "provider": {"note": "skipped_in_light_health"},
         "time": str(ready.get("ts") or datetime.now().isoformat()),
         # extras for richer UI

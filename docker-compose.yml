@@ -54,8 +54,8 @@ services:
       GP_TRADEABLE_MIN_CANDIDATES: ${GP_TRADEABLE_MIN_CANDIDATES:-20}
 
       # ---- LLM (strict tools via beta) ----
-      # Default to local llm-proxy beta endpoint (strict tools). Override in .env if needed.
-      LLM_BASE_URL: ${LLM_BASE_URL:-http://llm-proxy:8080/beta}
+      # Default to DeepSeek beta endpoint (strict tools). Override in .env if needed.
+      LLM_BASE_URL: ${LLM_BASE_URL:-https://api.deepseek.com/beta}
       LLM_API_KEY: ${LLM_API_KEY:-}
       CHAT_MODEL: ${CHAT_MODEL:-deepseek-chat}
 
@@ -68,28 +68,6 @@ services:
       timeout: 5s
       retries: 30
       start_period: 10s
-
-  llm-proxy:
-    build:
-      context: ./services/llm_proxy
-    environment:
-      # Upstream provider credentials (can reuse LLM_* from .env)
-      # Forward to DeepSeek beta by default to support strict tool schemas
-      UPSTREAM_BASE_URL: ${UPSTREAM_BASE_URL:-https://api.deepseek.com/beta}
-      UPSTREAM_API_KEY: ${UPSTREAM_API_KEY:-${LLM_API_KEY:-}}
-      # Optional client auth for proxy itself
-      PROXY_REQUIRE_AUTH: ${PROXY_REQUIRE_AUTH:-false}
-      PROXY_CLIENT_TOKENS: ${PROXY_CLIENT_TOKENS:-}
-    ports:
-      - "18080:8080"
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD-SHELL", "python -c \"import urllib.request,sys; sys.exit(0) if urllib.request.urlopen('http://127.0.0.1:8080/health', timeout=2).status==200 else sys.exit(1)\""]
-      interval: 15s
-      timeout: 5s
-      retries: 20
-      start_period: 10s
-
   web:
     build:
       context: ./frontend
@@ -98,7 +76,6 @@ services:
         BASE_NGINX_IMAGE: ${BASE_NGINX_IMAGE:-nginx:1.25-alpine}
     depends_on:
       - gp
-      - llm-proxy
     ports:
       - "8080:80"
     volumes:

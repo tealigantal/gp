@@ -217,7 +217,7 @@ def run(
             req = (date or "latest").strip() if date is not None else "latest"
             today = pd.Timestamp.today(tz=None).strftime("%Y%m%d")
             if req in {"latest", "today", ""}:
-                # if today is non-trading day, annotate debug with resolved_date=next open
+                # if today is non-trading day, annotate debug with resolved_date=next open (do not change tradeable)
                 row = cal[cal["cal_date"] >= today]
                 next_open = None
                 if not row.empty:
@@ -229,27 +229,16 @@ def run(
                     if isinstance(dbg, dict):
                         dbg.setdefault("requested_date", req)
                         dbg.setdefault("resolved_date", next_open)
-                        # If today not open and next_open != today, mark not tradeable
-                        if next_open != today:
-                            out["meta"]["tradeable"] = False
-                            dr = list(dbg.get("degrade_reasons") or [])
-                            dr.append({"reason_code": "NON_TRADING_DAY", "detail": {"requested": req, "resolved": next_open}})
-                            dbg["degrade_reasons"] = dr
-                            dbg["degraded"] = True
-                            dbg["reasons"] = dr
             else:
                 # explicit date
                 dnorm = req.replace("-", "") if len(req) == 10 and req[4] == '-' else req
                 row = cal[cal["cal_date"] == dnorm]
                 if not row.empty and int(row.iloc[0]["is_open"]) != 1:
-                    out["meta"]["tradeable"] = False
+                    # Explicit date is a non-trading day: record in debug only; do not force non-tradeable
                     dbg = out["meta"].setdefault("debug", {})
                     if isinstance(dbg, dict):
-                        dr = list(dbg.get("degrade_reasons") or [])
-                        dr.append({"reason_code": "NON_TRADING_DAY", "detail": {"requested": req}})
-                        dbg["degrade_reasons"] = dr
-                        dbg["degraded"] = True
-                        dbg["reasons"] = dr
+                        dbg.setdefault("requested_date", req)
+                        dbg.setdefault("resolved_date", dnorm)
     except Exception:
         pass
 

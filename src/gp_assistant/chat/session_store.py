@@ -208,6 +208,15 @@ _STATE_DEFAULTS = {
     "previous_run_id": None,
     "previous_active_symbols": [],
     "last_planner_output": None,
+    # Layered turn/memory fields (phase 3)
+    "last_right_panel": {},                 # 最近一次可见右侧面板（为了UI续航）
+    "pending_action": None,                 # 待续操作（如："explain"|"compare"|...）
+    "pending_symbols": [],                  # 待续操作关联的symbols（序列稳定）
+    "pending_cursor": None,                 # 待续分页/游标
+    "last_reference_resolution": None,      # 上轮引用解析结果（resolve_reference 输出）
+    "last_surface_kind": None,              # 上轮assistant可见输出类型（assistant_bundle|text|...）
+    "last_tool_results_summary": {},        # 上轮工具轨迹摘要（tools_used/used_symbols/tradeable）
+    "last_visible_assistant_summary": {},   # 上轮可见回复摘要（text截断、card_types、active_run_id）
 }
 
 
@@ -251,7 +260,10 @@ def get_state(session_id: str) -> Dict[str, Any]:
     st = dict(_STATE_DEFAULTS)
     raw = _load_state_raw(session_id)
     if isinstance(raw, dict):
-        st.update({k: raw.get(k) for k in _STATE_DEFAULTS.keys()})
+        for k in _STATE_DEFAULTS.keys():
+            v = raw.get(k, None)
+            if v is not None:
+                st[k] = v
     # derive last_recommend_symbols from last_recommend if missing
     if not st.get("last_recommend_symbols"):
         try:
