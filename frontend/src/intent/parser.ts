@@ -19,12 +19,7 @@ export type ParsedIntent = RecommendIntent | KlineIntent | ThemesIntent | Progre
 
 import { resolveSymbolsFromText } from './symbols'
 
-const DIGIT_CODE = /\b\d{6}\b/g
-
-function extractCodes(text: string): string[] {
-  const m = text.match(DIGIT_CODE)
-  return Array.from(new Set(m || []))
-}
+// const DIGIT_CODE = /\b\d{6}\b/g // reserved for future local parsing helpers
 
 function extractTopk(text: string): number | undefined {
   // e.g. "3只", "3个", or plain number "3"

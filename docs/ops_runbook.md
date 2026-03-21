@@ -6,6 +6,12 @@ Prerequisites
 - Configure `configs/config.yaml` (fees, slippage, max_positions, vol_unit)
 - Ensure directories exist: `data/`, `universe/`, `store/`, `results/`
 
+Runtime data & retention
+- Runtime outputs (sessions/search/recommend/cache/snapshots) are not versioned.
+- Periodic cleanup (keep last 14 days by default):
+  - `python -m scripts.retention --keep-days 14`
+  - Mount `store/` in Docker via compose; do not bake runtime data into the image.
+
 1) Data Update
 - Basics + Daily bars:
   - python gpbt.py fetch --provider tushare --start 20250101 --end 20250131

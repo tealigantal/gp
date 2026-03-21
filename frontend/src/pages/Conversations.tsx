@@ -1,27 +1,63 @@
-﻿import { useEffect, useState } from "react"
-import { Badge, Button, Card, List, Space, Typography, Popconfirm, message } from "antd"
-import { syncManager } from "../sync/SyncManager"
-import dayjs from "dayjs"
-import { useNavigate } from "react-router-dom"
-import { deleteConversation, cleanupConversations } from "../api/client"
-import { setSessionId as persistSessionId, newSid } from "../utils/session"
+import { useEffect, useState } from 'react'
+import { Badge, Button, Card, List, Space, Typography, Popconfirm, message } from 'antd'
+import dayjs from 'dayjs'
+import { useLocation, useNavigate } from 'react-router-dom'
+import { deleteConversation, cleanupConversations, getConversationSummaries } from '../api/client'
+import { asConversationSummary } from '../api/adapters'
+import type { ConversationSummary } from '../api/contracts'
+import { setSessionId as persistSessionId, newSid } from '../utils/session'
 
-type Item = { id: string; title: string; lastSeq: number; updatedAt?: string; unread: number; preview: string }
+type Item = { id: string; title: string; lastSeq: number; updatedAt?: string | null; unread: number; preview: string }
 
 export default function Conversations() {
   const [items, setItems] = useState<Item[]>([])
   const [loading, setLoading] = useState(false)
   const nav = useNavigate()
+  const loc = useLocation()
+  const params = new URLSearchParams(loc.search)
+  const currentCid = params.get('cid') || null
+
+  async function load() {
+    setLoading(true)
+    try {
+      const data = await getConversationSummaries()
+      const list = (data || []).map(asConversationSummary)
+      setItems(
+        list
+          .map((m: ConversationSummary) => ({
+            id: m.id,
+            title: m.title || m.id,
+            lastSeq: m.last_seq,
+            updatedAt: m.updated_at,
+            unread: m.unread_count,
+            preview: m.last_item_preview || '',
+          }))
+          .sort((a, b) => {
+            const ta = a.updatedAt ? Date.parse(a.updatedAt) : 0
+            const tb = b.updatedAt ? Date.parse(b.updatedAt) : 0
+            if (tb !== ta) return tb - ta
+            return b.lastSeq - a.lastSeq
+          })
+      )
+    } catch (e: unknown) {
+      const err = e as { message?: string }
+      message.error(err?.message || '加载失败')
+    } finally {
+      setLoading(false)
+    }
+  }
 
   useEffect(() => {
-    const unsub = syncManager.subscribe(() => setItems(syncManager.convList() as Item[]))
-    setItems(syncManager.convList() as Item[])
-    return () => unsub()
+    load()
   }, [])
 
   async function refresh() {
     setLoading(true)
-    try { syncManager.requestSync('conversations') } finally { setLoading(false) }
+    try {
+      await load()
+    } finally {
+      setLoading(false)
+    }
   }
 
   function open(cid: string) {
@@ -33,13 +69,22 @@ export default function Conversations() {
     try {
       await deleteConversation(cid)
       message.success('已删除会话')
-      // 立刻从列表与本地状态移除
-      setItems((prev) => prev.filter((x) => x.id !== cid))
-      syncManager.removeConversation(cid)
-      // 触发一次同步以刷新 meta
-      syncManager.requestSync('conversations')
-    } catch (e: any) {
-      message.error(e?.message || '删除失败')
+      await load()
+      // If deleting current conversation, switch to latest or create new
+      if (currentCid && currentCid === cid) {
+        if (items.length > 0) {
+          const next = items[0]
+          persistSessionId(next.id)
+          nav(`/chat?cid=${encodeURIComponent(next.id)}`)
+        } else {
+          const id = newSid()
+          persistSessionId(id)
+          nav(`/chat?cid=${encodeURIComponent(id)}`)
+        }
+      }
+    } catch (e: unknown) {
+      const err = e as { message?: string }
+      message.error(err?.message || '删除失败')
     }
   }
 
@@ -53,51 +98,68 @@ export default function Conversations() {
     try {
       await cleanupConversations('all')
       message.success('已清理所有会话')
-      // 清空本地状态并通知订阅者，界面自动刷新
       setItems([])
-      syncManager.resetAll()
-      ;['gp:lastSid','gp_session_id'].forEach((k)=>localStorage.removeItem(k))
-      syncManager.requestSync('conversations')
-    } catch (e: any) {
-      message.error(e?.message || '清理失败')
+      ;['gp:lastSid', 'gp_session_id'].forEach((k) => localStorage.removeItem(k))
+      await load()
+    } catch (e: unknown) {
+      const err = e as { message?: string }
+      message.error(err?.message || '清理失败')
     }
   }
 
   return (
-    <Card title="会话" extra={<Space>
-      <Popconfirm title="清理所有会话" description="将删除服务器上的全部会话及消息，不可恢复。确认？" onConfirm={cleanupAll}>
-        <Button danger>一键清理</Button>
-      </Popconfirm>
-      <Button onClick={createNew} type="primary">新建对话</Button>
-      <Button loading={loading} onClick={refresh}>刷新</Button>
-    </Space>}>
-      <List
-        dataSource={items}
-        renderItem={(it) => (
-          <List.Item style={{ cursor: 'pointer' }} actions={[
-            <Popconfirm key="del" title="删除会话" description="此操作不可恢复，确定删除？" onConfirm={() => onDelete(it.id)}>
-              <Button danger size="small" onClick={(e) => e.stopPropagation()}>删除</Button>
-            </Popconfirm>
-          ]} onClick={(e) => {
-            // 避免点到删除按钮触发打开
-            if ((e.target as HTMLElement).closest('.ant-popover') || (e.target as HTMLElement).closest('button')) return
-            open(it.id)
-          }}>
-            <Space direction="vertical" style={{ width: '100%' }} size={0}>
-              <Space align="center" style={{ justifyContent: 'space-between', width: '100%' }}>
-                <Typography.Text strong>{it.title}</Typography.Text>
-                <Space>
-                  {it.unread > 0 && <Badge count={it.unread} style={{ backgroundColor: '#f5222d' }} />}
-                  <Typography.Text type="secondary">{it.updatedAt ? dayjs(it.updatedAt).format('MM-DD HH:mm') : ''}</Typography.Text>
+    <Card
+      title="会话"
+      style={{ height: '100%' }}
+      styles={{ body: { height: '100%', display: 'flex', flexDirection: 'column', minHeight: 0, overflow: 'hidden' } }}
+      extra={
+        <Space>
+          <Popconfirm title="清空所有会话" description="将删除存储中的全部会话信息，无法恢复，确认？" onConfirm={cleanupAll}>
+            <Button danger>一键清空</Button>
+          </Popconfirm>
+          <Button onClick={createNew} type="primary">
+            新建对话
+          </Button>
+          <Button loading={loading} onClick={refresh}>
+            刷新
+          </Button>
+        </Space>
+      }
+    >
+      <div style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
+        <List
+          dataSource={items}
+          renderItem={(it) => (
+            <List.Item
+              style={{ cursor: 'pointer' }}
+              actions={[
+                <Popconfirm key="del" title="删除会话" description="此操作不可恢复，确认删除？" onConfirm={() => onDelete(it.id)}>
+                  <Button danger size="small" onClick={(e) => e.stopPropagation()}>
+                    删除
+                  </Button>
+                </Popconfirm>,
+              ]}
+              onClick={(e) => {
+                if ((e.target as HTMLElement).closest('.ant-popover') || (e.target as HTMLElement).closest('button')) return
+                open(it.id)
+              }}
+            >
+              <Space direction="vertical" style={{ width: '100%' }} size={0}>
+                <Space align="center" style={{ justifyContent: 'space-between', width: '100%' }}>
+                  <Typography.Text strong>{it.title}</Typography.Text>
+                  <Space>
+                    {it.unread > 0 && <Badge count={it.unread} style={{ backgroundColor: '#f5222d' }} />}
+                    <Typography.Text type="secondary">{it.updatedAt ? dayjs(it.updatedAt).format('MM-DD HH:mm') : ''}</Typography.Text>
+                  </Space>
                 </Space>
+                <Typography.Paragraph type="secondary" ellipsis={{ rows: 1 }} style={{ marginBottom: 0 }}>
+                  {it.preview || '...'}
+                </Typography.Paragraph>
               </Space>
-              <Typography.Paragraph type="secondary" ellipsis={{ rows: 1 }} style={{ marginBottom: 0 }}>
-                {it.preview || '...'}
-              </Typography.Paragraph>
-            </Space>
-          </List.Item>
-        )}
-      />
+            </List.Item>
+          )}
+        />
+      </div>
     </Card>
   )
 }

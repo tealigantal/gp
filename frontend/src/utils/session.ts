@@ -8,7 +8,7 @@ export function getOrCreateSessionId(): string {
   let sid = (cidParam || legacySid || localStorage.getItem(LAST_SID_KEY) || '').trim()
   if (!sid) sid = newSid()
   // persist and reflect in URL as cid only
-  try { localStorage.setItem(LAST_SID_KEY, sid) } catch {}
+  try { localStorage.setItem(LAST_SID_KEY, sid) } catch (e) { /* ignore */ void e }
   try {
     if (url.searchParams.get('cid') !== sid) {
       url.searchParams.set('cid', sid)
@@ -19,19 +19,19 @@ export function getOrCreateSessionId(): string {
     // IMPORTANT: preserve existing history.state (React Router stores its own keys in it).
     // Replacing it with `{}` can break navigation/back/forward behavior.
     window.history.replaceState(window.history.state, '', url.toString())
-  } catch {}
+  } catch (e) { /* ignore */ void e }
   return sid
 }
 
 export function setSessionId(sid: string) {
   const url = new URL(window.location.href)
-  try { localStorage.setItem(LAST_SID_KEY, sid) } catch {}
+  try { localStorage.setItem(LAST_SID_KEY, sid) } catch (e) { /* ignore */ void e }
   try {
     url.searchParams.set('cid', sid)
     if (url.searchParams.has('sid')) url.searchParams.delete('sid')
     // Preserve router-managed state.
     window.history.replaceState(window.history.state, '', url.toString())
-  } catch {}
+  } catch (e) { /* ignore */ void e }
 }
 
 export function newSid() {
@@ -39,6 +39,6 @@ export function newSid() {
   try {
     const uuid = crypto?.randomUUID?.()
     if (uuid) return `sess-${uuid}`
-  } catch {}
+  } catch (e) { /* ignore */ void e }
   return `sess-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`
 }

@@ -19,33 +19,54 @@ import json
 import os
 from datetime import datetime
 from typing import Any, Dict, List, Optional
+from urllib.parse import urlsplit
 
 import pandas as pd
-from fastapi import APIRouter, FastAPI, HTTPException, Query
+from fastapi import APIRouter, FastAPI, HTTPException, Query, Body
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from ..chat import event_store
-from ..chat.orchestrator import handle_message
+from ..chat.deepseek_agent import run_agent_turn
 from ..core.config import load_config
 from ..core.errors import APIError
 from ..core.paths import store_dir, results_dir
 from ..dev.fixtures import dev_ohlcv_bars
-from ..recommend.datahub import MarketDataHub
-from ..recommend.runner import list_modes as recommend_list_modes
-from ..recommend.runner import run as recommend_run
 from ..recommend.compact_payload import compact_recommend_payload
+from ..recommend.runner import list_modes as recommend_list_modes
+from ..kernel.facade import (
+    get_artifact_v2 as kernel_get_artifact_v2,
+    compare_symbols as kernel_compare_symbols,
+    get_pick_detail as kernel_pick_detail,
+    get_strategy_validation as kernel_strategy_validation,
+    get_paperfolio as kernel_get_paperfolio,
+)
 from .models import (
     ChatReq,
     ChatResp,
+    FocusReq,
+    FocusResp,
     EventOut,
     HealthResp,
     OHLCVBar,
     OHLCVResp,
     RecommendReq,
     RecommendResp,
+    CompareReq,
+    CompareResp,
+    PickDetailReq,
+    PickDetailResp,
+    RecommendV2Resp,
     SyncReq,
     SyncResp,
+    StrategyValidationResp,
+    PaperfolioResp,
+    LiveShadowResp,
+    ValidationSummaryResp,
+    PortfolioResp,
+    WorkbenchResp,
+    OperatorIntentActionReq,
+    OperatorIntentActionResp,
 )
 
 app = FastAPI(title="gp_assistant", version="1.1.0")
@@ -81,17 +102,22 @@ def _compact_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def _handle_chat(req: ChatReq) -> ChatResp:
-    data = handle_message(req.session_id, req.message, getattr(req, "message_id", None))
+    data = run_agent_turn(req.session_id, req.message)
     return ChatResp(
         session_id=data.get("session_id"),
         reply=str(data.get("reply", "")),
-        tool_trace=data.get("tool_trace", {}),
-        assistant_message_id=data.get("assistant_message_id"),
+        tool_trace={},
+        assistant_message_id=None,
+        right_panel=(data.get("right_panel") if isinstance(data.get("right_panel"), dict) else None),
     )
+
+
+# moved below after router creation
 
 
 def _handle_recommend(req: RecommendReq) -> Dict[str, Any]:
     # IMPORTANT: use runner (multi-mode)
+    from ..recommend.runner import run as recommend_run  # lazy import
     result = recommend_run(
         mode=req.mode,
         date=req.date,
@@ -163,26 +189,127 @@ def _service_health_status() -> Dict[str, Any]:
     }
 
 
-def _handle_health() -> Dict[str, Any]:
-    cfg = load_config()
-    from ..providers.factory import get_provider
-
-    provider = get_provider()
+def _health_live() -> Dict[str, Any]:
+    """Extremely lightweight liveness: process responds and config parses minimally."""
     now = datetime.now().isoformat()
+    status = {
+        "ok": True,
+        "status": "live",
+        "service": "gp-assistant",
+        "ts": now,
+    }
+    return status
 
-    llm_ready = bool(cfg.llm_base_url and cfg.llm_api_key)
 
+def _check_store_rw() -> Dict[str, Any]:
+    try:
+        base = store_dir()
+        base.mkdir(parents=True, exist_ok=True)
+        p = base / ".probe"
+        p.write_text("ok", encoding="utf-8")
+        try:
+            p.unlink(missing_ok=True)  # type: ignore[arg-type]
+        except TypeError:
+            try:
+                if p.exists():
+                    p.unlink()
+            except Exception:
+                pass
+        return {"ok": True, "path": str(base)}
+    except Exception as e:  # noqa: BLE001
+        return {"ok": False, "error": str(e)}
+
+
+def _check_config() -> Dict[str, Any]:
+    try:
+        cfg = load_config()
+        return {"ok": True, "run_mode": cfg.run_mode, "dev_mode": cfg.dev_mode}
+    except Exception as e:  # noqa: BLE001
+        return {"ok": False, "error": str(e)}
+
+
+def _is_local_url(u: str) -> bool:
+    try:
+        p = urlsplit(u)
+        host = (p.hostname or "").lower()
+        if not host:
+            return True
+        if host in {"localhost", "127.0.0.1", "0.0.0.0"}:
+            return True
+        # Container-local names typically have no dots (e.g., "llm", "proxy")
+        if "." not in host:
+            return True
+        return False
+    except Exception:
+        return False
+
+
+def _llm_health_url(base: str) -> str:
+    b = base.rstrip("/")
+    if b.endswith("/v1") or b.endswith("/beta"):
+        return b.rsplit("/", 1)[0] + "/health"
+    return b + "/health"
+
+
+def _check_llm(timeout: float = 0.8) -> Dict[str, Any]:
+    base = os.getenv("LLM_BASE_URL", "").strip()
+    key = os.getenv("LLM_API_KEY", "").strip()
+    if not base:
+        return {"ok": False, "skipped": False, "reason": "LLM_BASE_URL_missing"}
+    if not key:
+        return {"ok": False, "skipped": False, "reason": "LLM_API_KEY_missing"}
+    # Only probe when pointing to a local endpoint; skip external providers
+    if not _is_local_url(base):
+        return {"ok": True, "skipped": True, "reason": "external_provider_not_probed", "base": base}
+    url = _llm_health_url(base)
+    try:
+        import urllib.request  # noqa: PLC0415
+
+        req = urllib.request.Request(url, method="GET")
+        with urllib.request.urlopen(req, timeout=timeout) as resp:  # noqa: S310
+            code = int(getattr(resp, "status", 0) or 0)
+            return {"ok": (200 <= code < 500), "status": code, "url": url}
+    except Exception as e:  # noqa: BLE001
+        return {"ok": False, "error": str(e), "url": url}
+
+
+def _health_ready() -> Dict[str, Any]:
+    now = datetime.now().isoformat()
+    checks = {
+        "store": _check_store_rw(),
+        "config": _check_config(),
+        "llm": _check_llm(),
+    }
+    ok = all(v.get("ok") for v in checks.values())
     return {
-        "status": "ok",
-        "llm_ready": llm_ready,
-        "provider": provider.healthcheck(),
-        "time": now,
-        # extras (safe; HealthResp allows extra)
-        "run_mode": cfg.run_mode,
-        "dev_mode": cfg.dev_mode,
-        "recommend_mode": cfg.recommend_mode,
+        "ok": bool(ok),
+        "status": "ready" if ok else "degraded",
+        "service": "gp-assistant",
+        "ts": now,
+        "checks": checks,
+        "service_state": _service_health_status(),
+    }
+
+
+def _handle_health() -> Dict[str, Any]:
+    # Backward-compat lightweight health; do NOT call external providers.
+    ready = _health_ready()
+    cfg = None
+    try:
+        cfg = load_config()
+    except Exception:
+        pass
+    return {
+        "status": ("ok" if ready.get("ok") else "degraded"),
+        "llm_ready": bool(((ready.get("checks") or {}).get("llm") or {}).get("ok")),
+        "provider": {"note": "skipped_in_light_health"},
+        "time": str(ready.get("ts") or datetime.now().isoformat()),
+        # extras for richer UI
+        "run_mode": getattr(cfg, "run_mode", None),
+        "dev_mode": getattr(cfg, "dev_mode", None),
+        "recommend_mode": getattr(cfg, "recommend_mode", None),
         "recommend_modes": recommend_list_modes(),
-        "service": _service_health_status(),
+        "service": ready,
     }
 
 
@@ -226,7 +353,8 @@ def _handle_ohlcv(symbol: str, start: Optional[str], end: Optional[str], limit: 
         meta_out["filtered"].update({k: v for k, v in {"start": start, "end": end, "limit": limit, "mode": "dev"}.items() if v is not None})
         return OHLCVResp(symbol=symbol, meta=meta_out, bars=[OHLCVBar(**b) for b in bars])
 
-    # real mode
+    # real mode (lazy import to avoid heavy deps on app import)
+    from ..recommend.datahub import MarketDataHub  # local import
     hub = MarketDataHub()
     as_of = end  # prefer end as as_of boundary if provided
     df, meta = hub.daily_ohlcv(symbol, as_of=as_of, min_len=0)
@@ -346,6 +474,14 @@ def _handle_live_file(date: str, name: str) -> Dict[str, Any] | list[Dict[str, A
 api = APIRouter(prefix="/api")
 
 
+@api.post("/chat/focus", response_model=FocusResp)
+def api_post_chat_focus(req: FocusReq) -> Dict[str, Any]:
+    from ..chat import session_store as store
+    sid = store.ensure_session(req.session_id)
+    st = store.set_focus(sid, req.focus_symbol, reason="api_chat_focus")
+    return {"ok": True, "session_id": sid, "focus_symbol": req.focus_symbol, "state": st}
+
+
 @api.post("/chat", response_model=ChatResp)
 def api_post_chat(req: ChatReq) -> ChatResp:
     try:
@@ -381,6 +517,23 @@ def api_get_health() -> HealthResp:
         return HealthResp(**_handle_health())
     except Exception as e:  # noqa: BLE001
         raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@api.get("/health/live")
+def api_get_health_live() -> Dict[str, Any]:
+    try:
+        return _health_live()
+    except Exception as e:  # noqa: BLE001
+        # liveness must be extremely robust
+        return {"ok": False, "status": "error", "service": "gp-assistant", "ts": datetime.now().isoformat(), "error": str(e)}
+
+
+@api.get("/health/ready")
+def api_get_health_ready() -> Dict[str, Any]:
+    try:
+        return _health_ready()
+    except Exception as e:  # noqa: BLE001
+        return {"ok": False, "status": "error", "service": "gp-assistant", "ts": datetime.now().isoformat(), "error": str(e)}
 
 
 @api.get("/ohlcv/{symbol}", response_model=OHLCVResp)
@@ -559,6 +712,689 @@ def api_post_sync(req: SyncReq) -> SyncResp:  # type: ignore[return-value]
     )
 
 
+# -------------------------
+# Read-model endpoints (Phase 1)
+# -------------------------
+
+def _sql_conn():
+    try:
+        # best-effort reuse of event_store connection helper
+        return event_store._connect()  # type: ignore[attr-defined]
+    except Exception as e:  # noqa: BLE001
+        raise RuntimeError(f"failed to connect event store: {e}")
+
+
+def _current_user_id_safe() -> str:
+    try:
+        return event_store._current_user_id()  # type: ignore[attr-defined]
+    except Exception:
+        return "local"
+
+
+def _get_last_read_seq(cid: str, user_id: Optional[str] = None) -> int:
+    uid = user_id or _current_user_id_safe()
+    try:
+        conn = _sql_conn()
+        cur = conn.execute(
+            "SELECT last_read_seq FROM participants WHERE conversation_id=? AND user_id=?",
+            (cid, uid),
+        )
+        row = cur.fetchone()
+        conn.close()
+        return int(row[0] or 0) if row else 0
+    except Exception:
+        return 0
+
+
+def _row_payload_to_obj(val: Optional[str]) -> Optional[Dict[str, Any]]:
+    if val is None:
+        return None
+    try:
+        return json.loads(val)
+    except Exception:
+        return None
+
+
+def _map_kind_and_preview(kind: str, content: Optional[str], payload: Optional[Dict[str, Any]]):
+    # Map storage rows to stable kind + preview string
+    k = (kind or "text").strip().lower()
+    if k == "text":
+        pv = (content or "").strip()
+        return "text", pv
+    if k == "card":
+        ptype = str((payload or {}).get("type") or "").strip().lower()
+        if ptype == "recommendation":
+            picks = (payload or {}).get("picks")
+            n = 0
+            if isinstance(picks, list):
+                n = len(picks)
+            return "recommendation", f"推荐清单 {n}"
+        if ptype == "status":
+            msg = str((payload or {}).get("message") or (payload or {}).get("content") or "状态更新")
+            return "status", msg
+        if ptype == "no_trade":
+            return "no_trade", "空仓原因"
+        if ptype == "pick_detail":
+            sym = str((payload or {}).get("symbol") or "")
+            return "pick_detail", (f"研究 {sym}" if sym else "标的研究")
+        if ptype == "compare":
+            syms = (payload or {}).get("symbols") or []
+            pv = "对比"
+            try:
+                if isinstance(syms, list) and len(syms) >= 2:
+                    pv = f"对比 {syms[0]} vs {syms[1]}"
+            except Exception:
+                pass
+            return "compare", pv
+        if ptype == "exit_decision":
+            sym = str((payload or {}).get("symbol") or "")
+            return "exit_decision", (f"卖出判断 {sym}" if sym else "卖出判断")
+        if ptype == "run_change":
+            return "run_change", "推荐变化说明"
+        if ptype == "kline":
+            # Do not treat K线为主要线程项；预览保守返回空
+            return "status", ""
+    # fallback
+    return "text", (content or "").strip()
+
+
+def _last_item_info(cid: str) -> Dict[str, Any]:
+    conn = _sql_conn()
+    try:
+        cur = conn.execute(
+            """
+            SELECT id, seq_created, kind, content, payload, created_at
+            FROM conv_messages
+            WHERE conversation_id=? AND deleted_at IS NULL
+            ORDER BY seq_created DESC
+            LIMIT 50
+            """,
+            (cid,),
+        )
+        rows = cur.fetchall() or []
+    finally:
+        conn.close()
+    for r in rows:
+        mid, seq, kind, content, payload_json, created_at = r
+        payload = _row_payload_to_obj(payload_json)
+        kind2, preview = _map_kind_and_preview(kind or "", content, payload)
+        # Skip pure kline (mapped to empty preview)
+        if kind2 == "status" and preview == "":
+            continue
+        return {
+            "id": str(mid),
+            "seq": int(seq or 0),
+            "kind": kind2,
+            "preview": str(preview or ""),
+            "created_at": created_at,
+        }
+    return {"id": None, "seq": 0, "kind": "text", "preview": "", "created_at": None}
+
+
+def _unread_count(cid: str, last_read_seq: int) -> int:
+    conn = _sql_conn()
+    try:
+        cur = conn.execute(
+            """
+            SELECT seq_created, kind, content, payload
+            FROM conv_messages
+            WHERE conversation_id=? AND deleted_at IS NULL AND seq_created>?
+            ORDER BY seq_created ASC
+            """,
+            (cid, int(last_read_seq)),
+        )
+        rows = cur.fetchall() or []
+    finally:
+        conn.close()
+    cnt = 0
+    for seq, kind, content, payload_json in rows:
+        payload = _row_payload_to_obj(payload_json)
+        kind2, preview = _map_kind_and_preview(kind or "", content, payload)
+        # Count as unread when it's a visible thread item
+        if kind2 in {"text", "recommendation", "status", "no_trade", "pick_detail", "compare", "exit_decision", "run_change"}:
+            # Skip empty preview-only status (e.g., kline)
+            if kind2 == "status" and preview == "":
+                continue
+            cnt += 1
+    return cnt
+
+
+@api.get("/conversations/summaries")
+def api_get_conversation_summaries() -> List[Dict[str, Any]]:
+    items = event_store.list_conversations()
+    out: List[Dict[str, Any]] = []
+    for m in items:
+        cid = str(m.get("id"))
+        title = str(m.get("title") or cid)
+        last_seq = int(m.get("last_seq") or 0)
+        updated_at = m.get("updated_at")
+        last = _last_item_info(cid)
+        last_read = _get_last_read_seq(cid)
+        unread = _unread_count(cid, last_read)
+        out.append(
+            {
+                "id": cid,
+                "title": title,
+                "last_seq": last_seq,
+                "last_item_preview": last.get("preview") or "",
+                "last_item_kind": last.get("kind") or "text",
+                "last_item_ts": last.get("created_at"),
+                "unread_count": unread,
+                "updated_at": updated_at,
+            }
+        )
+    return out
+
+
+def _map_row_to_thread_item(row: tuple, cid: str) -> Optional[Dict[str, Any]]:
+    # row columns: id, seq_created, author_id, kind, content, payload, created_at
+    mid, seq, author_id, kind, content, payload_json, created_at = row
+    payload = _row_payload_to_obj(payload_json)
+    role = "assistant" if (str(author_id or "").lower().strip() == "assistant") else "user"
+    k = (kind or "text").strip().lower()
+
+    base = {
+        "id": str(mid),
+        "conversation_id": cid,
+        "seq": int(seq or 0),
+        "created_at": created_at,
+        "role": role,
+    }
+
+    # Only allow two kinds in thread timeline: user text and canonical assistant_bundle
+    if k == "text" and role == "user":
+        return {**base, "kind": "text", "content": str(content or "")}
+    if k == "assistant_bundle" and role == "assistant":
+        # Return the payload as-is under bundle field for frontend rendering
+        return {**base, "kind": "assistant_bundle", "bundle": payload}
+    return None
+
+
+@api.get("/threads/{cid}/items")
+def api_get_thread_items(
+    cid: str,
+    anchor: Optional[int] = Query(default=None),
+    direction: str = Query(default="backward", pattern="^(backward|forward)$"),
+    limit: int = Query(default=60, ge=1, le=500),
+) -> List[Dict[str, Any]]:
+    # Query from conv_messages for stable thread items
+    conn = _sql_conn()
+    try:
+        if direction == "forward":
+            a = int(anchor or 0)
+            cur = conn.execute(
+                """
+                SELECT id, seq_created, author_id, kind, content, payload, created_at
+                FROM conv_messages
+                WHERE conversation_id=? AND deleted_at IS NULL AND seq_created>?
+                ORDER BY seq_created ASC
+                LIMIT ?
+                """,
+                (cid, a, int(limit)),
+            )
+            rows = cur.fetchall() or []
+        else:
+            # backward: take items with seq<=anchor, ordered desc then reverse
+            last = int(anchor or 10**12)
+            cur = conn.execute(
+                """
+                SELECT id, seq_created, author_id, kind, content, payload, created_at
+                FROM conv_messages
+                WHERE conversation_id=? AND deleted_at IS NULL AND seq_created<=?
+                ORDER BY seq_created DESC
+                LIMIT ?
+                """,
+                (cid, last, int(limit)),
+            )
+            rows = list(reversed(cur.fetchall() or []))
+    finally:
+        conn.close()
+    out: List[Dict[str, Any]] = []
+    for r in rows:
+        it = _map_row_to_thread_item(r, cid)
+        if it is not None:
+            out.append(it)
+    return out
+
+
+@api.post("/threads/{cid}/read")
+def api_post_thread_read(cid: str, payload: Dict[str, Any] = Body(...)) -> Dict[str, Any]:
+    try:
+        last_read_seq = int((payload or {}).get("last_read_seq") or 0)
+    except Exception as e:  # noqa: BLE001
+        raise HTTPException(status_code=400, detail=f"invalid last_read_seq: {e}") from e
+    try:
+        event_store.update_read(cid, None, last_read_seq)
+        return {"status": "ok"}
+    except Exception as e:  # noqa: BLE001
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@api.post("/compare", response_model=CompareResp)
+def api_post_compare(req: 'CompareReq') -> Dict[str, Any]:
+    """Structured compare directly from artifact (no LLM)."""
+    try:
+        out = kernel_compare_symbols(req.run_id, req.symbols)
+        return out
+    except Exception as e:  # noqa: BLE001
+        # sanitize: do not leak raw exception
+        return {"ok": False, "error": "compare_unavailable"}
+
+
+@api.get("/pick", response_model=PickDetailResp)
+def api_get_pick_detail(run_id: Optional[str] = Query(default=None), symbol: str = Query(...)) -> Dict[str, Any]:
+    try:
+        out = kernel_pick_detail(run_id, symbol)
+        return out
+    except Exception as e:  # noqa: BLE001
+        return {"ok": False, "error": "pick_detail_unavailable"}
+
+
+## Legacy v1/v2 read helpers removed; unified artifact store is used instead.
+
+
+def _recommend_v2_read(run_id: Optional[str], as_of: Optional[str]) -> Dict[str, Any]:
+    return kernel_get_artifact_v2(run_id=run_id, as_of=as_of)
+
+
+@api.get("/recommend_v2", response_model=RecommendV2Resp)
+def api_get_recommend_v2(
+    run_id: Optional[str] = Query(default=None),
+    as_of: Optional[str] = Query(default=None),
+) -> Dict[str, Any]:
+    try:
+        return _recommend_v2_read(run_id, as_of)
+    except HTTPException:
+        raise
+    except Exception as e:  # noqa: BLE001
+        # sanitize raw error leakage
+        return {"artifact_version": "v2", "ok": False, "error": "recommend_v2_unavailable"}
+
+
+# ---- Phase 3: Validation read-only endpoints ----
+
+
+@api.get("/validation/strategy/{strategy}", response_model=StrategyValidationResp)
+def api_get_strategy_validation(strategy: str) -> Dict[str, Any]:
+    try:
+        return kernel_strategy_validation(strategy)
+    except Exception:
+        return {"strategy": strategy, "event_stats": {"available": False}, "walk_forward": {"available": False}, "strategy_health": {"available": False}}
+
+
+@api.get("/paperfolio", response_model=PaperfolioResp)
+def api_get_paperfolio() -> Dict[str, Any]:
+    try:
+        return kernel_get_paperfolio()
+    except Exception:
+        return {"available": False, "picks": []}
+
+
+@api.get("/live_shadow/summary", response_model=LiveShadowResp)
+def api_get_live_shadow_summary() -> Dict[str, Any]:
+    from ..kernel.facade import get_live_shadow_latest_summary
+    try:
+        return get_live_shadow_latest_summary()
+    except Exception:
+        return {"available": False, "dates": [], "summary": {}}
+
+
+@api.get("/validation/summary", response_model=ValidationSummaryResp)
+def api_get_validation_summary() -> Dict[str, Any]:
+    try:
+        from ..kernel.facade import get_validation_summary
+        return get_validation_summary()
+    except Exception:
+        return {"as_of": None, "parts": {}}
+
+
+@api.get("/recommend_v2/gated")
+def api_get_recommend_v2_gated(
+    run_id: Optional[str] = Query(default=None),
+    as_of: Optional[str] = Query(default=None),
+) -> Dict[str, Any]:
+    try:
+        from ..kernel.facade import get_gated_artifact_v2
+        return get_gated_artifact_v2(run_id=run_id, as_of=as_of)
+    except Exception:
+        return {"artifact_version": "v2", "ok": False, "error": "recommend_v2_unavailable"}
+
+
+# ---- Phase 7: Execution/Portfolio ----
+
+
+@api.get("/portfolio", response_model=PortfolioResp)
+def api_get_portfolio() -> Dict[str, Any]:
+    try:
+        from ..kernel.facade import get_portfolio_state
+        return get_portfolio_state()
+    except Exception:
+        return {"as_of": None, "positions": [], "pending_intents": [], "recent_events": []}
+
+
+@api.get("/execution/events")
+def api_get_execution_events(limit: int = Query(100, ge=1, le=1000)) -> List[Dict[str, Any]]:
+    try:
+        from ..kernel.facade import get_execution_events
+        return get_execution_events(limit)
+    except Exception:
+        return []
+
+
+@api.post("/execution/paper/run")
+def api_post_run_paper_execution(run_id: Optional[str] = Query(default=None), as_of: Optional[str] = Query(default=None)) -> Dict[str, Any]:
+    try:
+        from ..kernel.facade import run_paper_execution
+        res = run_paper_execution(run_id=run_id, as_of=as_of)
+        return res
+    except Exception as e:  # noqa: BLE001
+        return {"ok": False, "error": "paper_execution_failed"}
+
+
+# ---- Phase 8: Operator / Workbench ----
+
+
+@api.get("/workbench", response_model=WorkbenchResp)
+def api_get_workbench(run_id: Optional[str] = Query(default=None), as_of: Optional[str] = Query(default=None), event_limit: int = Query(100, ge=1, le=1000)) -> Dict[str, Any]:
+    try:
+        from ..operator.facade import get_workbench_snapshot
+        return get_workbench_snapshot(run_id=run_id, as_of=as_of, event_limit=event_limit)
+    except Exception:
+        return {"as_of": None, "warnings": ["workbench_unavailable"]}
+
+
+@api.post("/operator/intent/action", response_model=OperatorIntentActionResp)
+def api_post_operator_intent_action(payload: OperatorIntentActionReq) -> Dict[str, Any]:
+    try:
+        from ..execution.actions import admit_intent, reject_intent, cancel_intent
+        act = str(payload.action)
+        if act == 'admit':
+            if not payload.symbol:
+                return {"ok": False, "error": "SYMBOL_REQUIRED"}
+            return admit_intent(run_id=payload.run_id, as_of=payload.as_of, symbol=payload.symbol, note=payload.operator_note)
+        elif act == 'reject':
+            if not payload.symbol:
+                return {"ok": False, "error": "SYMBOL_REQUIRED"}
+            return reject_intent(run_id=payload.run_id, as_of=payload.as_of, symbol=payload.symbol, note=payload.operator_note)
+        elif act == 'cancel':
+            if not payload.intent_id:
+                return {"ok": False, "error": "INTENT_ID_REQUIRED"}
+            return cancel_intent(intent_id=payload.intent_id, note=payload.operator_note)
+        return {"ok": False, "error": "UNKNOWN_ACTION"}
+    except Exception:
+        return {"ok": False, "error": "operator_action_failed"}
+
+
+def _message_text_by_id(mid: str) -> Optional[str]:
+    conn = _sql_conn()
+    try:
+        cur = conn.execute(
+            "SELECT content FROM conv_messages WHERE id=? AND deleted_at IS NULL",
+            (mid,),
+        )
+        row = cur.fetchone()
+        return (row[0] if row else None) or None
+    finally:
+        conn.close()
+
+
+def _build_preview_with_highlight(text: str, q: str, max_len: int = 120) -> Dict[str, Any]:
+    s = text or ""
+    if not q:
+        return {"preview": s[:max_len], "highlights": []}
+    s_low = s.lower()
+    q_low = q.lower()
+    idx = s_low.find(q_low)
+    if idx < 0:
+        return {"preview": s[:max_len], "highlights": []}
+    start = max(0, idx - 16)
+    end = min(len(s), idx + len(q) + 16)
+    snippet = s[start:end]
+    return {"preview": snippet, "highlights": [{"start": idx - start, "length": len(q)}]}
+
+
+@api.get("/search")
+def api_search_hits(
+    q: str = Query(..., description="Search query"),
+    conversation_id: Optional[str] = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=200),
+) -> List[Dict[str, Any]]:
+    # New typed search hits with preview and anchor
+    hits = event_store.search_messages(q, conversation_id=conversation_id, limit=limit)
+    out: List[Dict[str, Any]] = []
+    for h in hits:
+        msg_id = str(h.get("message_id"))
+        cid = str(h.get("conversation_id"))
+        seq = int(h.get("seq") or 0)
+        txt = _message_text_by_id(msg_id) or ""
+        pv = _build_preview_with_highlight(txt, q)
+        out.append(
+            {
+                "conversation_id": cid,
+                "seq": seq,
+                "message_id": msg_id,
+                "preview": pv["preview"],
+                "highlights": pv["highlights"],
+                "anchor": {"conversation_id": cid, "seq": seq},
+            }
+        )
+    return out
+
+
+@api.get("/search_legacy")
+def api_search_legacy(
+    q: str = Query(..., description="Search query"),
+    conversation_id: Optional[str] = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=200),
+) -> List[Dict[str, Any]]:
+    # Preserve old minimal shape for backward compatibility
+    return event_store.search_messages(q, conversation_id=conversation_id, limit=limit)
+
+
+def _get_recommendation_artifact_by_mid(mid: str) -> Dict[str, Any]:
+    conn = _sql_conn()
+    try:
+        cur = conn.execute(
+            """
+            SELECT id, conversation_id, seq_created, author_id, kind, content, payload, created_at
+            FROM conv_messages
+            WHERE id=? AND deleted_at IS NULL
+            """,
+            (mid,),
+        )
+        row = cur.fetchone()
+    finally:
+        conn.close()
+    if not row:
+        raise HTTPException(status_code=404, detail="artifact not found")
+    _id, _cid, _seq, _author, kind, _content, payload_json, _created = row
+    if str(kind or "").lower() != "card":
+        raise HTTPException(status_code=400, detail="not a card artifact")
+    payload = _row_payload_to_obj(payload_json) or {}
+    if str((payload or {}).get("type") or "").lower() != "recommendation":
+        raise HTTPException(status_code=400, detail="not a recommendation artifact")
+    # New: V2 run_id-based recommendation card -> read gated artifact and map to safe structure
+    try:
+        if str((payload or {}).get("artifact_version") or "").lower() == "v2" and (payload or {}).get("run_id"):
+            from ..kernel.facade import get_gated_artifact_v2 as _get_gated  # local import to avoid heavy deps on app import
+            run_id = str((payload or {}).get("run_id") or "")
+            as_of = (payload or {}).get("as_of")
+            art = _get_gated(run_id=run_id or None, as_of=as_of)
+            # sanitize fields for frontend (do not leak internals)
+            items_out: List[Dict[str, Any]] = []
+            for it in (art.get("items") or []):
+                if not isinstance(it, dict):
+                    continue
+                item = {
+                    "symbol": str(it.get("symbol", "")),
+                    "name": (it.get("name") if isinstance(it.get("name"), str) else None),
+                    "strategy": (it.get("strategy") if isinstance(it.get("strategy"), str) else None),
+                    "strategy_label": (it.get("strategy_label") if isinstance(it.get("strategy_label"), str) else None),
+                    "thesis": (it.get("thesis") if isinstance(it.get("thesis"), str) else None),
+                    "entry_zone": it.get("entry_zone"),
+                    "stop": it.get("stop"),
+                    "take_profit": it.get("take_profit"),
+                    "reward_risk": it.get("reward_risk"),
+                    "execution_state": it.get("execution_state"),
+                    "actionable": it.get("actionable"),
+                    "alpha_score": it.get("alpha_score"),
+                    "execution_score": it.get("execution_score"),
+                    "reliability_score": it.get("reliability_score"),
+                    "final_score": it.get("final_score"),
+                    "confidence": it.get("confidence"),
+                    "risk_flags": it.get("risk_flags"),
+                    "invalidation": it.get("invalidation"),
+                    "gating_decision": (lambda gd: ({
+                        "decision": gd.get("decision"),
+                        "reasons": gd.get("reasons"),
+                        "warnings": gd.get("warnings"),
+                    } if isinstance(gd, dict) else None))(it.get("gating_decision")),
+                }
+                items_out.append(item)
+            # Lightweight rationale summaries
+            try:
+                items = art.get("items") or []
+                allow_n = sum(1 for it in items if isinstance(it, dict) and ((it.get("gating_decision") or {}).get("decision") == "allow"))
+                blocked_n = sum(1 for it in items if isinstance(it, dict) and ((it.get("gating_decision") or {}).get("decision") == "blocked"))
+                degraded_n = sum(1 for it in items if isinstance(it, dict) and ((it.get("gating_decision") or {}).get("decision") == "degraded"))
+                run_reasons = ((art.get("run_gating") or {}).get("reasons") or [])
+                selection_rationale = f"allow={allow_n}, degraded={degraded_n}; run_rules={', '.join(run_reasons or [])}"
+                rejection_summary = f"blocked={blocked_n}"
+            except Exception:
+                selection_rationale = None
+                rejection_summary = None
+
+            v2_out = {
+                "artifact_version": "v2",
+                "run_id": art.get("run_id"),
+                "as_of": art.get("as_of"),
+                "market_regime": art.get("market_regime"),
+                "degraded": bool(art.get("degraded")),
+                "tradeable": bool(art.get("tradeable")),
+                "reason": art.get("reason"),
+                "risk_profile": art.get("risk_profile"),
+                "universe_name": art.get("universe_name"),
+                "symbols": art.get("symbols") or [],
+                "themes": art.get("themes") or [],
+                "items": items_out,
+                "fallback_used": bool(art.get("fallback_used", False)),
+                "run_gating": (lambda rg: ({
+                    "decision": rg.get("decision"),
+                    "reasons": rg.get("reasons"),
+                    "warnings": rg.get("warnings"),
+                } if isinstance(rg, dict) else None))(art.get("run_gating")),
+                "selection_rationale": selection_rationale,
+                "rejection_summary": rejection_summary,
+            }
+            top_syms: List[str] = []
+            try:
+                for it in (art.get("items") or [])[:3]:
+                    if isinstance(it, dict) and isinstance(it.get("symbol"), str):
+                        top_syms.append(str(it.get("symbol")))
+            except Exception:
+                pass
+            return {
+                "id": str(_id),
+                "artifact_version": "v2",
+                "run_id": v2_out.get("run_id"),
+                "as_of": v2_out.get("as_of"),
+                "source": "gated_v2",
+                "summary": {
+                    "total": len(v2_out.get("items") or []),
+                    "top_symbols": top_syms,
+                    "tradeable": v2_out.get("tradeable"),
+                    "market_regime": v2_out.get("market_regime"),
+                    "run_gating": v2_out.get("run_gating"),
+                    "reason": v2_out.get("reason"),
+                },
+                "v2": v2_out,
+            }
+    except Exception:
+        # fall through to legacy mapping
+        pass
+    # Normalize to safe subset
+    picks_in = payload.get("picks") or []
+    picks_out: List[Dict[str, Any]] = []
+    if isinstance(picks_in, list):
+        for p in picks_in:
+            if not isinstance(p, dict):
+                continue
+            item = {
+                "symbol": str(p.get("symbol", "")),
+                "name": (p.get("name") if isinstance(p.get("name"), str) else None),
+                "theme": (p.get("theme") if isinstance(p.get("theme"), str) else None),
+            }
+            champ = p.get("champion") if isinstance(p.get("champion"), dict) else None
+            if champ:
+                item["champion"] = {"strategy": str(champ.get("strategy", "")), "score": (champ.get("score") if isinstance(champ.get("score"), (int, float)) else None)}
+            tp = p.get("trade_plan") if isinstance(p.get("trade_plan"), dict) else None
+            if tp:
+                bands = tp.get("bands") if isinstance(tp.get("bands"), dict) else None
+                actions = tp.get("actions") if isinstance(tp.get("actions"), dict) else None
+                risk = tp.get("risk") if isinstance(tp.get("risk"), dict) else None
+                item["trade_plan"] = {
+                    "entry": tp.get("entry"),
+                    "take": tp.get("take"),
+                    "stop": tp.get("stop"),
+                    "bands": {k: v for k, v in (bands or {}).items() if k in {"S1", "S2", "R1", "R2"}},
+                    "actions": {k: v for k, v in (actions or {}).items() if k in {"window_A", "window_B"}},
+                    "risk": {
+                        "stop_loss": (risk or {}).get("stop_loss"),
+                        "time_stop": (risk or {}).get("time_stop"),
+                        "no_averaging_down": (risk or {}).get("no_averaging_down"),
+                    },
+                }
+                # prune undefined keys
+                item["trade_plan"] = {k: v for k, v in item["trade_plan"].items() if v is not None}
+            chip = p.get("chip") if isinstance(p.get("chip"), dict) else None
+            if chip:
+                item["chip"] = {"model_used": chip.get("model_used")}
+            picks_out.append(item)
+    as_of = payload.get("as_of") or None
+    timezone = payload.get("timezone") or "Asia/Shanghai"
+    tradeable = payload.get("tradeable") if isinstance(payload.get("tradeable"), bool) else None
+    disclaimer = payload.get("disclaimer") or None
+    message = payload.get("message") or None
+    meta_env_grade = None
+    try:
+        env = payload.get("env") or {}
+        if isinstance(env, dict):
+            meta_env_grade = env.get("grade")
+    except Exception:
+        pass
+    diagnostics = None
+    try:
+        debug = payload.get("debug") or {}
+        if isinstance(debug, dict):
+            diagnostics = {
+                "degraded": bool(debug.get("degraded") is True),
+                "degrade_reasons": debug.get("degrade_reasons") or [],
+            }
+    except Exception:
+        pass
+    return {
+        "id": str(_id),
+        "as_of": (str(as_of) if as_of is not None else None),
+        "timezone": str(timezone),
+        "picks": picks_out,
+        "tradeable": tradeable,
+        "disclaimer": (str(disclaimer) if disclaimer is not None else None),
+        "message": (str(message) if message is not None else None),
+        "meta": {"env_grade": meta_env_grade} if meta_env_grade is not None else {},
+        "diagnostics": diagnostics,
+    }
+
+
+@api.get("/artifacts/recommendations/{artifact_id}")
+def api_get_recommendation_artifact(artifact_id: str) -> Dict[str, Any]:
+    try:
+        return _get_recommendation_artifact_by_mid(artifact_id)
+    except HTTPException:
+        raise
+    except Exception as e:  # noqa: BLE001
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
 @api.get("/conversations/{cid}/events", response_model=list[EventOut])
 def api_get_events(
     cid: str,
@@ -617,16 +1453,7 @@ def api_cleanup_conversations(payload: Optional[Dict[str, Any]] = None) -> Dict[
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
-@api.get("/search")
-def api_search(
-    q: str = Query(..., description="Search query"),
-    conversation_id: Optional[str] = Query(default=None),
-    limit: int = Query(default=50, ge=1, le=200),
-) -> List[Dict[str, Any]]:
-    try:
-        return event_store.search_messages(q, conversation_id=conversation_id, limit=limit)
-    except Exception as e:  # noqa: BLE001
-        raise HTTPException(status_code=500, detail=str(e)) from e
+# legacy search route is provided as /search_legacy (see below)
 
 
 @api.post("/attachments/sign")

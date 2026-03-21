@@ -1,0 +1,19 @@
+{
+  "picks": [
+    {
+      "pick_id": "RID:AAA",
+      "symbol": "AAA",
+      "strategy": "S",
+      "as_of": "2099-01-01",
+      "price_ref": 10.0,
+      "entry_reached": true,
+      "hit_stop": false,
+      "hit_take": true,
+      "mfe": 0.5999999999999996,
+      "mae": 0.0,
+      "holding_days": 8,
+      "final_state": "target_hit",
+      "updated_at": "2026-03-17T14:19:23.373387"
+    }
+  ]
+}

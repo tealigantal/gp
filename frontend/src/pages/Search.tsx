@@ -1,33 +1,27 @@
 import { useState } from 'react'
 import { Card, Input, Button, List, Space, Typography, message } from 'antd'
-import { search as apiSearch, listEvents } from '../api/client'
-import { syncManager } from '../sync/SyncManager'
+import { searchHits } from '../api/client'
+import { asSearchHits } from '../api/adapters'
+import { renderHighlight } from '../utils/highlight'
+import type { SearchHit } from '../api/contracts'
 import { useNavigate } from 'react-router-dom'
 import { setSessionId as persistSessionId } from '../utils/session'
 
 export default function Search() {
   const [q, setQ] = useState('')
   const [loading, setLoading] = useState(false)
-  const [results, setResults] = useState<Array<{ conversation_id: string; seq: number; message_id: string }>>([])
+  const [results, setResults] = useState<SearchHit[]>([])
   const nav = useNavigate()
 
   async function run() {
     if (!q.trim()) return
     setLoading(true)
     try {
-      const data = await apiSearch({ q: q.trim(), limit: 50 })
-      const withPreview = await Promise.all((data || []).map(async (it) => {
-        try {
-          // Fetch the exact seq (around+limit=1 will return the previous event due to server-side windowing).
-          const after = Math.max(Number(it.seq || 0) - 1, 0)
-          const evs = await listEvents(it.conversation_id, { after, limit: 1 })
-          const content = evs?.[0]?.data?.content || ''
-          return { ...it, preview: content }
-        } catch { return { ...it } }
-      }))
-      setResults(withPreview as any)
-    } catch (e: any) {
-      message.error(e?.message || '搜索失败')
+      const data = await searchHits({ q: q.trim(), limit: 50 })
+      setResults(asSearchHits(data))
+    } catch (e: unknown) {
+      const err = e as { message?: string }
+      message.error(err?.message || '搜索失败')
       setResults([])
     } finally {
       setLoading(false)
@@ -37,8 +31,6 @@ export default function Search() {
   async function jump(item: { conversation_id: string; seq: number }) {
     const cid = item.conversation_id
     persistSessionId(cid)
-    await syncManager.ensureLoaded(cid)
-    await syncManager.jumpToSeq(cid, item.seq)
     nav(`/chat?cid=${encodeURIComponent(cid)}&seq=${item.seq}`)
   }
 
@@ -53,14 +45,14 @@ export default function Search() {
       ) : (
         <List
           dataSource={results}
-          renderItem={(it: any) => (
+          renderItem={(it: SearchHit) => (
             <List.Item onClick={() => jump(it)} style={{ cursor: 'pointer' }}>
               <Space direction="vertical" size={2}>
                 <Typography.Text>会话: {it.conversation_id}</Typography.Text>
                 <Typography.Text type="secondary">定位 seq: {it.seq}</Typography.Text>
                 {it.preview && (
                   <Typography.Paragraph ellipsis={{ rows: 2 }}>
-                    {highlight(it.preview, q)}
+                    {renderHighlight(it.preview, it.highlights || [])}
                   </Typography.Paragraph>
                 )}
               </Space>
@@ -69,20 +61,5 @@ export default function Search() {
         />
       )}
     </Card>
-  )
-}
-
-function highlight(text: string, q: string) {
-  const idx = text.toLowerCase().indexOf(q.toLowerCase())
-  if (idx < 0) return text
-  const pre = text.slice(0, idx)
-  const mid = text.slice(idx, idx + q.length)
-  const suf = text.slice(idx + q.length)
-  return (
-    <span>
-      {pre}
-      <mark>{mid}</mark>
-      {suf}
-    </span>
   )
 }

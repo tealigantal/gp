@@ -1,0 +1,21 @@
+{
+  "status": "degraded",
+  "reason_codes": [
+    "low_win_rate"
+  ],
+  "paper_trade_summary": {},
+  "event_summary": {
+    "sample_size": 10,
+    "d3_mean": 0.0,
+    "d5_mean": 0.0,
+    "d10_mean": 0.0,
+    "win_rate_d5": 0.4
+  },
+  "walkforward_summary": {
+    "stable": false,
+    "recent_rank": 1,
+    "windows": [
+      -0.015
+    ]
+  }
+}

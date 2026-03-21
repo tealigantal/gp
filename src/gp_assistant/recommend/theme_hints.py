@@ -5,6 +5,7 @@ from typing import Any, Dict, List, Optional
 import pandas as pd
 
 from .chg_normalize import detect_chg_col, normalize_chg_pct
+from providers.boards import is_mainboard
 
 
 def _detect_chg_col(cols) -> Optional[str]:
@@ -15,6 +16,13 @@ def build_mover_hints(snapshot: Optional[pd.DataFrame], topn: int = 3) -> List[D
     if snapshot is None or (hasattr(snapshot, "empty") and snapshot.empty):
         return []
     df = snapshot.copy()
+    # Strict mainboard-only universe for mover hints
+    code_col = "代码" if "代码" in df.columns else ("code" if "code" in df.columns else None)
+    if code_col:
+        try:
+            df = df[df[code_col].astype(str).map(is_mainboard)]
+        except Exception:
+            pass
     chg_col = _detect_chg_col(df.columns)
     if not chg_col:
         return []

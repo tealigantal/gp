@@ -1,4 +1,4 @@
-# Exclude local virtualenvs and caches
+### Python / build caches
 .venv/
 __pycache__/
 .pytest_cache/
@@ -7,25 +7,39 @@ __pycache__/
 build/
 dist/
 
-# VCS and IDE
+### VCS and IDE
 .git/
 .gitignore
 .idea/
 .vscode/
 *.swp
 
-# OS junk
+### OS junk
 .DS_Store
 Thumbs.db
 
-# Large/local data not needed in image
+### Large/local runtime data (mount at runtime)
 data/
 results/
 cache/
-store/
+_tmp_gp/
 universe/
 
-# Logs and temp files
+# store runtime layers (mount in compose)
+store/cache/
+store/backtest/
+store/snapshots/
+store/sessions/
+store/search/
+store/*.duckdb
+*.duckdb
+*.db
+store/recommend/**
+!store/recommend/README.md
+!store/recommend/latest.json
+!store/recommend/2026-03-11.json
+
+### Logs and temp files
 *.log
 tmp_*
 tmp/
@@ -35,9 +49,13 @@ tmp_patch_agent.txt
 tmp_agent_before.txt
 tmp_snip.txt
 
-# Frontend build artifacts (backend image doesn't need them)
+### Frontend (backend image doesn't need these)
 frontend/node_modules/
 frontend/dist/
+frontend/.env.local
 
-# Misc
+### Vendored bundles
+EMQuantAPI_Python/
+
+### Misc
 docker-compose.yml.bak

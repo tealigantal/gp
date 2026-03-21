@@ -1,6 +1,15 @@
 import React from 'react'
 import { Typography } from 'antd'
 
+function cleanContent(text: string) {
+  try {
+    // Remove leading internal/debug tags like [chat_unavailable], [data_unavailable]
+    return text.replace(/^\[[^\]]+\]\s*/g, '')
+  } catch {
+    return text
+  }
+}
+
 export default function MessageBubble({ role, content }: { role: 'user' | 'assistant'; content: string }) {
   const isUser = role === 'user'
   return (
@@ -18,7 +27,7 @@ export default function MessageBubble({ role, content }: { role: 'user' | 'assis
           boxShadow: '0 1px 2px rgba(0,0,0,0.06)'
         }}
       >
-        <Typography.Text style={{ color: isUser ? '#fff' : 'inherit', fontSize: 15, lineHeight: 1.7 }}>{content}</Typography.Text>
+        <Typography.Text style={{ color: isUser ? '#fff' : 'inherit', fontSize: 15, lineHeight: 1.7 }}>{cleanContent(content)}</Typography.Text>
       </div>
     </div>
   )

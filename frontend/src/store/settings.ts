@@ -6,11 +6,11 @@ export function getRiskProfile(): RiskProfile {
   try {
     const v = localStorage.getItem(RISK_KEY)
     if (v === 'conservative' || v === 'normal' || v === 'aggressive') return v
-  } catch {}
+  } catch (e) { /* ignore */ void e }
   return 'normal'
 }
 
 export function setRiskProfile(v: RiskProfile) {
-  try { localStorage.setItem(RISK_KEY, v) } catch {}
+  try { localStorage.setItem(RISK_KEY, v) } catch (e) { /* ignore */ void e }
 }
 

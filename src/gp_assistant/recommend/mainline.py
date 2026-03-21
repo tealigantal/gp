@@ -128,6 +128,14 @@ def build_mainline(indicator: str = "今日", topn: int = 3, snapshot: Optional[
     try:
         if snapshot is not None and isinstance(snapshot, pd.DataFrame) and (not snapshot.empty) and ("行业" in [str(c) for c in snapshot.columns]):
             df = snapshot.copy()
+            # Strict mainboard-only universe for mainline aggregation
+            try:
+                from providers.boards import is_mainboard  # lazy import to avoid cycles
+                code_col = "代码" if "代码" in df.columns else ("code" if "code" in df.columns else None)
+                if code_col:
+                    df = df[df[code_col].astype(str).map(is_mainboard)]
+            except Exception:
+                pass
             # choose metric: sum of 成交额 if present, otherwise mean of chg/pct_chg
             cols = set(map(str, df.columns))
             use_amt = "成交额" in cols

@@ -15,8 +15,6 @@ collect_ignore = [
     "test_cli_output_string_only.py",
     "test_constraints_core.py",
     "test_json_protocol_flow.py",
-    "test_llm_proxy_import.py",
-    "test_llm_proxy_smoke.py",
     "test_pipeline_mock.py",
     "test_prompt_prefix_clean.py",
     "test_require_trades.py",
@@ -41,6 +39,27 @@ def pytest_collection_modifyitems(config, items):
         "test_theme_pool_snapshot_paths.py",
         "test_theme_pool_impl_nan_and_scale.py",
         "test_strict_no_pseudo_output.py",
+        # Phase 2.6 gate additions
+        "test_calibration.py",
+        "test_contracts_v2.py",
+        "test_refresh_service_v2.py",
+        "test_recommend_v2_endpoint.py",
+        "test_compare_and_pick_endpoints.py",
+        # Phase 3 gate additions (validation)
+        "test_event_stats.py",
+        "test_walkforward_stats.py",
+        "test_paper_trade.py",
+        "test_strategy_health.py",
+        "test_lifecycle.py",
+        "test_validation_endpoints.py",
+        # Phase 4 kernel consolidation gate additions
+        "test_kernel_facade_smoke.py",
+        # Phase 5 validation automation gate additions
+        "test_runner_summary.py",
+        # Phase 6 gating gate additions
+        "test_evaluator.py",
+        # Phase 7 execution/portfolio gate additions
+        "test_mainline.py",
     )
     for item in items:
         fn = item.location[0]

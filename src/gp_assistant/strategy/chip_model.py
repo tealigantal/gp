@@ -1,5 +1,7 @@
-﻿# 绠€浠嬶細绛圭爜/鎴愭湰甯︿及绠椼€傛彁渚?A/B 涓ょ妯″瀷浼扮畻骞冲潎鎴愭湰涓?90% 甯︼紝
-# 骞惰緭鍑虹疆淇″害绛夌粺璁★紝渚涗氦鏄撹鍒掑弬鑰冦€?from __future__ import annotations
+from __future__ import annotations
+
+# 简介：筹码/成本分布模型。提供 A/B 两种模型，计算平均成本与 90% 区间，
+# 并输出集中度等统计，辅助交易判断。
 
 from dataclasses import dataclass
 from typing import Any, Dict, Tuple
@@ -165,3 +167,4 @@ def compute_chip(df: pd.DataFrame, float_shares: float | None = None) -> Tuple[C
     except Exception:
         pass
     return res, meta
+

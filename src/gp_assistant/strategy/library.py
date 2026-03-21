@@ -6,6 +6,16 @@ from typing import Dict, Any, Callable
 # Registry mapping id -> module
 REGISTRY: Dict[str, Any] = {}
 
+# Optional: strategy metadata for champion eligibility and routing
+# Note: additive and safe defaults; individual strategies can be updated here
+# without changing their modules. Keys:
+# - family: trend|breakout|mean_reversion|structure
+# - direction: long|short|contra
+# - live_enabled: bool
+# - prefer_observation_only: bool
+# - champion_eligible: bool
+METADATA: Dict[str, Dict[str, Any]] = {}
+
 
 def register(name: str, mod: Any) -> None:
     REGISTRY[name] = mod
@@ -45,3 +55,22 @@ register("S11", S11)
 register("S12", S12)
 register("S13", S13)
 register("S14", S14)
+
+# Populate metadata with conservative assumptions; these can be tuned later.
+# The goal is to downweight non-live-long candidates without removing them.
+METADATA.update({
+    "S1": {"family": "trend", "direction": "long", "live_enabled": True, "prefer_observation_only": False, "champion_eligible": True},
+    "S2": {"family": "mean_reversion", "direction": "long", "live_enabled": True, "prefer_observation_only": True, "champion_eligible": False},
+    "S3": {"family": "breakout", "direction": "long", "live_enabled": True, "prefer_observation_only": False, "champion_eligible": True},
+    "S4": {"family": "mean_reversion", "direction": "contra", "live_enabled": True, "prefer_observation_only": True, "champion_eligible": False},
+    "S5": {"family": "trend", "direction": "long", "live_enabled": True, "prefer_observation_only": False, "champion_eligible": True},
+    "S6": {"family": "trend", "direction": "long", "live_enabled": True, "prefer_observation_only": False, "champion_eligible": True},
+    "S7": {"family": "breakout", "direction": "long", "live_enabled": True, "prefer_observation_only": False, "champion_eligible": True},
+    "S8": {"family": "momentum", "direction": "long", "live_enabled": True, "prefer_observation_only": False, "champion_eligible": True},
+    "S9": {"family": "structure", "direction": "long", "live_enabled": True, "prefer_observation_only": True, "champion_eligible": True},
+    "S10": {"family": "mean_reversion", "direction": "contra", "live_enabled": True, "prefer_observation_only": True, "champion_eligible": False},
+    "S11": {"family": "mean_reversion", "direction": "long", "live_enabled": True, "prefer_observation_only": True, "champion_eligible": False},
+    "S12": {"family": "structure", "direction": "long", "live_enabled": True, "prefer_observation_only": False, "champion_eligible": True},
+    "S13": {"family": "breakout", "direction": "long", "live_enabled": True, "prefer_observation_only": False, "champion_eligible": True},
+    "S14": {"family": "mean_reversion", "direction": "contra", "live_enabled": True, "prefer_observation_only": True, "champion_eligible": False},
+})

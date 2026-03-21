@@ -73,6 +73,4 @@ class LLMRouter:
             os.getenv("LLM_API_KEY")
             or os.getenv("DEEPSEEK_API_KEY")
             or os.getenv("OPENAI_API_KEY")
-            or os.getenv("UPSTREAM_API_KEY")
         )
-

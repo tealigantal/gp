@@ -79,7 +79,10 @@ def generate_candidates(
     topk: int = 3,
     *,
     snapshot: Optional[pd.DataFrame] = None,
-) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]], Dict[str, Any]]:
+    return_features: bool = False,
+    as_of: Optional[str] = None,
+    industry_filter: Optional[List[str]] = None,
+) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]], Dict[str, Any]] | Tuple[List[Dict[str, Any]], List[Dict[str, Any]], Dict[str, Any], Dict[str, pd.DataFrame]]:
     cfg = load_config()
     # Cost controls (env overrides; keep logic local)
     try:
@@ -155,14 +158,42 @@ def generate_candidates(
             "snapshot_columns": list(snapshot.columns) if hasattr(snapshot, "columns") else [],
         }
 
+    # Optional early shrink by industry (applies only to dynamic snapshot-derived universe)
+    try:
+        if base_reason == "dynamic_pool" and industry_filter and isinstance(industry_filter, list):
+            filt = [str(x) for x in industry_filter if isinstance(x, str) and x.strip()]
+            if filt:
+                before = len(cleaned)
+                def _match_ind(e: Dict[str, Any]) -> bool:  # noqa: ANN001
+                    ind = str(e.get("industry") or "").strip()
+                    if not ind:
+                        return False
+                    return any((ind == f or (ind in f) or (f in ind)) for f in filt)
+                cleaned = [e for e in cleaned if _match_ind(e)]
+                # annotate stats so callers can diagnose shrink effect
+                if cleaned is not None:
+                    stats_shrink = {"from": before, "to": len(cleaned), "by": "industry_filter"}
+                    # this will be surfaced by agent in debug.thematic_stats
+                    # but we still record locally for completeness
+                    # keep under a reserved key to avoid breaking existing readers
+                    # (agent will not rely on this field)
+                    # fmt: off
+                    pass
+                # fmt: on
+    except Exception:
+        pass
+
     stats: Dict[str, Any] = {
         "universe_in_count": pre_clean_len,
+        "universe_after_mainboard_filter_count": int(pre_clean_len),
+        "universe_after_code_clean_count": 0,
         "universe_after_filter_count": 0,
         "bars_missing_count": 0,
         "bars_too_short_count": 0,
         "indicator_error_count": 0,
         "skipped_symbols_sample": [],
         "candidates_out_count": 0,
+        "pool_pre_thematic_count": 0,
         "daily_attempts_sample": [],
         "universe_removed_counts": {
             "bad_code": int(bad_code_removed),
@@ -198,7 +229,7 @@ def generate_candidates(
     try:
         syms = [str(e.get("code")) for e in cleaned if e.get("code")]
         if syms:
-            _ = hub.daily_ohlcv_batch(syms, as_of=None, safety_lookback_days=prefetch_lookback_days)
+            _ = hub.daily_ohlcv_batch(syms, as_of=as_of, safety_lookback_days=prefetch_lookback_days)
             try:
                 print(f"[预取] 已批量入库日线：{len(syms)} 个标的 lookback_days={prefetch_lookback_days}", flush=True)
             except Exception:
@@ -209,16 +240,28 @@ def generate_candidates(
     # 2) 逐标的构建候选
     pool: List[Dict[str, Any]] = []
     veto_reasons: List[Dict[str, Any]] = []
+    # per-run shared feature map for reuse in later stages
+    feats_by_symbol: Dict[str, pd.DataFrame] = {}
+
+    # update post-clean counts for diagnostics
+    try:
+        stats["universe_after_code_clean_count"] = int(len(cleaned))
+    except Exception:
+        pass
 
     for entry in cleaned:
         sym = str(entry.get("code"))
         if not sym:
             continue
         try:
-            # cache 优先，长度不足时再允许回源补齐
-            df, meta = hub.daily_ohlcv(sym, None, min_len=250, prefer_cache_only=True)
-            if bool(meta.get("insufficient_history")) or int(meta.get("len", 0) or 0) < 120:
-                df, meta = hub.daily_ohlcv(sym, None, min_len=250, prefer_cache_only=False)
+            # cache 优先，长度不足或缓存缺失时再允许回源补齐
+            try:
+                df, meta = hub.daily_ohlcv(sym, as_of, min_len=250, prefer_cache_only=True)
+            except Exception:
+                df, meta = hub.daily_ohlcv(sym, as_of, min_len=250, prefer_cache_only=False)
+            else:
+                if bool(meta.get("insufficient_history")) or int(meta.get("len", 0) or 0) < 120:
+                    df, meta = hub.daily_ohlcv(sym, as_of, min_len=250, prefer_cache_only=False)
         except Exception as e:  # noqa: BLE001
             stats["bars_missing_count"] += 1
             if len(stats["skipped_symbols_sample"]) < 10:
@@ -246,6 +289,11 @@ def generate_candidates(
                 except Exception:
                     pass
                 continue
+        # cache for reuse by champion evaluation
+        try:
+            feats_by_symbol[sym] = feat
+        except Exception:
+            pass
 
         # 特征提取
         last = feat.iloc[-1]
@@ -262,7 +310,14 @@ def generate_candidates(
         atrp = _safe_float(last.get("atr_pct", 0.0))
         gap = _safe_float(last.get("gap_pct", 0.0))
         close = _safe_float(last.get("close", 0.0))
+        ma10 = _safe_float(last.get("ma10", 0.0)) if "ma10" in feat.columns else _safe_float(last.get("ma20", 0.0))
         ma20 = _safe_float(last.get("ma20", 0.0))
+        # Soft execution hint features (extension / distance)
+        extension_ma10 = (close - ma10) / ma10 if ma10 else 0.0
+        extension_ma20 = (close - ma20) / ma20 if ma20 else 0.0
+        recent = feat.tail(60)
+        supp = _safe_float(recent["close"].quantile(0.30) if "close" in recent.columns else 0.0)
+        distance_to_recent_support = (close - supp) / close if (close and supp) else 0.0
         pressure = {"near_ma20": bool(ma20 and abs((close - ma20) / ma20) <= 0.005)}
 
         # 筹码 + 噪声等级
@@ -286,6 +341,13 @@ def generate_candidates(
             continue
 
         # 构造候选
+        # extension vs chip cost
+        ext_cost = 0.0
+        try:
+            ext_cost = (close - float(getattr(chip_res, "avg_cost", 0.0))) / float(getattr(chip_res, "avg_cost", 0.0) or 1.0)
+        except Exception:
+            ext_cost = 0.0
+
         cand = {
             "symbol": sym,
             "name": entry.get("name"),
@@ -302,6 +364,11 @@ def generate_candidates(
                 "slope20": _safe_float(feat["slope20"].iloc[-1]) if "slope20" in feat.columns else 0.0,
                 "atr_pct": atrp,
                 "gap_pct": gap,
+                "extension_ma10": float(extension_ma10),
+                "extension_ma20": float(extension_ma20),
+                "extension_from_cost": float(ext_cost),
+                "distance_to_recent_support": float(distance_to_recent_support),
+                "chip_vs_cost_pct": float(ext_cost),
             },
             "close": close,
         }
@@ -324,7 +391,24 @@ def generate_candidates(
                 reasons.append("NEAR_CHIP90_HIGH_FORBID")
         except Exception:
             pass
-        cand["flags"] = {"must_observe_only": bool(observe_only), "reasons": reasons}
+        # approximate entry gap hint (how far from candidate execution anchors)
+        try:
+            entry_gap_hint = min(
+                [abs(extension_ma10), abs(extension_ma20), abs(ext_cost)]
+            )
+        except Exception:
+            entry_gap_hint = 0.0
+        # record which soft factors were penalized in candidate score to avoid double-penalizing later
+        cand_penalties = []
+        try:
+            if max(abs(extension_ma10), abs(extension_ma20), abs(ext_cost)) > 0:
+                cand_penalties.append("extension")
+            if distance_to_recent_support > 0:
+                cand_penalties.append("support_distance")
+        except Exception:
+            pass
+        cand["flags"] = {"must_observe_only": bool(observe_only), "reasons": reasons, "entry_gap_hint": float(entry_gap_hint)}
+        cand["penalty_tags"] = cand_penalties
 
         pool.append(cand)
 
@@ -332,10 +416,32 @@ def generate_candidates(
     def _liq_rank(g: str) -> int:
         return {"A": 0, "B": 1, "C": 2}.get(str(g), 3)
 
-    pool.sort(key=lambda x: (-(x["indicators"].get("slope20") or 0.0), x["atr_pct"], _liq_rank(x["liquidity"].get("grade"))))
+    # composite candidate score: trend quality, soft penalties for noise/overextension/support-distance, liquidity preference
+    def _cand_score(it: Dict[str, Any]) -> float:
+        ind = it.get("indicators", {}) or {}
+        slope = float(ind.get("slope20", 0.0))
+        atrp = float(ind.get("atr_pct", 0.0))
+        gap = float(ind.get("gap_pct", 0.0))
+        ext = max(abs(float(ind.get("extension_ma10", 0.0))), abs(float(ind.get("extension_ma20", 0.0))), abs(float(ind.get("extension_from_cost", 0.0))))
+        dist_support = float(ind.get("distance_to_recent_support", 0.0))
+        liq = -_liq_rank((it.get("liquidity") or {}).get("grade", "C"))  # A->0 -> higher after minus
+        # soft penalties; keep distance-to-support modest to avoid over-pruning
+        penalty = 0.5 * atrp + 0.3 * max(0.0, gap) + min(0.5, ext) + 0.2 * max(0.0, dist_support)
+        return 1.0 * slope - penalty + 0.1 * liq
+
+    for it in pool:
+        try:
+            it["candidate_score"] = float(_cand_score(it))
+        except Exception:
+            it["candidate_score"] = 0.0
+
+    pool.sort(key=lambda x: -float(x.get("candidate_score", 0.0)))
     stats["universe_after_filter_count"] = len(pool)
     stats["candidates_out_count"] = len(pool)
+    stats["pool_pre_thematic_count"] = len(pool)
 
+    if return_features:
+        return pool[: max(1, topk) * 5], veto_reasons, stats, feats_by_symbol
     return pool[: max(1, topk) * 5], veto_reasons, stats
 
 

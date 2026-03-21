@@ -1,0 +1,53 @@
+{
+  "as_of": "2026-03-20T13:34:01.357738+00:00",
+  "cash": null,
+  "equity": null,
+  "positions": [],
+  "pending_intents": [
+    {
+      "intent_id": "intent-45605cb1676e",
+      "run_id": "2099-07-01-PE",
+      "as_of": "2099-07-01-PE",
+      "symbol": "Q",
+      "side": "buy",
+      "decision_source": "gated_recommendation",
+      "gating_decision": {
+        "decision": "allow",
+        "level": "item",
+        "reasons": [],
+        "triggered_rules": [],
+        "warnings": [],
+        "inputs_snapshot": {
+          "final_score": 0.605,
+          "reliability_score": 1.0,
+          "invalidated_now": false,
+          "actionable": true,
+          "strategy": "S_OK8"
+        },
+        "fallback_used": false
+      },
+      "priority": 1.0,
+      "thesis": "S_OK8",
+      "entry_hint": null,
+      "stop_hint": null,
+      "invalidation": [],
+      "confidence": 1.0,
+      "sizing_hint": 1.0,
+      "status": "admitted",
+      "warnings": [],
+      "metadata": {
+        "created_at": "2026-03-20T13:34:01.356738+00:00"
+      },
+      "provenance": {
+        "artifact_version": "v2",
+        "symbol": "Q",
+        "strategy": "S_OK8"
+      }
+    }
+  ],
+  "recent_events": [],
+  "realized_pnl": null,
+  "unrealized_pnl": null,
+  "exposure_summary": {},
+  "warnings": []
+}

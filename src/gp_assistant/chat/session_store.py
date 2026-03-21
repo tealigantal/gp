@@ -45,10 +45,20 @@ def _connect() -> sqlite3.Connection:
         CREATE TABLE IF NOT EXISTS sessions(
             session_id TEXT PRIMARY KEY,
             created_at TEXT,
-            last_recommend_json TEXT
+            last_recommend_json TEXT,
+            state_json TEXT
         )
         """
     )
+    # Best-effort migration: add state_json when missing
+    try:
+        cur = conn.execute("PRAGMA table_info(sessions)")
+        cols = {str(r[1]) for r in cur.fetchall()}
+        if "state_json" not in cols:
+            conn.execute("ALTER TABLE sessions ADD COLUMN state_json TEXT")
+            conn.commit()
+    except Exception:
+        pass
     conn.commit()
     return conn
 
@@ -75,8 +85,8 @@ def ensure_session(session_id: Optional[str] = None) -> str:
                 cur = conn.execute("SELECT session_id FROM sessions WHERE session_id=?", (sid,))
                 if cur.fetchone() is None:
                     conn.execute(
-                        "INSERT INTO sessions(session_id, created_at, last_recommend_json) VALUES (?,?,?)",
-                        (sid, _now_iso(), None),
+                        "INSERT INTO sessions(session_id, created_at, last_recommend_json, state_json) VALUES (?,?,?,?)",
+                        (sid, _now_iso(), None, None),
                     )
                     conn.commit()
                 break
@@ -171,3 +181,221 @@ def load_last_recommend(session_id: str) -> Optional[Dict[str, Any]]:
         return json.loads(row[0])
     except Exception:
         return None
+
+
+# ---------------- Structured session state ----------------
+
+_STATE_DEFAULTS = {
+    # Legacy fields (kept for backward compatibility)
+    "current_focus_symbol": None,
+    "current_focus_name": None,
+    "last_recommend_symbols": [],
+    "last_analyze_symbol": None,
+    "last_tool_trace": None,
+    "last_agent_trace": None,
+    "last_as_of": None,
+    "pending_ambiguity": None,
+    "last_followup_type": None,
+    # Phase 1: run-aware, multi-symbol aware session fields
+    "active_run_id": None,            # 当前有效推荐run_id（或as_of）
+    "active_symbols": [],             # 当前run涉及的全部symbols（顺序稳定）
+    "focused_symbol": None,           # 当前焦点标的（替代 current_focus_symbol）
+    "compare_symbols": [],            # 最近一次比较涉及的symbols集合
+    "last_intent": None,              # 最近解析的意图
+    "last_message_type": None,        # 最近一次用户消息的类型（text/status等）
+    "last_refresh_at": None,          # 最近一次refresh时间
+    # Phase 2: run reuse + planner trace
+    "previous_run_id": None,
+    "previous_active_symbols": [],
+    "last_planner_output": None,
+    # Layered turn/memory fields (phase 3)
+    "last_right_panel": {},                 # 最近一次可见右侧面板（为了UI续航）
+    "pending_action": None,                 # 待续操作（如："explain"|"compare"|...）
+    "pending_symbols": [],                  # 待续操作关联的symbols（序列稳定）
+    "pending_cursor": None,                 # 待续分页/游标
+    "last_reference_resolution": None,      # 上轮引用解析结果（resolve_reference 输出）
+    "last_surface_kind": None,              # 上轮assistant可见输出类型（assistant_bundle|text|...）
+    "last_tool_results_summary": {},        # 上轮工具轨迹摘要（tools_used/used_symbols/tradeable）
+    "last_visible_assistant_summary": {},   # 上轮可见回复摘要（text截断、card_types、active_run_id）
+}
+
+
+def _load_state_raw(session_id: str) -> Dict[str, Any]:
+    conn = _connect()
+    try:
+        cur = conn.execute("SELECT state_json FROM sessions WHERE session_id=?", (session_id,))
+        row = cur.fetchone()
+    finally:
+        conn.close()
+    if not row:
+        return {}
+    try:
+        return json.loads(row[0] or "{}") if row[0] else {}
+    except Exception:
+        return {}
+
+
+def _save_state_raw(session_id: str, state: Dict[str, Any]) -> None:
+    conn = _connect()
+    try:
+        for i in range(6):
+            try:
+                conn.execute(
+                    "UPDATE sessions SET state_json=? WHERE session_id=?",
+                    (json.dumps(state, ensure_ascii=False), session_id),
+                )
+                conn.commit()
+                break
+            except sqlite3.OperationalError as e:
+                if "locked" in str(e).lower() or "busy" in str(e).lower():
+                    import time as _t
+                    _t.sleep(0.05 * (2 ** i))
+                    continue
+                raise
+    finally:
+        conn.close()
+
+
+def get_state(session_id: str) -> Dict[str, Any]:
+    st = dict(_STATE_DEFAULTS)
+    raw = _load_state_raw(session_id)
+    if isinstance(raw, dict):
+        for k in _STATE_DEFAULTS.keys():
+            v = raw.get(k, None)
+            if v is not None:
+                st[k] = v
+    # derive last_recommend_symbols from last_recommend if missing
+    if not st.get("last_recommend_symbols"):
+        try:
+            last = load_last_recommend(session_id)
+            picks = (last or {}).get("picks") or []
+            if isinstance(picks, list):
+                syms = []
+                for p in picks:
+                    try:
+                        s = str((p or {}).get("symbol") or "").strip()
+                        if s:
+                            syms.append(s)
+                    except Exception:
+                        continue
+                st["last_recommend_symbols"] = syms
+        except Exception:
+            pass
+    return st
+
+
+def update_state(session_id: str, updates: Dict[str, Any]) -> Dict[str, Any]:
+    cur = get_state(session_id)
+    # Accept only known keys; keep lists as lists
+    sanitized: Dict[str, Any] = {}
+    for k, v in updates.items():
+        if k not in _STATE_DEFAULTS:
+            continue
+        if isinstance(_STATE_DEFAULTS[k], list):
+            try:
+                vv = list(v) if v is not None else []
+            except Exception:
+                vv = []
+            sanitized[k] = vv
+        else:
+            sanitized[k] = v
+    # Mirror focused_symbol to legacy field for backward compatibility
+    if "focused_symbol" in sanitized and sanitized.get("focused_symbol") is not None:
+        sanitized.setdefault("current_focus_symbol", sanitized.get("focused_symbol"))
+    cur.update(sanitized)
+    _save_state_raw(session_id, cur)
+    return cur
+
+
+def set_focus(session_id: str, symbol: Optional[str], reason: Optional[str] = None, name: Optional[str] = None) -> Dict[str, Any]:
+    st = update_state(
+        session_id,
+        {
+            "current_focus_symbol": symbol,
+            "focused_symbol": symbol,
+            "current_focus_name": name,
+            "last_analyze_symbol": symbol,
+        },
+    )
+    # Internal-only event: do NOT materialize into user-visible message stream
+    try:
+        if symbol:
+            event_store.append_event(
+                session_id,
+                event_id=f"focus-{datetime.utcnow().strftime('%Y%m%d%H%M%S%f')}",
+                type="internal.focus_changed",
+                data={
+                    "symbol": symbol,
+                    "name": name,
+                    "reason": reason,
+                },
+                actor_id="assistant",
+            )
+    except Exception:
+        pass
+    return st
+
+
+def get_focus(session_id: str) -> Optional[str]:
+    st = get_state(session_id)
+    s = st.get("focused_symbol") or st.get("current_focus_symbol")
+    return str(s) if s else None
+
+
+def set_last_recommend_and_symbols(session_id: str, obj: Dict[str, Any]) -> None:
+    save_last_recommend(session_id, obj)
+    syms: list[str] = []
+    try:
+        picks = (obj or {}).get("picks") or []
+        if isinstance(picks, list):
+            for p in picks:
+                s = str((p or {}).get("symbol") or "").strip()
+                if s:
+                    syms.append(s)
+    except Exception:
+        pass
+    # Migrate previous context then set active
+    st0 = get_state(session_id)
+    prev_run = st0.get("active_run_id")
+    prev_syms = st0.get("active_symbols") or []
+    update_state(session_id, {"previous_run_id": prev_run, "previous_active_symbols": list(prev_syms or [])})
+    update_state(
+        session_id,
+        {
+            "last_recommend_symbols": syms,
+            "active_symbols": syms,
+            "last_as_of": (obj or {}).get("as_of"),
+            # Fix: prefer run_id first, fallback to as_of
+            "active_run_id": (obj or {}).get("run_id") or (obj or {}).get("as_of"),
+        },
+    )
+
+
+def get_last_symbols(session_id: str) -> list[str]:
+    st = get_state(session_id)
+    syms = st.get("last_recommend_symbols") or []
+    return list(syms) if isinstance(syms, list) else []
+
+
+# Phase 1 helpers (minimal API)
+
+def set_active_run(session_id: str, run_id: Optional[str], symbols: Optional[List[str]] = None) -> Dict[str, Any]:
+    return update_state(
+        session_id,
+        {
+            "active_run_id": run_id,
+            "active_symbols": list(symbols or []),
+        },
+    )
+
+
+def set_compare_symbols(session_id: str, symbols: List[str]) -> Dict[str, Any]:
+    return update_state(session_id, {"compare_symbols": list(symbols or [])})
+
+
+def set_last_intent(session_id: str, name: Optional[str], message_type: Optional[str] = None) -> Dict[str, Any]:
+    return update_state(session_id, {"last_intent": name, "last_message_type": message_type})
+
+
+def set_last_refresh(session_id: str) -> Dict[str, Any]:
+    return update_state(session_id, {"last_refresh_at": datetime.now(timezone.utc).isoformat()})

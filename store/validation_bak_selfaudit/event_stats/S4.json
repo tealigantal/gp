@@ -1,0 +1,8 @@
+{
+  "sample_size": 5,
+  "d3_mean": 0.0,
+  "d5_mean": 0.01,
+  "d10_mean": 0.02,
+  "win_rate_d5": 0.5,
+  "available": true
+}
