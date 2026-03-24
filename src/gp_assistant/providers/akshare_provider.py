@@ -28,7 +28,13 @@ class AkShareProvider(MarketDataProvider):
     SRC_CACHE = "cache:memory"
 
     def __init__(self, timeout_sec: int = 60):
-        self.timeout_sec = timeout_sec
+        # Enforce a safe floor to avoid invalid timeouts
+        try:
+            self.timeout_sec = int(timeout_sec)
+        except Exception:
+            self.timeout_sec = 60
+        if self.timeout_sec <= 0:
+            self.timeout_sec = 10
         self._last_snapshot_meta: Dict[str, Any] = {}
         self._snapshot_cache_df: Optional[pd.DataFrame] = None
         self._snapshot_cache_ts: Optional[float] = None
@@ -646,8 +652,18 @@ class AkShareProvider(MarketDataProvider):
 
         def wrapped(session, method, url, **kwargs):  # noqa: ANN001
             to = kwargs.get("timeout", None)
-            if to is None or (isinstance(to, (int, float)) and to < self.timeout_sec):
-                kwargs["timeout"] = self.timeout_sec
+            eff = None
+            try:
+                eff = float(to) if to is not None else None
+            except Exception:
+                eff = None
+            # Choose the larger of existing timeout and provider's timeout; enforce a positive floor
+            base = self.timeout_sec if isinstance(self.timeout_sec, (int, float)) else 0
+            if eff is None or eff < base:
+                eff = float(base)
+            if eff is None or eff <= 0:
+                eff = 10.0
+            kwargs["timeout"] = eff
             try:
                 hdrs = dict(kwargs.get("headers") or {})
                 hdrs.setdefault("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120 Safari/537.36")

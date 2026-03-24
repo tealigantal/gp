@@ -5,6 +5,7 @@ import MessageBubble from '../components/MessageBubble'
 import RightContextPanel from '../features/chat/RightContextPanel'
 import Conversations from './Conversations'
 import KlineInspector from '../features/artifacts/KlineInspector'
+import { useSelectedArtifact } from '../features/artifacts/useSelectedArtifact'
 import { setSessionId as persistSessionId } from '../utils/session'
 import { useConversationThread } from '../features/thread/useConversationThread'
 import { useSendMessage } from '../features/thread/useSendMessage'
@@ -22,6 +23,7 @@ export default function Chat() {
   const listRef = useRef<HTMLDivElement>(null)
   const [atBottom, setAtBottom] = useState(true)
   const [hasNew, setHasNew] = useState(false)
+  const { openKline } = useSelectedArtifact()
 
   const params = useMemo(() => new URLSearchParams(loc.search), [loc.search])
   const cidParam = params.get('cid') || null
@@ -118,7 +120,7 @@ export default function Chat() {
         )}
         {items.map((it) => (
           <div key={it.seq} data-seq={it.seq} style={{ marginBottom: 8 }}>
-            <ThreadItemRenderer item={it} />
+            <ThreadItemRenderer item={it} onOpenKline={openKline} />
           </div>
         ))}
         {pendingTexts.map((t, i) => (
@@ -174,7 +176,7 @@ export default function Chat() {
   )
 }
 
-function ThreadItemRenderer({ item }: { item: ThreadItem }) {
+function ThreadItemRenderer({ item, onOpenKline }: { item: ThreadItem; onOpenKline?: (symbol: string) => void }) {
   if (item.kind === 'text') {
     return <MessageBubble role={item.role} content={item.content} />
   }
@@ -191,7 +193,7 @@ function ThreadItemRenderer({ item }: { item: ThreadItem }) {
             return (
               <Card key={`card-${idx}`} size="small" title={c.title || `推荐清单 · ${items.length}`}>
                 <List dataSource={items} renderItem={(it: any) => (
-                  <List.Item key={String(it.symbol)}>
+                  <List.Item key={String(it.symbol)} actions={[<a key="k" onClick={() => onOpenKline?.(String(it.symbol))}>查看K线</a>] }>
                     <Space>
                       <Typography.Text strong>{String(it.symbol)}</Typography.Text>
                       {it.gating_decision?.decision && <Typography.Text type="secondary">{String(it.gating_decision.decision)}</Typography.Text>}

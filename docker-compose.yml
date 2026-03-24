@@ -1,4 +1,4 @@
-services:
+﻿services:
   gp:
     build:
       context: .
@@ -30,9 +30,11 @@ services:
 
       # ---- provider ----
       DATA_PROVIDER: ${DATA_PROVIDER:-akshare}
-      # 0 表示不设超时（后端内部将按无限超时处理）
+      # 0 琛ㄧず涓嶈瓒呮椂锛堝悗绔唴閮ㄥ皢鎸夋棤闄愯秴鏃跺鐞嗭級
       GP_REQUEST_TIMEOUT_SEC: ${GP_REQUEST_TIMEOUT_SEC:-0}
       STRICT_REAL_DATA: ${STRICT_REAL_DATA:-1}
+      # 寮哄埗鍒锋柊鍥炵湅绐楀彛锛堝ぉ锛夛紝浠呭湪寮哄埗鍒锋柊锛坮efresh=true锛夋椂鐢卞悗绔鍙?      GP_FORCE_REFRESH_LOOKBACK_DAYS: ${GP_FORCE_REFRESH_LOOKBACK_DAYS:-3}
+      # 褰撴ā鍨嬫湭鎸夋彁绀轰紶閫?refresh:true 鏃讹紝鑷姩杩藉姞涓€娆″己鍒跺埛鏂?      GP_ENFORCE_FORCE_REFRESH_ON_MISSING: ${GP_ENFORCE_FORCE_REFRESH_ON_MISSING:-1}
 
       # optional akshare route priority
       AK_SPOT_PRIORITY: ${AK_SPOT_PRIORITY:-}

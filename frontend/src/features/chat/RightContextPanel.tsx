@@ -1,5 +1,6 @@
 import React from 'react'
-import { Card, Descriptions, Tag, Typography } from 'antd'
+import { Card, Descriptions, Tag, Typography, Switch, Tooltip } from 'antd'
+import { getForceRefresh, setForceRefresh } from '../../store/settings'
 
 export default function RightContextPanel({ panel }: { panel?: Record<string, unknown> | null }) {
   const p = (panel || {}) as Record<string, any>
@@ -7,9 +8,15 @@ export default function RightContextPanel({ panel }: { panel?: Record<string, un
   const prevRun = p.previous_run_id as string | undefined
   const focus = p.focus_symbol as string | undefined
   const top = Array.isArray(p.top_symbols) ? (p.top_symbols as unknown[]).map((s) => String(s)) : undefined
+  // 不自动打开 K 线，保持纯手动触发（通过“查看K线”）
+  const force = getForceRefresh()
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-      <Card size="small" title="上下文状态">
+      <Card size="small" title="上下文状态" extra={
+        <Tooltip title="强制刷新K线">
+          <Switch size="small" defaultChecked={force} onChange={(v) => setForceRefresh(!!v)} />
+        </Tooltip>
+      }>
         <Descriptions size="small" column={1} bordered>
           {runId && (
             <Descriptions.Item label="本轮 run_id">{runId}</Descriptions.Item>
@@ -48,4 +55,3 @@ export default function RightContextPanel({ panel }: { panel?: Record<string, un
     </div>
   )
 }
-

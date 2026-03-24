@@ -15,6 +15,12 @@ import pandas as pd
 
 from ..core.types import ToolResult
 from ..recommend.datahub import MarketDataHub
+from ..core.config import load_config
+try:
+    from ..recommend.modes.service import _load_trade_calendar  # type: ignore
+except Exception:  # pragma: no cover
+    _load_trade_calendar = None  # type: ignore
+from ..recommend.calendar import nearest_trading_day
 from ..recommend.runner import run as recommend_run
 from ..tools.registry import Tool, ToolRegistry
 from ..tools.explain import run_explain as _run_explain
@@ -194,12 +200,84 @@ def t_get_ohlcv(args: dict, _state: Any) -> ToolResult:  # noqa: ANN401
     symbol = str(args.get("symbol", "")).strip()
     as_of = args.get("as_of")
     limit = int(args.get("limit", 120))
+    refresh = str(args.get("refresh", "auto")).strip().lower()
     if not symbol:
         return _err("missing symbol", code="MISSING_ARG")
     hub = MarketDataHub()
     try:
-        # Avoid network in agent path; prefer cache and fallback fixtures
-        df, meta = hub.daily_ohlcv(symbol, as_of=as_of, min_len=0, prefer_cache_only=True)
+        # Refresh policy: auto|force|never
+        if refresh not in {"auto", "force", "never"}:
+            refresh = "auto"
+        if refresh == "force":
+            df, meta = hub.daily_ohlcv(symbol, as_of=as_of, min_len=0, prefer_cache_only=False, force_network=True)
+        else:
+            # First try cache-only to keep latency low
+            df, meta = hub.daily_ohlcv(symbol, as_of=as_of, min_len=0, prefer_cache_only=True)
+        # Helper: resolve target trading day (on/before as_of; else today)
+        def _resolve_target(as_of_str):
+            cfg = load_config()
+            try:
+                if as_of_str is not None:
+                    base = pd.to_datetime(as_of_str).normalize()
+                else:
+                    now_local = pd.Timestamp.now(tz=cfg.timezone)
+                    # After close (15:05) -> today; else previous open day
+                    if now_local.time() >= pd.Timestamp('1900-01-01T15:05:00').time():
+                        base = now_local.normalize()
+                    else:
+                        base = (now_local - pd.Timedelta(days=1)).normalize()
+            except Exception:
+                base = (pd.to_datetime(as_of_str).normalize() if as_of_str is not None else pd.Timestamp.now().normalize())
+            cal = None
+            try:
+                cal = _load_trade_calendar() if _load_trade_calendar else None
+            except Exception:
+                cal = None
+            if isinstance(cal, pd.DataFrame) and not cal.empty and {"cal_date", "is_open"} <= set(cal.columns):
+                ymd = base.strftime("%Y%m%d")
+                sub = cal[(cal["cal_date"] <= ymd) & (cal["is_open"] == 1)]
+                if not sub.empty:
+                    try:
+                        return pd.to_datetime(str(sub.iloc[-1]["cal_date"]))
+                    except Exception:
+                        pass
+            try:
+                return nearest_trading_day(base)
+            except Exception:
+                d = base
+                while d.weekday() >= 5:
+                    d = d - pd.Timedelta(days=1)
+                return d
+
+        # If cache looks stale vs target trading day or empty, retry once with network
+        # Be robust to tz-aware/naive comparisons by comparing date() only.
+        need_refresh = False
+        try:
+            if df is None or len(df) == 0:
+                need_refresh = True
+            else:
+                target = _resolve_target(as_of)
+                # Normalize to plain date for safe comparison
+                try:
+                    tgt_date = pd.to_datetime(target).date()
+                except Exception:
+                    # Fallback: strip time portion if target is string-like
+                    tgt_date = pd.to_datetime(str(target).split("T", 1)[0], errors="coerce").date()
+                last_date = pd.to_datetime(df["date"].iloc[-1], errors="coerce").date()
+                if last_date is None or tgt_date is None:
+                    # If parsing failed, err on the side of refreshing once
+                    need_refresh = True
+                elif last_date < tgt_date:
+                    need_refresh = True
+        except Exception:
+            # Non-fatal; keep current decision
+            pass
+        if refresh != "never" and refresh != "force":
+            if need_refresh:
+                try:
+                    df, meta = hub.daily_ohlcv(symbol, as_of=as_of, min_len=0, prefer_cache_only=False)
+                except Exception:
+                    pass
         if isinstance(df, pd.DataFrame) and limit > 0:
             df = df.tail(limit)
         rows = [
@@ -246,15 +324,68 @@ def t_get_recent_bars(args: dict, _state: Any) -> ToolResult:  # noqa: ANN401
 
 def t_get_latest_price_snapshot(args: dict, _state: Any) -> ToolResult:  # noqa: ANN401
     symbol = str(args.get("symbol", "")).strip()
+    refresh = str(args.get("refresh", "auto")).strip().lower()
     if not symbol:
         return _err("missing symbol", code="MISSING_ARG")
     hub = MarketDataHub()
     try:
-        df, meta = hub.daily_ohlcv(symbol, as_of=None, min_len=0, prefer_cache_only=True)
-        if len(df) == 0:
+        # Cache-first for latency or honor refresh policy
+        if refresh not in {"auto", "force", "never"}:
+            refresh = "auto"
+        if refresh == "force":
+            df, meta = hub.daily_ohlcv(symbol, as_of=None, min_len=0, prefer_cache_only=False, force_network=True)
+        else:
+            df, meta = hub.daily_ohlcv(symbol, as_of=None, min_len=0, prefer_cache_only=True)
+        # Resolve target trading day and refresh once if cache looks stale
+        def _resolve_target():
+            cfg = load_config()
+            try:
+                now_local = pd.Timestamp.now(tz=cfg.timezone)
+                if now_local.time() >= pd.Timestamp('1900-01-01T15:05:00').time():
+                    base = now_local.normalize()
+                else:
+                    base = (now_local - pd.Timedelta(days=1)).normalize()
+            except Exception:
+                base = pd.Timestamp.now().normalize()
+            cal = None
+            try:
+                cal = _load_trade_calendar() if _load_trade_calendar else None
+            except Exception:
+                cal = None
+            if isinstance(cal, pd.DataFrame) and not cal.empty and {"cal_date", "is_open"} <= set(cal.columns):
+                ymd = base.strftime("%Y%m%d")
+                sub = cal[(cal["cal_date"] <= ymd) & (cal["is_open"] == 1)]
+                if not sub.empty:
+                    try:
+                        return pd.to_datetime(str(sub.iloc[-1]["cal_date"]))
+                    except Exception:
+                        pass
+            # weekend fallback
+            d = base
+            while d.weekday() >= 5:
+                d = d - pd.Timedelta(days=1)
+            return d
+
+        try:
+            need_refresh = False
+            if df is None or len(df) == 0:
+                need_refresh = True
+            else:
+                tgt_date = pd.to_datetime(_resolve_target()).date()
+                last_date = pd.to_datetime(df["date"].iloc[-1], errors="coerce").date()
+                if last_date is None or tgt_date is None or last_date < tgt_date:
+                    need_refresh = True
+            if refresh == "auto" and need_refresh:
+                df, meta = hub.daily_ohlcv(symbol, as_of=None, min_len=0, prefer_cache_only=False)
+        except Exception:
+            pass
+        if df is None or len(df) == 0:
             return _err("no_bars", code="EMPTY")
         last = df.iloc[-1]
-        return _ok("latest_snapshot", {"symbol": symbol, "date": str(pd.to_datetime(last["date"]).date()), "close": float(last["close"])})
+        return _ok(
+            "latest_snapshot",
+            {"symbol": symbol, "date": str(pd.to_datetime(last["date"]).date()), "close": float(last["close"])},
+        )
     except Exception as e:  # noqa: BLE001
         return _err(f"snapshot_failed: {e}", code="DATA_UNAVAILABLE")
 

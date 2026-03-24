@@ -1,15 +1,458 @@
 {
-  "as_of": "20260301",
-  "as_of_ts": "20260301 09:20:00",
-  "timezone": "Asia/Shanghai",
-  "tradeable": true,
-  "message": "preopen",
-  "disclaimer": "For research only; not investment advice.",
-  "stage": "preopen",
-  "picks": [],
-  "debug": {
-    "mode": "service",
-    "degraded": false,
-    "reasons": []
+  "picks": [
+    {
+      "symbol": "600150",
+      "theme": "dynamic_pool",
+      "market_theme": "行业-卫浴电器",
+      "flags": {
+        "must_observe_only": false,
+        "reasons": [],
+        "entry_gap_hint": 0.04053547632676601
+      },
+      "chip": {
+        "avg_cost": 35.60319236111111,
+        "profit_ratio": 0.10416666666666667,
+        "band_90_low": 33.648466666666664,
+        "band_90_high": 38.203066666666665,
+        "concentration_90": 0.9166666666666666,
+        "dist_to_90_high_pct": 0.10583094550873756,
+        "confidence": "low",
+        "model_used": "B",
+        "sample_n": 96
+      },
+      "indicators": {
+        "ma20": 36.7875,
+        "slope20": 0.0010612678068492995,
+        "atr_pct": 0.02839350824784754,
+        "gap_pct": -0.011856564488143338,
+        "extension_ma10": -0.048573975044563275,
+        "extension_ma20": -0.07142371729527705,
+        "extension_from_cost": -0.04053547632676601,
+        "distance_to_recent_support": -0.00846018735363002,
+        "chip_vs_cost_pct": -0.04053547632676601
+      },
+      "theme_overlap_score": 0.0,
+      "mainline_overlap_score": 0.0,
+      "penalty_tags": [
+        "extension"
+      ],
+      "candidate_score": -0.08455920361235152,
+      "champion": {
+        "strategy": "S7",
+        "cv": {
+          "k": 5,
+          "win_rate_5d_mean": 0.4958946553059643,
+          "win_rate_5d_std": 0.019221155602765536,
+          "mean_return_5d_mean": 0.003680378218354241,
+          "mean_return_5d_std": 0.005159557672855945,
+          "drawdown_proxy_mean": -0.7364392065762402
+        },
+        "event": {
+          "k": 1077,
+          "win_rate_2": 0.48144712430426717,
+          "win_rate_5": 0.4962894248608534,
+          "win_rate_10": 0.4856081708449396,
+          "mean_return_2": 0.0002476219874385223,
+          "mean_return_5": 0.0022309755273996522,
+          "mean_return_10": 0.004953271693994218,
+          "mdd10_proxy": -0.04819976767723881,
+          "sample_warning": false
+        },
+        "score": 0.3588001806259264,
+        "meta_penalty": 0.0,
+        "setup_penalty": 0.0,
+        "freshness_state": "fresh",
+        "reasons": [],
+        "score_breakdown": {
+          "event_component": 0.3458486565132243,
+          "cv_component": 0.012951524112702131,
+          "meta_penalty": 0.0,
+          "setup_penalty": 0.0,
+          "total": 0.3588001806259264
+        }
+      },
+      "trade_plan": {
+        "bands": {
+          "S1": 33.91,
+          "S2": 36.73238095238095,
+          "R1": 39.45,
+          "R2": 40.239000000000004,
+          "anchors": 36.73238095238095
+        },
+        "execution_bands": {
+          "S1": 33.91,
+          "S2": 36.73238095238095,
+          "R1": 39.45,
+          "R2": 40.239000000000004,
+          "anchors": 36.73238095238095
+        },
+        "structural_bands": {
+          "S1": 33.91,
+          "S2": 36.73238095238095,
+          "R1": 39.45,
+          "R2": 40.239000000000004,
+          "anchors": 36.73238095238095
+        },
+        "structural_band_source": "strategy_key_bands",
+        "execution_band_source": "strategy_key_bands",
+        "actions": {
+          "window_A": "收缩后首次回收不破低点；量能温和",
+          "window_B": "收盘站稳关键结构；不追价"
+        },
+        "invalidation": [
+          "放量跌破收缩低点"
+        ],
+        "risk": {
+          "stop_loss": "收盘有效跌破支撑带",
+          "time_stop": "2-3日不强必走",
+          "no_averaging_down": true
+        },
+        "diagnostics": {
+          "setup_idx": 6529,
+          "setup_age": 1,
+          "stale": false,
+          "band_source": "strategy_key_bands",
+          "execution_state": "actionable",
+          "entry_gap_pct": 0.007318501170960188,
+          "signed_entry_gap_pct": 0.007318501170960188,
+          "reward_risk": 21.160000000000025,
+          "actionable": true
+        },
+        "entry": [
+          33.91,
+          36.73238095238095
+        ],
+        "stop": "收盘有效跌破支撑带",
+        "take": [
+          39.45,
+          40.239000000000004
+        ]
+      },
+      "last_close": 34.16,
+      "last_date": "2026-03-19",
+      "score_breakdown": {
+        "champion_component": 0.21528010837555583,
+        "candidate_component": -0.033823681444940606,
+        "thematic_component": 0.0,
+        "reward_risk_component": 4.2320000000000055,
+        "entry_gap_penalty": -0.002195550351288056,
+        "execution_state_penalty": 0.0,
+        "extension_penalty": 0.0,
+        "freshness_penalty": 0.0,
+        "total": 4.411260876579332
+      },
+      "explain": "champ=0.36, cand=-0.08, th=0.00/ml=0.00, state=actionable, rr=21.160000000000025; off_mainline_downrank",
+      "final_score": 4.411260876579332
+    },
+    {
+      "symbol": "601288",
+      "theme": "dynamic_pool",
+      "market_theme": "行业-卫浴电器",
+      "flags": {
+        "must_observe_only": false,
+        "reasons": [],
+        "entry_gap_hint": 0.02230205059122886
+      },
+      "chip": {
+        "avg_cost": 7.30442789115646,
+        "profit_ratio": 0.3673469387755102,
+        "band_90_low": 6.5652,
+        "band_90_high": 8.278286666666665,
+        "concentration_90": 0.9183673469387755,
+        "dist_to_90_high_pct": 0.17495005005061412,
+        "confidence": "low",
+        "model_used": "B",
+        "sample_n": 98
+      },
+      "indicators": {
+        "ma20": 6.6185,
+        "slope20": 0.0,
+        "atr_pct": 0.02088420459133415,
+        "gap_pct": -0.0029673590504451725,
+        "extension_ma10": 0.02230205059122886,
+        "extension_ma20": 0.03195588124197326,
+        "extension_from_cost": -0.0649507255360621,
+        "distance_to_recent_support": 0.019033674963396762,
+        "chip_vs_cost_pct": -0.0649507255360621
+      },
+      "theme_overlap_score": 0.0,
+      "mainline_overlap_score": 0.0,
+      "penalty_tags": [
+        "extension",
+        "support_distance"
+      ],
+      "candidate_score": -0.07919956282440851,
+      "champion": {
+        "strategy": "S3",
+        "cv": {
+          "k": 5,
+          "win_rate_5d_mean": 0.4767785234899328,
+          "win_rate_5d_std": 0.04683313615618031,
+          "mean_return_5d_mean": 0.0015000764336850505,
+          "mean_return_5d_std": 0.0025681423240070064,
+          "drawdown_proxy_mean": -0.283169007921365
+        },
+        "event": {
+          "k": 2268,
+          "win_rate_2": 0.41311042674879017,
+          "win_rate_5": 0.4900924702774108,
+          "win_rate_10": 0.5229276895943563,
+          "mean_return_2": 0.00038580118659689393,
+          "mean_return_5": 0.0015378405749792569,
+          "mean_return_10": 0.0034072030245266274,
+          "mdd10_proxy": -0.013648378173890818,
+          "sample_warning": false
+        },
+        "score": 0.38362721506965913,
+        "meta_penalty": 0.0,
+        "setup_penalty": 0.0,
+        "freshness_state": "fresh",
+        "reasons": [],
+        "score_breakdown": {
+          "event_component": 0.3500328092950499,
+          "cv_component": 0.03359440577460929,
+          "meta_penalty": 0.0,
+          "setup_penalty": 0.0,
+          "total": 0.38362721506965913
+        }
+      },
+      "trade_plan": {
+        "bands": {
+          "S1": 6.66,
+          "S2": 7.066065573770492,
+          "R1": 7.57,
+          "R2": 7.7971,
+          "anchors": 7.066065573770492
+        },
+        "execution_bands": {
+          "S1": 6.66,
+          "S2": 7.066065573770492,
+          "R1": 7.57,
+          "R2": 7.7971,
+          "anchors": 7.066065573770492
+        },
+        "structural_bands": {
+          "S1": 6.66,
+          "S2": 7.066065573770492,
+          "R1": 7.57,
+          "R2": 7.7971,
+          "anchors": 7.066065573770492
+        },
+        "structural_band_source": "strategy_key_bands",
+        "execution_band_source": "strategy_key_bands",
+        "actions": {
+          "window_A": "压缩后首次回收关键带且不再创新低，量能温和；满足≥2项",
+          "window_B": "收盘突破中轨并站稳；不追价，确认后次日评估"
+        },
+        "invalidation": [
+          "持续阴跌",
+          "放量跌破关键带"
+        ],
+        "risk": {
+          "stop_loss": "收盘有效跌破支撑带",
+          "time_stop": "2-3日不强必走",
+          "no_averaging_down": true
+        },
+        "diagnostics": {
+          "setup_idx": 3798,
+          "setup_age": 3,
+          "stale": false,
+          "band_source": "strategy_key_bands",
+          "execution_state": "actionable",
+          "entry_gap_pct": 0.024890190336749624,
+          "signed_entry_gap_pct": 0.024890190336749624,
+          "reward_risk": 4.352941176470591,
+          "actionable": true
+        },
+        "entry": [
+          6.66,
+          7.066065573770492
+        ],
+        "stop": "收盘有效跌破支撑带",
+        "take": [
+          7.57,
+          7.7971
+        ]
+      },
+      "last_close": 6.83,
+      "last_date": "2026-03-19",
+      "score_breakdown": {
+        "champion_component": 0.23017632904179547,
+        "candidate_component": -0.03167982512976341,
+        "thematic_component": 0.0,
+        "reward_risk_component": 0.8705882352941183,
+        "entry_gap_penalty": -0.007467057101024887,
+        "execution_state_penalty": 0.0,
+        "extension_penalty": 0.0,
+        "freshness_penalty": 0.0,
+        "total": 1.0616176821051255
+      },
+      "explain": "champ=0.38, cand=-0.08, th=0.00/ml=0.00, state=actionable, rr=4.352941176470591; off_mainline_downrank",
+      "final_score": 1.0616176821051255
+    },
+    {
+      "symbol": "002371",
+      "theme": "dynamic_pool",
+      "market_theme": "行业-卫浴电器",
+      "flags": {
+        "must_observe_only": false,
+        "reasons": [],
+        "entry_gap_hint": 0.007558379368221555
+      },
+      "chip": {
+        "avg_cost": 453.54852255892257,
+        "profit_ratio": 0.6161616161616161,
+        "band_90_low": 402.5337333333333,
+        "band_90_high": 511.5271866666666,
+        "concentration_90": 0.9090909090909091,
+        "dist_to_90_high_pct": 0.09754552244196117,
+        "confidence": "low",
+        "model_used": "B",
+        "sample_n": 99
+      },
+      "indicators": {
+        "ma20": 465.6985000000001,
+        "slope20": -0.010368111522544026,
+        "atr_pct": 0.03389524034103049,
+        "gap_pct": -0.010509244242620853,
+        "extension_ma10": 0.007558379368221555,
+        "extension_ma20": -0.008736339069161882,
+        "extension_from_cost": 0.01781833043018572,
+        "distance_to_recent_support": -0.0005458917314732785,
+        "chip_vs_cost_pct": 0.01781833043018572
+      },
+      "theme_overlap_score": 0.0,
+      "mainline_overlap_score": 0.0,
+      "penalty_tags": [
+        "extension"
+      ],
+      "candidate_score": -0.04513406212324499,
+      "champion": {
+        "strategy": "S1",
+        "cv": {
+          "k": 5,
+          "win_rate_5d_mean": 0.5077747989276139,
+          "win_rate_5d_std": 0.012384782265363116,
+          "mean_return_5d_mean": 0.005840744236296334,
+          "mean_return_5d_std": 0.004358707937894472,
+          "drawdown_proxy_mean": -0.5771738803711159
+        },
+        "event": {
+          "k": 171,
+          "win_rate_2": 0.4853801169590643,
+          "win_rate_5": 0.5730994152046783,
+          "win_rate_10": 0.5146198830409356,
+          "mean_return_2": 0.001172091932702508,
+          "mean_return_5": 0.007195857684237809,
+          "mean_return_10": 0.00732988483569216,
+          "mdd10_proxy": -0.04940059463711335,
+          "sample_warning": false
+        },
+        "score": 0.413130380190967,
+        "meta_penalty": 0.0,
+        "setup_penalty": 0.0,
+        "freshness_state": "fresh",
+        "reasons": [],
+        "score_breakdown": {
+          "event_component": 0.3909195571049466,
+          "cv_component": 0.02221082308602041,
+          "meta_penalty": 0.0,
+          "setup_penalty": 0.0,
+          "total": 0.413130380190967
+        }
+      },
+      "trade_plan": {
+        "bands": {
+          "S1": 446.16,
+          "S2": 476.4532786885246,
+          "R1": 514.2,
+          "R2": 524.484,
+          "anchors": 476.4532786885246
+        },
+        "execution_bands": {
+          "S1": 446.16,
+          "S2": 476.4532786885246,
+          "R1": 514.2,
+          "R2": 524.484,
+          "anchors": 476.4532786885246
+        },
+        "structural_bands": {
+          "S1": 446.16,
+          "S2": 476.4532786885246,
+          "R1": 514.2,
+          "R2": 524.484,
+          "anchors": 476.4532786885246
+        },
+        "structural_band_source": "strategy_key_bands",
+        "execution_band_source": "strategy_key_bands",
+        "actions": {
+          "window_A": "关键带回收且不再创新低；量能不失控；满足≥2项则记录为承接",
+          "window_B": "收盘前站稳关键结构，回落不破；满足≥2项则视为转强；否则观望"
+        },
+        "invalidation": [
+          "放量不涨",
+          "频繁冲高回落",
+          "贴近压力带"
+        ],
+        "risk": {
+          "stop_loss": "收盘有效跌破支撑带",
+          "time_stop": "2-3日不强必走",
+          "no_averaging_down": true
+        },
+        "diagnostics": {
+          "setup_idx": 3805,
+          "setup_age": 0,
+          "stale": false,
+          "band_source": "strategy_key_bands",
+          "execution_state": "waiting_pullback",
+          "entry_gap_pct": 0.03351168684877493,
+          "signed_entry_gap_pct": 0.03351168684877493,
+          "reward_risk": 3.3981900452488785,
+          "actionable": false
+        },
+        "entry": [
+          446.16,
+          476.4532786885246
+        ],
+        "stop": "收盘有效跌破支撑带",
+        "take": [
+          514.2,
+          524.484
+        ]
+      },
+      "last_close": 461.63,
+      "last_date": "2026-03-19",
+      "score_breakdown": {
+        "champion_component": 0.24787822811458018,
+        "candidate_component": -0.018053624849297997,
+        "thematic_component": 0.0,
+        "reward_risk_component": 0.6796380090497758,
+        "entry_gap_penalty": -0.01005350605463248,
+        "execution_state_penalty": -0.3,
+        "extension_penalty": 0.0,
+        "freshness_penalty": 0.0,
+        "total": 0.5994091062604254
+      },
+      "explain": "champ=0.41, cand=-0.05, th=0.00/ml=0.00, state=waiting_pullback, rr=3.3981900452488785; off_mainline_downrank",
+      "final_score": 0.5994091062604254
+    }
+  ],
+  "meta": {
+    "as_of": "2026-03-20",
+    "as_of_ts": null,
+    "timezone": "Asia/Shanghai",
+    "tradeable": true,
+    "message": "generated 3 picks",
+    "disclaimer": "本内容仅供研究与教育，不构成任何投资建议或收益承诺；市场有风险，决策需独立承担",
+    "stage": null,
+    "debug": {
+      "mode": "service",
+      "degraded": true,
+      "degrade_reasons": [
+        {
+          "reason_code": "NORMALIZE_FAILED"
+        }
+      ]
+    }
   }
 }

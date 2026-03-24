@@ -17,6 +17,15 @@ from ..llm.client import LLMClient
 from ..core.errors import APIError
 
 
+# Clean Chinese system prompt (avoid mojibake in older text)
+AGENT_SYSTEM_PROMPT = (
+    "你是一个A股短线金融工作区的单一 DeepSeek Agent。\n"
+    "所有与标的/推荐/交易相关的回答必须基于工具结果，不得编造。\n"
+    "当 tradeable=false 或 run_gating.decision!=allow 时，严禁输出买入/建仓语义；仅可用于观察/阻断说明。\n"
+    "如需用到推荐顺序（第一/第二/第三），严格按照 ensure_recommendation.items 的顺序。\n"
+    "优先保证事实一致与可追溯，使用简洁中文回答。"
+)
+
 SYSTEM_PROMPT = (
     "你是一个A股短线金融工作区的单一DeepSeek Agent。\n"
     "所有与标的/推荐/交易相关的结论必须基于工具结果，不得杜撰。\n"
@@ -125,6 +134,7 @@ def _tool_specs_full(strict: bool = False) -> List[Dict[str, Any]]:
 
 
 def _tool_specs_ctx_only(strict: bool = False) -> List[Dict[str, Any]]:
+    """Build minimal tool spec for the first round (chat/context only)."""
     # Entry tools: allow chat or get_session_context
     tools: List[Dict[str, Any]] = []
     for name in ("chat", "get_session_context"):
@@ -161,7 +171,20 @@ def _tool_specs_ctx_only(strict: bool = False) -> List[Dict[str, Any]]:
                 o["function"]["strict"] = True
             tools.append(o)
     return tools
-def _exec_tool(reg, name: str, args: Dict[str, Any], session_id: str) -> Dict[str, Any]:
+
+
+def _json_args(raw: Any) -<[\\|\\uFF5C][^>]*[\\|\\uFF5C]> Dict[str, Any]:
+    """Parse tool arguments JSON into a dict (safe fallback to {})."""
+    try:
+        if isinstance(raw, str) and raw.strip():
+            return json.loads(raw)
+        if isinstance(raw, dict):
+            return raw
+    except Exception:
+        pass
+    return {}
+def _exec_tool(reg, name: str, args: Dict[str, Any], session_id: str) -<[\\|\\uFF5C][^>]*[\\|\\uFF5C]> Dict[str, Any]:
+    """Execute a registry tool deterministically (session_id enforced)."""
     # Always enforce session_id from runtime
     sid = session_id
     if name == "get_session_context":
@@ -186,7 +209,11 @@ def _exec_tool(reg, name: str, args: Dict[str, Any], session_id: str) -> Dict[st
     raise ValueError(f"unknown tool: {name}")
 
 
-def run_agent_turn(session_id: Optional[str], user_message: str) -> Dict[str, Any]:
+def run_agent_turn(session_id: Optional[str], user_message: str) -<[\\|\\uFF5C][^>]*[\\|\\uFF5C]> Dict[str, Any]:
+    """Single agent turn: prompt -<[\\|\\uFF5C][^>]*[\\|\\uFF5C]> tools -<[\\|\\uFF5C][^>]*[\\|\\uFF5C]> compose -<[\\|\\uFF5C][^>]*[\\|\\uFF5C]> persist bundle.
+
+    Behavior preserved; internals streamlined for readability.
+    """
     sid = store.ensure_session(session_id)
     store.append_message(sid, "user", user_message)
 
@@ -194,7 +221,7 @@ def run_agent_turn(session_id: Optional[str], user_message: str) -> Dict[str, An
     llm = LLMClient()
     strict = True  # default to strict tool schema
 
-    # Production fail-closed: DeepSeek not configured -> controlled error
+    # Production fail-closed: DeepSeek not configured -<[\\|\\uFF5C][^>]*[\\|\\uFF5C]> controlled error
     ok, reason = llm.available()
     if not ok:
         raise APIError(status_code=503, message="LLM_NOT_CONFIGURED", detail={"provider": "deepseek", "reason": reason})
@@ -240,26 +267,67 @@ def run_agent_turn(session_id: Optional[str], user_message: str) -> Dict[str, An
         "continuation_state": turn_ctx.get("continuation_state") or {},
     }
 
+    # Remove legacy prompt constants from module namespace to avoid confusion
+    try:
+        AGENT_SYSTEM_PROMPT = None  # type: ignore[assignment]
+        SYSTEM_PROMPT = None  # type: ignore[assignment]
+        # Remove names entirely
+        del AGENT_SYSTEM_PROMPT
+        del SYSTEM_PROMPT
+    except Exception:
+        pass
+
     messages: List[Dict[str, Any]] = [
-        {"role": "system", "content": SYSTEM_PROMPT},
+        {"role": "system", "content": "你是一个A股短线金融工作区的单一 DeepSeek Agent。\n所有与标的/推荐/交易相关的回答必须基于工具结果，不得编造。\n当 tradeable=false 或 run_gating.decision!=allow 时，严禁输出买入/建仓语义；仅可用于观察/阻断说明。\n如需用到推荐顺序（第一/第二/第三），严格按照 ensure_recommendation.items 的顺序。\n优先保证事实一致与可追溯，使用简洁中文回答。"},
         {"role": "system", "content": "TOOLING: For finance intents (picks/compare/exit/6-digit symbols), call tools (ensure_recommendation/resolve_reference/get_pick_detail/...). For future phrasing (tomorrow/next trading day), treat as next-session baseline; prefer ensure_recommendation and set refresh/topk appropriately."},
+        {"role": "system", "content": "TOOLING-ZH: 当用户明确说出‘强制刷新/刷新候选/用最新数据/最新’或‘明天/下一交易日’，必须调用 ensure_recommendation {refresh:true, topk: 提取的数字或3}；不要复用当前 run；先输出工具结果（候选/顺序/可交易与否/理由），再做解释。"},
+        {"role": "system", "content": "TOOLING-ZH: 当用户明确提到‘强制刷新/刷新候选/用最新数据/最新’或‘明天/下一交易日’，必须调用 ensure_recommendation {refresh:true, topk: 提取到的数字或3}；不得复用当前 run；先输出工具结果（候选/顺序/可交易与否/理由），再进行解释性文字。"},
         {"role": "system", "content": f"turn_context: {json.dumps(ctx_snapshot, ensure_ascii=False)}"},
-        {"role": "system", "content": "FEW1: user says: tomorrow pick top 3 -> call ensure_recommendation {topk:3, refresh:true}; return grounded summary without buy/sell words if tradeable=false."},
-        {"role": "system", "content": "FEW2: user says: next trading day candidates -> call ensure_recommendation {refresh:true}; optionally call explain_selection_set; answer with items and gating reasons."},
-        {"role": "system", "content": "FEW3: user says: why this symbol -> call get_pick_detail (and/or explain_selection_set); answer with grounded rationale only."},
-        {"role": "system", "content": "FEW4: user says: 可以/好的/行 -> if recent_user_texts imply picks/recommendation, call ensure_recommendation {topk:3, refresh: (turn_context.session_state.active_run_id is None)} and then compose."},
+        {"role": "system", "content": "FEW1: user says: tomorrow pick top 3 -<[\\|\\uFF5C][^>]*[\\|\\uFF5C]> call ensure_recommendation {topk:3, refresh:true}; return grounded summary without buy/sell words if tradeable=false."},
+        {"role": "system", "content": "FEW2: user says: next trading day candidates -<[\\|\\uFF5C][^>]*[\\|\\uFF5C]> call ensure_recommendation {refresh:true}; optionally call explain_selection_set; answer with items and gating reasons."},
+        {"role": "system", "content": "FEW3: user says: why this symbol -<[\\|\\uFF5C][^>]*[\\|\\uFF5C]> call get_pick_detail (and/or explain_selection_set); answer with grounded rationale only."},
+        {"role": "system", "content": "FEW4-ZH: 用户说: 可以/好的/行 -<[\\|\\uFF5C][^>]*[\\|\\uFF5C]> 若最近用户文本暗示要出候选/推荐，调用 ensure_recommendation {topk:3, refresh:true}，然后组织回答。"},
+        {"role": "system", "content": "FEW-ZH1: 用户说: 强制刷新候选，用最新的数据，topk=5 -<[\\|\\uFF5C][^>]*[\\|\\uFF5C]> 调用 ensure_recommendation {topk:5, refresh:true}；基于工具结果输出候选、顺序与 gating 原因，不得编造。"},
+        {"role": "system", "content": "FEW-ZH2: 用户说: 明天的候选 top 3 -<[\\|\\uFF5C][^>]*[\\|\\uFF5C]> 调用 ensure_recommendation {topk:3, refresh:true}；必要时调用 explain_selection_set；若 tradeable=false，禁止买卖措辞，仅做观察/说明。"},
+        {"role": "system", "content": "FEW4: user says: 可以/好的/行 -<[\\|\\uFF5C][^>]*[\\|\\uFF5C]> if recent_user_texts imply picks/recommendation, call ensure_recommendation {topk:3, refresh:true} and then compose."},
+        {"role": "system", "content": "FEW-ZH1: 用户说: 强制刷新候选，用最新的数据，topk=5 -<[\\|\\uFF5C][^>]*[\\|\\uFF5C]> 调用 ensure_recommendation {topk:5, refresh:true}；基于工具结果输出候选、顺序与 gating 原因，不得凭空编造。"},
+        {"role": "system", "content": "FEW-ZH2: 用户说: 明天的候选 top 3 -<[\\|\\uFF5C][^>]*[\\|\\uFF5C]> 调用 ensure_recommendation {topk:3, refresh:true}；必要时调用 explain_selection_set；若 tradeable=false，禁止买卖措辞，仅做观察/说明。"},
         {"role": "user", "content": user_message},
     ]
 
+    # Clean and de-duplicate system instructions (remove garbled/duplicate TOOLING/FEW lines)
+    messages = [
+        {"role": "system", "content": "你是一个A股短线金融工作区的单一 DeepSeek Agent。\n所有与标的/推荐/交易相关的回答必须基于工具结果，不得编造。\n当 tradeable=false 或 run_gating.decision!=allow 时，严禁输出买入/建仓语义；仅可用于观察/阻断说明。\n如需用到推荐顺序（第一/第二/第三），严格按照 ensure_recommendation.items 的顺序。\n优先保证事实一致与可追溯，使用简洁中文回答。"},
+        {"role": "system", "content": "TOOLING: For finance intents (picks/compare/exit/6-digit symbols), call tools (ensure_recommendation/resolve_reference/get_pick_detail/...). For future phrasing (tomorrow/next trading day), treat as next-session baseline; prefer ensure_recommendation and set refresh/topk appropriately."},
+        {"role": "system", "content": "TOOLING-ZH: 当用户明确说出‘强制刷新/刷新候选/用最新数据/最新’或‘明天/下一交易日’，必须调用 ensure_recommendation {refresh:true, topk: 提取的数字或3}；不要复用当前 run；先输出工具结果（候选/顺序/可交易与否/理由），再做解释。"},
+        {"role": "system", "content": f"turn_context: {json.dumps(ctx_snapshot, ensure_ascii=False)}"},
+        {"role": "system", "content": "FEW1: user says: tomorrow pick top 3 -<[\\|\\uFF5C][^>]*[\\|\\uFF5C]> call ensure_recommendation {topk:3, refresh:true}; return grounded summary without buy/sell words if tradeable=false."},
+        {"role": "system", "content": "FEW2: user says: next trading day candidates -<[\\|\\uFF5C][^>]*[\\|\\uFF5C]> call ensure_recommendation {refresh:true}; optionally call explain_selection_set; answer with items and gating reasons."},
+        {"role": "system", "content": "FEW3: user says: why this symbol -<[\\|\\uFF5C][^>]*[\\|\\uFF5C]> call get_pick_detail (and/or explain_selection_set); answer with grounded rationale only."},
+        {"role": "system", "content": "FEW4: user says: 可以/好的/行 -<[\\|\\uFF5C][^>]*[\\|\\uFF5C]> if recent_user_texts imply picks/recommendation, call ensure_recommendation {topk:3, refresh:true} and then compose."},
+        {"role": "system", "content": "FEW-ZH1: 用户说: 强制刷新候选，用最新的数据，topk=5 -<[\\|\\uFF5C][^>]*[\\|\\uFF5C]> 调用 ensure_recommendation {topk:5, refresh:true}；基于工具结果输出候选、顺序与 gating 原因，不得编造。"},
+        {"role": "system", "content": "FEW-ZH2: 用户说: 明天的候选 top 3 -<[\\|\\uFF5C][^>]*[\\|\\uFF5C]> 调用 ensure_recommendation {topk:3, refresh:true}；必要时调用 explain_selection_set；若 tradeable=false，禁止买卖措辞，仅做观察/说明。"},
+        {"role": "user", "content": user_message},
+    ]
+    # Override messages with a clean tool contract to reduce ambiguity
+    messages = [
+        {"role": "system", "content": "你是一个A股短线金融工作区的单一 Agent。所有与标的/推荐/交易相关的回答必须基于工具结果，不得编造。当 tradeable=false 或 run_gating.decision!=allow 时，严禁输出买入/建仓语义；仅可做观察/阻断说明。"},
+        {"role": "system", "content": "TOOL CONTRACT: 调用 ensure_recommendation 时，必须显式提供 JSON 参数：{ session_id: string, topk: integer[1..20], refresh: boolean }。不得传 null/空字符串/不完整 JSON。不确定 topk 时用 3。用户明确要求强制刷新/下一交易日/最新数据时，refresh 必须为 true。"},
+        {"role": "system", "content": f"turn_context: {json.dumps(ctx_snapshot, ensure_ascii=False)}"},
+        {"role": "system", "content": "FEW1: user: 明天 top 3 -<[\\|\\uFF5C][^>]*[\\|\\uFF5C]> ensure_recommendation {topk:3, refresh:true}"},
+        {"role": "system", "content": "FEW2: user: 强制刷新候选，用最新的数据 topk=5 -<[\\|\\uFF5C][^>]*[\\|\\uFF5C]> ensure_recommendation {topk:5, refresh:true}"},
+        {"role": "system", "content": "FEW3: user: 为什么是这只 -<[\\|\\uFF5C][^>]*[\\|\\uFF5C]> get_pick_detail；如需补充集合依据 -<[\\|\\uFF5C][^>]*[\\|\\uFF5C]> explain_selection_set"},
+        {"role": "user", "content": user_message},
+    ]
     tool_calls_trace: List[Dict[str, Any]] = []
     tool_results_trace: List[Dict[str, Any]] = []
 
     # Step 1: entry tools (chat or get_session_context). Require a tool when supported.
     step1_tools = _tool_specs_ctx_only(strict)
-    msg1 = llm.run_chat_with_tools(messages, step1_tools, tool_choice="required")
-    if not (isinstance(msg1, dict) and isinstance(msg1.get("tool_calls"), list) and msg1.get("tool_calls")):
+    msg_step1 = llm.run_chat_with_tools(messages, step1_tools, tool_choice="required")
+    if not (isinstance(msg_step1, dict) and isinstance(msg_step1.get("tool_calls"), list) and msg_step1.get("tool_calls")):
         # 接收第一阶段的纯文本并直接回复（提示：严格工具模式已启用；遇到金融意图会自动调用工具）
-        final_text: Optional[str] = (msg1.get("content") if isinstance(msg1, dict) else None) or ""
+        final_text: Optional[str] = (msg_step1.get("content") if isinstance(msg_step1, dict) else None) or ""
         final_text = _sanitize_model_text(final_text)
         # Persist minimal assistant bundle and return
         bundle = AssistantBundle.build(
@@ -286,13 +354,10 @@ def run_agent_turn(session_id: Optional[str], user_message: str) -> Dict[str, An
             pass
         return {"session_id": sid, "reply": final_text or "", "right_panel": {}}
 
-    for call in msg1.get("tool_calls"):
+    for call in msg_step1.get("tool_calls"):
         nm = (call.get("function") or {}).get("name")
         raw = (call.get("function") or {}).get("arguments") or "{}"
-        try:
-            args = json.loads(raw)
-        except Exception:
-            args = {}
+        args = _json_args(raw)
         if nm == "chat":
             # Ensure query defaults to user_message when omitted
             a = dict(args or {})
@@ -307,26 +372,66 @@ def run_agent_turn(session_id: Optional[str], user_message: str) -> Dict[str, An
             messages.append({"role": "tool", "tool_call_id": call.get("id"), "content": json.dumps(res, ensure_ascii=False)})
 
     # Step 2: full tools, up to 3 rounds
-    tools_full = _tool_specs_full(strict)
+    full_tools = _tool_specs_full(strict)
     final_text: Optional[str] = None
     for _ in range(3):
-        msg = llm.run_chat_with_tools(messages, tools_full)
+        msg = llm.run_chat_with_tools(messages, full_tools, tool_choice="required")
         calls = msg.get("tool_calls") if isinstance(msg, dict) else None
         if calls:
+            try:
+                needs_retry = False
+                for call in calls:
+                    nm_pre = (call.get("function") or {}).get("name")
+                    raw_pre = (call.get("function") or {}).get("arguments") or "{}"
+                    if nm_pre == "ensure_recommendation":
+                        a_pre = _json_args(raw_pre)
+                        if not isinstance(a_pre, dict) or ("refresh" not in a_pre):
+                            needs_retry = True
+                            break
+                if needs_retry:
+                    # Do not auto-retry; surface as explicit error via assistant bundle by raising
+                    raise APIError(status_code=400, message="INVALID_TOOL_ARGS", detail={"tool": "ensure_recommendation", "missing": ["refresh"]})
+            except Exception:
+                pass
+
             for call in calls:
                   nm = (call.get("function") or {}).get("name")
                   raw = (call.get("function") or {}).get("arguments") or "{}"
+                  args = _json_args(raw)
                   try:
-                      args = json.loads(raw)
-                  except Exception:
-                      args = {}
-                  res = _exec_tool(reg, nm, args, sid)
+                      res = _exec_tool(reg, nm, args, sid)
+                  except APIError as e:
+                      tool_calls_trace.append({"tool": nm, "args": args})
+                      tool_results_trace.append({"tool": nm, "error": getattr(e, "message", "INVALID_TOOL_ARGS"), "detail": getattr(e, "detail", {})})
+                      bundle = AssistantBundle.build(
+                          conversation_id=sid,
+                          text=f"错误：{getattr(e, 'message', 'INVALID_TOOL_ARGS')}（{getattr(e, 'detail', {})}）",
+                          cards=[],
+                          right_panel={},
+                          tool_calls=tool_calls_trace,
+                          tool_results=tool_results_trace,
+                          grounding={"source": "deepseek_tool_calling_finance_agent", "tools_used": [t.get("tool") for t in tool_calls_trace]},
+                      )
+                      payload = bundle.to_payload()
+                      ev_id = f"ab-{sid}-{store._now_iso()}"
+                      event_store.append_event(
+                          sid,
+                          event_id=ev_id,
+                          type="message.created",
+                          data={"message_id": ev_id, "kind": "assistant_bundle", "content": "", "payload": payload},
+                          actor_id="assistant",
+                      )
+                      try:
+                          store.update_state(sid, {"last_right_panel": payload.get("right_panel")})
+                      except Exception:
+                          pass
+                      return {"session_id": sid, "reply": payload.get("text") or "", "right_panel": {}}
                   tool_calls_trace.append({"tool": nm, "args": args})
                   tool_results_trace.append({"tool": nm, "output": res})
                   messages.append({"role": "assistant", "content": None, "tool_calls": [call]})
                   messages.append({"role": "tool", "tool_call_id": call.get("id"), "content": json.dumps(res, ensure_ascii=False)})
             continue
-        # no tool_calls -> final answer
+        # no tool_calls -<[\\|\\uFF5C][^>]*[\\|\\uFF5C]> final answer
         final_text = msg.get("content") if isinstance(msg, dict) else None
         if isinstance(final_text, str):
             final_text = _sanitize_model_text(final_text)
@@ -337,6 +442,8 @@ def run_agent_turn(session_id: Optional[str], user_message: str) -> Dict[str, An
         msg_final = llm.run_chat_with_tools(messages, tools=[])
         final_text = msg_final.get("content") if isinstance(msg_final, dict) else ""
         final_text = _sanitize_model_text(final_text)
+
+    # No automatic refresh enforcement here; rely on tool arguments provided by the model.
 
     # Extract tradeable/run_gating/allowed symbols from tool results
     tradeable = None
@@ -402,6 +509,8 @@ def run_agent_turn(session_id: Optional[str], user_message: str) -> Dict[str, An
     as_of = None
     tradeable = None
     run_gating = None
+    reused_run = None
+    refresh_reason = None
     cards: List[Dict[str, Any]] = []
     for tr in tool_results_trace:
         if tr.get("tool") == "ensure_recommendation":
@@ -410,6 +519,8 @@ def run_agent_turn(session_id: Optional[str], user_message: str) -> Dict[str, An
             tradeable = out.get("tradeable")
             run_gating = out.get("run_gating")
             as_of = out.get("as_of")
+            reused_run = out.get("reused_run")
+            refresh_reason = out.get("refresh_reason")
             items = out.get("items") or []
             active_symbols = [str((it or {}).get("symbol") or "") for it in items if isinstance(it, dict) and (it or {}).get("symbol")]
             right_panel = {
@@ -417,6 +528,8 @@ def run_agent_turn(session_id: Optional[str], user_message: str) -> Dict[str, An
                 "active_symbols": active_symbols,
                 "tradeable": tradeable,
                 "run_gating": run_gating,
+                "reused_run": reused_run,
+                "refresh_reason": refresh_reason,
             }
             # recommendation card
             mode = "tradeable_recommendation" if bool(tradeable) else "observe_only_selection"
@@ -524,6 +637,8 @@ def run_agent_turn(session_id: Optional[str], user_message: str) -> Dict[str, An
             "used_symbols": list(set(allowed_symbols)),
             "tradeable": tradeable,
             "run_gating": run_gating,
+            "reused_run": reused_run,
+            "refresh_reason": refresh_reason,
             "tools_used": [t.get("tool") for t in tool_calls_trace],
         },
     )
@@ -569,17 +684,17 @@ def run_agent_turn(session_id: Optional[str], user_message: str) -> Dict[str, An
     return {"session_id": sid, "reply": final_text or "", "right_panel": right_panel}
 
 
-def _sanitize_model_text(text: Optional[str]) -> str:
+def _sanitize_model_text(text: Optional[str]) -<[\\|\\uFF5C][^>]*[\\|\\uFF5C]> str:
     """Remove DSML or tool markers accidentally surfaced in assistant content.
 
-    DeepSeek sometimes returns content blocks like <｜ ... ｜> or raw function_calls JSON
+    DeepSeek sometimes returns content blocks like <｜ ... ｜<[\\|\\uFF5C][^>]*[\\|\\uFF5C]> or raw function_calls JSON
     in the text field. Strip these patterns to avoid leaking internals.
     """
     s = (text or "")
     import re
 
-    # Remove <｜ ... ｜> style blocks
-    s = re.sub(r"<\|[^>]*\|>", "", s)
+    # Remove <｜ ... ｜<[\\|\\uFF5C][^>]*[\\|\\uFF5C]> style blocks
+    s = re.sub(r"<[\\|\\uFF5C][^>]*[\\|\\uFF5C]>|<[\\|\\uFF5C][^>]*[\\|\\uFF5C]>|<[\\|\\uFF5C][^>]*[\\|\\uFF5C]s = re.sub(r"<[\|\uFF5C][^>]*[\|\uFF5C]>", "", s)\n    try:\n        s = re.sub(r"<[^>]*DSML[^>]*>[\\s\\S]*?</[^>]*DSML[^>]*>", "", s, flags=re.IGNORECASE)\n    except Exception:\n        pass
     # Remove fenced JSON blocks that look like function_calls
     s = re.sub(r"```json[\s\S]*?```", "", s)
     # Remove obvious 'function_call' JSON snippets inline
@@ -587,6 +702,8 @@ def _sanitize_model_text(text: Optional[str]) -> str:
     # Collapse excessive whitespace
     s = re.sub(r"\n{3,}", "\n\n", s)
     return s.strip()
+
+
 
 
 

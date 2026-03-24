@@ -106,6 +106,23 @@ def generate_candidates(
     except Exception:
         universe_max = 0
     hub = MarketDataHub()
+    # Resolve target trading day (with after-close gating)
+    def _resolve_target(as_of_str: Optional[str]) -> pd.Timestamp:
+        try:
+            tz = getattr(cfg, "timezone", "Asia/Shanghai")
+            if as_of_str is not None:
+                base = pd.to_datetime(as_of_str).normalize()
+            else:
+                now_local = pd.Timestamp.now(tz=tz)
+                base = now_local.normalize() if (now_local.time() >= pd.Timestamp('1900-01-01T15:05:00').time()) else (now_local - pd.Timedelta(days=1)).normalize()
+        except Exception:
+            base = (pd.to_datetime(as_of_str).normalize() if as_of_str is not None else pd.Timestamp.now().normalize())
+        # Minimal weekend fallback; holiday exceptions not covered here
+        d = base
+        while d.weekday() >= 5:
+            d = d - pd.Timedelta(days=1)
+        return d
+    _target_trading_day = _resolve_target(as_of).date()
 
     # 1) 基础股票池
     if symbols:
@@ -260,7 +277,17 @@ def generate_candidates(
             except Exception:
                 df, meta = hub.daily_ohlcv(sym, as_of, min_len=250, prefer_cache_only=False)
             else:
-                if bool(meta.get("insufficient_history")) or int(meta.get("len", 0) or 0) < 120:
+                need_refresh = False
+                try:
+                    if bool(meta.get("insufficient_history")) or int(meta.get("len", 0) or 0) < 120:
+                        need_refresh = True
+                    else:
+                        last_date = pd.to_datetime(df["date"].iloc[-1], errors="coerce").date()
+                        if last_date is None or last_date < _target_trading_day:
+                            need_refresh = True
+                except Exception:
+                    need_refresh = True
+                if need_refresh:
                     df, meta = hub.daily_ohlcv(sym, as_of, min_len=250, prefer_cache_only=False)
         except Exception as e:  # noqa: BLE001
             stats["bars_missing_count"] += 1
@@ -443,8 +470,6 @@ def generate_candidates(
     if return_features:
         return pool[: max(1, topk) * 5], veto_reasons, stats, feats_by_symbol
     return pool[: max(1, topk) * 5], veto_reasons, stats
-
-
 
 
 

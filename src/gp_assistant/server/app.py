@@ -341,7 +341,7 @@ def _filter_bars_by_date(bars: List[Dict[str, Any]], start: Optional[str], end: 
     return [b for b in bars if _ok(str(b.get("date", "")))]
 
 
-def _handle_ohlcv(symbol: str, start: Optional[str], end: Optional[str], limit: int, mode: Optional[str]) -> OHLCVResp:
+def _handle_ohlcv(symbol: str, start: Optional[str], end: Optional[str], limit: int, mode: Optional[str], refresh: Optional[str] = None) -> OHLCVResp:
     # dev fixture route: no provider / no network
     if _resolve_ohlcv_dev_mode(mode):
         bars, meta = dev_ohlcv_bars(symbol, as_of=end, limit=limit)
@@ -357,7 +357,12 @@ def _handle_ohlcv(symbol: str, start: Optional[str], end: Optional[str], limit: 
     from ..recommend.datahub import MarketDataHub  # local import
     hub = MarketDataHub()
     as_of = end  # prefer end as as_of boundary if provided
-    df, meta = hub.daily_ohlcv(symbol, as_of=as_of, min_len=0)
+    rmode = (refresh or "auto").strip().lower()
+    if rmode not in {"auto", "force", "never"}:
+        rmode = "auto"
+    prefer_cache_only = (rmode == "never")
+    force_network = (rmode == "force")
+    df, meta = hub.daily_ohlcv(symbol, as_of=as_of, min_len=0, prefer_cache_only=prefer_cache_only, force_network=force_network)
 
     if not isinstance(df, pd.DataFrame) or df.empty:
         return OHLCVResp(symbol=symbol, meta=meta or {}, bars=[])
@@ -385,7 +390,7 @@ def _handle_ohlcv(symbol: str, start: Optional[str], end: Optional[str], limit: 
 
     meta_out = dict(meta or {})
     meta_out.setdefault("filtered", {})
-    meta_out["filtered"].update({k: v for k, v in {"start": start, "end": end, "limit": limit, "mode": "default"}.items() if v is not None})
+    meta_out["filtered"].update({k: v for k, v in {"start": start, "end": end, "limit": limit, "mode": "default", "refresh": rmode}.items() if v is not None})
 
     return OHLCVResp(symbol=symbol, meta=meta_out, bars=[OHLCVBar(**b) for b in bars2])
 
@@ -543,9 +548,10 @@ def api_get_ohlcv(
     end: Optional[str] = Query(default=None, description="YYYY-MM-DD"),
     limit: int = Query(default=800, ge=1, le=5000),
     mode: Optional[str] = Query(default=None, description="ohlcv mode: dev|default (default follows GP_DEV_MODE)"),
+    refresh: Optional[str] = Query(default="auto", description="cache policy: auto|force|never"),
 ) -> OHLCVResp:
     try:
-        return _handle_ohlcv(symbol, start, end, limit, mode)
+        return _handle_ohlcv(symbol, start, end, limit, mode, refresh)
     except ValueError as e:
         # data unavailable / not found
         raise HTTPException(status_code=404, detail=str(e)) from e

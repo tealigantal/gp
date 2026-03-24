@@ -37,7 +37,7 @@ export async function health() {
   return data
 }
 
-export async function ohlcv(symbol: string, params?: { start?: string; end?: string; limit?: number }) {
+export async function ohlcv(symbol: string, params?: { start?: string; end?: string; limit?: number; refresh?: 'auto' | 'force' | 'never' }) {
   const { data } = await api.get<OHLCVResp>(`/ohlcv/${symbol}`, { params })
   return data
 }

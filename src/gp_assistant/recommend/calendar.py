@@ -47,6 +47,13 @@ def calendar_summary() -> Dict[str, str]:
     cfg = load_config()
     tz = zoneinfo.ZoneInfo(cfg.timezone)
     now = datetime.now(tz=tz)
-    as_of = nearest_trading_day(now).strftime("%Y-%m-%d")
+    # After-close gating: before 15:05 use previous trading day as as_of
+    base = now
+    try:
+        if now.time() < time(15, 5):
+            base = now - timedelta(days=1)
+    except Exception:
+        pass
+    as_of = nearest_trading_day(base).strftime("%Y-%m-%d")
     tw = trading_window_now(now)
     return {"as_of": as_of, "window": tw.label, "timezone": cfg.timezone}

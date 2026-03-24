@@ -1,15 +1,17 @@
 import ReactECharts from 'echarts-for-react'
 import { useQuery } from '@tanstack/react-query'
 import { ohlcv } from '../api/client'
+import { useForceRefreshFlag } from '../hooks/useForceRefresh'
 
 type Bands = { S1?: number; S2?: number; R1?: number; R2?: number }
 type Chip = { band_90_low?: number; avg_cost?: number; band_90_high?: number; model_used?: string }
 type Overlay = { bands?: Bands; chip?: Chip }
 
 export default function KlineChart({ symbol, overlay }: { symbol: string; overlay?: Overlay }) {
+  const force = useForceRefreshFlag()
   const q = useQuery({
-    queryKey: ['ohlcv', symbol],
-    queryFn: () => ohlcv(symbol, { limit: 120 }),
+    queryKey: ['ohlcv', symbol, force ? 'force' : 'auto'],
+    queryFn: () => ohlcv(symbol, { limit: 120, refresh: force ? 'force' : 'auto' }),
     enabled: !!symbol
   })
   if (!symbol) return null

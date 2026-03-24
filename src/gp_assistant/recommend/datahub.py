@@ -3,13 +3,21 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
+import os
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta, time as _time
 
 import pandas as pd
 
 from ..core.paths import store_dir
+from ..recommend.calendar import nearest_trading_day, is_trading_day
+from ..core.config import load_config
+try:
+    # Optional calendar loader (uses data/raw/trade_calendar.parquet if available)
+    from ..recommend.modes.service import _load_trade_calendar  # type: ignore
+except Exception:  # pragma: no cover
+    _load_trade_calendar = None  # type: ignore
 from ..core.config import load_config
 from ..providers.factory import get_provider
 from ..tools.market_data import normalize_daily_ohlcv
@@ -105,7 +113,7 @@ class MarketDataHub:
             pass
         return df
 
-    def daily_ohlcv(self, symbol: str, as_of: Optional[str] = None, min_len: int = 250, *, prefer_cache_only: bool = False) -> Tuple[pd.DataFrame, Dict[str, Any]]:
+    def daily_ohlcv(self, symbol: str, as_of: Optional[str] = None, min_len: int = 250, *, prefer_cache_only: bool = False, force_network: bool = False) -> Tuple[pd.DataFrame, Dict[str, Any]]:
         cfg = load_config()
         df: Optional[pd.DataFrame] = None if cfg.strict_real_data else self._from_fixtures(symbol)
         meta: Dict[str, Any] = {"source": None}
@@ -116,7 +124,10 @@ class MarketDataHub:
         qid = canonical_query_id(qparams)
         ensure_query(qid, qparams)
 
-        do_network = not prefer_cache_only
+        # Network decision; force_network overrides TTL and other gates
+        # In addition, allow a process-level override for short backfill during a forced refresh run.
+        force_ctx = (os.getenv("GP_FORCE_DATA_REFRESH", "").strip().lower() in {"1", "true", "yes"})
+        do_network = True if (force_network or force_ctx) else (not prefer_cache_only)
         # track provenance/merge stats
         # 使用 COUNT(*) 避免 JSON 解码全量行带来的额外 CPU/IO
         rows_before = _count_items(qid)
@@ -126,7 +137,7 @@ class MarketDataHub:
         # TTL gating: if last_fetch_at within TTL, skip network
         try:
             ttl = int(getattr(cfg, "cache_refresh_ttl_sec", 300))
-            if ttl > 0:
+            if ttl > 0 and not force_network:
                 meta_q = _query_meta(qid)
                 lfa = meta_q.get("last_fetch_at")
                 if isinstance(lfa, str) and lfa.strip():
@@ -141,8 +152,85 @@ class MarketDataHub:
                             do_network = False
         except Exception:
             pass
+
+        # Day-rollover/trading-day guard: if cached last_item_time < target trading day, force a network attempt
+        try:
+            if not prefer_cache_only and not force_network:
+                meta_q = _query_meta(qid)
+                last_item_time = meta_q.get("last_item_time")
+                # Resolve target trading day (on/before as_of; else today in configured TZ)
+                def _resolve_target(as_of_str: Optional[str]) -> pd.Timestamp:
+                    """Resolve the effective target trading day.
+
+                    - If as_of provided: use that date (normalized), then snap to last open day on/before it.
+                    - If as_of None: use now in configured tz, but only switch to "today" after 15:05 local time;
+                      otherwise use previous open day. This avoids premature midday refreshes.
+                    """
+                    try:
+                        tz = getattr(cfg, "timezone", "Asia/Shanghai")
+                        if as_of_str is not None:
+                            base = pd.to_datetime(as_of_str).normalize()
+                        else:
+                            now_local = pd.Timestamp.now(tz=tz)
+                            # After close (15:05) -> today; else previous day
+                            if now_local.time() >= _time(15, 5):
+                                base = now_local.normalize()
+                            else:
+                                base = (now_local - pd.Timedelta(days=1)).normalize()
+                    except Exception:
+                        base = (pd.to_datetime(as_of_str).normalize() if as_of_str is not None else pd.Timestamp.now().normalize())
+                    # Try precise calendar if available
+                    cal = None
+                    try:
+                        cal = _load_trade_calendar() if _load_trade_calendar else None
+                    except Exception:
+                        cal = None
+                    if isinstance(cal, pd.DataFrame) and not cal.empty and {"cal_date", "is_open"} <= set(cal.columns):
+                        ymd = base.strftime("%Y%m%d")
+                        sub = cal[(cal["cal_date"] <= ymd) & (cal["is_open"] == 1)]
+                        if not sub.empty:
+                            target_str = str(sub.iloc[-1]["cal_date"])  # last open day on/before base
+                            try:
+                                return pd.to_datetime(target_str).normalize()
+                            except Exception:
+                                pass
+                    # Fallback: weekday-based
+                    try:
+                        from ..recommend.calendar import nearest_trading_day as _nearest  # type: ignore
+                        return _nearest(base).normalize()
+                    except Exception:
+                        # minimal: if weekend, step back to Friday; else use base
+                        d = base
+                        while d.weekday() >= 5:
+                            d = d - pd.Timedelta(days=1)
+                        return d.normalize()
+
+                target = _resolve_target(as_of)
+                if last_item_time is None:
+                    do_network = True
+                    meta["rollover_forced"] = True
+                    meta["target_trading_day"] = target.date().isoformat()
+                else:
+                    try:
+                        last_d = pd.to_datetime(last_item_time).normalize()
+                        if last_d < target:
+                            do_network = True
+                            meta["rollover_forced"] = True
+                            meta["target_trading_day"] = target.date().isoformat()
+                    except Exception:
+                        do_network = True
+                        meta["rollover_forced"] = True
+                        meta["target_trading_day"] = target.date().isoformat()
+        except Exception:
+            # Non-fatal; keep previous decision
+            pass
         if do_network:
-            start, end = compute_next_range(qid, user_start=None, user_end=as_of, safety_lookback_days=2)
+            # Short backfill window: default 2 days; allow override under forced refresh context
+            try:
+                backfill_days = int(os.getenv("GP_FORCE_REFRESH_LOOKBACK_DAYS", "3")) if force_ctx else 2
+            except Exception:
+                backfill_days = 3 if force_ctx else 2
+            start, end = compute_next_range(qid, user_start=None, user_end=as_of, safety_lookback_days=backfill_days)
             def _date_only(s: Optional[str]) -> Optional[str]:
                 if s is None:
                     return None
@@ -263,10 +351,47 @@ class MarketDataHub:
         if not symbols:
             return {}
         provider = get_provider()
+        cfg = load_config()
+        # Resolve target trading day with after-close gating (15:05 local)
+        def _resolve_target(as_of_str: Optional[str]) -> pd.Timestamp:
+            try:
+                tz = getattr(cfg, "timezone", "Asia/Shanghai")
+                if as_of_str is not None:
+                    base = pd.to_datetime(as_of_str).normalize()
+                else:
+                    now_local = pd.Timestamp.now(tz=tz)
+                    if now_local.time() >= _time(15, 5):
+                        base = now_local.normalize()
+                    else:
+                        base = (now_local - pd.Timedelta(days=1)).normalize()
+            except Exception:
+                base = (pd.to_datetime(as_of_str).normalize() if as_of_str is not None else pd.Timestamp.now().normalize())
+            # Try trade calendar when available
+            cal = None
+            try:
+                cal = _load_trade_calendar() if _load_trade_calendar else None
+            except Exception:
+                cal = None
+            if isinstance(cal, pd.DataFrame) and not cal.empty and {"cal_date", "is_open"} <= set(cal.columns):
+                ymd = base.strftime("%Y%m%d")
+                sub = cal[(cal["cal_date"] <= ymd) & (cal["is_open"] == 1)]
+                if not sub.empty:
+                    try:
+                        return pd.to_datetime(str(sub.iloc[-1]["cal_date"]))
+                    except Exception:
+                        pass
+            # Fallback: weekend step-back only
+            d = base
+            while d.weekday() >= 5:
+                d = d - pd.Timedelta(days=1)
+            return d
+
+        target = _resolve_target(as_of).normalize()
         # compute minimal start across symbols
         starts = []
         qids: Dict[str, str] = {}
         skip_symbols: set[str] = set()
+        behind_symbols: set[str] = set()
         for s in symbols:
             qparams = {"kind": "daily", "symbol": str(s), "provider": provider.name}
             qid = canonical_query_id(qparams)
@@ -278,6 +403,14 @@ class MarketDataHub:
                 if ttl > 0:
                     meta_q = _query_meta(qid)
                     lfa = meta_q.get("last_fetch_at")
+                    lit = meta_q.get("last_item_time")
+                    is_behind = False
+                    try:
+                        if isinstance(lit, str) and lit.strip():
+                            ld = pd.to_datetime(lit).normalize()
+                            is_behind = (ld < target)
+                    except Exception:
+                        is_behind = True  # if unparsable, err on refresh
                     if isinstance(lfa, str) and lfa.strip():
                         last = None
                         try:
@@ -287,9 +420,11 @@ class MarketDataHub:
                         if last is not None:
                             now = datetime.now(tz=timezone.utc)
                             age = (now - (last if last.tzinfo else last.replace(tzinfo=timezone.utc))).total_seconds()
-                            if age <= ttl:
+                            if age <= ttl and not is_behind:
                                 skip_symbols.add(s)
                                 continue
+                    if is_behind:
+                        behind_symbols.add(s)
             except Exception:
                 pass
             st, _ = compute_next_range(qid, user_start=None, user_end=as_of, safety_lookback_days=safety_lookback_days)
@@ -306,7 +441,8 @@ class MarketDataHub:
         end = _date_only(as_of)
 
         # Fetch batch and upsert
-        fetch_list = [s for s in symbols if s not in skip_symbols]
+        # Always fetch symbols that are behind target trading day regardless of TTL
+        fetch_list = [s for s in symbols if (s not in skip_symbols) or (s in behind_symbols)]
         raw_map = provider.get_daily_batch(fetch_list, start=start, end=end) if fetch_list else {}
         for s, raw in raw_map.items():
             try:

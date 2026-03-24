@@ -29,8 +29,15 @@ def _get_singletons(cfg) -> tuple[MarketDataProvider, MarketDataProvider, Market
             # keep akshare timeout aligned with config (best effort)
             try:
                 ak = _PROVIDER_SINGLETONS.get("akshare")
-                if ak is not None and getattr(ak, "timeout_sec", None) != cfg.request_timeout_sec:
-                    setattr(ak, "timeout_sec", cfg.request_timeout_sec)
+                if ak is not None:
+                    try:
+                        desired = int(cfg.request_timeout_sec)
+                    except Exception:
+                        desired = 20
+                    if desired <= 0:
+                        desired = 10
+                    if getattr(ak, "timeout_sec", None) != desired:
+                        setattr(ak, "timeout_sec", desired)
             except Exception:
                 pass
         return (

@@ -113,12 +113,60 @@ class ToolRegistry:
                     auto_reason = "auto_not_tradeable"
                 elif isinstance(rg, str) and rg != "allow":
                     auto_reason = "auto_run_gating_not_allow"
+                else:
+                    # Staleness check: if artifact as_of < target trading day, refresh once
+                    # Target day gating: before 15:05 local (Asia/Shanghai) -> previous open day
+                    from datetime import datetime, timedelta, time as _t
+                    import zoneinfo
+                    try:
+                        tz = zoneinfo.ZoneInfo("Asia/Shanghai")
+                    except Exception:
+                        tz = None
+                    now = datetime.now(tz=tz)
+                    base = now if now.time() >= _t(15, 5) else (now - timedelta(days=1))
+                    # weekend step-back only (holiday exceptions not covered here)
+                    d = base
+                    while d.weekday() >= 5:
+                        d = d - timedelta(days=1)
+                    target = d.date()
+                    aof = str(art.get("as_of") or art.get("run_id") or "").strip()
+                    art_date = None
+                    if aof:
+                        s = aof.replace("-", "")
+                        if len(s) >= 8 and s[:8].isdigit():
+                            try:
+                                art_date = datetime.strptime(s[:8], "%Y%m%d").date()
+                            except Exception:
+                                art_date = None
+                    if art_date is None or art_date < target:
+                        auto_reason = "auto_stale_run"
         except Exception:
             pass
 
         # If missing or refresh requested (manual/auto), compute a fresh run via runner and persist to v2
         if refresh or auto_reason or not isinstance(art, dict) or not art.get("items"):
-            v1 = _recommend_run(mode="default", date=None, topk=topk or 3, universe="auto", symbols=None, risk_profile="normal")
+            # When explicitly refreshed, temporarily set a process-level flag to force short backfill
+            # in MarketDataHub (e.g., last 3 days) and bypass stale caches for this run only.
+            import os
+            prev_force = os.getenv("GP_FORCE_DATA_REFRESH")
+            prev_backfill = os.getenv("GP_FORCE_REFRESH_LOOKBACK_DAYS")
+            try:
+                if refresh:
+                    os.environ["GP_FORCE_DATA_REFRESH"] = "1"
+                    # Default to 3 days unless already provided by operator/env
+                    if not os.getenv("GP_FORCE_REFRESH_LOOKBACK_DAYS"):
+                        os.environ["GP_FORCE_REFRESH_LOOKBACK_DAYS"] = "3"
+                v1 = _recommend_run(mode="default", date=None, topk=topk or 3, universe="auto", symbols=None, risk_profile="normal")
+            finally:
+                # Restore prior env (avoid contaminating subsequent requests)
+                if prev_force is None:
+                    os.environ.pop("GP_FORCE_DATA_REFRESH", None)
+                else:
+                    os.environ["GP_FORCE_DATA_REFRESH"] = prev_force
+                if prev_backfill is None:
+                    os.environ.pop("GP_FORCE_REFRESH_LOOKBACK_DAYS", None)
+                else:
+                    os.environ["GP_FORCE_REFRESH_LOOKBACK_DAYS"] = prev_backfill
             v2 = build_v2_dict_from_v1(v1)
             rid = str(v2.get("run_id") or v2.get("as_of") or "")
             if rid:

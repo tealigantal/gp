@@ -20,6 +20,7 @@ import pandas as pd
 from ..core.config import load_config
 from ..core.logging import logger
 from ..observe.degrade import record as degrade_record
+import os
 from ..observe.degrade import warn_once
 from ..core.paths import store_dir
 from .contracts import build_v2_from_v1
@@ -891,7 +892,8 @@ def run(date: Optional[str] = None, topk: int = 3, universe: str = "auto", symbo
     if snap_meta.get("cache") == "disk":
         degrade_record(dbg, "SNAPSHOT_DISK_CACHE", {"age_sec": snap_meta.get("cache_age_sec")}, severity=("warn" if _is_non_trading else "degrade"))
     if bool(snap_meta.get("fallback")):
-        degrade_record(dbg, "SNAPSHOT_FALLBACK", {"to": snap_meta.get("source"), "reason": snap_meta.get("fallback_reason")}, severity=("warn" if _is_non_trading else "degrade"))
+        # Treat fallback as a warning in trading sessions to avoid over-blocking
+        degrade_record(dbg, "SNAPSHOT_FALLBACK", {"to": snap_meta.get("source"), "reason": snap_meta.get("fallback_reason")}, severity="warn")
     if snap_meta.get("skipped_routes"):
         degrade_record(dbg, "SNAPSHOT_ROUTE_SKIPPED", {"routes": snap_meta.get("skipped_routes")}, severity=("warn" if _is_non_trading else "degrade"))
     if snapshot_df is None:
@@ -912,13 +914,8 @@ def run(date: Optional[str] = None, topk: int = 3, universe: str = "auto", symbo
                 pass
             if meta.get("missing") is True:
                 return False
-            if meta.get("cache"):
-                return False
+            # Relax: cache/fallback/route-skipped no longer mark snapshot unclean on trading days
             if meta.get("stale") is True:
-                return False
-            if meta.get("fallback") is True:
-                return False
-            if meta.get("skipped_routes"):
                 return False
             if meta.get("error") or meta.get("error_type"):
                 return False
@@ -931,8 +928,18 @@ def run(date: Optional[str] = None, topk: int = 3, universe: str = "auto", symbo
         degrade_record(dbg, "UNIVERSE_TOO_SMALL", {"count": cand_stats.get("universe_after_filter_count", 0), "min": getattr(cfg, "tradeable_min_universe", 50)})
     if cand_stats.get("candidates_out_count", 0) < getattr(cfg, "tradeable_min_candidates", 20):
         degrade_record(dbg, "CANDIDATE_TOO_SMALL", {"count": cand_stats.get("candidates_out_count", 0), "min": getattr(cfg, "tradeable_min_candidates", 20)})
-    if cand_stats.get("bars_too_short_count", 0) > 0:
-        degrade_record(dbg, "BARS_TOO_SHORT", {"count": cand_stats.get("bars_too_short_count", 0)})
+    # BARS_TOO_SHORT: degrade only when ratio exceeds threshold; else warn
+    try:
+        short_ct = int(cand_stats.get("bars_too_short_count", 0) or 0)
+        uni_ct = int(cand_stats.get("universe_after_filter_count", 0) or 0)
+        ratio = (float(short_ct) / float(max(1, uni_ct))) if uni_ct else 0.0
+        ratio_thr = float(os.getenv("GP_BARS_TOO_SHORT_WARN_RATIO", "0.3"))
+        severity = "degrade" if ratio >= ratio_thr else "warn"
+        if short_ct > 0:
+            degrade_record(dbg, "BARS_TOO_SHORT", {"count": short_ct, "ratio": round(ratio, 3), "thr": ratio_thr}, severity=severity)
+    except Exception:
+        if cand_stats.get("bars_too_short_count", 0) > 0:
+            degrade_record(dbg, "BARS_TOO_SHORT", {"count": cand_stats.get("bars_too_short_count", 0)})
     if cand_stats.get("indicator_error_count", 0) > 0:
         degrade_record(dbg, "INDICATOR_PARTIAL", {"count": cand_stats.get("indicator_error_count", 0)})
     # Universe dirty input visibility (does not change tradeable rules)
@@ -953,9 +960,17 @@ def run(date: Optional[str] = None, topk: int = 3, universe: str = "auto", symbo
             tradeable = False
     except Exception:
         pass
-    if tradeable and dbg.get("degrade_reasons"):
-        degrade_record(dbg, "INSUFFICIENT_EVIDENCE_TRADEABLE", {"reason": "degrade_reasons_present"})
-        tradeable = False
+    # Only block when blocking degrade codes present; else allow with warnings
+    if tradeable:
+        try:
+            blk_env = os.getenv("GP_BLOCKING_DEGRADE_CODES", "SNAPSHOT_MISSING,MAINLINE_FILTERED_ALL,UNIVERSE_TOO_SMALL,CANDIDATE_TOO_SMALL")
+            blocking = {c.strip() for c in blk_env.split(',') if c.strip()}
+        except Exception:
+            blocking = {"SNAPSHOT_MISSING", "MAINLINE_FILTERED_ALL", "UNIVERSE_TOO_SMALL", "CANDIDATE_TOO_SMALL"}
+        present = {str(x.get("reason_code")) for x in (dbg.get("degrade_reasons") or [])}
+        if blocking & present:
+            degrade_record(dbg, "INSUFFICIENT_EVIDENCE_TRADEABLE", {"reason": "blocking_degrade_present", "blocking": sorted(list(blocking & present))})
+            tradeable = False
     payload["tradeable"] = bool(tradeable)
     # Message with strong visibility when not tradeable
     if not payload["tradeable"]:
@@ -1049,4 +1064,3 @@ def run(date: Optional[str] = None, topk: int = 3, universe: str = "auto", symbo
 
     _write_outputs(as_of, payload)
     return payload
-
