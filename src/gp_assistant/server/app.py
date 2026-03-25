@@ -21,19 +21,100 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional
 from urllib.parse import urlsplit
 
-import pandas as pd
-from fastapi import APIRouter, FastAPI, HTTPException, Query, Body
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+try:  # Optional FastAPI import for environments without the dependency
+    from fastapi import APIRouter, FastAPI, HTTPException, Query, Body
+    from fastapi.middleware.cors import CORSMiddleware
+    from fastapi.responses import JSONResponse
+    _FASTAPI_AVAILABLE = True
+except Exception:  # pragma: no cover
+    _FASTAPI_AVAILABLE = False
+    # Minimal no-op fallbacks to allow module import without FastAPI installed
+    class HTTPException(Exception):  # type: ignore
+        def __init__(self, status_code: int = 500, detail: Any | None = None):
+            super().__init__(str(detail) if detail is not None else "HTTPException")
+            self.status_code = status_code
+            self.detail = detail
+
+    class JSONResponse(dict):  # type: ignore
+        def __init__(self, status_code: int = 200, content: Dict[str, Any] | None = None):
+            super().__init__(content or {})
+            self.status_code = status_code
+
+    class APIRouter:  # type: ignore
+        def __init__(self, prefix: str = ""):
+            self.prefix = prefix
+
+        def get(self, *args, **kwargs):  # noqa: D401
+            def _decorator(fn):
+                return fn
+            return _decorator
+
+        def post(self, *args, **kwargs):  # noqa: D401
+            def _decorator(fn):
+                return fn
+            return _decorator
+
+        def delete(self, *args, **kwargs):  # noqa: D401
+            def _decorator(fn):
+                return fn
+            return _decorator
+
+        def put(self, *args, **kwargs):  # noqa: D401
+            def _decorator(fn):
+                return fn
+            return _decorator
+
+    class FastAPI:  # type: ignore
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def add_middleware(self, *args, **kwargs):
+            pass
+
+        def include_router(self, *args, **kwargs):
+            pass
+
+        def exception_handler(self, *args, **kwargs):  # noqa: D401
+            def _decorator(fn):
+                return fn
+            return _decorator
+
+        # route decorators for legacy direct app routes
+        def get(self, *args, **kwargs):  # noqa: D401
+            def _decorator(fn):
+                return fn
+            return _decorator
+
+        def post(self, *args, **kwargs):  # noqa: D401
+            def _decorator(fn):
+                return fn
+            return _decorator
+
+        def delete(self, *args, **kwargs):  # noqa: D401
+            def _decorator(fn):
+                return fn
+            return _decorator
+
+        def put(self, *args, **kwargs):  # noqa: D401
+            def _decorator(fn):
+                return fn
+            return _decorator
+
+    class CORSMiddleware:  # type: ignore
+        pass
+
+    def Query(default=None, **kwargs):  # type: ignore
+        return default
+
+    def Body(default=None, **kwargs):  # type: ignore
+        return default
 
 from ..chat import event_store
-from ..chat.orchestrator import handle_message
 from ..core.config import load_config
 from ..core.errors import APIError
 from ..core.paths import store_dir, results_dir
 from ..dev.fixtures import dev_ohlcv_bars
 from ..recommend.compact_payload import compact_recommend_payload
-from ..recommend.runner import list_modes as recommend_list_modes
 from ..kernel.facade import (
     get_artifact_v2 as kernel_get_artifact_v2,
     compare_symbols as kernel_compare_symbols,
@@ -41,33 +122,61 @@ from ..kernel.facade import (
     get_strategy_validation as kernel_strategy_validation,
     get_paperfolio as kernel_get_paperfolio,
 )
-from .models import (
-    ChatReq,
-    ChatResp,
-    FocusReq,
-    FocusResp,
-    EventOut,
-    HealthResp,
-    OHLCVBar,
-    OHLCVResp,
-    RecommendReq,
-    RecommendResp,
-    CompareReq,
-    CompareResp,
-    PickDetailReq,
-    PickDetailResp,
-    RecommendV2Resp,
-    SyncReq,
-    SyncResp,
-    StrategyValidationResp,
-    PaperfolioResp,
-    LiveShadowResp,
-    ValidationSummaryResp,
-    PortfolioResp,
-    WorkbenchResp,
-    OperatorIntentActionReq,
-    OperatorIntentActionResp,
-)
+try:
+    from .models import (
+        ChatReq,
+        ChatResp,
+        FocusReq,
+        FocusResp,
+        EventOut,
+        HealthResp,
+        OHLCVBar,
+        OHLCVResp,
+        RecommendReq,
+        RecommendResp,
+        CompareReq,
+        CompareResp,
+        PickDetailReq,
+        PickDetailResp,
+        RecommendV2Resp,
+        SyncReq,
+        SyncResp,
+        StrategyValidationResp,
+        PaperfolioResp,
+        LiveShadowResp,
+        ValidationSummaryResp,
+        PortfolioResp,
+        WorkbenchResp,
+        OperatorIntentActionReq,
+        OperatorIntentActionResp,
+    )
+except Exception:  # pragma: no cover - allow import without pydantic installed
+    # Minimal placeholders for type annotations/response_model arguments under FastAPI stubs
+    ChatReq = Dict[str, Any]  # type: ignore
+    ChatResp = Dict[str, Any]  # type: ignore
+    FocusReq = Dict[str, Any]  # type: ignore
+    FocusResp = Dict[str, Any]  # type: ignore
+    EventOut = Dict[str, Any]  # type: ignore
+    HealthResp = Dict[str, Any]  # type: ignore
+    OHLCVBar = Dict[str, Any]  # type: ignore
+    OHLCVResp = Dict[str, Any]  # type: ignore
+    RecommendReq = Dict[str, Any]  # type: ignore
+    RecommendResp = Dict[str, Any]  # type: ignore
+    CompareReq = Dict[str, Any]  # type: ignore
+    CompareResp = Dict[str, Any]  # type: ignore
+    PickDetailReq = Dict[str, Any]  # type: ignore
+    PickDetailResp = Dict[str, Any]  # type: ignore
+    RecommendV2Resp = Dict[str, Any]  # type: ignore
+    SyncReq = Dict[str, Any]  # type: ignore
+    SyncResp = Dict[str, Any]  # type: ignore
+    StrategyValidationResp = Dict[str, Any]  # type: ignore
+    PaperfolioResp = Dict[str, Any]  # type: ignore
+    LiveShadowResp = Dict[str, Any]  # type: ignore
+    ValidationSummaryResp = Dict[str, Any]  # type: ignore
+    PortfolioResp = Dict[str, Any]  # type: ignore
+    WorkbenchResp = Dict[str, Any]  # type: ignore
+    OperatorIntentActionReq = Dict[str, Any]  # type: ignore
+    OperatorIntentActionResp = Dict[str, Any]  # type: ignore
 
 app = FastAPI(title="gp_assistant", version="1.1.0")
 
@@ -102,6 +211,8 @@ def _compact_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def _handle_chat(req: ChatReq) -> ChatResp:
+    # Lazy import to avoid heavy dependencies at module import time
+    from ..chat.orchestrator import handle_message  # type: ignore
     data = handle_message(req.session_id, req.message, req.message_id)
     return ChatResp(
         session_id=data.get("session_id"),
@@ -308,7 +419,8 @@ def _handle_health() -> Dict[str, Any]:
         "run_mode": getattr(cfg, "run_mode", None),
         "dev_mode": getattr(cfg, "dev_mode", None),
         "recommend_mode": getattr(cfg, "recommend_mode", None),
-        "recommend_modes": recommend_list_modes(),
+        # Lazy import to avoid heavy deps
+        "recommend_modes": __import__("gp_assistant.recommend.runner", fromlist=["list_modes"]).list_modes(),
         "service": ready,
     }
 
@@ -355,6 +467,7 @@ def _handle_ohlcv(symbol: str, start: Optional[str], end: Optional[str], limit: 
 
     # real mode (lazy import to avoid heavy deps on app import)
     from ..recommend.datahub import MarketDataHub  # local import
+    import pandas as pd  # local import to avoid import error on app import
     hub = MarketDataHub()
     as_of = end  # prefer end as as_of boundary if provided
     rmode = (refresh or "auto").strip().lower()
@@ -509,7 +622,7 @@ def api_post_recommend(req: RecommendReq) -> RecommendResp:  # type: ignore[retu
 def api_get_recommend_modes() -> Dict[str, Any]:
     cfg = load_config()
     return {
-        "available": recommend_list_modes(),
+        "available": __import__("gp_assistant.recommend.runner", fromlist=["list_modes"]).list_modes(),
         "default": cfg.recommend_mode,
         "dev_mode": cfg.dev_mode,
         "run_mode": cfg.run_mode,

@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 """
-Agent tool layer for chat orchestration.
+Legacy agent tool layer (compatibility only).
 
-Provides a constrained, deterministic toolset that the chat agent can call.
-Each tool exposes: name, description, args_schema, and a run(args, state) -> ToolResult.
+Mainline orchestrator does not depend on this module. It remains available for
+older flows or experiments that call tool registries directly. Avoid adding
+business logic here; prefer chat.orchestrator + tool_registry.
 """
 
 import re
