@@ -74,8 +74,9 @@ def t_get_session_focus(args: dict, _state: Any) -> ToolResult:  # noqa: ANN401
     sid = str(args.get("session_id", "")).strip()
     if not sid:
         return _err("missing session_id", code="MISSING_ARG")
+    sym = store.get_focus(sid)
     st = store.get_state(sid)
-    return _ok("focus_loaded", {"symbol": st.get("current_focus_symbol"), "name": st.get("current_focus_name")})
+    return _ok("focus_loaded", {"symbol": sym, "name": st.get("current_focus_name")})
 
 
 def t_set_session_focus(args: dict, _state: Any) -> ToolResult:  # noqa: ANN401

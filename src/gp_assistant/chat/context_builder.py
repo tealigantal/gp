@@ -115,7 +115,7 @@ def build_turn_context(session_id: str) -> Dict[str, Any]:
     session_state = {
         "active_run_id": st.get("active_run_id"),
         "previous_run_id": st.get("previous_run_id"),
-        "focus_symbol": st.get("focused_symbol") or st.get("current_focus_symbol"),
+        "focus_symbol": store.get_focus(sid),
         "active_symbols": list(st.get("active_symbols") or []),
         "pending_action": st.get("pending_action"),
         "pending_symbols": list(st.get("pending_symbols") or []),

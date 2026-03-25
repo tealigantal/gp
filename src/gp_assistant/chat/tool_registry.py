@@ -77,7 +77,7 @@ class ToolRegistry:
         return {
             "active_run_id": st.get("active_run_id"),
             "previous_run_id": st.get("previous_run_id"),
-            "focus_symbol": st.get("focused_symbol") or st.get("current_focus_symbol"),
+            "focus_symbol": store.get_focus(session_id),
             "active_symbols": st.get("active_symbols") or [],
             "tradeable": tradeable,
             "run_gating": run_gating,
@@ -100,7 +100,7 @@ class ToolRegistry:
         st = store.get_state(session_id)
         s = (raw_reference or "").strip()
         active = list(st.get("active_symbols") or [])
-        focus = st.get("focused_symbol") or st.get("current_focus_symbol")
+        focus = store.get_focus(session_id)
 
         # Explicit symbol present?
         import re
