@@ -47,11 +47,23 @@ def run(
     universe: str = "auto",
     symbols: Optional[List[str]] = None,
     risk_profile: str = "normal",
+    # explicit refresh knobs (do not mutate environment here)
+    force_data_refresh: bool = False,
+    refresh_lookback_days: Optional[int] = None,
 ) -> Dict[str, Any]:
     m = resolve_mode(mode)
 
     if m == "default":
-        return default_agent.run(date=date, topk=topk, universe=universe, symbols=symbols, risk_profile=risk_profile)
+        # default agent may ignore the new knobs; they are reserved for explicit plumb-through
+        return default_agent.run(
+            date=date,
+            topk=topk,
+            universe=universe,
+            symbols=symbols,
+            risk_profile=risk_profile,
+            force_data_refresh=force_data_refresh,
+            refresh_lookback_days=refresh_lookback_days,
+        )
 
     if not _SAFE_MODE.fullmatch(m):
         raise APIError(status_code=400, message="invalid recommend mode", detail={"mode": m})
@@ -65,7 +77,15 @@ def run(
     if not callable(fn):
         raise APIError(status_code=500, message="recommend mode missing run()", detail={"mode": m})
 
-    out = fn(date=date, topk=topk, universe=universe, symbols=symbols, risk_profile=risk_profile)
+    out = fn(
+        date=date,
+        topk=topk,
+        universe=universe,
+        symbols=symbols,
+        risk_profile=risk_profile,
+        force_data_refresh=force_data_refresh,
+        refresh_lookback_days=refresh_lookback_days,
+    )
 
     if isinstance(out, dict):
         out.setdefault("debug", {})

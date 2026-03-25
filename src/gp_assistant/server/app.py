@@ -27,7 +27,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from ..chat import event_store
-from ..chat.deepseek_agent import run_agent_turn
+from ..chat.orchestrator import handle_message
 from ..core.config import load_config
 from ..core.errors import APIError
 from ..core.paths import store_dir, results_dir
@@ -102,7 +102,7 @@ def _compact_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def _handle_chat(req: ChatReq) -> ChatResp:
-    data = run_agent_turn(req.session_id, req.message)
+    data = handle_message(req.session_id, req.message, req.message_id)
     return ChatResp(
         session_id=data.get("session_id"),
         reply=str(data.get("reply", "")),

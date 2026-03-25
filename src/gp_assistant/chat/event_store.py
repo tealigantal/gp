@@ -11,6 +11,7 @@ import threading
 
 from ..core.config import load_config
 from ..core.paths import store_dir
+from . import sqlite_utils as _su
 
 # Global re-entrant lock to serialize SQLite writes within process
 _WRITE_LOCK = threading.RLock()
@@ -24,23 +25,9 @@ _WRITE_LOCK = threading.RLock()
 # - User-level settings kept in participants table
 
 
-def _db_path() -> Path:
-    p = store_dir() / "sessions" / "session.db"
-    p.parent.mkdir(parents=True, exist_ok=True)
-    return p
-
-
 def _connect() -> sqlite3.Connection:
-    # Add timeout and WAL mode to reduce 'database is locked' under concurrent writes
-    conn = sqlite3.connect(str(_db_path()), timeout=15.0)
-    try:
-        # Enable WAL for better concurrent read/write, and set a sane busy timeout
-        conn.execute("PRAGMA journal_mode=WAL")
-        conn.execute("PRAGMA synchronous=NORMAL")
-        conn.execute("PRAGMA busy_timeout=10000")  # 10s
-    except Exception:
-        # Pragmas are best-effort; continue even if unsupported
-        pass
+    # Use shared connector; ensure tables exist below
+    conn = _su.connect_db()
     conn.execute(
         """
         CREATE TABLE IF NOT EXISTS conversations(
@@ -125,33 +112,11 @@ def _connect() -> sqlite3.Connection:
 
 
 def _retry_on_locked(fn, *, retries: int = 8, base_delay: float = 0.08):
-    """Retry helper for sporadic 'database is locked' OperationalError.
-
-    Exponential backoff: base_delay * 2**attempt
-    """
-    for i in range(max(1, retries)):
-        try:
-            return fn()
-        except sqlite3.OperationalError as e:  # noqa: BLE001
-            msg = str(e).lower()
-            if "database is locked" in msg or "database is busy" in msg:
-                time.sleep(base_delay * (2 ** i))
-                continue
-            raise
-    # One last attempt (propagate if still failing)
-    return fn()
+    return _su.retry_on_locked(fn, retries=retries, base_delay=base_delay)
 
 
 def _now_iso() -> str:
-    cfg = load_config()
-    tz = timezone.utc
-    try:
-        import zoneinfo
-
-        tz = zoneinfo.ZoneInfo(cfg.timezone)
-    except Exception:
-        pass
-    return datetime.now(tz=tz).isoformat()
+    return _su.now_iso()
 
 
 def _current_user_id() -> str:

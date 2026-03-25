@@ -152,7 +152,16 @@ def _write_outputs(as_of: str, payload: Dict[str, Any]) -> None:
             pass
 
 
-def run(date: Optional[str] = None, topk: int = 3, universe: str = "auto", symbols: Optional[List[str]] = None, risk_profile: str = "normal") -> Dict[str, Any]:  # noqa: D401
+def run(
+    date: Optional[str] = None,
+    topk: int = 3,
+    universe: str = "auto",
+    symbols: Optional[List[str]] = None,
+    risk_profile: str = "normal",
+    *,
+    force_data_refresh: bool = False,
+    refresh_lookback_days: Optional[int] = None,
+) -> Dict[str, Any]:  # noqa: D401
     cfg = load_config()
     cal = calendar_summary()
     as_of = date or cal["as_of"]

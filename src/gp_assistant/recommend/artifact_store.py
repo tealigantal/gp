@@ -155,6 +155,8 @@ def build_v2_dict_from_v1(payload: Dict[str, Any], *, risk_profile: Optional[str
     out = {
         "run_id": v2.run_id,
         "as_of": v2.as_of,
+        "as_of_ts": v2.as_of_ts,
+        "data_cutoff": v2.data_cutoff,
         "snapshot_id": v2.snapshot_id,
         "market_regime": v2.market_regime,
         "degraded": v2.degraded,

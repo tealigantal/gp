@@ -77,6 +77,8 @@ class PickItemV2:
 class PickArtifactV2:
     run_id: str
     as_of: str
+    as_of_ts: Optional[str]
+    data_cutoff: Optional[str]
     snapshot_id: Optional[str]
     market_regime: Optional[str]
     degraded: bool
@@ -151,11 +153,15 @@ def build_v2_from_v1(payload: Dict[str, Any], *, risk_profile: Optional[str] = N
 
     # Snapshot id best-effort from data_status.snapshot.as_of_ts
     snapshot_id = None
+    as_of_ts = None
     try:
         ds = payload.get("data_status", {}) or {}
-        snapshot_id = (ds.get("snapshot", {}) or {}).get("as_of_ts")
+        snapshot = (ds.get("snapshot", {}) or {})
+        snapshot_id = snapshot.get("as_of_ts")
+        as_of_ts = snapshot_id
     except Exception:
         snapshot_id = None
+        as_of_ts = None
 
     # market_regime from env.grade if available
     regime = None
@@ -364,9 +370,18 @@ def build_v2_from_v1(payload: Dict[str, Any], *, risk_profile: Optional[str] = N
         except Exception:
             continue
 
+    # Determine data_cutoff by policy
+    try:
+        from .run_policy import detect_cutoff as _detect_cutoff  # local import to avoid cycles
+        data_cutoff = _detect_cutoff()
+    except Exception:
+        data_cutoff = "INTRADAY"
+
     return PickArtifactV2(
         run_id=run_id,
         as_of=as_of,
+        as_of_ts=(str(as_of_ts) if as_of_ts else None),
+        data_cutoff=str(data_cutoff or "INTRADAY"),
         snapshot_id=(str(snapshot_id) if snapshot_id else None),
         market_regime=regime,
         degraded=bool(degraded),
