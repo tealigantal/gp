@@ -205,25 +205,9 @@ class ToolRegistry:
 
     # 8. get_run_change
     def get_run_change(self, session_id: str) -> Dict[str, Any]:
+        from .run_diff_service import diff_runs
         st = store.get_state(session_id)
-        curr = list(st.get("active_symbols") or [])
-        prev = list(st.get("previous_active_symbols") or [])
-        added = [s for s in curr if s and s not in prev]
-        removed = [s for s in prev if s and s not in curr]
-        rank_changes: List[Dict[str, Any]] = []  # placeholder for later stable rank diffs
-        tradeable_change = None
-        run_gating_change = None
-        summary_reason = "selection_updated" if (added or removed) else "no_change"
-        return {
-            "current_run_id": st.get("active_run_id"),
-            "previous_run_id": st.get("previous_run_id"),
-            "added_symbols": added,
-            "removed_symbols": removed,
-            "rank_changes": rank_changes,
-            "tradeable_change": tradeable_change,
-            "run_gating_change": run_gating_change,
-            "summary_reason": summary_reason,
-        }
+        return diff_runs(st.get("active_run_id"), st.get("previous_run_id"))
 
     # 9. set_focus_symbol
     def set_focus_symbol(self, session_id: str, symbol: str) -> Dict[str, Any]:

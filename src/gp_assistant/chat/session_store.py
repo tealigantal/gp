@@ -201,6 +201,11 @@ _STATE_DEFAULTS = {
     "last_surface_kind": None,
     "last_tool_results_summary": {},
     "last_visible_assistant_summary": {},
+    # Phase 2.7: follow-up binding context
+    "referenced_run_id": None,
+    "referenced_symbols": [],
+    "last_reference_reason": None,
+    "last_target_kind": None,
 }
 
 
@@ -385,4 +390,3 @@ def set_last_intent(session_id: str, name: Optional[str], message_type: Optional
 
 def set_last_refresh(session_id: str) -> Dict[str, Any]:
     return update_state(session_id, {"last_refresh_at": datetime.now(timezone.utc).isoformat()})
-

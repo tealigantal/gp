@@ -213,19 +213,17 @@ def t_get_ohlcv(args: dict, _state: Any) -> ToolResult:  # noqa: ANN401
         else:
             # First try cache-only to keep latency low
             df, meta = hub.daily_ohlcv(symbol, as_of=as_of, min_len=0, prefer_cache_only=True)
-        # Helper: resolve target trading day (on/before as_of; else today)
+        # Helper: resolve target trading day (on/before as_of; else unified now)
         def _resolve_target(as_of_str):
             cfg = load_config()
             try:
                 if as_of_str is not None:
                     base = pd.to_datetime(as_of_str).normalize()
                 else:
+                    from ..recommend.trading_clock import resolve_effective_trading_date as _resolve_td
                     now_local = pd.Timestamp.now(tz=cfg.timezone)
-                    # After close (15:05) -> today; else previous open day
-                    if now_local.time() >= pd.Timestamp('1900-01-01T15:05:00').time():
-                        base = now_local.normalize()
-                    else:
-                        base = (now_local - pd.Timedelta(days=1)).normalize()
+                    eff = _resolve_td(now_local.to_pydatetime())
+                    base = pd.to_datetime(eff).normalize()
             except Exception:
                 base = (pd.to_datetime(as_of_str).normalize() if as_of_str is not None else pd.Timestamp.now().normalize())
             cal = None
@@ -340,11 +338,10 @@ def t_get_latest_price_snapshot(args: dict, _state: Any) -> ToolResult:  # noqa:
         def _resolve_target():
             cfg = load_config()
             try:
+                from ..recommend.trading_clock import resolve_effective_trading_date as _resolve_td
                 now_local = pd.Timestamp.now(tz=cfg.timezone)
-                if now_local.time() >= pd.Timestamp('1900-01-01T15:05:00').time():
-                    base = now_local.normalize()
-                else:
-                    base = (now_local - pd.Timedelta(days=1)).normalize()
+                eff = _resolve_td(now_local.to_pydatetime())
+                base = pd.to_datetime(eff).normalize()
             except Exception:
                 base = pd.Timestamp.now().normalize()
             cal = None
