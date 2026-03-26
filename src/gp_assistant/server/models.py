@@ -290,3 +290,21 @@ class OperatorIntentActionResp(BaseModel):
     ok: bool
     error: Optional[str] = None
     intent_id: Optional[str] = None
+
+
+# --- Force refresh recent K-line + rerun ---
+
+
+class ForceRefreshReq(BaseModel):
+    session_id: str
+    days: Optional[int] = Field(default=3, ge=1, le=10)
+
+
+class ForceRefreshResp(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    success: bool
+    days: int
+    message: str
+    event_id: Optional[str] = None
+    seq: Optional[int] = None

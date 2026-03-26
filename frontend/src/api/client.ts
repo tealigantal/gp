@@ -1,5 +1,5 @@
 import axios from 'axios'
-import type { ChatReq, ChatResp, RecommendReq, RecommendResp, HealthResp, OHLCVResp, SyncReq, SyncResp, EventOut, RecommendV2, CompareResp, PickDetailResp, StrategyValidationResp, PaperfolioResp, LiveShadowResp, ValidationSummary, PortfolioState, ExecutionEvent, OrderIntent, WorkbenchSnapshot } from './types'
+import type { ChatReq, ChatResp, RecommendReq, RecommendResp, HealthResp, OHLCVResp, SyncReq, SyncResp, EventOut, RecommendV2, CompareResp, PickDetailResp, StrategyValidationResp, PaperfolioResp, LiveShadowResp, ValidationSummary, PortfolioState, ExecutionEvent, OrderIntent, WorkbenchSnapshot, ForceRefreshReq, ForceRefreshResp } from './types'
 import type { ConversationSummary, ThreadItem, RecommendationArtifact, SearchHit } from './contracts'
 
 const baseURL = import.meta.env.VITE_API_BASE || '/api'
@@ -164,5 +164,11 @@ export async function getWorkbench(params: { run_id?: string; as_of?: string; ev
 
 export async function postOperatorIntentAction(body: { action: 'admit'|'reject'|'cancel'; run_id?: string; as_of?: string; symbol?: string; intent_id?: string; operator_note?: string }) {
   const { data } = await api.post<{ ok: boolean; error?: string; intent_id?: string }>(`/operator/intent/action`, body)
+  return data
+}
+
+// ---- Force refresh recent K-line + rerun ----
+export async function forceRefreshRecommend(body: ForceRefreshReq) {
+  const { data } = await api.post<ForceRefreshResp>('/chat/force-refresh-recommend', body)
   return data
 }

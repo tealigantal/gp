@@ -235,3 +235,17 @@ export type PickDetailResp = {
   item?: Record<string, unknown> | null
   error?: string
 }
+
+// ---- Force refresh recent K-line + rerun ----
+export type ForceRefreshReq = {
+  session_id: string
+  days?: number
+}
+
+export type ForceRefreshResp = {
+  success: boolean
+  days: number
+  message: string
+  event_id?: string
+  seq?: number
+}

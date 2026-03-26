@@ -22,6 +22,7 @@ from typing import Any, Dict, List, Optional
 from urllib.parse import urlsplit
 
 import pandas as pd
+import logging
 from fastapi import APIRouter, FastAPI, HTTPException, Query, Body
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -67,9 +68,12 @@ from .models import (
     WorkbenchResp,
     OperatorIntentActionReq,
     OperatorIntentActionResp,
+    ForceRefreshReq,
+    ForceRefreshResp,
 )
 
 app = FastAPI(title="gp_assistant", version="1.1.0")
+_log = logging.getLogger(__name__)
 
 
 def _maybe_enable_cors(application: FastAPI) -> None:
@@ -492,6 +496,14 @@ def api_post_chat(req: ChatReq) -> ChatResp:
     try:
         return _handle_chat(req)
     except Exception as e:  # noqa: BLE001
+        try:
+            _log.exception(
+                "route_error:/api/chat session_id=%s message=%s",
+                getattr(req, "session_id", None),
+                getattr(req, "message", None),
+            )
+        except Exception:
+            pass
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
@@ -502,6 +514,96 @@ def api_post_recommend(req: RecommendReq) -> RecommendResp:  # type: ignore[retu
     except APIError:
         raise
     except Exception as e:  # noqa: BLE001
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+def _force_refresh_kline_only(req: ForceRefreshReq) -> Dict[str, Any]:
+    """
+    Hard action: force refresh recent N days of OHLCV via data hub upsert, then append a fixed assistant text.
+    - No LLM, no recommendation rerun, no cards.
+    - Reuses existing datahub/refresh logic by setting GP_FORCE_DATA_REFRESH + GP_FORCE_REFRESH_LOOKBACK_DAYS.
+    """
+    from ..chat import session_store as store
+    from ..chat import event_store
+    from ..recommend.datahub import MarketDataHub
+
+    sid = store.ensure_session(req.session_id)
+
+    # Validate days
+    try:
+        days = int(req.days or 3)
+    except Exception:
+        days = 3
+    if days < 1 or days > 10:
+        raise HTTPException(status_code=400, detail="days must be 1..10")
+
+    # Determine target symbols from session context (minimal scope)
+    st = store.get_state(sid)
+    target_symbols: List[str] = []
+    try:
+        syms = st.get("active_symbols") or st.get("last_recommend_symbols") or []
+        if isinstance(syms, list):
+            target_symbols = [str(s).strip() for s in syms if str(s).strip()]
+    except Exception:
+        target_symbols = []
+
+    # Force-refresh recent days for these symbols
+    prev_force = os.getenv("GP_FORCE_DATA_REFRESH")
+    prev_backfill = os.getenv("GP_FORCE_REFRESH_LOOKBACK_DAYS")
+    try:
+        os.environ["GP_FORCE_DATA_REFRESH"] = "1"
+        os.environ["GP_FORCE_REFRESH_LOOKBACK_DAYS"] = str(days)
+        hub = MarketDataHub()
+        for s in target_symbols:
+            try:
+                # force network + short backfill; upsert by (symbol+date)
+                hub.daily_ohlcv(s, as_of=None, min_len=0, prefer_cache_only=False, force_network=True)
+            except Exception:
+                # Best-effort per symbol; continue others
+                continue
+    finally:
+        # Restore env
+        if prev_force is None:
+            os.environ.pop("GP_FORCE_DATA_REFRESH", None)
+        else:
+            os.environ["GP_FORCE_DATA_REFRESH"] = prev_force
+        if prev_backfill is None:
+            os.environ.pop("GP_FORCE_REFRESH_LOOKBACK_DAYS", None)
+        else:
+            os.environ["GP_FORCE_REFRESH_LOOKBACK_DAYS"] = prev_backfill
+
+    # Append fixed assistant message (plain text)
+    text = f"已刷新近{days}天K线数据，请继续提问。"
+    ev_id = f"sys-refresh-{sid}-{event_store._now_iso()}"  # type: ignore[attr-defined]
+    seq, _ = event_store.append_event(
+        sid,
+        event_id=ev_id,
+        type="message.created",
+        data={
+            "message_id": ev_id,
+            "kind": "text",
+            "content": text,
+            "payload": None,
+        },
+        actor_id="assistant",
+    )
+
+    try:
+        store.set_last_refresh(sid)
+    except Exception:
+        pass
+
+    return {"success": True, "days": days, "message": text, "event_id": ev_id, "seq": seq}
+
+
+@api.post("/chat/force-refresh-recommend", response_model=ForceRefreshResp)
+def api_post_force_refresh_recommend(req: ForceRefreshReq) -> Dict[str, Any]:
+    try:
+        return _force_refresh_kline_only(req)
+    except APIError:
+        raise
+    except Exception as e:  # noqa: BLE001
+        # clear and concise error for UI toast
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 

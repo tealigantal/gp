@@ -14,6 +14,14 @@ ENV PIP_INDEX_URL=${PIP_INDEX_URL}
 
 WORKDIR /app
 
+# System deps for TLS + diagnostics
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        ca-certificates \
+        curl \
+    && update-ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
 # Install Python deps first (cacheable)
 COPY requirements.txt /app/requirements.txt
 RUN --mount=type=cache,target=/root/.cache/pip \

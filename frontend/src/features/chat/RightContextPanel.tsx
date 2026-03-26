@@ -1,8 +1,10 @@
-import React from 'react'
-import { Card, Descriptions, Tag, Typography, Switch, Tooltip } from 'antd'
+import React, { useState } from 'react'
+import { Card, Descriptions, Tag, Typography, Switch, Tooltip, Button, message, InputNumber } from 'antd'
 import { getForceRefresh, setForceRefresh } from '../../store/settings'
+import { forceRefreshRecommend } from '../../api/client'
+import type { ForceRefreshResp } from '../../api/types'
 
-export default function RightContextPanel({ panel }: { panel?: Record<string, unknown> | null }) {
+export default function RightContextPanel({ panel, sessionId, onForceRefreshCompleted }: { panel?: Record<string, unknown> | null; sessionId?: string | null; onForceRefreshCompleted?: (res: ForceRefreshResp) => void }) {
   const p = (panel || {}) as Record<string, any>
   const runId = p.active_run_id as string | undefined
   const prevRun = p.previous_run_id as string | undefined
@@ -10,6 +12,8 @@ export default function RightContextPanel({ panel }: { panel?: Record<string, un
   const top = Array.isArray(p.top_symbols) ? (p.top_symbols as unknown[]).map((s) => String(s)) : undefined
   // 不自动打开 K 线，保持纯手动触发（通过“查看K线”）
   const force = getForceRefresh()
+  const [loading, setLoading] = useState(false)
+  const [days, setDays] = useState<number>(3)
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
       <Card size="small" title="上下文状态" extra={
@@ -51,6 +55,27 @@ export default function RightContextPanel({ panel }: { panel?: Record<string, un
             <Descriptions.Item label="执行分支">{String(p.executor_path)}</Descriptions.Item>
           )}
         </Descriptions>
+        <div style={{ marginTop: 8, display: 'flex', gap: 8, alignItems: 'center' }}>
+          <InputNumber size="small" min={1} max={10} value={days} onChange={(v) => setDays(Number(v) || 0)} style={{ width: 80 }} />
+          <Button type="primary" size="small" loading={loading} disabled={loading}
+            onClick={async () => {
+              if (!sessionId) { message.warning('无有效会话'); return }
+              const d = Number(days)
+              if (!Number.isInteger(d) || d < 1 || d > 10) { message.error('请输入 1 到 10 的整数'); return }
+              try {
+                setLoading(true)
+                const res = await forceRefreshRecommend({ session_id: sessionId, days: d })
+                message.success(res?.message || '已刷新K线')
+                onForceRefreshCompleted?.(res)
+              } catch (err: any) {
+                const msg = err?.message || '刷新失败'
+                message.error(msg)
+              } finally {
+                setLoading(false)
+              }
+            }}
+          >{loading ? '处理中...' : '刷新K线'}</Button>
+        </div>
       </Card>
     </div>
   )

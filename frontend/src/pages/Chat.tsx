@@ -160,7 +160,12 @@ export default function Chat() {
 
   const right = (
     <div style={{ height: '100%', overflow: 'auto', display: 'flex', flexDirection: 'column', gap: 12 }}>
-      <RightContextPanel panel={rightPanel} />
+      <RightContextPanel panel={rightPanel} sessionId={sessionId}
+        onForceRefreshCompleted={() => {
+          // 不自动变更右侧详情，仅拉取新消息
+          setTimeout(() => { loadNewer().catch(() => undefined) }, 150)
+        }}
+      />
       <KlineInspector />
     </div>
   )
