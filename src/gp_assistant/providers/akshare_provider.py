@@ -243,7 +243,7 @@ class AkShareProvider(MarketDataProvider):
     def get_spot_snapshot(self):  # noqa: ANN001
         ak = self._import()
         cfg = load_config()
-        routes: List[str] = list(getattr(cfg, "ak_spot_priority", ["sina", "em"]))
+        routes: List[str] = list(getattr(cfg, "ak_spot_priority", ["em", "sina"]))
         t0 = time.time()
         attempts: List[Dict[str, Any]] = []
         try:
@@ -498,7 +498,7 @@ class AkShareProvider(MarketDataProvider):
     def get_daily(self, symbol: str, start: str | None, end: str | None) -> pd.DataFrame:  # noqa: D401
         ak = self._import()
         cfg = load_config()
-        routes: List[str] = list(getattr(cfg, "ak_daily_priority", ["tx", "sina", "em"]))
+        routes: List[str] = list(getattr(cfg, "ak_daily_priority", ["em", "sina", "tx"]))
         s_ymd = start.replace("-", "") if start else None
         e_ymd = end.replace("-", "") if end else None
 
@@ -644,6 +644,42 @@ class AkShareProvider(MarketDataProvider):
         except Exception:
             pass
         raise DataProviderError(f"AkShare get_daily failed: {msg}", symbol=symbol)
+
+    # ---- Optional bulk daily fetch with small parallelism -------------------
+    def get_daily_batch(self, symbols: List[str], start: str | None, end: str | None) -> Dict[str, pd.DataFrame]:  # noqa: D401
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+        out: Dict[str, pd.DataFrame] = {}
+        syms = [str(s).strip() for s in (symbols or []) if str(s).strip()]
+        if not syms:
+            return out
+        # small bounded parallelism to avoid provider rate limits
+        try:
+            import os
+            max_workers = int(os.getenv('AK_BATCH_WORKERS', '6') or '6')
+        except Exception:
+            max_workers = 6
+        max_workers = max(1, min(12, max_workers))
+        def _one(s: str) -> tuple[str, pd.DataFrame]:
+            try:
+                df = self.get_daily(s, start, end)
+                return s, df
+            except Exception:
+                # propagate empty on failure for that symbol
+                import pandas as _pd
+                return s, _pd.DataFrame()
+        if max_workers == 1 or len(syms) == 1:
+            for s in syms:
+                k, v = _one(s)
+                if not v.empty:
+                    out[k] = v
+            return out
+        with ThreadPoolExecutor(max_workers=max_workers) as ex:
+            futs = [ex.submit(_one, s) for s in syms]
+            for fut in as_completed(futs):
+                k, v = fut.result()
+                if not v.empty:
+                    out[k] = v
+        return out
 
     # ---- Internals: request patch + retry ----------------------------------
     def _with_requests_timeout(self, fn):  # noqa: ANN001

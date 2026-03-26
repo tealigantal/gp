@@ -1,0 +1,1328 @@
+{
+  "trading_day": "20260326",
+  "book_version": "book_20260326_89883be6ba05",
+  "updated_at": "2026-03-26T18:32:54.393481+00:00",
+  "regime": {
+    "grade": "D",
+    "reasons": [
+      "全市场均值涨跌幅=-1.48%",
+      "上涨占比=16.68%"
+    ],
+    "recovery_conditions": [
+      "上涨家数占比>55%",
+      "全市场均值涨跌幅>+0.3%"
+    ],
+    "raw": {
+      "breadth": {
+        "mean_chg": -1.482603605243991,
+        "up_ratio": 0.16678805535324107
+      }
+    }
+  },
+  "daybook": {
+    "trading_day": "20260326",
+    "generated_at": "2026-03-26T17:35:16.364767+00:00",
+    "regime": {
+      "grade": "D",
+      "reasons": [
+        "全市场均值涨跌幅=-1.48%",
+        "上涨占比=16.68%"
+      ],
+      "recovery_conditions": [
+        "上涨家数占比>55%",
+        "全市场均值涨跌幅>+0.3%"
+      ],
+      "raw": {
+        "breadth": {
+          "mean_chg": -1.482603605243991,
+          "up_ratio": 0.16678805535324107
+        }
+      }
+    },
+    "tradeable": true,
+    "reason": "generated 12 picks",
+    "themes": [
+      "概念-昨日打二板以上表现",
+      "概念-昨日连板_含一字"
+    ],
+    "picks": [
+      {
+        "symbol": "600183",
+        "name": null,
+        "rank": 1,
+        "strategy_id": "S7",
+        "thesis": "champ=0.37, cand=-0.20, th=0.00/ml=0.00, state=actionable, rr=54.54285714285804; off_mainline_downrank",
+        "entry_plan": {
+          "kind": "zone",
+          "low": 55.06,
+          "high": 63.780952380952385,
+          "price": 55.06
+        },
+        "stop_plan": {
+          "kind": "close_below_support",
+          "price": 55.06,
+          "invalidation": "收盘有效跌破支撑带",
+          "text": "收盘有效跌破支撑带"
+        },
+        "take_profit_plan": {
+          "kind": "targets",
+          "price": 74.5,
+          "targets": [
+            74.5,
+            75.99
+          ]
+        },
+        "scores": {
+          "final": 11.047494270172997,
+          "candidate": -0.20005364580789575,
+          "champion": 0.3680654412205723,
+          "reward_risk": 54.54285714285804
+        },
+        "risk_flags": [],
+        "why_selected": "champ=0.37, cand=-0.20, th=0.00/ml=0.00, state=actionable, rr=54.54285714285804; off_mainline_downrank",
+        "why_not_others": [],
+        "evidence_refs": [
+          "600183"
+        ],
+        "style_label": "balanced"
+      },
+      {
+        "symbol": "002131",
+        "name": null,
+        "rank": 2,
+        "strategy_id": "S7",
+        "thesis": "champ=0.34, cand=-0.16, th=0.00/ml=0.00, state=actionable, rr=37.666666666666906; off_mainline_downrank",
+        "entry_plan": {
+          "kind": "zone",
+          "low": 7.45,
+          "high": 8.528095238095238,
+          "price": 7.45
+        },
+        "stop_plan": {
+          "kind": "close_below_support",
+          "price": 7.45,
+          "invalidation": "收盘有效跌破支撑带",
+          "text": "收盘有效跌破支撑带"
+        },
+        "take_profit_plan": {
+          "kind": "targets",
+          "price": 9.77,
+          "targets": [
+            9.77,
+            9.965399999999999
+          ]
+        },
+        "scores": {
+          "final": 7.675358399185635,
+          "candidate": -0.15576591510410004,
+          "champion": 0.344547060258131,
+          "reward_risk": 37.666666666666906
+        },
+        "risk_flags": [],
+        "why_selected": "champ=0.34, cand=-0.16, th=0.00/ml=0.00, state=actionable, rr=37.666666666666906; off_mainline_downrank",
+        "why_not_others": [],
+        "evidence_refs": [
+          "002131"
+        ],
+        "style_label": "balanced"
+      },
+      {
+        "symbol": "600988",
+        "name": null,
+        "rank": 3,
+        "strategy_id": "S7",
+        "thesis": "champ=0.36, cand=-0.12, th=0.00/ml=0.00, state=actionable, rr=14.033898305084836; off_mainline_downrank",
+        "entry_plan": {
+          "kind": "zone",
+          "low": 36.71,
+          "high": 40.144285714285715,
+          "price": 36.71
+        },
+        "stop_plan": {
+          "kind": "close_below_support",
+          "price": 36.71,
+          "invalidation": "收盘有效跌破支撑带",
+          "text": "收盘有效跌破支撑带"
+        },
+        "take_profit_plan": {
+          "kind": "targets",
+          "price": 45.58,
+          "targets": [
+            45.58,
+            46.4916
+          ]
+        },
+        "scores": {
+          "final": 2.9713843825598554,
+          "candidate": -0.12373743451242822,
+          "champion": 0.364741672764752,
+          "reward_risk": 14.033898305084836
+        },
+        "risk_flags": [],
+        "why_selected": "champ=0.36, cand=-0.12, th=0.00/ml=0.00, state=actionable, rr=14.033898305084836; off_mainline_downrank",
+        "why_not_others": [],
+        "evidence_refs": [
+          "600988"
+        ],
+        "style_label": "balanced"
+      },
+      {
+        "symbol": "600096",
+        "name": null,
+        "rank": 4,
+        "strategy_id": "S7",
+        "thesis": "champ=0.38, cand=-0.21, th=0.00/ml=0.00, state=actionable, rr=13.390804597701187; off_mainline_downrank",
+        "entry_plan": {
+          "kind": "zone",
+          "low": 33.1,
+          "high": 40.51952380952381,
+          "price": 33.1
+        },
+        "stop_plan": {
+          "kind": "close_below_support",
+          "price": 33.1,
+          "invalidation": "收盘有效跌破支撑带",
+          "text": "收盘有效跌破支撑带"
+        },
+        "take_profit_plan": {
+          "kind": "targets",
+          "price": 45.62,
+          "targets": [
+            45.62,
+            46.532399999999996
+          ]
+        },
+        "scores": {
+          "final": 2.814639471713941,
+          "candidate": -0.20635816933415527,
+          "champion": 0.3778417830562846,
+          "reward_risk": 13.390804597701187
+        },
+        "risk_flags": [],
+        "why_selected": "champ=0.38, cand=-0.21, th=0.00/ml=0.00, state=actionable, rr=13.390804597701187; off_mainline_downrank",
+        "why_not_others": [],
+        "evidence_refs": [
+          "600096"
+        ],
+        "style_label": "balanced"
+      },
+      {
+        "symbol": "603986",
+        "name": null,
+        "rank": 5,
+        "strategy_id": "S7",
+        "thesis": "champ=0.39, cand=-0.15, th=0.00/ml=0.00, state=actionable, rr=10.546874999999991; off_mainline_downrank",
+        "entry_plan": {
+          "kind": "zone",
+          "low": 256.88,
+          "high": 286.3438095238095,
+          "price": 256.88
+        },
+        "stop_plan": {
+          "kind": "close_below_support",
+          "price": 256.88,
+          "invalidation": "收盘有效跌破支撑带",
+          "text": "收盘有效跌破支撑带"
+        },
+        "take_profit_plan": {
+          "kind": "targets",
+          "price": 316.0,
+          "targets": [
+            316.0,
+            322.32
+          ]
+        },
+        "scores": {
+          "final": 2.27837572046351,
+          "candidate": -0.14970709084311123,
+          "champion": 0.3912435870343386,
+          "reward_risk": 10.546874999999991
+        },
+        "risk_flags": [],
+        "why_selected": "champ=0.39, cand=-0.15, th=0.00/ml=0.00, state=actionable, rr=10.546874999999991; off_mainline_downrank",
+        "why_not_others": [],
+        "evidence_refs": [
+          "603986"
+        ],
+        "style_label": "balanced"
+      },
+      {
+        "symbol": "600410",
+        "name": null,
+        "rank": 6,
+        "strategy_id": "S7",
+        "thesis": "champ=0.36, cand=-0.20, th=0.00/ml=0.00, state=waiting_pullback, rr=9.93877551020408; off_mainline_downrank",
+        "entry_plan": {
+          "kind": "zone",
+          "low": 23.59,
+          "high": 28.06190476190476,
+          "price": 23.59
+        },
+        "stop_plan": {
+          "kind": "close_below_support",
+          "price": 23.59,
+          "invalidation": "收盘有效跌破支撑带",
+          "text": "收盘有效跌破支撑带"
+        },
+        "take_profit_plan": {
+          "kind": "targets",
+          "price": 34.31,
+          "targets": [
+            34.31,
+            34.9962
+          ]
+        },
+        "scores": {
+          "final": 1.8155607003533267,
+          "candidate": -0.19703868635853344,
+          "champion": 0.36431147470289316,
+          "reward_risk": 9.93877551020408
+        },
+        "risk_flags": [],
+        "why_selected": "champ=0.36, cand=-0.20, th=0.00/ml=0.00, state=waiting_pullback, rr=9.93877551020408; off_mainline_downrank",
+        "why_not_others": [],
+        "evidence_refs": [
+          "600410"
+        ],
+        "style_label": "balanced"
+      },
+      {
+        "symbol": "601600",
+        "name": null,
+        "rank": 7,
+        "strategy_id": "S7",
+        "thesis": "champ=0.36, cand=-0.20, th=0.00/ml=0.00, state=waiting_pullback, rr=9.261904761904761; off_mainline_downrank",
+        "entry_plan": {
+          "kind": "zone",
+          "low": 10.89,
+          "high": 13.290476190476191,
+          "price": 10.89
+        },
+        "stop_plan": {
+          "kind": "close_below_support",
+          "price": 10.89,
+          "invalidation": "收盘有效跌破支撑带",
+          "text": "收盘有效跌破支撑带"
+        },
+        "take_profit_plan": {
+          "kind": "targets",
+          "price": 15.2,
+          "targets": [
+            15.2,
+            15.504
+          ]
+        },
+        "scores": {
+          "final": 1.6782879995942268,
+          "candidate": -0.2043667972364158,
+          "champion": 0.3646572494370296,
+          "reward_risk": 9.261904761904761
+        },
+        "risk_flags": [],
+        "why_selected": "champ=0.36, cand=-0.20, th=0.00/ml=0.00, state=waiting_pullback, rr=9.261904761904761; off_mainline_downrank",
+        "why_not_others": [],
+        "evidence_refs": [
+          "601600"
+        ],
+        "style_label": "balanced"
+      },
+      {
+        "symbol": "600118",
+        "name": null,
+        "rank": 8,
+        "strategy_id": "S7",
+        "thesis": "champ=0.35, cand=-0.16, th=0.00/ml=0.00, state=waiting_pullback, rr=8.00000000000001; off_mainline_downrank",
+        "entry_plan": {
+          "kind": "zone",
+          "low": 75.92,
+          "high": 88.27190476190476,
+          "price": 75.92
+        },
+        "stop_plan": {
+          "kind": "close_below_support",
+          "price": 75.92,
+          "invalidation": "收盘有效跌破支撑带",
+          "text": "收盘有效跌破支撑带"
+        },
+        "take_profit_plan": {
+          "kind": "targets",
+          "price": 100.85,
+          "targets": [
+            100.85,
+            102.86699999999999
+          ]
+        },
+        "scores": {
+          "final": 1.4388446886531312,
+          "candidate": -0.15794709918172262,
+          "champion": 0.35430659219635313,
+          "reward_risk": 8.00000000000001
+        },
+        "risk_flags": [],
+        "why_selected": "champ=0.35, cand=-0.16, th=0.00/ml=0.00, state=waiting_pullback, rr=8.00000000000001; off_mainline_downrank",
+        "why_not_others": [],
+        "evidence_refs": [
+          "600118"
+        ],
+        "style_label": "balanced"
+      },
+      {
+        "symbol": "600111",
+        "name": null,
+        "rank": 9,
+        "strategy_id": "S7",
+        "thesis": "champ=0.36, cand=-0.18, th=0.00/ml=0.00, state=waiting_pullback, rr=7.926940639269414; off_mainline_downrank",
+        "entry_plan": {
+          "kind": "zone",
+          "low": 44.02,
+          "high": 52.01428571428571,
+          "price": 44.02
+        },
+        "stop_plan": {
+          "kind": "close_below_support",
+          "price": 44.02,
+          "invalidation": "收盘有效跌破支撑带",
+          "text": "收盘有效跌破支撑带"
+        },
+        "take_profit_plan": {
+          "kind": "targets",
+          "price": 63.57,
+          "targets": [
+            63.57,
+            64.84140000000001
+          ]
+        },
+        "scores": {
+          "final": 1.411970825488776,
+          "candidate": -0.18218463566118517,
+          "champion": 0.35612375615919184,
+          "reward_risk": 7.926940639269414
+        },
+        "risk_flags": [],
+        "why_selected": "champ=0.36, cand=-0.18, th=0.00/ml=0.00, state=waiting_pullback, rr=7.926940639269414; off_mainline_downrank",
+        "why_not_others": [],
+        "evidence_refs": [
+          "600111"
+        ],
+        "style_label": "balanced"
+      },
+      {
+        "symbol": "600879",
+        "name": null,
+        "rank": 10,
+        "strategy_id": "S7",
+        "thesis": "champ=0.36, cand=-0.18, th=0.00/ml=0.00, state=waiting_pullback, rr=7.186813186813189; off_mainline_downrank",
+        "entry_plan": {
+          "kind": "zone",
+          "low": 20.4,
+          "high": 24.214761904761907,
+          "price": 20.4
+        },
+        "stop_plan": {
+          "kind": "close_below_support",
+          "price": 20.4,
+          "invalidation": "收盘有效跌破支撑带",
+          "text": "收盘有效跌破支撑带"
+        },
+        "take_profit_plan": {
+          "kind": "targets",
+          "price": 27.85,
+          "targets": [
+            27.85,
+            28.407000000000004
+          ]
+        },
+        "scores": {
+          "final": 1.2709809162679513,
+          "candidate": -0.1776668210366992,
+          "champion": 0.3624931570459139,
+          "reward_risk": 7.186813186813189
+        },
+        "risk_flags": [],
+        "why_selected": "champ=0.36, cand=-0.18, th=0.00/ml=0.00, state=waiting_pullback, rr=7.186813186813189; off_mainline_downrank",
+        "why_not_others": [],
+        "evidence_refs": [
+          "600879"
+        ],
+        "style_label": "balanced"
+      },
+      {
+        "symbol": "002261",
+        "name": null,
+        "rank": 11,
+        "strategy_id": "S7",
+        "thesis": "champ=0.36, cand=-0.12, th=0.00/ml=0.00, state=waiting_pullback, rr=6.716129032258079; off_mainline_downrank",
+        "entry_plan": {
+          "kind": "zone",
+          "low": 32.1,
+          "high": 37.21857142857144,
+          "price": 32.1
+        },
+        "stop_plan": {
+          "kind": "close_below_support",
+          "price": 32.1,
+          "invalidation": "收盘有效跌破支撑带",
+          "text": "收盘有效跌破支撑带"
+        },
+        "take_profit_plan": {
+          "kind": "targets",
+          "price": 44.06,
+          "targets": [
+            44.06,
+            44.9412
+          ]
+        },
+        "scores": {
+          "final": 1.1938956074944524,
+          "candidate": -0.12370736058712345,
+          "champion": 0.3566191123622648,
+          "reward_risk": 6.716129032258079
+        },
+        "risk_flags": [],
+        "why_selected": "champ=0.36, cand=-0.12, th=0.00/ml=0.00, state=waiting_pullback, rr=6.716129032258079; off_mainline_downrank",
+        "why_not_others": [],
+        "evidence_refs": [
+          "002261"
+        ],
+        "style_label": "balanced"
+      },
+      {
+        "symbol": "603881",
+        "name": null,
+        "rank": 12,
+        "strategy_id": "S8",
+        "thesis": "champ=0.39, cand=-0.08, th=0.00/ml=0.00, state=actionable, rr=3.39189189189188; off_mainline_downrank",
+        "entry_plan": {
+          "kind": "zone",
+          "low": 36.54,
+          "high": 38.63,
+          "price": 36.54
+        },
+        "stop_plan": {
+          "kind": "close_below_support",
+          "price": 36.54,
+          "invalidation": "收盘有效跌破支撑带",
+          "text": "收盘有效跌破支撑带"
+        },
+        "take_profit_plan": {
+          "kind": "targets",
+          "price": 39.79,
+          "targets": [
+            39.79,
+            42.0
+          ]
+        },
+        "scores": {
+          "final": 0.8746796396923122,
+          "candidate": -0.08413873970556009,
+          "champion": 0.39318615469746293,
+          "reward_risk": 3.39189189189188
+        },
+        "risk_flags": [],
+        "why_selected": "champ=0.39, cand=-0.08, th=0.00/ml=0.00, state=actionable, rr=3.39189189189188; off_mainline_downrank",
+        "why_not_others": [],
+        "evidence_refs": [
+          "603881"
+        ],
+        "style_label": "balanced"
+      }
+    ],
+    "reserve_symbols": [
+      "600900",
+      "002594",
+      "600036",
+      "601398",
+      "601985",
+      "600519",
+      "601669",
+      "002371",
+      "002565",
+      "601012",
+      "000617",
+      "603259",
+      "002463",
+      "002466",
+      "000938",
+      "601868",
+      "002709",
+      "603083",
+      "002837",
+      "600309",
+      "600930",
+      "002460",
+      "601857",
+      "000547",
+      "600089",
+      "600157",
+      "000988",
+      "002407",
+      "002025",
+      "600744"
+    ],
+    "source_meta": {
+      "raw_keys": [
+        "as_of",
+        "candidate_pool",
+        "data_status",
+        "debug",
+        "disclaimer",
+        "env",
+        "execution_checklist",
+        "mainline",
+        "message",
+        "mover_hints",
+        "picks",
+        "themes",
+        "timezone",
+        "tradeable"
+      ],
+      "topk": 12,
+      "risk_profile": "normal"
+    }
+  },
+  "board": [
+    {
+      "symbol": "600183",
+      "name": null,
+      "rank": 1,
+      "final_score": 11.047494270172997,
+      "live_score": 11.047494270172997,
+      "execution_state": "observe",
+      "can_open": false,
+      "stretched": false,
+      "invalidated": false,
+      "summary": "600183 结构候选，等待盘中5分状态。",
+      "style_label": "balanced",
+      "pick": {
+        "symbol": "600183",
+        "name": null,
+        "rank": 1,
+        "strategy_id": "S7",
+        "thesis": "champ=0.37, cand=-0.20, th=0.00/ml=0.00, state=actionable, rr=54.54285714285804; off_mainline_downrank",
+        "entry_plan": {
+          "kind": "zone",
+          "low": 55.06,
+          "high": 63.780952380952385,
+          "price": 55.06
+        },
+        "stop_plan": {
+          "kind": "close_below_support",
+          "price": 55.06,
+          "invalidation": "收盘有效跌破支撑带",
+          "text": "收盘有效跌破支撑带"
+        },
+        "take_profit_plan": {
+          "kind": "targets",
+          "price": 74.5,
+          "targets": [
+            74.5,
+            75.99
+          ]
+        },
+        "scores": {
+          "final": 11.047494270172997,
+          "candidate": -0.20005364580789575,
+          "champion": 0.3680654412205723,
+          "reward_risk": 54.54285714285804
+        },
+        "risk_flags": [],
+        "why_selected": "champ=0.37, cand=-0.20, th=0.00/ml=0.00, state=actionable, rr=54.54285714285804; off_mainline_downrank",
+        "why_not_others": [],
+        "evidence_refs": [
+          "600183"
+        ],
+        "style_label": "balanced"
+      },
+      "pulse": null
+    },
+    {
+      "symbol": "002131",
+      "name": null,
+      "rank": 2,
+      "final_score": 7.675358399185635,
+      "live_score": 7.675358399185635,
+      "execution_state": "observe",
+      "can_open": false,
+      "stretched": false,
+      "invalidated": false,
+      "summary": "002131 结构候选，等待盘中5分状态。",
+      "style_label": "balanced",
+      "pick": {
+        "symbol": "002131",
+        "name": null,
+        "rank": 2,
+        "strategy_id": "S7",
+        "thesis": "champ=0.34, cand=-0.16, th=0.00/ml=0.00, state=actionable, rr=37.666666666666906; off_mainline_downrank",
+        "entry_plan": {
+          "kind": "zone",
+          "low": 7.45,
+          "high": 8.528095238095238,
+          "price": 7.45
+        },
+        "stop_plan": {
+          "kind": "close_below_support",
+          "price": 7.45,
+          "invalidation": "收盘有效跌破支撑带",
+          "text": "收盘有效跌破支撑带"
+        },
+        "take_profit_plan": {
+          "kind": "targets",
+          "price": 9.77,
+          "targets": [
+            9.77,
+            9.965399999999999
+          ]
+        },
+        "scores": {
+          "final": 7.675358399185635,
+          "candidate": -0.15576591510410004,
+          "champion": 0.344547060258131,
+          "reward_risk": 37.666666666666906
+        },
+        "risk_flags": [],
+        "why_selected": "champ=0.34, cand=-0.16, th=0.00/ml=0.00, state=actionable, rr=37.666666666666906; off_mainline_downrank",
+        "why_not_others": [],
+        "evidence_refs": [
+          "002131"
+        ],
+        "style_label": "balanced"
+      },
+      "pulse": null
+    },
+    {
+      "symbol": "600988",
+      "name": null,
+      "rank": 3,
+      "final_score": 2.9713843825598554,
+      "live_score": 2.9713843825598554,
+      "execution_state": "observe",
+      "can_open": false,
+      "stretched": false,
+      "invalidated": false,
+      "summary": "600988 结构候选，等待盘中5分状态。",
+      "style_label": "balanced",
+      "pick": {
+        "symbol": "600988",
+        "name": null,
+        "rank": 3,
+        "strategy_id": "S7",
+        "thesis": "champ=0.36, cand=-0.12, th=0.00/ml=0.00, state=actionable, rr=14.033898305084836; off_mainline_downrank",
+        "entry_plan": {
+          "kind": "zone",
+          "low": 36.71,
+          "high": 40.144285714285715,
+          "price": 36.71
+        },
+        "stop_plan": {
+          "kind": "close_below_support",
+          "price": 36.71,
+          "invalidation": "收盘有效跌破支撑带",
+          "text": "收盘有效跌破支撑带"
+        },
+        "take_profit_plan": {
+          "kind": "targets",
+          "price": 45.58,
+          "targets": [
+            45.58,
+            46.4916
+          ]
+        },
+        "scores": {
+          "final": 2.9713843825598554,
+          "candidate": -0.12373743451242822,
+          "champion": 0.364741672764752,
+          "reward_risk": 14.033898305084836
+        },
+        "risk_flags": [],
+        "why_selected": "champ=0.36, cand=-0.12, th=0.00/ml=0.00, state=actionable, rr=14.033898305084836; off_mainline_downrank",
+        "why_not_others": [],
+        "evidence_refs": [
+          "600988"
+        ],
+        "style_label": "balanced"
+      },
+      "pulse": null
+    },
+    {
+      "symbol": "600096",
+      "name": null,
+      "rank": 4,
+      "final_score": 2.814639471713941,
+      "live_score": 2.814639471713941,
+      "execution_state": "observe",
+      "can_open": false,
+      "stretched": false,
+      "invalidated": false,
+      "summary": "600096 结构候选，等待盘中5分状态。",
+      "style_label": "balanced",
+      "pick": {
+        "symbol": "600096",
+        "name": null,
+        "rank": 4,
+        "strategy_id": "S7",
+        "thesis": "champ=0.38, cand=-0.21, th=0.00/ml=0.00, state=actionable, rr=13.390804597701187; off_mainline_downrank",
+        "entry_plan": {
+          "kind": "zone",
+          "low": 33.1,
+          "high": 40.51952380952381,
+          "price": 33.1
+        },
+        "stop_plan": {
+          "kind": "close_below_support",
+          "price": 33.1,
+          "invalidation": "收盘有效跌破支撑带",
+          "text": "收盘有效跌破支撑带"
+        },
+        "take_profit_plan": {
+          "kind": "targets",
+          "price": 45.62,
+          "targets": [
+            45.62,
+            46.532399999999996
+          ]
+        },
+        "scores": {
+          "final": 2.814639471713941,
+          "candidate": -0.20635816933415527,
+          "champion": 0.3778417830562846,
+          "reward_risk": 13.390804597701187
+        },
+        "risk_flags": [],
+        "why_selected": "champ=0.38, cand=-0.21, th=0.00/ml=0.00, state=actionable, rr=13.390804597701187; off_mainline_downrank",
+        "why_not_others": [],
+        "evidence_refs": [
+          "600096"
+        ],
+        "style_label": "balanced"
+      },
+      "pulse": null
+    },
+    {
+      "symbol": "603986",
+      "name": null,
+      "rank": 5,
+      "final_score": 2.27837572046351,
+      "live_score": 2.27837572046351,
+      "execution_state": "observe",
+      "can_open": false,
+      "stretched": false,
+      "invalidated": false,
+      "summary": "603986 结构候选，等待盘中5分状态。",
+      "style_label": "balanced",
+      "pick": {
+        "symbol": "603986",
+        "name": null,
+        "rank": 5,
+        "strategy_id": "S7",
+        "thesis": "champ=0.39, cand=-0.15, th=0.00/ml=0.00, state=actionable, rr=10.546874999999991; off_mainline_downrank",
+        "entry_plan": {
+          "kind": "zone",
+          "low": 256.88,
+          "high": 286.3438095238095,
+          "price": 256.88
+        },
+        "stop_plan": {
+          "kind": "close_below_support",
+          "price": 256.88,
+          "invalidation": "收盘有效跌破支撑带",
+          "text": "收盘有效跌破支撑带"
+        },
+        "take_profit_plan": {
+          "kind": "targets",
+          "price": 316.0,
+          "targets": [
+            316.0,
+            322.32
+          ]
+        },
+        "scores": {
+          "final": 2.27837572046351,
+          "candidate": -0.14970709084311123,
+          "champion": 0.3912435870343386,
+          "reward_risk": 10.546874999999991
+        },
+        "risk_flags": [],
+        "why_selected": "champ=0.39, cand=-0.15, th=0.00/ml=0.00, state=actionable, rr=10.546874999999991; off_mainline_downrank",
+        "why_not_others": [],
+        "evidence_refs": [
+          "603986"
+        ],
+        "style_label": "balanced"
+      },
+      "pulse": null
+    },
+    {
+      "symbol": "600410",
+      "name": null,
+      "rank": 6,
+      "final_score": 1.8155607003533267,
+      "live_score": 1.8155607003533267,
+      "execution_state": "observe",
+      "can_open": false,
+      "stretched": false,
+      "invalidated": false,
+      "summary": "600410 结构候选，等待盘中5分状态。",
+      "style_label": "balanced",
+      "pick": {
+        "symbol": "600410",
+        "name": null,
+        "rank": 6,
+        "strategy_id": "S7",
+        "thesis": "champ=0.36, cand=-0.20, th=0.00/ml=0.00, state=waiting_pullback, rr=9.93877551020408; off_mainline_downrank",
+        "entry_plan": {
+          "kind": "zone",
+          "low": 23.59,
+          "high": 28.06190476190476,
+          "price": 23.59
+        },
+        "stop_plan": {
+          "kind": "close_below_support",
+          "price": 23.59,
+          "invalidation": "收盘有效跌破支撑带",
+          "text": "收盘有效跌破支撑带"
+        },
+        "take_profit_plan": {
+          "kind": "targets",
+          "price": 34.31,
+          "targets": [
+            34.31,
+            34.9962
+          ]
+        },
+        "scores": {
+          "final": 1.8155607003533267,
+          "candidate": -0.19703868635853344,
+          "champion": 0.36431147470289316,
+          "reward_risk": 9.93877551020408
+        },
+        "risk_flags": [],
+        "why_selected": "champ=0.36, cand=-0.20, th=0.00/ml=0.00, state=waiting_pullback, rr=9.93877551020408; off_mainline_downrank",
+        "why_not_others": [],
+        "evidence_refs": [
+          "600410"
+        ],
+        "style_label": "balanced"
+      },
+      "pulse": null
+    },
+    {
+      "symbol": "601600",
+      "name": null,
+      "rank": 7,
+      "final_score": 1.6782879995942268,
+      "live_score": 1.6782879995942268,
+      "execution_state": "observe",
+      "can_open": false,
+      "stretched": false,
+      "invalidated": false,
+      "summary": "601600 结构候选，等待盘中5分状态。",
+      "style_label": "balanced",
+      "pick": {
+        "symbol": "601600",
+        "name": null,
+        "rank": 7,
+        "strategy_id": "S7",
+        "thesis": "champ=0.36, cand=-0.20, th=0.00/ml=0.00, state=waiting_pullback, rr=9.261904761904761; off_mainline_downrank",
+        "entry_plan": {
+          "kind": "zone",
+          "low": 10.89,
+          "high": 13.290476190476191,
+          "price": 10.89
+        },
+        "stop_plan": {
+          "kind": "close_below_support",
+          "price": 10.89,
+          "invalidation": "收盘有效跌破支撑带",
+          "text": "收盘有效跌破支撑带"
+        },
+        "take_profit_plan": {
+          "kind": "targets",
+          "price": 15.2,
+          "targets": [
+            15.2,
+            15.504
+          ]
+        },
+        "scores": {
+          "final": 1.6782879995942268,
+          "candidate": -0.2043667972364158,
+          "champion": 0.3646572494370296,
+          "reward_risk": 9.261904761904761
+        },
+        "risk_flags": [],
+        "why_selected": "champ=0.36, cand=-0.20, th=0.00/ml=0.00, state=waiting_pullback, rr=9.261904761904761; off_mainline_downrank",
+        "why_not_others": [],
+        "evidence_refs": [
+          "601600"
+        ],
+        "style_label": "balanced"
+      },
+      "pulse": null
+    },
+    {
+      "symbol": "600118",
+      "name": null,
+      "rank": 8,
+      "final_score": 1.4388446886531312,
+      "live_score": 1.4388446886531312,
+      "execution_state": "observe",
+      "can_open": false,
+      "stretched": false,
+      "invalidated": false,
+      "summary": "600118 结构候选，等待盘中5分状态。",
+      "style_label": "balanced",
+      "pick": {
+        "symbol": "600118",
+        "name": null,
+        "rank": 8,
+        "strategy_id": "S7",
+        "thesis": "champ=0.35, cand=-0.16, th=0.00/ml=0.00, state=waiting_pullback, rr=8.00000000000001; off_mainline_downrank",
+        "entry_plan": {
+          "kind": "zone",
+          "low": 75.92,
+          "high": 88.27190476190476,
+          "price": 75.92
+        },
+        "stop_plan": {
+          "kind": "close_below_support",
+          "price": 75.92,
+          "invalidation": "收盘有效跌破支撑带",
+          "text": "收盘有效跌破支撑带"
+        },
+        "take_profit_plan": {
+          "kind": "targets",
+          "price": 100.85,
+          "targets": [
+            100.85,
+            102.86699999999999
+          ]
+        },
+        "scores": {
+          "final": 1.4388446886531312,
+          "candidate": -0.15794709918172262,
+          "champion": 0.35430659219635313,
+          "reward_risk": 8.00000000000001
+        },
+        "risk_flags": [],
+        "why_selected": "champ=0.35, cand=-0.16, th=0.00/ml=0.00, state=waiting_pullback, rr=8.00000000000001; off_mainline_downrank",
+        "why_not_others": [],
+        "evidence_refs": [
+          "600118"
+        ],
+        "style_label": "balanced"
+      },
+      "pulse": null
+    },
+    {
+      "symbol": "600111",
+      "name": null,
+      "rank": 9,
+      "final_score": 1.411970825488776,
+      "live_score": 1.411970825488776,
+      "execution_state": "observe",
+      "can_open": false,
+      "stretched": false,
+      "invalidated": false,
+      "summary": "600111 结构候选，等待盘中5分状态。",
+      "style_label": "balanced",
+      "pick": {
+        "symbol": "600111",
+        "name": null,
+        "rank": 9,
+        "strategy_id": "S7",
+        "thesis": "champ=0.36, cand=-0.18, th=0.00/ml=0.00, state=waiting_pullback, rr=7.926940639269414; off_mainline_downrank",
+        "entry_plan": {
+          "kind": "zone",
+          "low": 44.02,
+          "high": 52.01428571428571,
+          "price": 44.02
+        },
+        "stop_plan": {
+          "kind": "close_below_support",
+          "price": 44.02,
+          "invalidation": "收盘有效跌破支撑带",
+          "text": "收盘有效跌破支撑带"
+        },
+        "take_profit_plan": {
+          "kind": "targets",
+          "price": 63.57,
+          "targets": [
+            63.57,
+            64.84140000000001
+          ]
+        },
+        "scores": {
+          "final": 1.411970825488776,
+          "candidate": -0.18218463566118517,
+          "champion": 0.35612375615919184,
+          "reward_risk": 7.926940639269414
+        },
+        "risk_flags": [],
+        "why_selected": "champ=0.36, cand=-0.18, th=0.00/ml=0.00, state=waiting_pullback, rr=7.926940639269414; off_mainline_downrank",
+        "why_not_others": [],
+        "evidence_refs": [
+          "600111"
+        ],
+        "style_label": "balanced"
+      },
+      "pulse": null
+    },
+    {
+      "symbol": "600879",
+      "name": null,
+      "rank": 10,
+      "final_score": 1.2709809162679513,
+      "live_score": 1.2709809162679513,
+      "execution_state": "observe",
+      "can_open": false,
+      "stretched": false,
+      "invalidated": false,
+      "summary": "600879 结构候选，等待盘中5分状态。",
+      "style_label": "balanced",
+      "pick": {
+        "symbol": "600879",
+        "name": null,
+        "rank": 10,
+        "strategy_id": "S7",
+        "thesis": "champ=0.36, cand=-0.18, th=0.00/ml=0.00, state=waiting_pullback, rr=7.186813186813189; off_mainline_downrank",
+        "entry_plan": {
+          "kind": "zone",
+          "low": 20.4,
+          "high": 24.214761904761907,
+          "price": 20.4
+        },
+        "stop_plan": {
+          "kind": "close_below_support",
+          "price": 20.4,
+          "invalidation": "收盘有效跌破支撑带",
+          "text": "收盘有效跌破支撑带"
+        },
+        "take_profit_plan": {
+          "kind": "targets",
+          "price": 27.85,
+          "targets": [
+            27.85,
+            28.407000000000004
+          ]
+        },
+        "scores": {
+          "final": 1.2709809162679513,
+          "candidate": -0.1776668210366992,
+          "champion": 0.3624931570459139,
+          "reward_risk": 7.186813186813189
+        },
+        "risk_flags": [],
+        "why_selected": "champ=0.36, cand=-0.18, th=0.00/ml=0.00, state=waiting_pullback, rr=7.186813186813189; off_mainline_downrank",
+        "why_not_others": [],
+        "evidence_refs": [
+          "600879"
+        ],
+        "style_label": "balanced"
+      },
+      "pulse": null
+    },
+    {
+      "symbol": "002261",
+      "name": null,
+      "rank": 11,
+      "final_score": 1.1938956074944524,
+      "live_score": 1.1938956074944524,
+      "execution_state": "observe",
+      "can_open": false,
+      "stretched": false,
+      "invalidated": false,
+      "summary": "002261 结构候选，等待盘中5分状态。",
+      "style_label": "balanced",
+      "pick": {
+        "symbol": "002261",
+        "name": null,
+        "rank": 11,
+        "strategy_id": "S7",
+        "thesis": "champ=0.36, cand=-0.12, th=0.00/ml=0.00, state=waiting_pullback, rr=6.716129032258079; off_mainline_downrank",
+        "entry_plan": {
+          "kind": "zone",
+          "low": 32.1,
+          "high": 37.21857142857144,
+          "price": 32.1
+        },
+        "stop_plan": {
+          "kind": "close_below_support",
+          "price": 32.1,
+          "invalidation": "收盘有效跌破支撑带",
+          "text": "收盘有效跌破支撑带"
+        },
+        "take_profit_plan": {
+          "kind": "targets",
+          "price": 44.06,
+          "targets": [
+            44.06,
+            44.9412
+          ]
+        },
+        "scores": {
+          "final": 1.1938956074944524,
+          "candidate": -0.12370736058712345,
+          "champion": 0.3566191123622648,
+          "reward_risk": 6.716129032258079
+        },
+        "risk_flags": [],
+        "why_selected": "champ=0.36, cand=-0.12, th=0.00/ml=0.00, state=waiting_pullback, rr=6.716129032258079; off_mainline_downrank",
+        "why_not_others": [],
+        "evidence_refs": [
+          "002261"
+        ],
+        "style_label": "balanced"
+      },
+      "pulse": null
+    },
+    {
+      "symbol": "603881",
+      "name": null,
+      "rank": 12,
+      "final_score": 0.8746796396923122,
+      "live_score": 0.8746796396923122,
+      "execution_state": "observe",
+      "can_open": false,
+      "stretched": false,
+      "invalidated": false,
+      "summary": "603881 结构候选，等待盘中5分状态。",
+      "style_label": "balanced",
+      "pick": {
+        "symbol": "603881",
+        "name": null,
+        "rank": 12,
+        "strategy_id": "S8",
+        "thesis": "champ=0.39, cand=-0.08, th=0.00/ml=0.00, state=actionable, rr=3.39189189189188; off_mainline_downrank",
+        "entry_plan": {
+          "kind": "zone",
+          "low": 36.54,
+          "high": 38.63,
+          "price": 36.54
+        },
+        "stop_plan": {
+          "kind": "close_below_support",
+          "price": 36.54,
+          "invalidation": "收盘有效跌破支撑带",
+          "text": "收盘有效跌破支撑带"
+        },
+        "take_profit_plan": {
+          "kind": "targets",
+          "price": 39.79,
+          "targets": [
+            39.79,
+            42.0
+          ]
+        },
+        "scores": {
+          "final": 0.8746796396923122,
+          "candidate": -0.08413873970556009,
+          "champion": 0.39318615469746293,
+          "reward_risk": 3.39189189189188
+        },
+        "risk_flags": [],
+        "why_selected": "champ=0.39, cand=-0.08, th=0.00/ml=0.00, state=actionable, rr=3.39189189189188; off_mainline_downrank",
+        "why_not_others": [],
+        "evidence_refs": [
+          "603881"
+        ],
+        "style_label": "balanced"
+      },
+      "pulse": null
+    }
+  ],
+  "watchset": [
+    "600183",
+    "002131",
+    "600988",
+    "600096",
+    "603986",
+    "600410",
+    "601600",
+    "600118",
+    "600111",
+    "600879",
+    "002261",
+    "603881",
+    "600900",
+    "002594",
+    "600036",
+    "601398",
+    "601985",
+    "600519",
+    "601669",
+    "002371",
+    "002565",
+    "601012",
+    "000617",
+    "603259",
+    "002463",
+    "002466",
+    "000938"
+  ],
+  "symbol_states": {},
+  "portfolio_snapshot": {
+    "as_of": "2026-03-20T13:34:01.357738+00:00",
+    "cash": null,
+    "equity": null,
+    "positions": [],
+    "pending_intents": [
+      {
+        "intent_id": "intent-45605cb1676e",
+        "run_id": "2099-07-01-PE",
+        "as_of": "2099-07-01-PE",
+        "symbol": "Q",
+        "side": "buy",
+        "decision_source": "gated_recommendation",
+        "gating_decision": {
+          "decision": "allow",
+          "level": "item",
+          "reasons": [],
+          "triggered_rules": [],
+          "warnings": [],
+          "inputs_snapshot": {
+            "final_score": 0.605,
+            "reliability_score": 1.0,
+            "invalidated_now": false,
+            "actionable": true,
+            "strategy": "S_OK8"
+          },
+          "fallback_used": false
+        },
+        "priority": 1.0,
+        "thesis": "S_OK8",
+        "entry_hint": null,
+        "stop_hint": null,
+        "invalidation": [],
+        "confidence": 1.0,
+        "sizing_hint": 1.0,
+        "status": "admitted",
+        "warnings": [],
+        "metadata": {
+          "created_at": "2026-03-20T13:34:01.356738+00:00"
+        },
+        "provenance": {
+          "artifact_version": "v2",
+          "symbol": "Q",
+          "strategy": "S_OK8"
+        }
+      }
+    ],
+    "recent_events": [
+      {
+        "event_id": "evt-9631fedb1eca",
+        "intent_id": "intent-45605cb1676e",
+        "event_type": "admitted",
+        "timestamp": "2026-03-20T13:34:01.357738+00:00",
+        "symbol": "Q",
+        "notes": "paper_admit",
+        "source_run_id": "2099-07-01-PE"
+      }
+    ],
+    "realized_pnl": null,
+    "unrealized_pnl": null,
+    "exposure_summary": {},
+    "warnings": []
+  },
+  "last_closed_5m": null,
+  "side_results": []
+}

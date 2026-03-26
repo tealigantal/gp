@@ -12,7 +12,12 @@
     "jsx": "react-jsx",
     "strict": true,
     "baseUrl": ".",
-    "types": ["vite/client", "vitest/globals", "@testing-library/jest-dom"]
+    "types": ["vite/client"]
   },
   "include": ["src"]
+  ,
+  "exclude": [
+    "src/**/*.test.ts",
+    "src/**/*.test.tsx"
+  ]
 }

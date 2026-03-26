@@ -570,6 +570,27 @@ def run(date: Optional[str] = None, topk: int = 3, universe: str = "auto", symbo
         # Resolve band sources for output clarity
         structural_band_source = structural_band_source or (band_source or "unknown")
         execution_band_source = execution_band_source or (band_source or "direct")
+        # Unified trade plan objects derived from bands
+        try:
+            _s1 = float(bands.get("S1")) if (bands and bands.get("S1") is not None) else None
+        except Exception:
+            _s1 = None
+        try:
+            _s2 = float(bands.get("S2")) if (bands and bands.get("S2") is not None) else None
+        except Exception:
+            _s2 = None
+        try:
+            _r1 = float(bands.get("R1")) if (bands and bands.get("R1") is not None) else None
+        except Exception:
+            _r1 = None
+        try:
+            _r2 = float(bands.get("R2")) if (bands and bands.get("R2") is not None) else None
+        except Exception:
+            _r2 = None
+        entry_obj = {"kind": "zone", "low": (_s1 if _s1 is not None else None), "high": (_s2 if _s2 is not None else None), "price": (_s1 if _s1 is not None else None)}
+        _stop_text = "收盘有效跌破支撑带"
+        stop_obj = {"kind": "close_below_support", "price": (_s1 if _s1 is not None else None), "invalidation": _stop_text, "text": _stop_text}
+        take_obj = {"kind": "targets", "price": (_r1 if _r1 is not None else None), "targets": [x for x in [_r1, _r2] if x is not None]}
         return {
             "bands": exec_bands,
             "execution_bands": exec_bands,
@@ -580,9 +601,9 @@ def run(date: Optional[str] = None, topk: int = 3, universe: str = "auto", symbo
             "invalidation": invalid,
             "risk": risk,
             "diagnostics": diag,
-            "entry": entry,
-            "stop": stop,
-            "take": take,
+            "entry": entry_obj,
+            "stop": stop_obj,
+            "take_profit": take_obj,
         }
 
     # Evaluate strategies for pool and choose champion

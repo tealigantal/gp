@@ -232,41 +232,67 @@ def build_v2_from_v1(payload: Dict[str, Any], *, risk_profile: Optional[str] = N
             name = p.get("name") if isinstance(p.get("name"), str) else None
             # price_ref from last_close if available
             price_ref = _safe_float(p.get("last_close"))
-            # entry zone from tp.entry; if scalar -> make a tight band around it
+            # entry zone from tp.entry (dict: {low,high,price}); if scalar -> make a tight band around it
             entry_zone: Optional[Tuple[float, float]] = None
             try:
                 ent = tp.get("entry")
-                if isinstance(ent, list) and len(ent) >= 2:
+                if isinstance(ent, dict):
+                    lo = _safe_float(ent.get("low"))
+                    hi = _safe_float(ent.get("high"))
+                    if lo is not None and hi is not None:
+                        entry_zone = (min(lo, hi), max(lo, hi))
+                    else:
+                        v = _safe_float(ent.get("price"))
+                        if v is not None:
+                            entry_zone = (v * 0.995, v * 1.005)
+                elif isinstance(ent, list) and len(ent) >= 2:
                     a = _safe_float(ent[0]); b = _safe_float(ent[1])
                     if a is not None and b is not None:
-                        lo, hi = (a, b) if a <= b else (b, a)
-                        entry_zone = (lo, hi)
+                        lo2, hi2 = (a, b) if a <= b else (b, a)
+                        entry_zone = (lo2, hi2)
                 elif isinstance(ent, (int, float)):
-                    v = _safe_float(ent)
-                    if v is not None:
-                        entry_zone = (v * 0.995, v * 1.005)
+                    v2 = _safe_float(ent)
+                    if v2 is not None:
+                        entry_zone = (v2 * 0.995, v2 * 1.005)
             except Exception:
                 entry_zone = None
-            # stop from S1 (close-below support)
+            # stop from tp.stop.price (dict) or fallback to bands.S1
             stop = None
             try:
-                bands = tp.get("bands") or {}
-                stop = _safe_float(bands.get("S1"))
+                stp = tp.get("stop")
+                if isinstance(stp, dict):
+                    stop = _safe_float(stp.get("price"))
+                if stop is None:
+                    bands = tp.get("bands") or {}
+                    stop = _safe_float(bands.get("S1"))
             except Exception:
                 stop = None
-            # take_profit from tp.take
+            # take_profit from tp.take_profit.targets (dict) or legacy tp.take
             take_profit: List[float] = []
             try:
-                tk = tp.get("take")
-                if isinstance(tk, list):
-                    for v in tk:
-                        vv = _safe_float(v)
+                tp_obj = tp.get("take_profit")
+                if isinstance(tp_obj, dict):
+                    tgt = tp_obj.get("targets")
+                    if isinstance(tgt, list):
+                        for v in tgt:
+                            vv = _safe_float(v)
+                            if vv is not None:
+                                take_profit.append(vv)
+                    else:
+                        vv2 = _safe_float(tp_obj.get("price"))
+                        if vv2 is not None:
+                            take_profit.append(vv2)
+                else:
+                    tk = tp.get("take")
+                    if isinstance(tk, list):
+                        for v in tk:
+                            vv = _safe_float(v)
+                            if vv is not None:
+                                take_profit.append(vv)
+                    elif isinstance(tk, (int, float)):
+                        vv = _safe_float(tk)
                         if vv is not None:
                             take_profit.append(vv)
-                elif isinstance(tk, (int, float)):
-                    vv = _safe_float(tk)
-                    if vv is not None:
-                        take_profit.append(vv)
             except Exception:
                 take_profit = []
             # rr/actionable/state

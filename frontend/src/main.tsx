@@ -1,30 +1,30 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { BrowserRouter } from 'react-router-dom'
-import App from './App'
-import 'antd/dist/reset.css'
-import './design/global.css'
 import dayjs from 'dayjs'
 import 'dayjs/locale/zh-cn'
+import 'antd/dist/reset.css'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import App from './App'
+import './styles.css'
 
 dayjs.locale('zh-cn')
 
-// Removed global SyncManager polling; read-model uses per-view fetch.
-
 const queryClient = new QueryClient({
   defaultOptions: {
-    queries: { retry: 1, refetchOnWindowFocus: false },
-    mutations: { retry: 0 }
-  }
+    queries: {
+      retry: 1,
+      refetchOnWindowFocus: false,
+    },
+    mutations: {
+      retry: 0,
+    },
+  },
 })
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <QueryClientProvider client={queryClient}>
-      <BrowserRouter>
-        <App />
-      </BrowserRouter>
+      <App />
     </QueryClientProvider>
-  </React.StrictMode>
+  </React.StrictMode>,
 )

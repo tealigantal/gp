@@ -35,7 +35,11 @@ def health() -> HealthResponse:
 @router.get('/api/book/current', response_model=BookResponse)
 def current_book() -> BookResponse:
     with book_lane():
-        book = ensure_book(force_rebuild=False)
+        # Read-first: only rebuild when missing or trading day changes
+        book = load_current_book()
+        td = current_trading_day()
+        if book is None or (getattr(book, 'trading_day', None) != td):
+            book = ensure_book(force_rebuild=False)
     return BookResponse(book=book.model_dump())
 
 
