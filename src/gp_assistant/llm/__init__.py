@@ -1,2 +1,1 @@
-__all__ = []
-# 简介：LLM 子模块包初始化，聚合 LLM 客户端等能力。
+from .client import LLMClient

@@ -1,0 +1,475 @@
+﻿"""候选集生成（完整实现）。
+
+基于快照/参数/本地 Universe，拉取日线 -> 计算指标/筹码/风险 ->
+给出可观测字段与必要的 veto/flags 信息，供后续策略与 UI 使用。
+"""
+
+from __future__ import annotations
+
+from dataclasses import asdict
+from typing import Any, Dict, List, Optional, Tuple
+
+import os
+import math
+import pandas as pd
+
+from ..core.config import load_config
+from ..providers.universe_provider import UniverseProvider
+from ..providers.boards import is_mainboard
+from .datahub import MarketDataHub
+from ..strategy.indicators import compute_indicators
+from ..strategy.chip_model import compute_chip
+from ..risk.noise_q import grade_noise
+
+
+def _liquidity_grade(avg5_amount: float) -> str:
+    if avg5_amount >= 2e9:
+        return "A"
+    if avg5_amount >= 1e9:
+        return "B"
+    return "C"
+
+
+def _pick_col(df: pd.DataFrame, candidates: List[str]) -> Optional[str]:
+    for c in candidates:
+        if c in df.columns:
+            return c
+    return None
+
+
+def _build_dynamic_universe_symbols(snapshot: Optional[pd.DataFrame]) -> List[Dict[str, Any]]:
+    if snapshot is None or len(snapshot) == 0:
+        return []
+    snap = snapshot.copy()
+    code_col = _pick_col(snap, ["code", "symbol", "ts_code", "代码"])  # required
+    if not code_col:
+        return []
+    name_col = _pick_col(snap, ["name"])  # optional
+    close_col = _pick_col(snap, ["close", "price"])  # optional
+    amount_col = _pick_col(snap, ["amount", "turnover"])  # optional
+    industry_col = _pick_col(snap, ["industry"])  # optional
+    cols = [c for c in [code_col, name_col, close_col, amount_col, industry_col] if c]
+    df = snap[cols].copy()
+    # numeric
+    for c in [x for x in [close_col, amount_col] if x]:
+        df[c] = pd.to_numeric(df[c], errors="coerce")
+    out: List[Dict[str, Any]] = []
+    for _, r in df.iterrows():
+        raw_code = str(r[code_col])
+        s = raw_code.strip().lower()
+        if "." in s:
+            s = s.split(".", 1)[0]
+        for p in ("sh", "sz", "bj"):
+            if s.startswith(p):
+                s = s[len(p):]
+        digits = "".join([ch for ch in s if ch.isdigit()])
+        code = digits[:6] if len(digits) >= 6 else raw_code
+        out.append({
+            "code": str(code),
+            "name": (str(r[name_col]) if name_col else None),
+            "industry": (str(r[industry_col]) if industry_col else None),
+            "amount": float(r.get(amount_col, 0.0)) if amount_col else 0.0,
+        })
+    return out
+
+
+def generate_candidates(
+    symbols: List[str] | None,
+    env_grade: str,
+    topk: int = 3,
+    *,
+    snapshot: Optional[pd.DataFrame] = None,
+    return_features: bool = False,
+    as_of: Optional[str] = None,
+    industry_filter: Optional[List[str]] = None,
+) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]], Dict[str, Any]] | Tuple[List[Dict[str, Any]], List[Dict[str, Any]], Dict[str, Any], Dict[str, pd.DataFrame]]:
+    cfg = load_config()
+    # Cost controls (env overrides; keep logic local)
+    try:
+        dynamic_pool_size = int(getattr(cfg, "dynamic_pool_size", 0) or 0)
+    except Exception:
+        dynamic_pool_size = 0
+    if dynamic_pool_size <= 0:
+        try:
+            dynamic_pool_size = int(os.getenv("GP_DYNAMIC_POOL_SIZE", "200"))
+        except Exception:
+            dynamic_pool_size = 200
+
+    try:
+        prefetch_lookback_days = int(os.getenv("GP_PREFETCH_LOOKBACK_DAYS", "60"))
+    except Exception:
+        prefetch_lookback_days = 60
+    prefetch_lookback_days = max(0, min(365, int(prefetch_lookback_days)))
+
+    try:
+        universe_max = int(os.getenv("GP_UNIVERSE_MAX", "0"))
+    except Exception:
+        universe_max = 0
+    hub = MarketDataHub()
+    # Resolve target trading day (with after-close gating)
+    def _resolve_target(as_of_str: Optional[str]) -> pd.Timestamp:
+        try:
+            tz = getattr(cfg, "timezone", "Asia/Shanghai")
+            if as_of_str is not None:
+                base = pd.to_datetime(as_of_str).normalize()
+            else:
+                now_local = pd.Timestamp.now(tz=tz)
+                base = now_local.normalize() if (now_local.time() >= pd.Timestamp('1900-01-01T15:05:00').time()) else (now_local - pd.Timedelta(days=1)).normalize()
+        except Exception:
+            base = (pd.to_datetime(as_of_str).normalize() if as_of_str is not None else pd.Timestamp.now().normalize())
+        # Minimal weekend fallback; holiday exceptions not covered here
+        d = base
+        while d.weekday() >= 5:
+            d = d - pd.Timedelta(days=1)
+        return d
+    _target_trading_day = _resolve_target(as_of).date()
+
+    # 1) 基础股票池
+    if symbols:
+        base_entries: List[Dict[str, Any]] = [{"code": str(s)} for s in symbols]
+        base_reason = "symbols_param"
+    elif snapshot is not None:
+        base_entries = _build_dynamic_universe_symbols(snapshot)
+        base_reason = "dynamic_pool"
+        # 对动态池做 TopN 截断（按成交额降序），以避免全市场逐标的重计算
+        try:
+            topn = max(int(topk) * 5, int(getattr(cfg, "dynamic_pool_size", 200)))
+        except Exception:
+            topn = max(int(topk) * 5, 200)
+        try:
+            base_entries.sort(key=lambda e: -float(e.get("amount", 0.0)))
+        except Exception:
+            pass
+        base_entries = base_entries[: topn]
+    else:
+        uni = UniverseProvider()
+        syms = uni.get_symbols()
+        base_entries = [{"code": s} for s in syms]
+        base_reason = "universe:file"
+    # Strict mainboard-only filter (AkShare-compatible, code-based)
+    try:
+        before_cnt = len(base_entries)
+        base_entries = [e for e in base_entries if e.get("code") and is_mainboard(str(e.get("code")))]
+        removed_non_main = before_cnt - len(base_entries)
+    except Exception:
+        removed_non_main = 0
+    pre_clean_len = len(base_entries)
+    bad_code_removed = 0
+    cleaned: List[Dict[str, Any]] = []
+    for e in base_entries:
+        s = str(e.get("code", "")).strip()
+        if len(s) == 6 and s.isdigit():
+            cleaned.append(e)
+        else:
+            bad_code_removed += 1
+
+    universe_fallback: Dict[str, Any] | None = None
+    if snapshot is not None and len(cleaned) == 0:
+        uni = UniverseProvider()
+        syms = uni.get_symbols()
+        cleaned = [{"code": s} for s in syms]
+        universe_fallback = {
+            "from": "snapshot",
+            "to": "universe_file",
+            "reason": "snapshot_schema_unusable",
+            "snapshot_columns": list(snapshot.columns) if hasattr(snapshot, "columns") else [],
+        }
+
+    # Optional early shrink by industry (applies only to dynamic snapshot-derived universe)
+    try:
+        if base_reason == "dynamic_pool" and industry_filter and isinstance(industry_filter, list):
+            filt = [str(x) for x in industry_filter if isinstance(x, str) and x.strip()]
+            if filt:
+                before = len(cleaned)
+                def _match_ind(e: Dict[str, Any]) -> bool:  # noqa: ANN001
+                    ind = str(e.get("industry") or "").strip()
+                    if not ind:
+                        return False
+                    return any((ind == f or (ind in f) or (f in ind)) for f in filt)
+                cleaned = [e for e in cleaned if _match_ind(e)]
+                # annotate stats so callers can diagnose shrink effect
+                if cleaned is not None:
+                    stats_shrink = {"from": before, "to": len(cleaned), "by": "industry_filter"}
+                    # this will be surfaced by agent in debug.thematic_stats
+                    # but we still record locally for completeness
+                    # keep under a reserved key to avoid breaking existing readers
+                    # (agent will not rely on this field)
+                    # fmt: off
+                    pass
+                # fmt: on
+    except Exception:
+        pass
+
+    stats: Dict[str, Any] = {
+        "universe_in_count": pre_clean_len,
+        "universe_after_mainboard_filter_count": int(pre_clean_len),
+        "universe_after_code_clean_count": 0,
+        "universe_after_filter_count": 0,
+        "bars_missing_count": 0,
+        "bars_too_short_count": 0,
+        "indicator_error_count": 0,
+        "skipped_symbols_sample": [],
+        "candidates_out_count": 0,
+        "pool_pre_thematic_count": 0,
+        "daily_attempts_sample": [],
+        "universe_removed_counts": {
+            "bad_code": int(bad_code_removed),
+            "insufficient_liquidity": 0,
+            "insufficient_history": 0,
+            "non_mainboard": int(removed_non_main),
+        },
+    }
+    if universe_fallback is not None:
+        stats["universe_fallback"] = universe_fallback
+    # Bound universe size early to avoid O(N) network/CPU blow-ups.
+    truncated: Dict[str, Any] | None = None
+    try:
+        if base_reason == "dynamic_pool" and dynamic_pool_size > 0 and len(cleaned) > dynamic_pool_size:
+            before = len(cleaned)
+            try:
+                cleaned.sort(key=lambda e: float(e.get("amount", 0.0) or 0.0), reverse=True)
+                cleaned = cleaned[:dynamic_pool_size]
+                truncated = {"from": before, "to": len(cleaned), "limit": dynamic_pool_size, "by": "amount_desc"}
+            except Exception:
+                cleaned = cleaned[:dynamic_pool_size]
+                truncated = {"from": before, "to": len(cleaned), "limit": dynamic_pool_size, "by": "slice"}
+        if base_reason == "universe:file" and universe_max and universe_max > 0 and len(cleaned) > universe_max:
+            before = len(cleaned)
+            cleaned = cleaned[:universe_max]
+            truncated = {"from": before, "to": len(cleaned), "limit": universe_max, "by": "universe_max"}
+    except Exception:
+        truncated = None
+    if truncated is not None:
+        stats["universe_truncated"] = truncated
+
+    # 预取（TTL 控制由 datahub 处理）
+    try:
+        syms = [str(e.get("code")) for e in cleaned if e.get("code")]
+        if syms:
+            _ = hub.daily_ohlcv_batch(syms, as_of=as_of, safety_lookback_days=prefetch_lookback_days)
+            try:
+                print(f"[预取] 已批量入库日线：{len(syms)} 个标的 lookback_days={prefetch_lookback_days}", flush=True)
+            except Exception:
+                pass
+    except Exception:
+        pass
+
+    # 2) 逐标的构建候选
+    pool: List[Dict[str, Any]] = []
+    veto_reasons: List[Dict[str, Any]] = []
+    # per-run shared feature map for reuse in later stages
+    feats_by_symbol: Dict[str, pd.DataFrame] = {}
+
+    # update post-clean counts for diagnostics
+    try:
+        stats["universe_after_code_clean_count"] = int(len(cleaned))
+    except Exception:
+        pass
+
+    for entry in cleaned:
+        sym = str(entry.get("code"))
+        if not sym:
+            continue
+        try:
+            # cache 优先，长度不足或缓存缺失时再允许回源补齐
+            try:
+                df, meta = hub.daily_ohlcv(sym, as_of, min_len=250, prefer_cache_only=True)
+            except Exception:
+                df, meta = hub.daily_ohlcv(sym, as_of, min_len=250, prefer_cache_only=False)
+            else:
+                need_refresh = False
+                try:
+                    if bool(meta.get("insufficient_history")) or int(meta.get("len", 0) or 0) < 120:
+                        need_refresh = True
+                    else:
+                        last_date = pd.to_datetime(df["date"].iloc[-1], errors="coerce").date()
+                        if last_date is None or last_date < _target_trading_day:
+                            need_refresh = True
+                except Exception:
+                    need_refresh = True
+                if need_refresh:
+                    df, meta = hub.daily_ohlcv(sym, as_of, min_len=250, prefer_cache_only=False)
+        except Exception as e:  # noqa: BLE001
+            stats["bars_missing_count"] += 1
+            if len(stats["skipped_symbols_sample"]) < 10:
+                stats["skipped_symbols_sample"].append(sym)
+            try:
+                print(f"[跳过] 无法获取日线 {sym} err={type(e).__name__}: {e}", flush=True)
+            except Exception:
+                pass
+            continue
+
+        # 指标与筹码
+        indicator_first_fail = False
+        try:
+            feat = compute_indicators(df)
+        except Exception:
+            indicator_first_fail = True
+            try:
+                feat = compute_indicators(df)
+            except Exception as e:  # noqa: BLE001
+                stats["indicator_error_count"] += 1
+                if len(stats["skipped_symbols_sample"]) < 10:
+                    stats["skipped_symbols_sample"].append(sym)
+                try:
+                    print(f"[跳过] 指标失败 {sym} err={type(e).__name__}: {e}", flush=True)
+                except Exception:
+                    pass
+                continue
+        # cache for reuse by champion evaluation
+        try:
+            feats_by_symbol[sym] = feat
+        except Exception:
+            pass
+
+        # 特征提取
+        last = feat.iloc[-1]
+        def _safe_float(v: Any) -> float:
+            try:
+                x = float(v)
+                if math.isnan(x) or math.isinf(x):
+                    return 0.0
+                return x
+            except Exception:
+                return 0.0
+
+        avg5_amount = _safe_float(feat.get("amount_5d_avg", pd.Series([0.0])).iloc[-1] if "amount_5d_avg" in feat.columns else 0.0)
+        atrp = _safe_float(last.get("atr_pct", 0.0))
+        gap = _safe_float(last.get("gap_pct", 0.0))
+        close = _safe_float(last.get("close", 0.0))
+        ma10 = _safe_float(last.get("ma10", 0.0)) if "ma10" in feat.columns else _safe_float(last.get("ma20", 0.0))
+        ma20 = _safe_float(last.get("ma20", 0.0))
+        # Soft execution hint features (extension / distance)
+        extension_ma10 = (close - ma10) / ma10 if ma10 else 0.0
+        extension_ma20 = (close - ma20) / ma20 if ma20 else 0.0
+        recent = feat.tail(60)
+        supp = _safe_float(recent["close"].quantile(0.30) if "close" in recent.columns else 0.0)
+        distance_to_recent_support = (close - supp) / close if (close and supp) else 0.0
+        pressure = {"near_ma20": bool(ma20 and abs((close - ma20) / ma20) <= 0.005)}
+
+        # 筹码 + 噪声等级
+        chip_res, chip_meta = compute_chip(feat)
+        q_grade = grade_noise(feat, env_grade if env_grade in {"A", "B", "C", "D"} else "C")
+
+        # 硬性流动性阈值 veto
+        if avg5_amount < cfg.min_avg_amount:
+            veto = {"symbol": sym, "reason": "LOW_LIQ_HARD", "amount_5d_avg": avg5_amount}
+            veto_reasons.append(veto)
+            try:
+                stats["universe_removed_counts"]["insufficient_liquidity"] += 1
+            except Exception:
+                pass
+            if bool(meta.get("insufficient_history")):
+                stats["bars_too_short_count"] += 1
+                try:
+                    stats["universe_removed_counts"]["insufficient_history"] += 1
+                except Exception:
+                    pass
+            continue
+
+        # 构造候选
+        # extension vs chip cost
+        ext_cost = 0.0
+        try:
+            ext_cost = (close - float(getattr(chip_res, "avg_cost", 0.0))) / float(getattr(chip_res, "avg_cost", 0.0) or 1.0)
+        except Exception:
+            ext_cost = 0.0
+
+        cand = {
+            "symbol": sym,
+            "name": entry.get("name"),
+            "industry": entry.get("industry"),
+            "source_reason": base_reason,
+            "liquidity": {"avg5_amount": avg5_amount, "grade": _liquidity_grade(avg5_amount)},
+            "atr_pct": atrp,
+            "gap_pct": gap,
+            "pressure_flags": pressure,
+            "q_grade": q_grade,
+            "chip": asdict(chip_res),
+            "indicators": {
+                "ma20": ma20,
+                "slope20": _safe_float(feat["slope20"].iloc[-1]) if "slope20" in feat.columns else 0.0,
+                "atr_pct": atrp,
+                "gap_pct": gap,
+                "extension_ma10": float(extension_ma10),
+                "extension_ma20": float(extension_ma20),
+                "extension_from_cost": float(ext_cost),
+                "distance_to_recent_support": float(distance_to_recent_support),
+                "chip_vs_cost_pct": float(ext_cost),
+            },
+            "close": close,
+        }
+
+        # 观察/禁止标记
+        observe_only = False
+        reasons: List[str] = []
+        if cand["liquidity"]["grade"] == "C":
+            observe_only = True
+            reasons.append("LIQ_C_OBSERVE")
+        if atrp > 0.08:
+            observe_only = True
+            reasons.append("ATR_HIGH_OBSERVE")
+        if gap > 0.02:
+            observe_only = True
+            reasons.append("GAP_HIGH_FORBID")
+        try:
+            if getattr(chip_res, "dist_to_90_high_pct", 1.0) <= 0.02:
+                observe_only = True
+                reasons.append("NEAR_CHIP90_HIGH_FORBID")
+        except Exception:
+            pass
+        # approximate entry gap hint (how far from candidate execution anchors)
+        try:
+            entry_gap_hint = min(
+                [abs(extension_ma10), abs(extension_ma20), abs(ext_cost)]
+            )
+        except Exception:
+            entry_gap_hint = 0.0
+        # record which soft factors were penalized in candidate score to avoid double-penalizing later
+        cand_penalties = []
+        try:
+            if max(abs(extension_ma10), abs(extension_ma20), abs(ext_cost)) > 0:
+                cand_penalties.append("extension")
+            if distance_to_recent_support > 0:
+                cand_penalties.append("support_distance")
+        except Exception:
+            pass
+        cand["flags"] = {"must_observe_only": bool(observe_only), "reasons": reasons, "entry_gap_hint": float(entry_gap_hint)}
+        cand["penalty_tags"] = cand_penalties
+
+        pool.append(cand)
+
+    # 排序与统计
+    def _liq_rank(g: str) -> int:
+        return {"A": 0, "B": 1, "C": 2}.get(str(g), 3)
+
+    # composite candidate score: trend quality, soft penalties for noise/overextension/support-distance, liquidity preference
+    def _cand_score(it: Dict[str, Any]) -> float:
+        ind = it.get("indicators", {}) or {}
+        slope = float(ind.get("slope20", 0.0))
+        atrp = float(ind.get("atr_pct", 0.0))
+        gap = float(ind.get("gap_pct", 0.0))
+        ext = max(abs(float(ind.get("extension_ma10", 0.0))), abs(float(ind.get("extension_ma20", 0.0))), abs(float(ind.get("extension_from_cost", 0.0))))
+        dist_support = float(ind.get("distance_to_recent_support", 0.0))
+        liq = -_liq_rank((it.get("liquidity") or {}).get("grade", "C"))  # A->0 -> higher after minus
+        # soft penalties; keep distance-to-support modest to avoid over-pruning
+        penalty = 0.5 * atrp + 0.3 * max(0.0, gap) + min(0.5, ext) + 0.2 * max(0.0, dist_support)
+        return 1.0 * slope - penalty + 0.1 * liq
+
+    for it in pool:
+        try:
+            it["candidate_score"] = float(_cand_score(it))
+        except Exception:
+            it["candidate_score"] = 0.0
+
+    pool.sort(key=lambda x: -float(x.get("candidate_score", 0.0)))
+    stats["universe_after_filter_count"] = len(pool)
+    stats["candidates_out_count"] = len(pool)
+    stats["pool_pre_thematic_count"] = len(pool)
+
+    if return_features:
+        return pool[: max(1, topk) * 5], veto_reasons, stats, feats_by_symbol
+    return pool[: max(1, topk) * 5], veto_reasons, stats
+
+
+
