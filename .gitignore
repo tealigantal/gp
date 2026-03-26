@@ -83,3 +83,10 @@ error.txt
 tmp_*.txt
 _patch*
 _before*
+# Temp and local debug artifacts
+temp_*.txt
+tmp_*.py
+tmp_*.txt
+CON_out.txt
+_mass_refresh_*.py
+_trigger_mainboard_refresh*.py

@@ -106,22 +106,24 @@ def generate_candidates(
     except Exception:
         universe_max = 0
     hub = MarketDataHub()
-    # Resolve target trading day (with after-close gating)
+    # Resolve target trading day via unified clock
+    from .trading_clock import resolve_effective_trading_date as _resolve_td
     def _resolve_target(as_of_str: Optional[str]) -> pd.Timestamp:
+        if as_of_str is not None:
+            try:
+                d = pd.to_datetime(as_of_str).normalize()
+                # Snap to weekday-only previous if weekend
+                while d.weekday() >= 5:
+                    d = d - pd.Timedelta(days=1)
+                return d
+            except Exception:
+                pass
         try:
-            tz = getattr(cfg, "timezone", "Asia/Shanghai")
-            if as_of_str is not None:
-                base = pd.to_datetime(as_of_str).normalize()
-            else:
-                now_local = pd.Timestamp.now(tz=tz)
-                base = now_local.normalize() if (now_local.time() >= pd.Timestamp('1900-01-01T15:05:00').time()) else (now_local - pd.Timedelta(days=1)).normalize()
+            now_local = pd.Timestamp.now(tz=getattr(cfg, "timezone", "Asia/Shanghai"))
         except Exception:
-            base = (pd.to_datetime(as_of_str).normalize() if as_of_str is not None else pd.Timestamp.now().normalize())
-        # Minimal weekend fallback; holiday exceptions not covered here
-        d = base
-        while d.weekday() >= 5:
-            d = d - pd.Timedelta(days=1)
-        return d
+            now_local = pd.Timestamp.now()
+        eff = _resolve_td(now_local.to_pydatetime())
+        return pd.to_datetime(eff).normalize()
     _target_trading_day = _resolve_target(as_of).date()
 
     # 1) 基础股票池
@@ -470,6 +472,5 @@ def generate_candidates(
     if return_features:
         return pool[: max(1, topk) * 5], veto_reasons, stats, feats_by_symbol
     return pool[: max(1, topk) * 5], veto_reasons, stats
-
 
 

@@ -2,12 +2,13 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, time, timedelta
+from datetime import datetime, timedelta
 from typing import Dict
 
 import zoneinfo
 
 from ..core.config import load_config
+from .trading_clock import get_market_phase, resolve_effective_trading_date
 
 
 def is_trading_day(dt: datetime) -> bool:
@@ -47,13 +48,6 @@ def calendar_summary() -> Dict[str, str]:
     cfg = load_config()
     tz = zoneinfo.ZoneInfo(cfg.timezone)
     now = datetime.now(tz=tz)
-    # After-close gating: before 15:05 use previous trading day as as_of
-    base = now
-    try:
-        if now.time() < time(15, 5):
-            base = now - timedelta(days=1)
-    except Exception:
-        pass
-    as_of = nearest_trading_day(base).strftime("%Y-%m-%d")
-    tw = trading_window_now(now)
-    return {"as_of": as_of, "window": tw.label, "timezone": cfg.timezone}
+    as_of = resolve_effective_trading_date(now)
+    phase = get_market_phase(now)
+    return {"as_of": as_of, "window": trading_window_now(now).label, "market_phase": phase, "timezone": cfg.timezone}

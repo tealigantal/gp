@@ -1,5 +1,11 @@
 from __future__ import annotations
 
+"""
+Legacy compatibility helpers for historical chat flow.
+
+Note: mainline does not use this module. Kept thin for backwards imports.
+"""
+
 from typing import Any, Dict, List, Optional, Tuple
 
 from . import session_store as store
@@ -25,4 +31,3 @@ def resolve_symbol_from_ordinal(symbols: List[str], n: int) -> Optional[str]:
     if not symbols or len(symbols) < n:
         return None
     return symbols[n - 1]
-

@@ -47,8 +47,6 @@ def _read_v2_from_store(run_id: Optional[str], as_of: Optional[str]) -> Dict[str
                 cand.append(base / f"{str(as_of)[:4]}-{str(as_of)[4:6]}-{str(as_of)[6:8]}_v2.json")
         except Exception:
             pass
-    if not run_id and not as_of:
-        cand.append(base / "latest_v2.json")
     for p in cand:
         if p.exists():
             try:
@@ -75,8 +73,6 @@ def _read_v1_from_store(run_id: Optional[str], as_of: Optional[str]) -> Dict[str
                 cand.append(base / f"{str(as_of)[:4]}-{str(as_of)[4:6]}-{str(as_of)[6:8]}.json")
         except Exception:
             pass
-    if not run_id and not as_of:
-        cand.append(base / "latest.json")
     for p in cand:
         if p.exists():
             try:
@@ -155,6 +151,9 @@ def build_v2_dict_from_v1(payload: Dict[str, Any], *, risk_profile: Optional[str
     out = {
         "run_id": v2.run_id,
         "as_of": v2.as_of,
+        "as_of_ts": v2.as_of_ts,
+        "trading_date": v2.trading_date,
+        "data_cutoff": v2.data_cutoff,
         "snapshot_id": v2.snapshot_id,
         "market_regime": v2.market_regime,
         "degraded": v2.degraded,
@@ -188,7 +187,7 @@ def build_v2_dict_from_v1(payload: Dict[str, Any], *, risk_profile: Optional[str
     return fixed
 
 
-def read_artifact_v2(run_id: Optional[str] = None, as_of: Optional[str] = None) -> Dict[str, Any]:
+def read_artifact_v2(run_id: Optional[str] = None, as_of: Optional[str] = None, *, allow_v1_fallback: bool = False, allow_latest_fallback: bool = False) -> Dict[str, Any]:
     # 1) prefer persisted v2
     v2p = _read_v2_from_store(run_id, as_of)
     if isinstance(v2p, dict):
@@ -200,13 +199,32 @@ def read_artifact_v2(run_id: Optional[str] = None, as_of: Optional[str] = None) 
         fixed.setdefault("artifact_version", "v2")
         fixed.setdefault("fallback_used", False)
         return fixed
-    # 2) fallback: v1 -> v2 conversion
-    v1 = _read_v1_from_store(run_id, as_of)
-    if not isinstance(v1, dict):
-        raise FileNotFoundError("ARTIFACT_NOT_FOUND")
-    out = build_v2_dict_from_v1(v1)
-    out["fallback_used"] = True
-    return out
+    # 2) optional fallback: v1 -> v2 conversion
+    if allow_v1_fallback:
+        v1 = _read_v1_from_store(run_id, as_of)
+        if isinstance(v1, dict):
+            out = build_v2_dict_from_v1(v1)
+            out["fallback_used"] = True
+            return out
+    # 3) optional latest fallbacks when no run_id/as_of provided
+    if allow_latest_fallback and (not run_id and not as_of):
+        v2_latest = _read_v2_from_store(None, None)
+        if isinstance(v2_latest, dict):
+            ok, errs, fixed = validate_pick_artifact_v2(v2_latest)
+            if not ok:
+                fixed["degraded"] = True
+                fixed.setdefault("reason", "artifact_validation_failed")
+                fixed.setdefault("errors", errs)
+            fixed.setdefault("artifact_version", "v2")
+            fixed.setdefault("fallback_used", False)
+            return fixed
+        if allow_v1_fallback:
+            v1_latest = _read_v1_from_store(None, None)
+            if isinstance(v1_latest, dict):
+                out = build_v2_dict_from_v1(v1_latest)
+                out["fallback_used"] = True
+                return out
+    raise FileNotFoundError("ARTIFACT_NOT_FOUND")
 
 
 def persist_artifact_v2(run_id: str, v2_obj: Dict[str, Any]) -> None:

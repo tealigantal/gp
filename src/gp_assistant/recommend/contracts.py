@@ -77,6 +77,9 @@ class PickItemV2:
 class PickArtifactV2:
     run_id: str
     as_of: str
+    as_of_ts: Optional[str]
+    trading_date: Optional[str]
+    data_cutoff: Optional[str]
     snapshot_id: Optional[str]
     market_regime: Optional[str]
     degraded: bool
@@ -151,11 +154,15 @@ def build_v2_from_v1(payload: Dict[str, Any], *, risk_profile: Optional[str] = N
 
     # Snapshot id best-effort from data_status.snapshot.as_of_ts
     snapshot_id = None
+    as_of_ts = None
     try:
         ds = payload.get("data_status", {}) or {}
-        snapshot_id = (ds.get("snapshot", {}) or {}).get("as_of_ts")
+        snapshot = (ds.get("snapshot", {}) or {})
+        snapshot_id = snapshot.get("as_of_ts")
+        as_of_ts = snapshot_id
     except Exception:
         snapshot_id = None
+        as_of_ts = None
 
     # market_regime from env.grade if available
     regime = None
@@ -364,9 +371,58 @@ def build_v2_from_v1(payload: Dict[str, Any], *, risk_profile: Optional[str] = N
         except Exception:
             continue
 
+    # Determine trading_date and data_cutoff from payload only (no reliance on current clock)
+    def _safe_date_from_any(s: Optional[str]) -> Optional[str]:
+        if not s:
+            return None
+        t = str(s).strip().replace("/", "-")
+        if len(t) >= 8 and t[:8].isdigit():
+            return f"{t[:4]}-{t[4:6]}-{t[6:8]}"
+        try:
+            return str(s).split("T", 1)[0]
+        except Exception:
+            return None
+
+    trading_date = _safe_date_from_any(as_of) or _safe_date_from_any(as_of_ts)
+
+    # cutoff inference: prefer explicit payload field; else infer conservatively from as_of_ts
+    data_cutoff: Optional[str] = None
+    try:
+        # v1 payload may carry an explicit cutoff
+        explicit = str((payload.get("data_cutoff") or payload.get("cutoff") or "")).upper().strip()
+        if explicit in {"INTRADAY", "EOD"}:
+            data_cutoff = explicit
+    except Exception:
+        data_cutoff = None
+    if not data_cutoff:
+        # Use conservative inference from snapshot time
+        hhmm = None
+        try:
+            s = str(as_of_ts or "").strip()
+            if "T" in s:
+                _, t = s.split("T", 1)
+            elif " " in s:
+                _, t = s.split(" ", 1)
+            else:
+                t = ""
+            if t:
+                parts = t.split(":")
+                if len(parts) >= 2 and parts[0].isdigit() and parts[1].isdigit():
+                    hhmm = (int(parts[0]), int(parts[1]))
+        except Exception:
+            hhmm = None
+        if trading_date and hhmm is not None:
+            data_cutoff = "INTRADAY" if hhmm < (15, 5) else "EOD"
+        else:
+            # Historical/unknown snapshot time -> EOD by default
+            data_cutoff = "EOD"
+
     return PickArtifactV2(
         run_id=run_id,
         as_of=as_of,
+        as_of_ts=(str(as_of_ts) if as_of_ts else None),
+        trading_date=trading_date,
+        data_cutoff=str(data_cutoff or "INTRADAY"),
         snapshot_id=(str(snapshot_id) if snapshot_id else None),
         market_regime=regime,
         degraded=bool(degraded),

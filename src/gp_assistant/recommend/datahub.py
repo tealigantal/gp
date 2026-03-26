@@ -158,25 +158,22 @@ class MarketDataHub:
             if not prefer_cache_only and not force_network:
                 meta_q = _query_meta(qid)
                 last_item_time = meta_q.get("last_item_time")
-                # Resolve target trading day (on/before as_of; else today in configured TZ)
+                # Resolve target trading day (on/before as_of; else unified now in configured TZ)
                 def _resolve_target(as_of_str: Optional[str]) -> pd.Timestamp:
-                    """Resolve the effective target trading day.
+                    """Resolve the effective target trading day using unified clock.
 
                     - If as_of provided: use that date (normalized), then snap to last open day on/before it.
-                    - If as_of None: use now in configured tz, but only switch to "today" after 15:05 local time;
-                      otherwise use previous open day. This avoids premature midday refreshes.
+                    - If as_of None: derive from trading_clock.resolve_effective_trading_date(now)
                     """
                     try:
                         tz = getattr(cfg, "timezone", "Asia/Shanghai")
                         if as_of_str is not None:
                             base = pd.to_datetime(as_of_str).normalize()
                         else:
+                            from ..recommend.trading_clock import resolve_effective_trading_date as _resolve_td
                             now_local = pd.Timestamp.now(tz=tz)
-                            # After close (15:05) -> today; else previous day
-                            if now_local.time() >= _time(15, 5):
-                                base = now_local.normalize()
-                            else:
-                                base = (now_local - pd.Timedelta(days=1)).normalize()
+                            eff = _resolve_td(now_local.to_pydatetime())
+                            base = pd.to_datetime(eff).normalize()
                     except Exception:
                         base = (pd.to_datetime(as_of_str).normalize() if as_of_str is not None else pd.Timestamp.now().normalize())
                     # Try precise calendar if available
@@ -352,18 +349,17 @@ class MarketDataHub:
             return {}
         provider = get_provider()
         cfg = load_config()
-        # Resolve target trading day with after-close gating (15:05 local)
+        # Resolve target trading day via unified clock
         def _resolve_target(as_of_str: Optional[str]) -> pd.Timestamp:
             try:
                 tz = getattr(cfg, "timezone", "Asia/Shanghai")
                 if as_of_str is not None:
                     base = pd.to_datetime(as_of_str).normalize()
                 else:
+                    from ..recommend.trading_clock import resolve_effective_trading_date as _resolve_td
                     now_local = pd.Timestamp.now(tz=tz)
-                    if now_local.time() >= _time(15, 5):
-                        base = now_local.normalize()
-                    else:
-                        base = (now_local - pd.Timedelta(days=1)).normalize()
+                    eff = _resolve_td(now_local.to_pydatetime())
+                    base = pd.to_datetime(eff).normalize()
             except Exception:
                 base = (pd.to_datetime(as_of_str).normalize() if as_of_str is not None else pd.Timestamp.now().normalize())
             # Try trade calendar when available

@@ -1,35 +1,23 @@
-# 简介：多轮对话状态存储。使用 SQLite 持久化消息历史与最近一次推荐，
-# 支持根据 session_id 复用上下文实现连续对话。
 from __future__ import annotations
+
+"""
+Session state store: persists chat messages and structured session state in SQLite.
+
+This module now uses shared sqlite_utils for DB connection and time helpers to
+avoid duplicating pragmas and retry loops.
+"""
 
 import json
 import sqlite3
-from dataclasses import dataclass
 from datetime import datetime, timezone
-from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from ..core.config import load_config
-from ..core.paths import store_dir
 from . import event_store
-import time
-
-
-def _db_path() -> Path:
-    p = store_dir() / "sessions" / "session.db"
-    p.parent.mkdir(parents=True, exist_ok=True)
-    return p
+from .sqlite_utils import connect_db as _db_connect, now_iso as _now_iso
 
 
 def _connect() -> sqlite3.Connection:
-    # Align SQLite pragmas with event_store to mitigate 'database is locked'
-    conn = sqlite3.connect(str(_db_path()), timeout=15.0)
-    try:
-        conn.execute("PRAGMA journal_mode=WAL")
-        conn.execute("PRAGMA synchronous=NORMAL")
-        conn.execute("PRAGMA busy_timeout=10000")  # 10s
-    except Exception:
-        pass
+    conn = _db_connect()
     conn.execute(
         """
         CREATE TABLE IF NOT EXISTS messages(
@@ -63,18 +51,6 @@ def _connect() -> sqlite3.Connection:
     return conn
 
 
-def _now_iso() -> str:
-    cfg = load_config()
-    tz = timezone.utc
-    try:
-        import zoneinfo
-
-        tz = zoneinfo.ZoneInfo(cfg.timezone)
-    except Exception:
-        pass
-    return datetime.now(tz=tz).isoformat()
-
-
 def ensure_session(session_id: Optional[str] = None) -> str:
     sid = session_id or datetime.utcnow().strftime("sess-%Y%m%d%H%M%S%f")
     conn = _connect()
@@ -92,7 +68,8 @@ def ensure_session(session_id: Optional[str] = None) -> str:
                 break
             except sqlite3.OperationalError as e:
                 if "locked" in str(e).lower() or "busy" in str(e).lower():
-                    time.sleep(0.05 * (2 ** i))
+                    import time as _t
+                    _t.sleep(0.05 * (2 ** i))
                     continue
                 raise
     finally:
@@ -102,12 +79,18 @@ def ensure_session(session_id: Optional[str] = None) -> str:
         event_store.ensure_conversation(sid, title=sid, conv_type="chat")
         event_store.ensure_participant(sid)
     except Exception:
-        # do not fail chat if event store init has an issue
         pass
     return sid
 
 
-def append_message(session_id: str, role: str, content: str, message_id: Optional[str] = None, *, require_event: bool = False) -> Optional[str]:
+def append_message(
+    session_id: str,
+    role: str,
+    content: str,
+    message_id: Optional[str] = None,
+    *,
+    require_event: bool = False,
+) -> Optional[str]:
     conn = _connect()
     try:
         for i in range(6):
@@ -121,6 +104,7 @@ def append_message(session_id: str, role: str, content: str, message_id: Optiona
             except sqlite3.OperationalError as e:
                 if "locked" in str(e).lower() or "busy" in str(e).lower():
                     import time as _t
+
                     _t.sleep(0.05 * (2 ** i))
                     continue
                 raise
@@ -131,9 +115,8 @@ def append_message(session_id: str, role: str, content: str, message_id: Optiona
         author_id = role or "user"
         _, ev = event_store.append_text_message(session_id, author_id=author_id, content=content, message_id=message_id)
         return str(ev.get("id"))
-    except Exception as e:  # noqa: BLE001
+    except Exception:
         if require_event:
-            # Fail fast to keep backend as single source of truth
             raise
         return message_id
 
@@ -163,6 +146,7 @@ def save_last_recommend(session_id: str, obj: Dict[str, Any]) -> None:
             except sqlite3.OperationalError as e:
                 if "locked" in str(e).lower() or "busy" in str(e).lower():
                     import time as _t
+
                     _t.sleep(0.05 * (2 ** i))
                     continue
                 raise
@@ -197,26 +181,31 @@ _STATE_DEFAULTS = {
     "pending_ambiguity": None,
     "last_followup_type": None,
     # Phase 1: run-aware, multi-symbol aware session fields
-    "active_run_id": None,            # 当前有效推荐run_id（或as_of）
-    "active_symbols": [],             # 当前run涉及的全部symbols（顺序稳定）
-    "focused_symbol": None,           # 当前焦点标的（替代 current_focus_symbol）
-    "compare_symbols": [],            # 最近一次比较涉及的symbols集合
-    "last_intent": None,              # 最近解析的意图
-    "last_message_type": None,        # 最近一次用户消息的类型（text/status等）
-    "last_refresh_at": None,          # 最近一次refresh时间
+    "active_run_id": None,
+    "active_symbols": [],
+    "focused_symbol": None,
+    "compare_symbols": [],
+    "last_intent": None,
+    "last_message_type": None,
+    "last_refresh_at": None,
     # Phase 2: run reuse + planner trace
     "previous_run_id": None,
     "previous_active_symbols": [],
     "last_planner_output": None,
     # Layered turn/memory fields (phase 3)
-    "last_right_panel": {},                 # 最近一次可见右侧面板（为了UI续航）
-    "pending_action": None,                 # 待续操作（如："explain"|"compare"|...）
-    "pending_symbols": [],                  # 待续操作关联的symbols（序列稳定）
-    "pending_cursor": None,                 # 待续分页/游标
-    "last_reference_resolution": None,      # 上轮引用解析结果（resolve_reference 输出）
-    "last_surface_kind": None,              # 上轮assistant可见输出类型（assistant_bundle|text|...）
-    "last_tool_results_summary": {},        # 上轮工具轨迹摘要（tools_used/used_symbols/tradeable）
-    "last_visible_assistant_summary": {},   # 上轮可见回复摘要（text截断、card_types、active_run_id）
+    "last_right_panel": {},
+    "pending_action": None,
+    "pending_symbols": [],
+    "pending_cursor": None,
+    "last_reference_resolution": None,
+    "last_surface_kind": None,
+    "last_tool_results_summary": {},
+    "last_visible_assistant_summary": {},
+    # Phase 2.7: follow-up binding context
+    "referenced_run_id": None,
+    "referenced_symbols": [],
+    "last_reference_reason": None,
+    "last_target_kind": None,
 }
 
 
@@ -249,6 +238,7 @@ def _save_state_raw(session_id: str, state: Dict[str, Any]) -> None:
             except sqlite3.OperationalError as e:
                 if "locked" in str(e).lower() or "busy" in str(e).lower():
                     import time as _t
+
                     _t.sleep(0.05 * (2 ** i))
                     continue
                 raise
@@ -344,7 +334,7 @@ def get_focus(session_id: str) -> Optional[str]:
 
 def set_last_recommend_and_symbols(session_id: str, obj: Dict[str, Any]) -> None:
     save_last_recommend(session_id, obj)
-    syms: list[str] = []
+    syms: List[str] = []
     try:
         picks = (obj or {}).get("picks") or []
         if isinstance(picks, list):
@@ -371,13 +361,14 @@ def set_last_recommend_and_symbols(session_id: str, obj: Dict[str, Any]) -> None
     )
 
 
-def get_last_symbols(session_id: str) -> list[str]:
+def get_last_symbols(session_id: str) -> List[str]:
     st = get_state(session_id)
     syms = st.get("last_recommend_symbols") or []
     return list(syms) if isinstance(syms, list) else []
 
 
 # Phase 1 helpers (minimal API)
+
 
 def set_active_run(session_id: str, run_id: Optional[str], symbols: Optional[List[str]] = None) -> Dict[str, Any]:
     return update_state(

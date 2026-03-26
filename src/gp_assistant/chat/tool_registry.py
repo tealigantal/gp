@@ -77,7 +77,7 @@ class ToolRegistry:
         return {
             "active_run_id": st.get("active_run_id"),
             "previous_run_id": st.get("previous_run_id"),
-            "focus_symbol": st.get("focused_symbol") or st.get("current_focus_symbol"),
+            "focus_symbol": store.get_focus(session_id),
             "active_symbols": st.get("active_symbols") or [],
             "tradeable": tradeable,
             "run_gating": run_gating,
@@ -90,119 +90,17 @@ class ToolRegistry:
 
     # 2. ensure_recommendation
     def ensure_recommendation(self, session_id: str, *, topk: Optional[int] = None, refresh: bool = False) -> Dict[str, Any]:
+        from .run_service import get_active_run
+
         sid = store.ensure_session(session_id)
-        st = store.get_state(sid)
-        run_id = None if refresh else (st.get("active_run_id") or None)
-
-        # Try gated artifact first
-        try:
-            art = _get_gated_artifact_v2(run_id=run_id)
-        except Exception:
-            art = {}
-
-        # Auto-refresh policy: if current run is degraded/no-trade, refresh once
-        auto_reason: Optional[str] = None
-        try:
-            if isinstance(art, dict) and not refresh:
-                rg = (art.get("run_gating") or {}).get("decision") if isinstance(art.get("run_gating"), dict) else None
-                if (not art.get("items")):
-                    auto_reason = "auto_empty_items"
-                elif art.get("degraded") is True:
-                    auto_reason = "auto_degraded"
-                elif art.get("tradeable") is False:
-                    auto_reason = "auto_not_tradeable"
-                elif isinstance(rg, str) and rg != "allow":
-                    auto_reason = "auto_run_gating_not_allow"
-                else:
-                    # Staleness check: if artifact as_of < target trading day, refresh once
-                    # Target day gating: before 15:05 local (Asia/Shanghai) -> previous open day
-                    from datetime import datetime, timedelta, time as _t
-                    import zoneinfo
-                    try:
-                        tz = zoneinfo.ZoneInfo("Asia/Shanghai")
-                    except Exception:
-                        tz = None
-                    now = datetime.now(tz=tz)
-                    base = now if now.time() >= _t(15, 5) else (now - timedelta(days=1))
-                    # weekend step-back only (holiday exceptions not covered here)
-                    d = base
-                    while d.weekday() >= 5:
-                        d = d - timedelta(days=1)
-                    target = d.date()
-                    aof = str(art.get("as_of") or art.get("run_id") or "").strip()
-                    art_date = None
-                    if aof:
-                        s = aof.replace("-", "")
-                        if len(s) >= 8 and s[:8].isdigit():
-                            try:
-                                art_date = datetime.strptime(s[:8], "%Y%m%d").date()
-                            except Exception:
-                                art_date = None
-                    if art_date is None or art_date < target:
-                        auto_reason = "auto_stale_run"
-        except Exception:
-            pass
-
-        # If missing or refresh requested (manual/auto), compute a fresh run via runner and persist to v2
-        if refresh or auto_reason or not isinstance(art, dict) or not art.get("items"):
-            # When explicitly refreshed, temporarily set a process-level flag to force short backfill
-            # in MarketDataHub (e.g., last 3 days) and bypass stale caches for this run only.
-            import os
-            prev_force = os.getenv("GP_FORCE_DATA_REFRESH")
-            prev_backfill = os.getenv("GP_FORCE_REFRESH_LOOKBACK_DAYS")
-            try:
-                if refresh:
-                    os.environ["GP_FORCE_DATA_REFRESH"] = "1"
-                    # Default to 3 days unless already provided by operator/env
-                    if not os.getenv("GP_FORCE_REFRESH_LOOKBACK_DAYS"):
-                        os.environ["GP_FORCE_REFRESH_LOOKBACK_DAYS"] = "3"
-                v1 = _recommend_run(mode="default", date=None, topk=topk or 3, universe="auto", symbols=None, risk_profile="normal")
-            finally:
-                # Restore prior env (avoid contaminating subsequent requests)
-                if prev_force is None:
-                    os.environ.pop("GP_FORCE_DATA_REFRESH", None)
-                else:
-                    os.environ["GP_FORCE_DATA_REFRESH"] = prev_force
-                if prev_backfill is None:
-                    os.environ.pop("GP_FORCE_REFRESH_LOOKBACK_DAYS", None)
-                else:
-                    os.environ["GP_FORCE_REFRESH_LOOKBACK_DAYS"] = prev_backfill
-            v2 = build_v2_dict_from_v1(v1)
-            rid = str(v2.get("run_id") or v2.get("as_of") or "")
-            if rid:
-                try:
-                    persist_artifact_v2(rid, v2)
-                except Exception:
-                    pass
-            art = _get_gated_artifact_v2(run_id=rid or None)
-
-        items = art.get("items") or []
-        symbols = [str((it or {}).get("symbol") or "") for it in items if isinstance(it, dict) and (it or {}).get("symbol")]
-
-        # Update session context
-        store.update_state(sid, {
-            "active_run_id": art.get("run_id") or art.get("as_of"),
-            "active_symbols": list(symbols),
-        })
-
-        return {
-            "active_run_id": art.get("run_id"),
-            "tradeable": bool(art.get("tradeable")),
-            "run_gating": art.get("run_gating"),
-            "reason": art.get("reason"),
-            "items": items,
-            "as_of": art.get("as_of"),
-            "reused_run": (run_id is not None and run_id == art.get("run_id")),
-            "stale": False,
-            "refresh_reason": ("force_refresh" if refresh else auto_reason),
-        }
+        return get_active_run(sid, now=None, force_refresh=bool(refresh), topk=topk or 3)
 
     # 3. resolve_reference
     def resolve_reference(self, session_id: str, raw_reference: str) -> Dict[str, Any]:
         st = store.get_state(session_id)
         s = (raw_reference or "").strip()
         active = list(st.get("active_symbols") or [])
-        focus = st.get("focused_symbol") or st.get("current_focus_symbol")
+        focus = store.get_focus(session_id)
 
         # Explicit symbol present?
         import re
@@ -307,25 +205,9 @@ class ToolRegistry:
 
     # 8. get_run_change
     def get_run_change(self, session_id: str) -> Dict[str, Any]:
+        from .run_diff_service import diff_runs
         st = store.get_state(session_id)
-        curr = list(st.get("active_symbols") or [])
-        prev = list(st.get("previous_active_symbols") or [])
-        added = [s for s in curr if s and s not in prev]
-        removed = [s for s in prev if s and s not in curr]
-        rank_changes: List[Dict[str, Any]] = []  # placeholder for later stable rank diffs
-        tradeable_change = None
-        run_gating_change = None
-        summary_reason = "selection_updated" if (added or removed) else "no_change"
-        return {
-            "current_run_id": st.get("active_run_id"),
-            "previous_run_id": st.get("previous_run_id"),
-            "added_symbols": added,
-            "removed_symbols": removed,
-            "rank_changes": rank_changes,
-            "tradeable_change": tradeable_change,
-            "run_gating_change": run_gating_change,
-            "summary_reason": summary_reason,
-        }
+        return diff_runs(st.get("active_run_id"), st.get("previous_run_id"))
 
     # 9. set_focus_symbol
     def set_focus_symbol(self, session_id: str, symbol: str) -> Dict[str, Any]:

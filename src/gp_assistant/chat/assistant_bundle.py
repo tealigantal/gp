@@ -80,8 +80,8 @@ class AssistantBundle:
         # Strict schema normalization for persistence
         rp = dict(self.right_panel or {})
         g = dict(self.grounding or {})
-        # normalize some common fields
-        g.setdefault("source", "tool_calling_agent")
+        # normalize some common fields; orchestrator is the only mainline source
+        g.setdefault("source", "orchestrator")
         rp.setdefault("active_run_id", g.get("active_run_id"))
         rp.setdefault("previous_run_id", g.get("previous_run_id"))
         rp.setdefault("focus_symbol", g.get("focus_symbol"))
@@ -101,7 +101,7 @@ class AssistantBundle:
             "tool_calls": list(self.tool_calls or []),
             "tool_results": list(self.tool_results or []),
             "grounding": {
-                "source": str(g.get("source") or "tool_calling_agent"),
+                "source": str(g.get("source") or "orchestrator"),
                 "active_run_id": g.get("active_run_id"),
                 "previous_run_id": g.get("previous_run_id"),
                 "focus_symbol": g.get("focus_symbol"),

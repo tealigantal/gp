@@ -22,11 +22,13 @@ from ..portfolio.store import read_portfolio_state as _read_portfolio, read_rece
 
 
 def get_artifact_v2(run_id: Optional[str] = None, as_of: Optional[str] = None) -> Dict[str, Any]:
-    return _read_artifact_v2(run_id=run_id, as_of=as_of)
+    # Strict mode: do not implicitly fall back to latest or v1
+    return _read_artifact_v2(run_id=run_id, as_of=as_of, allow_v1_fallback=False, allow_latest_fallback=False)
 
 
 def get_latest_artifact_v2() -> Dict[str, Any]:
-    return _read_artifact_v2()
+    # Legacy helper may use opt-in fallbacks
+    return _read_artifact_v2(allow_v1_fallback=True, allow_latest_fallback=True)
 
 
 def compare_symbols(run_id: Optional[str], symbols: List[str]) -> Dict[str, Any]:
@@ -120,7 +122,7 @@ def get_validation_summary() -> Dict[str, Any]:
 
 
 def get_gated_artifact_v2(run_id: Optional[str] = None, as_of: Optional[str] = None) -> Dict[str, Any]:
-    base = _read_artifact_v2(run_id=run_id, as_of=as_of)
+    base = _read_artifact_v2(run_id=run_id, as_of=as_of, allow_v1_fallback=False, allow_latest_fallback=False)
     summary = get_validation_summary()
     gated = _apply_gating(base, summary=summary)
     gated.setdefault("artifact_version", base.get("artifact_version", "v2"))
