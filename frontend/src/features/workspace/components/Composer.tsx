@@ -24,7 +24,7 @@ export function Composer({ value, onChange, onSubmit, disabled, llmReady }: Comp
           value={value}
           onChange={(event) => onChange(event.target.value)}
           autoSize={{ minRows: 2, maxRows: 5 }}
-          placeholder="例如：给我今天 3 只；第二只现在还能买吗；为什么这次没有上次那只。"
+          placeholder="例如：第二只现在还能买吗；600183 的止损止盈怎么看；为什么这次没有上次那只。"
           onPressEnter={(event) => {
             if (!event.shiftKey) {
               event.preventDefault()

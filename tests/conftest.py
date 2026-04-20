@@ -60,6 +60,11 @@ def pytest_collection_modifyitems(config, items):
         "test_evaluator.py",
         # Phase 7 execution/portfolio gate additions
         "test_mainline.py",
+        # Codex-added unit tests for intent layer
+        "test_interpret_request_types.py",
+        "test_judgment_dispatch.py",
+        "test_dispatch_new_handlers.py",
+        "test_daybook_mapping.py",
     )
     for item in items:
         fn = item.location[0]

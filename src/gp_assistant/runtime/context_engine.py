@@ -10,6 +10,8 @@ def build_context(memory_ctx: Dict[str, Any], book: MarketBook) -> Dict[str, Any
     turns = memory_ctx['recent_turns']
     claims = memory_ctx['recent_claims']
     return {
+        'session_has_active_run': bool(session.active_run_id),
+        'session_focus_symbol': (session.focus_subject.get('symbol') if isinstance(session.focus_subject, dict) else None),
         'session': {
             'session_id': session.session_id,
             'active_run_id': session.active_run_id,

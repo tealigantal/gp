@@ -1,11 +1,54 @@
+// Chat contracts
 export interface ChatRequest {
   session_id?: string
   message: string
 }
 
+// Canonical message model
+export type CanonicalPick = {
+  symbol: string
+  name?: string | null
+  rank: number
+  action: 'BUY' | 'WATCH' | 'INVALID'
+  state_label: string
+  thesis?: string
+  entry_text?: string
+  stop_text?: string
+  take_text?: string
+  why_selected_text?: string
+  reason_short?: string
+  can_execute_now?: boolean
+  missing_fields?: string[]
+}
+
+export type CanonicalRecommendMessage = {
+  message_kind: 'recommend'
+  lead_summary?: string
+  decision_state?: 'BUY' | 'WATCH' | 'INVALID'
+  market_summary?: string
+  execution_note?: string
+  risk_note?: string
+  picks: CanonicalPick[]
+  narrative_text: string
+  followup_suggestions?: string[]
+}
+
+export type CanonicalFollowupMessage = {
+  message_kind: 'followup' | 'compare' | 'exit' | 'no_trade' | 'explain' | 'live_check' | 'run_change' | 'chat'
+  narrative_text: string
+  state_tags?: Array<{ label: string; value: string }>
+  symbols?: string[]
+  reason?: string
+  symbol?: string | null
+  followup_suggestions?: string[]
+}
+
+export type CanonicalMessage = CanonicalRecommendMessage | CanonicalFollowupMessage
+
 export interface ChatResponse {
   session_id: string
   reply: string
+  message?: CanonicalMessage
   run_id?: string | null
   symbols: string[]
   right_panel: Record<string, unknown>
@@ -14,6 +57,7 @@ export interface ChatResponse {
   evidence_refs: string[]
 }
 
+// Health/book/run/session domain contracts
 export interface HealthResponse {
   status: string
   trading_day?: string | null
@@ -165,4 +209,14 @@ export interface BookResponse {
 
 export interface RunResponse {
   run: AdviceRun
+}
+
+// Session list API
+export interface SessionListItem {
+  session_id: string
+  created_at: string
+  updated_at: string
+  title: string
+  preview: string
+  active_run_id?: string | null
 }

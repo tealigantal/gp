@@ -6,6 +6,7 @@ import type {
   HealthResponse,
   RunResponse,
   SessionResponse,
+  SessionListItem,
   SideResult,
 } from './contracts'
 
@@ -39,6 +40,11 @@ export async function getSideResults() {
   return data
 }
 
+export async function getSessions(limit = 20) {
+  const { data } = await api.get<SessionListItem[]>(`/api/sessions?limit=${limit}`)
+  return data
+}
+
 export async function postChat(payload: ChatRequest) {
   const { data } = await api.post<ChatResponse>('/api/chat', payload)
   return data
@@ -46,10 +52,13 @@ export async function postChat(payload: ChatRequest) {
 
 export function readApiError(error: unknown): string {
   if (error instanceof AxiosError) {
+    const payload = (error.response?.data ?? {}) as Record<string, unknown>
+    const detail = (payload['detail'] ?? {}) as Record<string, unknown>
+    const err = (payload['error'] ?? {}) as Record<string, unknown>
     return (
-      (error.response?.data as any)?.detail?.reason ||
-      (error.response?.data as any)?.detail?.message ||
-      (error.response?.data as any)?.error?.message ||
+      (typeof detail['reason'] === 'string' ? (detail['reason'] as string) : undefined) ||
+      (typeof detail['message'] === 'string' ? (detail['message'] as string) : undefined) ||
+      (typeof err['message'] === 'string' ? (err['message'] as string) : undefined) ||
       error.message
     )
   }

@@ -17,6 +17,11 @@ def publish_run(session_id: str, book: MarketBook, topk: int = 3) -> AdviceRun:
         reason=book.daybook.reason,
         picks=book.board[:topk],
         evidence_refs=[book.book_version],
+        daybook_effective_day=book.daybook_effective_day,
+        pulse_trade_day=book.pulse_trade_day,
+        pulse_slot_at=book.pulse_slot_at,
+        market_phase=book.market_phase,
+        data_status=book.data_status,
     )
     save_run(run)
     return run

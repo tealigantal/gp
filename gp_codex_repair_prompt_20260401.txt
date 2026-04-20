@@ -1,0 +1,84 @@
+你在修改一个已有项目 GP。目标不是补丁修复，而是在现有主链上做正式收口。
+
+【总原则】
+1. 不新建第二条主链。
+2. 不做兼容，不保留 legacy 输出双轨。
+3. 不允许 fallback 到 recommend。
+4. 不允许 debug explain 进入用户可见字段。
+5. 所有 request 都必须有明确 handler。
+6. 所有 symbol/rank/focus 解析统一走一个 resolver。
+7. 前端只认 canonical message / right_panel。
+
+【当前主链】
+gateway/routes.py
+ -> runtime/turn_loop.py
+ -> runtime/concern_parser.py
+ -> runtime/evidence_planner.py
+ -> judgment/engine.py
+ -> runtime/narrator.py
+ -> memory/service.py
+
+【你必须完成的任务】
+
+一、后端
+1. 重构 `src/gp_assistant/judgment/engine.py` 为完整 dispatcher。
+2. 新增：
+   - `src/gp_assistant/judgment/explain.py`
+   - `src/gp_assistant/judgment/live_check.py`
+   - `src/gp_assistant/judgment/run_change.py`
+3. 改 `src/gp_assistant/runtime/evidence_planner.py`：让不同 request 的 evidence 需求与 subject 语义一致。
+4. 将 `src/gp_assistant/runtime/turn_loop.py` 中 resolver 抽到新文件：
+   - `src/gp_assistant/runtime/reference_resolver.py`
+5. resolver 必须优先从 `active_run.picks` 解析 symbol/rank，再 fallback 到 `book.board`。
+6. `run_change` 只能依赖 `active_run + previous_run`，不能依赖 `subject_entry`。
+7. `market explain` 不能依赖 `subject_entry`。
+8. `selection_engine/agent.py` 把 explain 分层为：
+   - debug_explain
+   - reason_codes
+   - user_thesis
+9. `book/daybook.py` 不允许再把 `item['explain']` 映射到 `AdvicePick.thesis` 或 `AdvicePick.why_selected`。
+10. `runtime/narrator.py` 新增并正确输出：
+    - message_kind='explain'
+    - message_kind='live_check'
+    - message_kind='run_change'
+11. `memory/service.py` 收紧状态更新规则：
+    - chat 不更新交易状态
+    - run_change 不更新 active_run/focus_subject
+
+二、前端
+1. 改 `frontend/src/shared/contracts.ts`：补齐 canonical message 联合类型。
+2. 改 `frontend/src/features/workspace/components/ChatThread.tsx`：按 message_kind 精确渲染。
+3. 新增必要组件，例如 `RunChangeMessageCard`、`LiveCheckMessageCard`，如果你认为需要。
+4. 改 `RecommendationPickCard.tsx`：不允许渲染 debug explain。
+5. 改 `DecisionSnapshot.tsx`：优先读 latestResponse.right_panel.top3 或 transcript meta.right_panel.top3，不再默认直接用 `book.board`。
+6. 改 `MainConclusionCard.tsx`：取消硬编码市场文案，改成数据驱动。
+7. 改 `useAdvisorWorkspace.ts`：pending assistant meta 要带上 `message/right_panel/planner_trace`。
+
+三、测试
+1. 新增后端测试，至少覆盖：
+   - 你好 -> chat
+   - 今天给我3只 -> recommend
+   - 为什么今天空仓 -> explain(subject=market)
+   - 看002371卖出判断 -> exit
+   - 第二只现在还能买吗 -> live_check
+   - 为什么这次和上次不一样 -> run_change
+2. 新增断言：推荐卡片用户字段中不得出现 `champ=`/`cand=`/`rr=`/`off_mainline_`。
+3. 新增前端测试：pending assistant turn 也能渲染 canonical message。
+
+【重要约束】
+- 不要加 fallback recommend。
+- 不要保留旧 explain 输出链。
+- 不要为了“先跑通”让 `run_change` 继续走 `judge_followup()`。
+- 不要让 `MainConclusionCard` 或右侧快照继续讲另一套结论。
+
+【完成后你必须做】
+1. 给出修改过的文件列表。
+2. 给出每个文件的改动要点。
+3. 运行测试；如果没有现成测试，至少补上最小可运行测试并执行。
+4. 汇报以下 6 条验收是否通过：
+   - explain 不再 500
+   - exit 不再 500
+   - run_change 可用
+   - 推荐卡片不再有 debug 文本
+   - 右侧快照与主消息同源
+   - MainConclusionCard 不再硬编码

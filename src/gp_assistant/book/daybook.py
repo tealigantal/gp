@@ -22,12 +22,16 @@ def _map_pick(rank: int, item: Dict[str, Any]) -> AdvicePick:
     diag = trade_plan.get('diagnostics') or {}
     champion = item.get('champion') or {}
     symbol = str(item.get('symbol') or item.get('code') or '').strip()
+    # Prefer user-visible fields; do not leak debug explain
+    user_thesis = item.get('user_thesis')
+    why_selected_text = item.get('why_selected_text')
+    thesis_fallback = item.get('thesis')
     return AdvicePick(
         symbol=symbol,
         name=item.get('name'),
         rank=rank,
         strategy_id=str(champion.get('strategy') or item.get('strategy') or ''),
-        thesis=str(item.get('thesis') or item.get('explain') or ''),
+        thesis=str(user_thesis or thesis_fallback or ''),
         entry_plan=trade_plan.get('entry') or item.get('entry_plan') or {},
         stop_plan=trade_plan.get('stop') or item.get('stop_plan') or {},
         take_profit_plan=trade_plan.get('take_profit') or item.get('take_profit_plan') or {},
@@ -38,7 +42,7 @@ def _map_pick(rank: int, item: Dict[str, Any]) -> AdvicePick:
             'reward_risk': float(diag.get('reward_risk') or 0.0),
         },
         risk_flags=[str(x) for x in (item.get('risk_flags') or [])],
-        why_selected=str(item.get('explain') or ''),
+        why_selected=str(why_selected_text or ''),
         why_not_others=[str(x) for x in (item.get('why_not') or [])],
         evidence_refs=[symbol],
         style_label=_pick_style(item),

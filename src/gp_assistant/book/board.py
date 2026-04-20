@@ -20,7 +20,9 @@ def _base_entry_summary(pick: AdvicePick, pulse: SymbolPulse | None) -> str:
 def build_board(daybook: DayBook, pulse_map: Dict[str, SymbolPulse]) -> List[BoardEntry]:
     entries: List[BoardEntry] = []
     for idx, pick in enumerate(daybook.picks, start=1):
-        pulse = pulse_map.get(pick.symbol)
+        p0 = pulse_map.get(pick.symbol)
+        # If pulse is marked stale, treat as absent to avoid leaking yesterday's intraday state
+        pulse = None if (p0 is not None and getattr(p0, 'is_stale', False)) else p0
         base = float(pick.scores.get('final') or 0.0)
         pulse_score = float(pulse.pulse_score if pulse else 0.0)
         invalidated = bool(pulse.invalidated) if pulse else False

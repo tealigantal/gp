@@ -6,11 +6,15 @@ from ..contracts.api import ChatRequest, ChatResponse, HealthResponse, SessionRe
 from ..runtime.turn_loop import run_turn_sync
 from ..gateway.queue import session_lane, book_lane
 from ..gateway.sessions import get_session_payload
+from ..memory.session_store import list_sessions
+from ..memory.transcript_store import load_recent
 from ..gateway.events import list_side_results
-from ..book.engine import ensure_book
+from ..book.engine import ensure_book, load_current_book
 from ..book.repo import load_current_book, load_run
 from ..llm.client import LLMClient
 from ..evidence.market_service import current_trading_day
+from ..runtime.freshness_policy import make_refresh_plan, make_dashboard_refresh_plan
+from ..memory.session_store import default_session
 
 router = APIRouter()
 
@@ -34,12 +38,11 @@ def health() -> HealthResponse:
 
 @router.get('/api/book/current', response_model=BookResponse)
 def current_book() -> BookResponse:
+    # Always advance to latest 5m pulse on fetch (cheap, rebuilds daybook only when day changes)
     with book_lane():
-        # Read-first: only rebuild when missing or trading day changes
-        book = load_current_book()
-        td = current_trading_day()
-        if book is None or (getattr(book, 'trading_day', None) != td):
-            book = ensure_book(force_rebuild=False)
+        # dashboard/book endpoint should not rely on empty-message plan; use dashboard plan
+        plan = make_dashboard_refresh_plan()
+        book = ensure_book(plan)
     return BookResponse(book=book.model_dump())
 
 
@@ -57,3 +60,26 @@ def get_session(session_id: str) -> SessionResponse:
 @router.get('/api/side-results')
 def side_results() -> list[dict]:
     return list_side_results()
+
+
+@router.get('/api/sessions')
+def list_session_overviews(limit: int = 20) -> list[dict]:
+    out: list[dict] = []
+    for s in list_sessions(limit=limit):
+        turns = load_recent(s.session_id, limit=4)
+        title = None
+        preview = None
+        for t in reversed(turns):
+            if t.role == 'assistant' and not preview:
+                preview = t.content[:120]
+            if t.role == 'user' and not title:
+                title = t.content[:40]
+        out.append({
+            'session_id': s.session_id,
+            'created_at': s.created_at,
+            'updated_at': s.updated_at,
+            'title': title or '对话',
+            'preview': preview or '',
+            'active_run_id': s.active_run_id,
+        })
+    return out

@@ -687,30 +687,49 @@ class AkShareProvider(MarketDataProvider):
         original = requests.sessions.Session.request
 
         def wrapped(session, method, url, **kwargs):  # noqa: ANN001
-            to = kwargs.get("timeout", None)
-            eff = None
+            # Only enforce for AkShare-related hosts; leave others (e.g., LLM providers) untouched
+            is_ak_host = False
             try:
-                eff = float(to) if to is not None else None
-            except Exception:
-                eff = None
-            # Choose the larger of existing timeout and provider's timeout; enforce a positive floor
-            base = self.timeout_sec if isinstance(self.timeout_sec, (int, float)) else 0
-            if eff is None or eff < base:
-                eff = float(base)
-            if eff is None or eff <= 0:
-                eff = 10.0
-            kwargs["timeout"] = eff
-            try:
-                hdrs = dict(kwargs.get("headers") or {})
-                hdrs.setdefault("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120 Safari/537.36")
                 if isinstance(url, str):
-                    if "eastmoney.com" in url:
-                        hdrs.setdefault("Referer", "https://quote.eastmoney.com/")
-                    elif "sina.com" in url or "sinajs.cn" in url:
-                        hdrs.setdefault("Referer", "https://finance.sina.com.cn/")
-                kwargs["headers"] = hdrs
+                    u = url.lower()
+                    if ("eastmoney.com" in u) or ("sina.com" in u) or ("sinajs.cn" in u):
+                        is_ak_host = True
             except Exception:
-                pass
+                is_ak_host = False
+
+            if is_ak_host:
+                to = kwargs.get("timeout", None)
+                eff = None
+                try:
+                    eff = float(to) if to is not None else None
+                except Exception:
+                    eff = None
+                # Choose the larger of existing timeout and provider's timeout; enforce a positive floor
+                base = self.timeout_sec if isinstance(self.timeout_sec, (int, float)) else 0
+                try:
+                    base = float(base)
+                except Exception:
+                    base = 0.0
+                if eff is None or (isinstance(base, (int, float)) and eff < base):
+                    eff = float(base)
+                if eff is None or eff <= 0:
+                    eff = 10.0  # safe minimum to avoid 0 meaning immediate timeout
+                kwargs["timeout"] = eff
+                try:
+                    hdrs = dict(kwargs.get("headers") or {})
+                    hdrs.setdefault(
+                        "User-Agent",
+                        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120 Safari/537.36",
+                    )
+                    if isinstance(url, str):
+                        if "eastmoney.com" in url:
+                            hdrs.setdefault("Referer", "https://quote.eastmoney.com/")
+                        elif "sina.com" in url or "sinajs.cn" in url:
+                            hdrs.setdefault("Referer", "https://finance.sina.com.cn/")
+                    kwargs["headers"] = hdrs
+                except Exception:
+                    pass
+            # Non-AkShare hosts fall through with original kwargs (no forced timeout)
             return original(session, method, url, **kwargs)
 
         try:

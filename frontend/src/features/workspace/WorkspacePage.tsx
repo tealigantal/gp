@@ -1,19 +1,15 @@
-import { Alert, Card, Layout, Spin, Tabs } from 'antd'
+import { Alert, Card, Layout, Spin } from 'antd'
 import { useAdvisorWorkspace } from './useAdvisorWorkspace'
 import { HeaderBar } from './components/HeaderBar'
 import { ChatThread } from './components/ChatThread'
 import { Composer } from './components/Composer'
-import { BookBoardPanel } from './components/BookBoardPanel'
-import { RunPanel } from './components/RunPanel'
-import { SessionPanel } from './components/SessionPanel'
-import { SideResultsPanel } from './components/SideResultsPanel'
-import { QuickPrompts } from './components/QuickPrompts'
+import { DecisionSnapshot } from './components/DecisionSnapshot'
+import { DebugDrawer } from './components/DebugDrawer'
 
 const { Header, Sider, Content } = Layout
 
 export function WorkspacePage() {
   const workspace = useAdvisorWorkspace()
-
   const prompt = async (message: string) => {
     workspace.setComposerValue(message)
     await workspace.submitMessage(message)
@@ -36,32 +32,30 @@ export function WorkspacePage() {
           onNewSession={workspace.resetSession}
           health={workspace.health}
           bookVersion={workspace.book?.book_version || null}
+          session={workspace.session}
+          book={workspace.book}
+          sessions={workspace.sessions}
         />
       </Header>
-      <Layout className="app-body">
-        <Sider width={320} theme="light" className="left-sider">
-          <div className="panel-scroll">
-            {!workspace.health?.llm_ready ? (
-              <Alert
-                type="error"
-                showIcon
-                message="后端 LLM 不可用"
-                description="前端不会做旧链路兼容或静态兜底；请先让 /api/health 返回 llm_ready=true。"
-                style={{ marginBottom: 12 }}
-              />
-            ) : null}
-            <QuickPrompts book={workspace.book} run={workspace.run} onPrompt={prompt} />
-            <div style={{ height: 12 }} />
-            <SessionPanel session={workspace.session} />
-          </div>
-        </Sider>
+      <Layout className="app-body chat-first">
         <Content className="center-pane">
+          {!workspace.health?.llm_ready ? (
+            <Alert
+              type="error"
+              showIcon
+              message="后端 LLM 不可用"
+              description="请先确保 /api/health 返回 llm_ready=true"
+              style={{ marginBottom: 12 }}
+            />
+          ) : null}
           <Card className="chat-card" bodyStyle={{ display: 'flex', flexDirection: 'column', gap: 16, minHeight: 0 }}>
             <ChatThread
               turns={workspace.turns}
               latestResponse={workspace.latestResponse}
               error={workspace.lastError}
               sending={workspace.isSending}
+              book={workspace.book}
+              onPrompt={prompt}
             />
             <Composer
               value={workspace.composerValue}
@@ -70,30 +64,12 @@ export function WorkspacePage() {
               disabled={workspace.isSending}
               llmReady={workspace.health?.llm_ready}
             />
+            <DebugDrawer session={workspace.session} latestResponse={workspace.latestResponse} />
           </Card>
         </Content>
-        <Sider width={480} theme="light" className="right-sider">
+        <Sider width={360} theme="light" className="right-sider snapshot-sider">
           <div className="panel-scroll">
-            <Tabs
-              defaultActiveKey="board"
-              items={[
-                {
-                  key: 'board',
-                  label: 'Board',
-                  children: <BookBoardPanel book={workspace.book} onPrompt={prompt} />,
-                },
-                {
-                  key: 'run',
-                  label: 'Active Run',
-                  children: <RunPanel run={workspace.run} onPrompt={prompt} />,
-                },
-                {
-                  key: 'signals',
-                  label: 'Side Results',
-                  children: <SideResultsPanel items={workspace.sideResults} />,
-                },
-              ]}
-            />
+            <DecisionSnapshot book={workspace.book} session={workspace.session} latest={workspace.latestResponse} />
           </div>
         </Sider>
       </Layout>

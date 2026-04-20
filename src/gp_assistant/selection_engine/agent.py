@@ -520,7 +520,7 @@ def run(date: Optional[str] = None, topk: int = 3, universe: str = "auto", symbo
                                 "s1_struct": s_s1,
                                 "s1_exec": e_s1,
                                 "ratio": div,
-                                "explain": "execution bands recentered from structural due to stale/out-of-scale",
+                                "debug_explain": "execution bands recentered from structural due to stale/out-of-scale",
                             }
             except Exception:
                 pass
@@ -772,11 +772,11 @@ def run(date: Optional[str] = None, topk: int = 3, universe: str = "auto", symbo
     def _final_score(item: Dict[str, Any]) -> float:
         comp = _score_components(item)
         total = sum(comp.values())
-        # attach breakdown and explain
+        # attach breakdown and explanations (user/debug split)
         try:
             item["score_breakdown"] = dict(comp)
             item["score_breakdown"]["total"] = float(total)
-            # brief explain
+            # brief explanations: split user-facing vs debug
             champ_sc = float((item.get("champion") or {}).get("score") or 0.0)
             state = str(((item.get("trade_plan") or {}).get("diagnostics") or {}).get("execution_state") or "")
             # thematic and candidate parts in explain; plus reason text
@@ -788,7 +788,35 @@ def run(date: Optional[str] = None, topk: int = 3, universe: str = "auto", symbo
                 reason_parts.append("within_mainline")
             else:
                 reason_parts.append("off_mainline_downrank")
-            item["explain"] = f"champ={champ_sc:.2f}, cand={cand_base:.2f}, th={th:.2f}/ml={ml:.2f}, state={state}, rr={((item.get('trade_plan') or {}).get('diagnostics') or {}).get('reward_risk')}; {' '.join(reason_parts)}"
+            # Debug-only string
+            item["debug_explain"] = (
+                f"champ={champ_sc:.2f}, cand={cand_base:.2f}, th={th:.2f}/ml={ml:.2f}, "
+                f"state={state}, rr={((item.get('trade_plan') or {}).get('diagnostics') or {}).get('reward_risk')}; "
+                + " ".join(reason_parts)
+            )
+            # Structured reason codes
+            rc: List[str] = [*reason_parts]
+            try:
+                rr = ((item.get('trade_plan') or {}).get('diagnostics') or {}).get('reward_risk')
+                if rr is not None:
+                    rc.append('rr_known')
+                rc.append(f"state={state}")
+            except Exception:
+                pass
+            item["reason_codes"] = rc
+            # User-facing thesis in Chinese (generic)
+            if state == 'actionable':
+                user_msg = "接近计划买点，执行条件较充分，留意盘中确认。"
+            elif state in {'waiting_pullback', 'observe_only'}:
+                user_msg = "结构候选靠前，但当前执行条件一般，建议观察等待更优位置。"
+            elif state in {'below_support', 'breakdown_risk'}:
+                user_msg = "状态偏弱或跌破支撑，建议谨慎，等待重回计划区间。"
+            else:
+                user_msg = "候选结构较优，具体执行以盘中信号为准。"
+            if 'off_mainline_downrank' in reason_parts:
+                user_msg += " 主线覆盖不足，排序有下调。"
+            item["user_thesis"] = user_msg
+            item["why_selected_text"] = "相对同组候选综合条件更优。"
         except Exception:
             pass
         return float(total)
@@ -885,7 +913,8 @@ def run(date: Optional[str] = None, topk: int = 3, universe: str = "auto", symbo
         pass
     # Stage-specific degrade reasons for thematic/mainline
     if restrict_mainline and (not restrict_effective):
-        degrade_record(dbg, "MAINLINE_UNAVAILABLE", {"errors": mainline_errors, "restrict_to_mainline": True})
+        # Mainline unavailable shouldn't block tradeability; record as warning only
+        degrade_record(dbg, "MAINLINE_UNAVAILABLE", {"errors": mainline_errors, "restrict_to_mainline": True}, severity="warn")
     # Only claim filtered-all if there were candidates before thematic and restriction was effectively applied
     if restrict_effective and int(pool_before_thematic) > 0 and len(pool) == 0:
         degrade_record(dbg, "MAINLINE_FILTERED_ALL", {})

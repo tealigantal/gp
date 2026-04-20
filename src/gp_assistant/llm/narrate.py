@@ -25,6 +25,7 @@ def render_reply(payload: Dict[str, Any]) -> str:
         raise APIError(status_code=503, message='LLM unavailable for narration', detail={'reason': reason})
     messages = [
         {'role': 'system', 'content': SYSTEM},
+        {'role': 'system', 'content': "当 payload.judgment.kind == 'chat' 时：不要输出任何交易结论/推荐/卖出判断，仅做轻量引导与礼貌回应。"},
         {'role': 'user', 'content': json.dumps(payload, ensure_ascii=False)},
     ]
     raw = client.chat(messages)

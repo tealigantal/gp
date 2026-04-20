@@ -7,6 +7,10 @@ import pandas as pd
 from ..contracts.objects import MarketBook, SymbolPulse, AdvicePick
 from ..evidence.market_service import fetch_minute_bars_5m
 from ..runtime.utils import now_iso
+from ..core.logging import logger
+from ..core.config import load_config
+import zoneinfo
+from datetime import datetime
 
 
 def _extract_price(levels: dict, keys: list[str]) -> float | None:
@@ -62,14 +66,82 @@ def _pulse_from_df(symbol: str, pick: AdvicePick | None, df: pd.DataFrame) -> Sy
         evidence_refs=[symbol],
     )
 
+def apply_pulse(
+    book: MarketBook,
+    symbols: Iterable[str],
+    *,
+    target_trade_day: str | None,
+    target_slot_at: str | None,
+) -> MarketBook:
+    """Refresh pulse for a minimal symbol set.
 
-def apply_pulse(book: MarketBook, symbols: Iterable[str]) -> MarketBook:
-    bars = fetch_minute_bars_5m(symbols, book.trading_day)
+    - Only fetch bars for target_trade_day.
+    - If target_slot_at is not None, clamp bars to that slot.
+    - If trade_day mismatches existing pulses, mark them stale.
+    - If no closed bar yet, do not carry over yesterday's pulse.
+    """
+    try:
+        tz = zoneinfo.ZoneInfo(load_config().timezone)
+    except Exception:
+        tz = None
+    now = datetime.now(tz=tz) if tz else datetime.now()
+
+    # Handle no-closed-bar: clear intraday last_closed_5m and avoid reusing yesterday
+    if not target_trade_day or not target_slot_at:
+        for s in symbols:
+            state = book.symbol_states.get(s)
+            if state is not None:
+                state.is_stale = True
+                state.stale_reason = 'no_closed_bar_yet'
+                # Neutralize yesterday's execution hints
+                state.execution_state = 'observe'
+                state.invalidated = False
+                state.entry_distance_pct = None
+        book.last_closed_5m = None
+        book.updated_at = now_iso()
+        logger.info("[5m-pulse] skip update due to no_closed_bar target; symbols=%d", len(list(symbols)))
+        return book
+
+    bars = fetch_minute_bars_5m(symbols, target_trade_day)
     pick_map = {p.symbol: p for p in book.daybook.picks}
+    updated = 0
     for symbol, df in bars.items():
         if df is None or df.empty:
             continue
-        book.symbol_states[symbol] = _pulse_from_df(symbol, pick_map.get(symbol), df)
-        book.last_closed_5m = book.symbol_states[symbol].last_bar_at or book.last_closed_5m
+        try:
+            # clamp to target_slot_at
+            df2 = df.copy()
+            df2['trade_time'] = pd.to_datetime(df2['trade_time'])
+            cutoff = pd.to_datetime(target_slot_at)
+            df2 = df2[df2['trade_time'] <= cutoff]
+        except Exception:
+            df2 = df
+        if df2 is None or df2.empty:
+            continue
+        pulse = _pulse_from_df(symbol, pick_map.get(symbol), df2)
+        pulse.trade_day = target_trade_day
+        pulse.slot_at = target_slot_at
+        book.symbol_states[symbol] = pulse
+        book.last_closed_5m = pulse.last_bar_at or book.last_closed_5m
+        updated += 1
+
+    # mark cross-day stale for any symbol not refreshed but present with old trade_day
+    for sym, state in list(book.symbol_states.items()):
+        if sym not in bars and isinstance(state, SymbolPulse):
+            if state.trade_day and state.trade_day != target_trade_day:
+                state.is_stale = True
+                state.stale_reason = 'cross_day'
+                # Neutralize legacy execution hints from previous day
+                state.execution_state = 'observe'
+                state.invalidated = False
+                state.entry_distance_pct = None
+
     book.updated_at = now_iso()
+    logger.info(
+        "[5m-pulse] day=%s scope=%d updated=%d last_closed_5m=%s",
+        target_trade_day,
+        len(list(symbols)),
+        updated,
+        book.last_closed_5m,
+    )
     return book

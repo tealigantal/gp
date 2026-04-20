@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { ChatResponse, TranscriptEvent } from '../../shared/contracts'
-import { getCurrentBook, getHealth, getRun, getSession, getSideResults, postChat, readApiError } from '../../shared/api'
+import { getCurrentBook, getHealth, getSession, getSessions, postChat, readApiError } from '../../shared/api'
 import { loadSessionId, newSessionId, saveSessionId } from '../../shared/session'
 
 interface PendingTurn {
@@ -35,19 +35,10 @@ export function useAdvisorWorkspace() {
     refetchInterval: 10000,
   })
 
-  const runId = sessionQuery.data?.session.active_run_id || latestResponse?.run_id || null
-
-  const runQuery = useQuery({
-    queryKey: ['run', runId],
-    queryFn: () => getRun(String(runId)),
-    enabled: !!runId,
-    refetchInterval: 10000,
-  })
-
-  const sideResultsQuery = useQuery({
-    queryKey: ['side-results'],
-    queryFn: getSideResults,
-    refetchInterval: 15000,
+  const sessionsListQuery = useQuery({
+    queryKey: ['sessions', 20],
+    queryFn: () => getSessions(20),
+    refetchInterval: 20000,
   })
 
   const sendMessageMutation = useMutation({
@@ -63,11 +54,8 @@ export function useAdvisorWorkspace() {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['session', sessionId] }),
         queryClient.invalidateQueries({ queryKey: ['book', 'current'] }),
-        queryClient.invalidateQueries({ queryKey: ['side-results'] }),
+        queryClient.invalidateQueries({ queryKey: ['sessions', 20] }),
       ])
-      if (data.run_id) {
-        await queryClient.invalidateQueries({ queryKey: ['run', data.run_id] })
-      }
     },
     onError: (error) => {
       setLastError(readApiError(error))
@@ -107,6 +95,9 @@ export function useAdvisorWorkspace() {
         meta: {
           run_id: pendingTurn.assistant.run_id,
           symbols: pendingTurn.assistant.symbols,
+          message: pendingTurn.assistant.message,
+          right_panel: pendingTurn.assistant.right_panel,
+          planner_trace: pendingTurn.assistant.planner_trace,
         },
       })
     }
@@ -145,9 +136,8 @@ export function useAdvisorWorkspace() {
     health: healthQuery.data,
     book: bookQuery.data?.book,
     session: sessionQuery.data,
-    run: runQuery.data?.run,
-    sideResults: sideResultsQuery.data || [],
+    sessions: sessionsListQuery.data || [],
     isInitialLoading:
-      healthQuery.isLoading || bookQuery.isLoading || sessionQuery.isLoading || (Boolean(runId) && runQuery.isLoading),
+      healthQuery.isLoading || bookQuery.isLoading || sessionQuery.isLoading,
   }
 }

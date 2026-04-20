@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, Field, ConfigDict
+from .intents import RequestType, SubjectType, FreshnessType
 
 
 class GPModel(BaseModel):
@@ -42,14 +43,21 @@ class SessionState(GPModel):
     last_seen_book_version: Optional[str] = None
     last_turn_id: Optional[str] = None
     last_claim_ids: List[str] = Field(default_factory=list)
+    # Freshness metadata for validating active_run reuse
+    active_run_daybook_effective_day: Optional[str] = None
+    active_run_pulse_trade_day: Optional[str] = None
+    active_run_pulse_slot_at: Optional[str] = None
+    # Focus recap for rank-based reference resolution
+    last_focus_rank: Optional[int] = None
+    last_focus_symbol: Optional[str] = None
 
 
 class TurnFrame(GPModel):
     frame_id: str
     raw_message: str
-    subject: str
-    request: str
-    freshness: str
+    subject: SubjectType
+    request: RequestType
+    freshness: FreshnessType
     references: Dict[str, Any] = Field(default_factory=dict)
     constraints: Dict[str, Any] = Field(default_factory=dict)
     ambiguity: Dict[str, Any] = Field(default_factory=dict)
@@ -96,6 +104,11 @@ class SymbolPulse(GPModel):
     entry_distance_pct: Optional[float] = None
     flags: List[str] = Field(default_factory=list)
     evidence_refs: List[str] = Field(default_factory=list)
+    # Freshness/canonical tracking for 5m
+    trade_day: Optional[str] = None
+    slot_at: Optional[str] = None
+    is_stale: bool = False
+    stale_reason: Optional[str] = None
 
 
 class BoardEntry(GPModel):
@@ -136,6 +149,13 @@ class MarketBook(GPModel):
     portfolio_snapshot: Dict[str, Any] = Field(default_factory=dict)
     last_closed_5m: Optional[str] = None
     side_results: List[SideResult] = Field(default_factory=list)
+    # Freshness metadata snapshot for the book
+    daybook_effective_day: Optional[str] = None
+    pulse_trade_day: Optional[str] = None
+    pulse_slot_at: Optional[str] = None
+    market_phase: Optional[str] = None
+    data_status: Optional[str] = None
+    calendar_source: Optional[str] = None
 
 
 class AdviceRun(GPModel):
@@ -149,6 +169,12 @@ class AdviceRun(GPModel):
     reason: Optional[str] = None
     picks: List[BoardEntry] = Field(default_factory=list)
     evidence_refs: List[str] = Field(default_factory=list)
+    # Freshness metadata for provenance
+    daybook_effective_day: Optional[str] = None
+    pulse_trade_day: Optional[str] = None
+    pulse_slot_at: Optional[str] = None
+    market_phase: Optional[str] = None
+    data_status: Optional[str] = None
 
 
 class EvidencePack(GPModel):
@@ -175,14 +201,17 @@ class Judgment(GPModel):
     claims: List[Claim] = Field(default_factory=list)
     side_results: List[SideResult] = Field(default_factory=list)
     evidence_refs: List[str] = Field(default_factory=list)
+    diff: Dict[str, Any] = Field(default_factory=dict)
 
 
 class ReplyBundle(GPModel):
     session_id: str
     text: str
+    kind: str | None = None
     run_id: Optional[str] = None
     symbols: List[str] = Field(default_factory=list)
     right_panel: Dict[str, Any] = Field(default_factory=dict)
     ui_items: List[Dict[str, Any]] = Field(default_factory=list)
+    message: Dict[str, Any] = Field(default_factory=dict)
     evidence_refs: List[str] = Field(default_factory=list)
     planner_trace: Dict[str, Any] = Field(default_factory=dict)

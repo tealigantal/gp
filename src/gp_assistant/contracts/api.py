@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, Field
 
 
 class ChatRequest(BaseModel):
@@ -10,9 +10,9 @@ class ChatRequest(BaseModel):
 
 
 class ChatResponse(BaseModel):
-    model_config = ConfigDict(extra="allow")
     session_id: str
     reply: str
+    message: Dict[str, Any] = Field(default_factory=dict)
     run_id: Optional[str] = None
     symbols: List[str] = Field(default_factory=list)
     right_panel: Dict[str, Any] = Field(default_factory=dict)

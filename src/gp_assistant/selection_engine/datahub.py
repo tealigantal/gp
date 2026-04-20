@@ -11,7 +11,7 @@ from datetime import datetime, timezone, timedelta, time as _time
 import pandas as pd
 
 from ..core.paths import store_dir
-from ..selection_engine.calendar import nearest_trading_day, is_trading_day
+# unified calendar/clock provided via runtime.market_clock
 from ..core.config import load_config
 try:
     # Optional calendar loader (uses data/raw/trade_calendar.parquet if available)
@@ -160,50 +160,31 @@ class MarketDataHub:
                 last_item_time = meta_q.get("last_item_time")
                 # Resolve target trading day (on/before as_of; else today in configured TZ)
                 def _resolve_target(as_of_str: Optional[str]) -> pd.Timestamp:
-                    """Resolve the effective target trading day.
+                    """Resolve the effective target trading day using unified market clock.
 
-                    - If as_of provided: use that date (normalized), then snap to last open day on/before it.
-                    - If as_of None: use now in configured tz, but only switch to "today" after 15:05 local time;
-                      otherwise use previous open day. This avoids premature midday refreshes.
+                    - If as_of provided: snap to last open day on/before as_of.
+                    - If as_of None: use compute_market_state().target_daybook_effective_day.
                     """
                     try:
-                        tz = getattr(cfg, "timezone", "Asia/Shanghai")
                         if as_of_str is not None:
                             base = pd.to_datetime(as_of_str).normalize()
+                            cal = _load_trade_calendar() if _load_trade_calendar else None
+                            if isinstance(cal, pd.DataFrame) and not cal.empty and {"cal_date", "is_open"} <= set(cal.columns):
+                                ymd = base.strftime("%Y%m%d")
+                                sub = cal[(cal["cal_date"] <= ymd) & (cal["is_open"] == 1)]
+                                if not sub.empty:
+                                    return pd.to_datetime(str(sub.iloc[-1]["cal_date"]).strip()).normalize()
+                            # Fallback weekday-only
+                            d = base
+                            while d.weekday() >= 5:
+                                d = d - pd.Timedelta(days=1)
+                            return d.normalize()
                         else:
-                            now_local = pd.Timestamp.now(tz=tz)
-                            # After close (15:05) -> today; else previous day
-                            if now_local.time() >= _time(15, 5):
-                                base = now_local.normalize()
-                            else:
-                                base = (now_local - pd.Timedelta(days=1)).normalize()
+                            from ..runtime.market_clock import compute_market_state  # lazy import to avoid cycles
+                            ms = compute_market_state()
+                            return pd.to_datetime(ms.target_daybook_effective_day).normalize()
                     except Exception:
-                        base = (pd.to_datetime(as_of_str).normalize() if as_of_str is not None else pd.Timestamp.now().normalize())
-                    # Try precise calendar if available
-                    cal = None
-                    try:
-                        cal = _load_trade_calendar() if _load_trade_calendar else None
-                    except Exception:
-                        cal = None
-                    if isinstance(cal, pd.DataFrame) and not cal.empty and {"cal_date", "is_open"} <= set(cal.columns):
-                        ymd = base.strftime("%Y%m%d")
-                        sub = cal[(cal["cal_date"] <= ymd) & (cal["is_open"] == 1)]
-                        if not sub.empty:
-                            target_str = str(sub.iloc[-1]["cal_date"])  # last open day on/before base
-                            try:
-                                return pd.to_datetime(target_str).normalize()
-                            except Exception:
-                                pass
-                    # Fallback: weekday-based
-                    try:
-                        from ..selection_engine.calendar import nearest_trading_day as _nearest  # type: ignore
-                        return _nearest(base).normalize()
-                    except Exception:
-                        # minimal: if weekend, step back to Friday; else use base
-                        d = base
-                        while d.weekday() >= 5:
-                            d = d - pd.Timedelta(days=1)
-                        return d.normalize()
+                        return (pd.to_datetime(as_of_str).normalize() if as_of_str is not None else pd.Timestamp.now().normalize())
 
                 target = _resolve_target(as_of)
                 if last_item_time is None:
@@ -352,39 +333,28 @@ class MarketDataHub:
             return {}
         provider = get_provider()
         cfg = load_config()
-        # Resolve target trading day with after-close gating (15:05 local)
+        # Resolve target trading day using unified market clock
         def _resolve_target(as_of_str: Optional[str]) -> pd.Timestamp:
             try:
-                tz = getattr(cfg, "timezone", "Asia/Shanghai")
                 if as_of_str is not None:
                     base = pd.to_datetime(as_of_str).normalize()
+                    cal = _load_trade_calendar() if _load_trade_calendar else None
+                    if isinstance(cal, pd.DataFrame) and not cal.empty and {"cal_date", "is_open"} <= set(cal.columns):
+                        ymd = base.strftime("%Y%m%d")
+                        sub = cal[(cal["cal_date"] <= ymd) & (cal["is_open"] == 1)]
+                        if not sub.empty:
+                            return pd.to_datetime(str(sub.iloc[-1]["cal_date"]))
+                    # fallback weekend-step back
+                    d = base
+                    while d.weekday() >= 5:
+                        d = d - pd.Timedelta(days=1)
+                    return d
                 else:
-                    now_local = pd.Timestamp.now(tz=tz)
-                    if now_local.time() >= _time(15, 5):
-                        base = now_local.normalize()
-                    else:
-                        base = (now_local - pd.Timedelta(days=1)).normalize()
+                    from ..runtime.market_clock import compute_market_state  # lazy import
+                    ms = compute_market_state()
+                    return pd.to_datetime(ms.target_daybook_effective_day)
             except Exception:
-                base = (pd.to_datetime(as_of_str).normalize() if as_of_str is not None else pd.Timestamp.now().normalize())
-            # Try trade calendar when available
-            cal = None
-            try:
-                cal = _load_trade_calendar() if _load_trade_calendar else None
-            except Exception:
-                cal = None
-            if isinstance(cal, pd.DataFrame) and not cal.empty and {"cal_date", "is_open"} <= set(cal.columns):
-                ymd = base.strftime("%Y%m%d")
-                sub = cal[(cal["cal_date"] <= ymd) & (cal["is_open"] == 1)]
-                if not sub.empty:
-                    try:
-                        return pd.to_datetime(str(sub.iloc[-1]["cal_date"]))
-                    except Exception:
-                        pass
-            # Fallback: weekend step-back only
-            d = base
-            while d.weekday() >= 5:
-                d = d - pd.Timedelta(days=1)
-            return d
+                return (pd.to_datetime(as_of_str).normalize() if as_of_str is not None else pd.Timestamp.now().normalize())
 
         target = _resolve_target(as_of).normalize()
         # compute minimal start across symbols

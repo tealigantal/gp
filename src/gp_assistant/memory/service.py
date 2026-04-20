@@ -25,20 +25,59 @@ def commit_turn(session_id: str, user_message: str, reply: ReplyBundle, judgment
     session = load_session(session_id)
     turn_id = gen_id('turn')
     seq = next_seq(session_id)
-    append_event(TranscriptEvent(seq=seq, turn_id=turn_id, session_id=session_id, role='user', content=user_message, created_at=now_iso(), meta={}))
-    append_event(TranscriptEvent(seq=seq + 1, turn_id=turn_id, session_id=session_id, role='assistant', content=reply.text, created_at=now_iso(), meta={'run_id': reply.run_id, 'symbols': reply.symbols}))
+    append_event(TranscriptEvent(
+        seq=seq,
+        turn_id=turn_id,
+        session_id=session_id,
+        role='user',
+        content=user_message,
+        created_at=now_iso(),
+        meta={},
+    ))
+    append_event(TranscriptEvent(
+        seq=seq + 1,
+        turn_id=turn_id,
+        session_id=session_id,
+        role='assistant',
+        content=reply.text,
+        created_at=now_iso(),
+        meta={
+            'kind': reply.kind,
+            'run_id': reply.run_id,
+            'symbols': reply.symbols,
+            'ui_items': reply.ui_items,
+            'message': reply.message,
+            'narrative_text': reply.text,
+            'right_panel': reply.right_panel,
+            'planner_trace': reply.planner_trace,
+        },
+    ))
     claims = [c.model_copy(update={'turn_id': turn_id, 'session_id': session_id}) for c in judgment.claims]
     save_claims(claims)
     session.last_turn_id = turn_id
-    if judgment.run is not None:
-        session.previous_run_id = session.active_run_id
-        session.active_run_id = judgment.run.run_id
-        session.last_seen_book_version = judgment.run.book_version
-        session.focus_subject = {'type': 'run', 'run_id': judgment.run.run_id}
-    elif judgment.subject_entry is not None:
-        session.focus_subject = {'type': 'symbol', 'symbol': judgment.subject_entry.symbol}
-    if reply.symbols:
-        session.compare_set = list(reply.symbols[:3])
+    k = (judgment.kind or '').lower()
+    if k != 'chat':
+        if judgment.run is not None:
+            session.previous_run_id = session.active_run_id
+            session.active_run_id = judgment.run.run_id
+            session.last_seen_book_version = judgment.run.book_version
+            session.focus_subject = {'type': 'run', 'run_id': judgment.run.run_id}
+            # snapshot run freshness metadata for reuse validation
+            try:
+                session.active_run_daybook_effective_day = judgment.run.daybook_effective_day
+                session.active_run_pulse_trade_day = judgment.run.pulse_trade_day
+                session.active_run_pulse_slot_at = judgment.run.pulse_slot_at
+            except Exception:
+                pass
+        elif judgment.subject_entry is not None and k != 'run_change':
+            session.focus_subject = {'type': 'symbol', 'symbol': judgment.subject_entry.symbol}
+            session.last_focus_symbol = judgment.subject_entry.symbol
+            try:
+                session.last_focus_rank = int(judgment.subject_entry.rank)
+            except Exception:
+                pass
+        if reply.symbols and k == 'compare':
+            session.compare_set = list(reply.symbols[:3])
     session.last_claim_ids = [c.claim_id for c in claims][-20:]
     save_preferences(session_id, session.user_preferences)
     save_session(session)

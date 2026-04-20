@@ -32,24 +32,49 @@ def _with_requests_timeout(fn):  # noqa: ANN001
         timeout_sec = int(getattr(cfg, "request_timeout_sec", 20))
     except Exception:
         timeout_sec = 20
+    # Enforce a safe floor so 0/negative doesn't mean instant timeout
+    try:
+        base_timeout = float(timeout_sec)
+    except Exception:
+        base_timeout = 20.0
+    if base_timeout <= 0:
+        base_timeout = 10.0
+
     import requests  # type: ignore
     original = requests.sessions.Session.request
 
     def wrapped(session, method, url, **kwargs):  # noqa: ANN001
-        to = kwargs.get("timeout", None)
-        if to is None or (isinstance(to, (int, float)) and to < timeout_sec):
-            kwargs["timeout"] = timeout_sec
+        is_ak_host = False
         try:
-            hdrs = dict(kwargs.get("headers") or {})
-            hdrs.setdefault("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120 Safari/537.36")
             if isinstance(url, str):
-                if "eastmoney.com" in url:
-                    hdrs.setdefault("Referer", "https://quote.eastmoney.com/")
-                elif "sina.com" in url or "sinajs.cn" in url:
-                    hdrs.setdefault("Referer", "https://finance.sina.com.cn/")
-            kwargs["headers"] = hdrs
+                u = url.lower()
+                if ("eastmoney.com" in u) or ("sina.com" in u) or ("sinajs.cn" in u):
+                    is_ak_host = True
         except Exception:
-            pass
+            is_ak_host = False
+
+        if is_ak_host:
+            to = kwargs.get("timeout", None)
+            try:
+                to_val = float(to) if to is not None else None
+            except Exception:
+                to_val = None
+            if to_val is None or to_val < base_timeout:
+                kwargs["timeout"] = base_timeout
+            try:
+                hdrs = dict(kwargs.get("headers") or {})
+                hdrs.setdefault(
+                    "User-Agent",
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120 Safari/537.36",
+                )
+                if isinstance(url, str):
+                    if "eastmoney.com" in url:
+                        hdrs.setdefault("Referer", "https://quote.eastmoney.com/")
+                    elif "sina.com" in url or "sinajs.cn" in url:
+                        hdrs.setdefault("Referer", "https://finance.sina.com.cn/")
+                kwargs["headers"] = hdrs
+            except Exception:
+                pass
         return original(session, method, url, **kwargs)
 
     try:
