@@ -6,45 +6,48 @@ interface SessionSwitcherProps {
   currentId: string
   onSelect: (id: string) => void
   onNew: () => void
+  loading?: boolean
 }
 
-export function SessionSwitcher({ sessions, currentId, onSelect, onNew }: SessionSwitcherProps) {
-  const items = sessions.map((s) => ({
-    key: s.session_id,
+export function SessionSwitcher({ sessions, currentId, onSelect, onNew, loading }: SessionSwitcherProps) {
+  const items = sessions.map((session) => ({
+    key: session.session_id,
     label: (
       <div style={{ display: 'flex', flexDirection: 'column', minWidth: 220 }}>
         <Typography.Text strong>
-          {new Date(s.updated_at).toLocaleDateString('zh-CN', { month: '2-digit', day: '2-digit' })}
-          {' '}
-          {new Date(s.updated_at).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}
+          {new Date(session.updated_at).toLocaleDateString('zh-CN', { month: '2-digit', day: '2-digit' })}{' '}
+          {new Date(session.updated_at).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}
         </Typography.Text>
         <Typography.Text type="secondary" ellipsis>
-          {s.title || '会话'} · {s.preview || ''}
+          {session.title || '未命名会话'} · {session.preview || ''}
         </Typography.Text>
       </div>
     ),
   }))
 
-  const current = sessions.find((s) => s.session_id === currentId)
+  const current = sessions.find((session) => session.session_id === currentId)
   const currentLabel = current
     ? `${new Date(current.updated_at).toLocaleDateString('zh-CN', { month: '2-digit', day: '2-digit' })} ${new Date(current.updated_at).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}`
-    : '新会话'
+    : 'Current session'
 
   return (
-    <Space>
+    <Space wrap>
       <Dropdown
         menu={{
           items,
           onClick: (info) => onSelect(info.key),
         }}
         placement="bottomRight"
+        trigger={['click']}
+        disabled={!items.length}
       >
-        <Button>{currentLabel}</Button>
+        <Button aria-label="Switch sessions" loading={loading}>
+          {currentLabel}
+        </Button>
       </Dropdown>
-      <Button type="primary" onClick={onNew}>
-        新会话
+      <Button type="primary" onClick={onNew} aria-label="Start a new session">
+        新建会话
       </Button>
     </Space>
   )
 }
-

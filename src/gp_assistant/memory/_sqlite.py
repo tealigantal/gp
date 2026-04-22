@@ -57,6 +57,30 @@ def ensure_schema() -> None:
         conn.close()
 
 
+def gateway_stats() -> dict[str, int | str | None]:
+    ensure_schema()
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    try:
+        row = conn.execute(
+            """
+            SELECT
+                (SELECT COUNT(*) FROM sessions) AS session_count,
+                (SELECT COUNT(*) FROM transcript) AS transcript_count,
+                (SELECT COUNT(*) FROM claims) AS claim_count,
+                (SELECT MAX(updated_at) FROM sessions) AS latest_session_at
+            """
+        ).fetchone()
+        return {
+            'session_count': int(row['session_count'] or 0),
+            'transcript_count': int(row['transcript_count'] or 0),
+            'claim_count': int(row['claim_count'] or 0),
+            'latest_session_at': row['latest_session_at'],
+        }
+    finally:
+        conn.close()
+
+
 @contextmanager
 def get_conn():
     ensure_schema()

@@ -5,7 +5,7 @@ from pathlib import Path
 from fastapi.testclient import TestClient
 
 from gp_assistant.kernel import facade as k
-from gp_assistant.server.app import app
+from gp_assistant.gateway.app import app
 from gp_assistant.recommend.artifact_store import persist_artifact_v2
 
 
@@ -56,4 +56,3 @@ def test_kernel_facade_unified_run_id():
     assert 'event_stats' in sv and 'walk_forward' in sv and 'strategy_health' in sv
     ls = k.get_live_shadow_latest_summary()
     assert 'available' in ls and 'dates' in ls
-

@@ -5,42 +5,49 @@ interface MainConclusionCardProps {
   book?: MarketBook
 }
 
+function fmtDateTime(value?: string | null) {
+  if (!value) return '暂无'
+  const dt = new Date(value)
+  if (Number.isNaN(dt.getTime())) return value
+  return dt.toLocaleString('zh-CN', { hour12: false })
+}
+
 export function MainConclusionCard({ book }: MainConclusionCardProps) {
   const tradeable = book?.daybook?.tradeable ?? false
-  const reason = book?.daybook?.reason || ''
-  const last5m = book?.last_closed_5m || null
-  const updated = book?.updated_at || null
+  const reason = book?.daybook?.reason || '基于当前账本状态整理，等待更明确的盘中条件。'
+  const updatedAt = fmtDateTime(book?.updated_at)
+  const last5m = fmtDateTime(book?.last_closed_5m)
+
   return (
-    <Card
-      className="main-conclusion-card"
-      style={{ background: '#0f172a', color: '#e5f2ff', borderRadius: 16 }}
-      bodyStyle={{ display: 'flex', flexDirection: 'column', gap: 10 }}
-      title={
-        <Space size={8}>
-          <Typography.Title level={4} style={{ color: '#e5f2ff', margin: 0 }}>今日主结论</Typography.Title>
-          <Typography.Text style={{ color: '#c7d2fe' }}>{tradeable ? '可以交易（以计划与盘中条件为准）' : '暂不交易，先观察'}</Typography.Text>
-        </Space>
-      }
-      extra={<Tag color={tradeable ? 'green' : 'red'}>{tradeable ? 'ALLOW' : 'DENY'}</Tag>}
-      headStyle={{ background: 'transparent', borderBottom: '1px solid rgba(148,163,184,0.18)' }}
-    >
-      <Space wrap size={14}>
-        <div className="mini-block">
-          <Typography.Text strong style={{ color: '#93c5fd' }}>市场摘要</Typography.Text>
-          <Typography.Paragraph style={{ marginBottom: 0, color: '#e5f2ff' }}>{reason || '依据当前账本生成。'}</Typography.Paragraph>
+    <Card className="main-conclusion-card" styles={{ body: { display: 'flex', flexDirection: 'column', gap: 18 } }}>
+      <div className="main-conclusion-hero">
+        <div>
+          <Typography.Text className="eyebrow">Market Brief</Typography.Text>
+          <Typography.Title level={3} style={{ margin: '6px 0 0' }}>
+            {tradeable ? '当前允许按计划观察与执行' : '当前以观察为主，不建议贸然开仓'}
+          </Typography.Title>
         </div>
+        <Tag color={tradeable ? 'green' : 'orange'}>{tradeable ? '可执行' : '观察'}</Tag>
+      </div>
+
+      <Typography.Paragraph className="hero-copy">{reason}</Typography.Paragraph>
+
+      <Space wrap size={12}>
         <div className="mini-block">
-          <Typography.Text strong style={{ color: '#93c5fd' }}>执行原则</Typography.Text>
-          <Typography.Paragraph style={{ marginBottom: 0, color: '#e5f2ff' }}>{tradeable ? '只在满足计划与风险收益条件下操作，避免追高。' : '保持观察，等待条件满足后再行动。'}</Typography.Paragraph>
-        </div>
-        <div className="mini-block">
-          <Typography.Text strong style={{ color: '#93c5fd' }}>盘中提醒</Typography.Text>
-          <Typography.Paragraph style={{ marginBottom: 0, color: '#e5f2ff' }}>
-            最近 5 分钟：{last5m ? new Date(last5m).toLocaleString('zh-CN', { hour12: false }) : '—'}；账本更新时间：{updated ? new Date(updated).toLocaleString('zh-CN', { hour12: false }) : '—'}
+          <Typography.Text strong>执行原则</Typography.Text>
+          <Typography.Paragraph style={{ marginBottom: 0 }}>
+            先看计划买点、风险收益比和 5 分钟状态，不因排名靠前就提前追单。
           </Typography.Paragraph>
+        </div>
+        <div className="mini-block">
+          <Typography.Text strong>最近 5 分钟</Typography.Text>
+          <Typography.Paragraph style={{ marginBottom: 0 }}>{last5m}</Typography.Paragraph>
+        </div>
+        <div className="mini-block">
+          <Typography.Text strong>账本更新时间</Typography.Text>
+          <Typography.Paragraph style={{ marginBottom: 0 }}>{updatedAt}</Typography.Paragraph>
         </div>
       </Space>
     </Card>
   )
 }
-

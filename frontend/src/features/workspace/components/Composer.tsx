@@ -15,7 +15,7 @@ export function Composer({ value, onChange, onSubmit, disabled, llmReady }: Comp
         <Alert
           type="warning"
           showIcon
-          message="LLM 未就绪，前端不会做兼容降级。请先配置后端 LLM。"
+          message="LLM 当前不可用，请检查后端配置并确认 `/api/health` 返回 `llm_ready=true`。"
           style={{ marginBottom: 12 }}
         />
       ) : null}
@@ -24,7 +24,10 @@ export function Composer({ value, onChange, onSubmit, disabled, llmReady }: Comp
           value={value}
           onChange={(event) => onChange(event.target.value)}
           autoSize={{ minRows: 2, maxRows: 5 }}
-          placeholder="例如：第二只现在还能买吗；600183 的止损止盈怎么看；为什么这次没有上次那只。"
+          placeholder="例如：今天给我 3 只；为什么第一只是它；600519 现在还能买吗；S1-S14 都是什么。"
+          aria-label="Message composer"
+          name="message"
+          autoComplete="off"
           onPressEnter={(event) => {
             if (!event.shiftKey) {
               event.preventDefault()

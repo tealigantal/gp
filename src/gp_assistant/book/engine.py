@@ -34,6 +34,20 @@ def _new_book(daybook: DayBook) -> MarketBook:
         daybook_effective_day=daybook.trading_day,
     )
 
+
+def book_is_fresh_for_plan(book: MarketBook | None, refresh_plan: RefreshPlan) -> bool:
+    """Return whether the current book already matches the requested refresh slot."""
+    if book is None:
+        return False
+    return (
+        book.daybook_effective_day == refresh_plan.target_daybook_effective_day
+        and book.pulse_trade_day == refresh_plan.target_pulse_trade_day
+        and book.pulse_slot_at == refresh_plan.target_pulse_slot_at
+        and book.market_phase == refresh_plan.market_phase
+        and book.data_status == refresh_plan.data_status
+        and getattr(book, 'calendar_source', None) == getattr(refresh_plan, 'calendar_source', None)
+    )
+
 def ensure_book(refresh_plan: RefreshPlan) -> MarketBook:
     """Ensure MarketBook aligns with the provided RefreshPlan.
 

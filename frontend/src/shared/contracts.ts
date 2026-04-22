@@ -31,6 +31,7 @@ export type CanonicalRecommendMessage = {
   picks: CanonicalPick[]
   narrative_text: string
   followup_suggestions?: string[]
+  freshness_meta?: Record<string, unknown>
 }
 
 export type CanonicalFollowupMessage = {
@@ -41,6 +42,7 @@ export type CanonicalFollowupMessage = {
   reason?: string
   symbol?: string | null
   followup_suggestions?: string[]
+  freshness_meta?: Record<string, unknown>
 }
 
 export type CanonicalMessage = CanonicalRecommendMessage | CanonicalFollowupMessage
@@ -63,6 +65,14 @@ export interface HealthResponse {
   trading_day?: string | null
   book_version?: string | null
   llm_ready: boolean
+  storage: HealthStorageStats
+}
+
+export interface HealthStorageStats {
+  session_count: number
+  transcript_count: number
+  claim_count: number
+  latest_session_at?: string | null
 }
 
 export interface SessionState {
@@ -187,6 +197,11 @@ export interface MarketBook {
   symbol_states: Record<string, SymbolPulse>
   portfolio_snapshot: Record<string, unknown>
   last_closed_5m?: string | null
+  daybook_effective_day?: string | null
+  pulse_trade_day?: string | null
+  pulse_slot_at?: string | null
+  market_phase?: string | null
+  data_status?: string | null
   side_results: SideResult[]
 }
 

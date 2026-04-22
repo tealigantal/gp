@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from fastapi.testclient import TestClient
-from gp_assistant.server.app import app
+from gp_assistant.gateway.app import app
 from gp_assistant.core.paths import store_dir
 
 
@@ -42,4 +42,3 @@ def test_pick_detail_returns_item():
     assert isinstance(it, dict)
     assert it.get("symbol") == "CCC000"
     assert "execution_state" in it and "alpha_score" in it
-

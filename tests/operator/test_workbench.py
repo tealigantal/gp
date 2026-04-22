@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from gp_assistant.kernel import facade as k
-from gp_assistant.server.app import app
+from gp_assistant.gateway.app import app
 from fastapi.testclient import TestClient
 from gp_assistant.validation.strategy_health import save_strategy_health
 from gp_assistant.recommend.artifact_store import persist_artifact_v2
@@ -57,4 +57,3 @@ def test_workbench_fallback_and_aggregation():
     snap = k.get_workbench_snapshot(as_of=rid2)
     prev = snap.get('intents_preview') or []
     assert not any(it.get('symbol')=='B' for it in prev)
-

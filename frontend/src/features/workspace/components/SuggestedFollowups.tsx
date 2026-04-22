@@ -1,4 +1,4 @@
-import { Space, Tag } from 'antd'
+import { Button, Space } from 'antd'
 
 interface SuggestedFollowupsProps {
   suggestions?: string[]
@@ -9,10 +9,10 @@ export function SuggestedFollowups({ suggestions = [], onPick }: SuggestedFollow
   if (!suggestions.length) return null
   return (
     <Space size={8} wrap style={{ marginTop: 4 }}>
-      {suggestions.map((t) => (
-        <Tag key={t} style={{ cursor: 'pointer', background: '#f1f5f9' }} onClick={() => onPick(t)}>
-          {t}
-        </Tag>
+      {suggestions.map((text) => (
+        <Button key={text} size="small" className="prompt-chip" onClick={() => onPick(text)}>
+          {text}
+        </Button>
       ))}
     </Space>
   )

@@ -5,5 +5,5 @@ os.environ.setdefault("PYTHONPATH", "src")
 
 
 def test_app_import_ok():
-    import gp_assistant.server.app as app  # noqa: F401
+    import gp_assistant.gateway.app as app  # noqa: F401
 

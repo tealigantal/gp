@@ -5,16 +5,16 @@ from fastapi import APIRouter
 from ..contracts.api import ChatRequest, ChatResponse, HealthResponse, SessionResponse, BookResponse, RunResponse
 from ..runtime.turn_loop import run_turn_sync
 from ..gateway.queue import session_lane, book_lane
-from ..gateway.sessions import get_session_payload
+from ..gateway.sessions import get_session_payload, sanitize_chat_payload
 from ..memory.session_store import list_sessions
 from ..memory.transcript_store import load_recent
 from ..gateway.events import list_side_results
-from ..book.engine import ensure_book, load_current_book
-from ..book.repo import load_current_book, load_run
+from ..book.engine import ensure_book, load_current_book, book_is_fresh_for_plan
+from ..book.repo import load_run
 from ..llm.client import LLMClient
 from ..evidence.market_service import current_trading_day
-from ..runtime.freshness_policy import make_refresh_plan, make_dashboard_refresh_plan
-from ..memory.session_store import default_session
+from ..memory._sqlite import gateway_stats
+from ..runtime.freshness_policy import make_dashboard_refresh_plan
 
 router = APIRouter()
 
@@ -25,7 +25,7 @@ def chat(req: ChatRequest) -> ChatResponse:
     session_id = req.session_id or 'default'
     with session_lane(session_id):
         out = run_turn_sync(session_id=session_id, user_message=req.message)
-    return ChatResponse(**out)
+    return ChatResponse(**sanitize_chat_payload(out))
 
 
 @router.get('/health', response_model=HealthResponse)
@@ -33,16 +33,23 @@ def chat(req: ChatRequest) -> ChatResponse:
 def health() -> HealthResponse:
     book = load_current_book()
     ok, _ = LLMClient().available()
-    return HealthResponse(status='ok', trading_day=current_trading_day(), book_version=(book.book_version if book else None), llm_ready=ok)
+    return HealthResponse(
+        status='ok',
+        trading_day=current_trading_day(),
+        book_version=(book.book_version if book else None),
+        llm_ready=ok,
+        storage=gateway_stats(),
+    )
 
 
 @router.get('/api/book/current', response_model=BookResponse)
 def current_book() -> BookResponse:
     # Always advance to latest 5m pulse on fetch (cheap, rebuilds daybook only when day changes)
     with book_lane():
-        # dashboard/book endpoint should not rely on empty-message plan; use dashboard plan
         plan = make_dashboard_refresh_plan()
-        book = ensure_book(plan)
+        book = load_current_book()
+        if not book_is_fresh_for_plan(book, plan):
+            book = ensure_book(plan)
     return BookResponse(book=book.model_dump())
 
 

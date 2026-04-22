@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from fastapi.testclient import TestClient
-from gp_assistant.server.app import app
+from gp_assistant.gateway.app import app
 from gp_assistant.core.paths import store_dir
 
 
@@ -48,4 +48,3 @@ def test_compare_returns_ranking_and_winner(tmp_path):
     assert data.get("ok") is True
     assert data.get("winner_symbol") in {"AAA000", "BBB000"}
     assert isinstance(data.get("ranking"), list) and len(data.get("ranking")) == 2
-

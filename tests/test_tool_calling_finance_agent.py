@@ -5,7 +5,7 @@ os.environ.setdefault("TZ", "Asia/Shanghai")
 from typing import Any, Dict, List
 from fastapi.testclient import TestClient
 
-from gp_assistant.server.app import app
+from gp_assistant.gateway.app import app
 
 
 client = TestClient(app)
@@ -109,4 +109,3 @@ def test_agent_uses_tool_results_not_free_text_for_finance_followup():
     tools = [str((t or {}).get("tool")) for t in (b.get("tool_results") or [])]
     assert "ensure_recommendation" in tools
     assert "explain_selection_set" in tools or "get_pick_detail" in tools
-

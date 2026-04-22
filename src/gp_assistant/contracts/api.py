@@ -21,11 +21,19 @@ class ChatResponse(BaseModel):
     evidence_refs: List[str] = Field(default_factory=list)
 
 
+class HealthStorageStats(BaseModel):
+    session_count: int = 0
+    transcript_count: int = 0
+    claim_count: int = 0
+    latest_session_at: Optional[str] = None
+
+
 class HealthResponse(BaseModel):
     status: str
     trading_day: Optional[str] = None
     book_version: Optional[str] = None
     llm_ready: bool = False
+    storage: HealthStorageStats = Field(default_factory=HealthStorageStats)
 
 
 class SessionResponse(BaseModel):

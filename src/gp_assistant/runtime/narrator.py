@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Any, Dict, List, Optional
 
 from ..llm.narrate import render_reply
-from ..contracts.objects import ReplyBundle, Judgment, TurnFrame, EvidencePack, BoardEntry
+from ..contracts.objects import ReplyBundle, Judgment, TurnFrame, EvidencePack, BoardEntry, TranscriptEvent
 
 
 def _to_action_and_state(entry: BoardEntry) -> tuple[str, str]:
@@ -197,10 +197,43 @@ def _build_canonical_message(evidence: EvidencePack, judgment: Judgment, narrati
     }
 
 
-def build_reply(session_id: str, frame: TurnFrame, evidence: EvidencePack, judgment: Judgment) -> ReplyBundle:
+def _dialogue_context(turns: List[TranscriptEvent] | None) -> List[Dict[str, Any]]:
+    if not turns:
+        return []
+    out: List[Dict[str, Any]] = []
+    for turn in turns[-6:]:
+        meta = turn.meta or {}
+        message = meta.get("message") if isinstance(meta, dict) else None
+        item: Dict[str, Any] = {
+            "role": turn.role,
+            "content": turn.content,
+        }
+        if isinstance(message, dict):
+            item["message_kind"] = message.get("message_kind")
+            item["symbols"] = message.get("symbols") or meta.get("symbols") or []
+        out.append(item)
+    return out
+
+
+def build_reply(
+    session_id: str,
+    frame: TurnFrame,
+    evidence: EvidencePack,
+    judgment: Judgment,
+    *,
+    recent_turns: List[TranscriptEvent] | None = None,
+) -> ReplyBundle:
     text = render_reply({
         'frame': frame.model_dump(),
         'judgment': judgment.model_dump(),
+        'session_context': {
+            'active_run_id': evidence.session.active_run_id,
+            'previous_run_id': evidence.session.previous_run_id,
+            'focus_subject': evidence.session.focus_subject,
+            'compare_set': evidence.session.compare_set,
+            'last_focus_symbol': evidence.session.last_focus_symbol,
+        },
+        'recent_dialogue': _dialogue_context(recent_turns),
         'evidence_summary': {
             'book_version': evidence.book.book_version,
             'board_symbols': [e.symbol for e in evidence.book.board[:6]],

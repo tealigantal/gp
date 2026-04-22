@@ -111,7 +111,13 @@ def run_turn_sync(session_id: str | None, user_message: str) -> Dict[str, Any]:
     plan = plan_evidence(frame)
     evidence = build_evidence_pack(frame, memory_ctx, book, plan, invalidate_active_run=plan0.invalidate_active_run)
     judgment = make_judgment(session_id=session_id, frame=frame, evidence=evidence)
-    reply = build_reply(session_id=session_id, frame=frame, evidence=evidence, judgment=judgment)
+    reply = build_reply(
+        session_id=session_id,
+        frame=frame,
+        evidence=evidence,
+        judgment=judgment,
+        recent_turns=memory_ctx.get('recent_turns') or [],
+    )
     validate_reply(reply, judgment)
     commit_turn(session_id=session_id, user_message=user_message, reply=reply, judgment=judgment)
     try:
