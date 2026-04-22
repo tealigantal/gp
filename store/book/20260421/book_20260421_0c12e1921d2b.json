@@ -1,7 +1,7 @@
 {
   "trading_day": "20260421",
   "book_version": "book_20260421_0c12e1921d2b",
-  "updated_at": "2026-04-22T05:55:48.227945+00:00",
+  "updated_at": "2026-04-22T06:56:16.473446+00:00",
   "regime": {
     "grade": "C",
     "reasons": [
@@ -1323,7 +1323,7 @@
   "side_results": [],
   "daybook_effective_day": "20260421",
   "pulse_trade_day": "20260422",
-  "pulse_slot_at": "2026-04-22 13:55:00",
+  "pulse_slot_at": "2026-04-22 14:55:00",
   "market_phase": "INTRADAY_PM",
   "data_status": "ok",
   "calendar_source": "weekday"

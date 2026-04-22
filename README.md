@@ -1,46 +1,123 @@
-## gp · 简洁版 AI 选股系统（Chat 入口 + gated V2）
+# GP Assistant
 
-本项目提供一个面向 A 股的简洁 AI 选股系统。以 Chat 为入口，orchestrator 调用推荐引擎，统一至 gated PickArtifactV2，写入会话上下文（run_id/active_symbols）。
+Chat-first A-share research and recommendation service built around a single runtime spine:
 
-### 快速开始（本地）
-- 依赖：Python 3.11+（推荐 3.12），Node.js 18+（前端）
-- 安装后端依赖：
-  1) `python -m venv .venv && ./.venv/Scripts/activate`（Linux/macOS: `source .venv/bin/activate`）
-  2) `pip install -r requirements.txt`
-- 启动后端（FastAPI）：
-  - `python -m uvicorn gp_assistant.server.app:app --host 0.0.0.0 --port 8000`
-  - 健康检查：`curl http://localhost:8000/api/health`
-- 启动前端（可选）：
-  - `cd frontend && npm ci && npm run dev`
-  - 浏览器访问：`http://localhost:5173`（默认进入 `/chat`）
+- `gateway/` exposes the FastAPI API
+- `runtime/` owns the turn loop
+- `memory/` stores session and transcript state
+- `book/` builds the market book and actionable board
+- `judgment/` produces recommendation, follow-up, compare, and exit decisions
+- `selection_engine/` remains the low-level ranking engine
 
-### 使用 Docker（后端 + 前端）
-- 可选创建 `.env`（供 docker compose 使用）。常用：`LLM_API_KEY`、`LLM_BASE_URL`、`GP_CORS_ORIGINS`、`DATA_PROVIDER`（默认 akshare）。
-- 启动服务：
-  - 后端：`docker compose up -d gp`
-  - 前端（可选）：`docker compose up -d web`
-  - 或一次性：`docker compose up -d`
-- 访问与日志：
-  - 后端健康检查：`http://localhost:8000/api/health`
-  - Web 前端：`http://localhost:8080`（默认进入 `/chat`）
-  - 查看日志：`docker compose logs -f gp --tail=200`、`docker compose logs -f web --tail=200`
-- 数据与产出（已挂载到宿主机）：`./data ./results ./universe ./store ./cache ./configs`
+## Current Status
 
-说明：
-- `LLM_BASE_URL` 默认指向 `https://api.deepseek.com/beta`（严格工具）。
-- `LLM_API_KEY` 为上游 DeepSeek/OpenAI 兼容接口的 API Key（直接使用，不再经过本地代理）。
+The repository has been cleaned back to the current service architecture.
 
-### Chat 主链路与关键节点（概览）
-- Chat：`POST /api/chat { session_id?, message }`（支持 follow-up）
-- 推荐卡：`GET /api/recommend_v2/gated?run_id=...`（gated PickArtifactV2）
-- 历史卡：`GET /api/artifacts/recommendations/{artifact_id}`
-- 对比/细节：`POST /api/compare`、`GET /api/pick`
+- legacy `gp_assistant.chat` compatibility code removed
+- legacy `gp_assistant.recommend` compatibility code removed
+- retired test surfaces removed
+- docs reorganized into active docs and archive
 
-### 端到端验收（后端）
-- 最小验证示例：
-  - `pytest -q tests/api/test_recommend_v2_endpoint.py tests/api/test_compare_and_pick_endpoints.py`
+Latest progress is tracked in [docs/PROGRESS.md](./docs/PROGRESS.md).
 
-### 开发与约束
-- 不再引入第 3 个服务；不再维护本地 LLM 代理。
-- 不重复造轮子，不引入复杂外部依赖；严格工具模式保持开启。
+## Quick Start
 
+### Backend
+
+Requirements:
+
+- Python 3.11+
+
+Setup:
+
+```bash
+python -m venv .venv
+.venv\Scripts\activate
+pip install -r requirements.txt
+```
+
+Run the API:
+
+```bash
+set PYTHONPATH=src
+python -m gp_assistant serve --host 127.0.0.1 --port 8000
+```
+
+Health check:
+
+```bash
+curl http://127.0.0.1:8000/api/health
+```
+
+Single-turn local chat:
+
+```bash
+set PYTHONPATH=src
+python -m gp_assistant chat "给我三只当前可看的票"
+```
+
+### Frontend
+
+Requirements:
+
+- Node.js 18+
+
+Run:
+
+```bash
+cd frontend
+npm ci
+npm run dev
+```
+
+Default frontend URL:
+
+- `http://localhost:5173`
+
+## Main Endpoints
+
+- `POST /api/chat`
+- `GET /api/health`
+- `GET /api/book/current`
+- `GET /api/session/{session_id}`
+- `GET /api/sessions`
+- `GET /api/run/{run_id}`
+- `GET /api/side-results`
+
+## Repository Layout
+
+```text
+src/gp_assistant/
+  gateway/          FastAPI entrypoints
+  runtime/          turn loop and freshness handling
+  memory/           session, transcript, claim storage
+  book/             daybook and board construction
+  judgment/         user-facing decision layer
+  evidence/         market / portfolio / validation services
+  selection_engine/ ranking and recommendation internals
+  strategy/         strategy library and scoring logic
+```
+
+## Validation
+
+Useful local checks:
+
+```bash
+python -m compileall src
+python -m pytest -q tests/server/test_app_import.py tests/server/test_chat_endpoint_smoke.py
+python -m pytest -q tests/unit/test_interpret_request_types.py tests/unit/test_judgment_dispatch.py tests/unit/test_dispatch_new_handlers.py tests/unit/test_daybook_mapping.py
+python -m pytest -q tests/test_api_smoke.py
+```
+
+## Docs
+
+- [docs/README.md](./docs/README.md)
+- [docs/PROGRESS.md](./docs/PROGRESS.md)
+- [docs/ops_runbook.md](./docs/ops_runbook.md)
+- [docs/data_freshness_policy.md](./docs/data_freshness_policy.md)
+- [docs/service_contract.md](./docs/service_contract.md)
+
+## Notes
+
+- Runtime-generated files under `store/` are workspace artifacts, not core source files.
+- Some archived docs still contain historical encoding damage; they were kept for traceability, not as current documentation.
