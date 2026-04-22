@@ -21,12 +21,12 @@ def _stub_feat_df():
 
 def test_champion_score_changes_order(monkeypatch):
     # Monkeypatch candidate_gen to provide two candidates with similar base score
-    from src.gp_assistant.recommend import candidate_gen as cg
+    from src.gp_assistant.selection_engine import candidate_gen as cg
 
     def fake_gen(symbols, env_grade, topk=3, snapshot=None):  # noqa: ANN001
         pool = [
-            {"symbol": "600519", "industry": "閻т粙鍘?, "liquidity": {"avg5_amount": 2e9, "grade": "A"}, "chip": {"avg_cost": 10.0, "band_90_low": 9.5, "band_90_high": 10.5}, "indicators": {"slope20": 0.5, "atr_pct": 0.02, "gap_pct": 0.0}},
-            {"symbol": "000001", "industry": "闁炬儼顢?, "liquidity": {"avg5_amount": 2e9, "grade": "A"}, "chip": {"avg_cost": 10.0, "band_90_low": 9.5, "band_90_high": 10.5}, "indicators": {"slope20": 0.5, "atr_pct": 0.02, "gap_pct": 0.0}},
+            {"symbol": "600519", "industry": "闁谎傜矙閸?, "liquidity": {"avg5_amount": 2e9, "grade": "A"}, "chip": {"avg_cost": 10.0, "band_90_low": 9.5, "band_90_high": 10.5}, "indicators": {"slope20": 0.5, "atr_pct": 0.02, "gap_pct": 0.0}},
+            {"symbol": "000001", "industry": "闂佺偓鍎奸、?, "liquidity": {"avg5_amount": 2e9, "grade": "A"}, "chip": {"avg_cost": 10.0, "band_90_low": 9.5, "band_90_high": 10.5}, "indicators": {"slope20": 0.5, "atr_pct": 0.02, "gap_pct": 0.0}},
         ]
         for it in pool:
             it["candidate_score"] = 0.5
@@ -35,7 +35,7 @@ def test_champion_score_changes_order(monkeypatch):
     monkeypatch.setattr(cg, "generate_candidates", fake_gen)
 
     # Monkeypatch datahub + indicators to avoid heavy deps
-    from src.gp_assistant.recommend import datahub as dh
+    from src.gp_assistant.selection_engine import datahub as dh
     monkeypatch.setattr(dh.MarketDataHub, "daily_ohlcv", lambda self, sym, as_of, min_len=250, prefer_cache_only=False: (_stub_feat_df(), {"len": 260}))
 
     from src.gp_assistant.strategy import indicators as indi

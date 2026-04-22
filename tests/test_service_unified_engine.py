@@ -10,7 +10,7 @@ def test_service_preopen_uses_engine(monkeypatch, tmp_path: Path):
     (tmp_path / 'store' / 'recommend').mkdir(parents=True, exist_ok=True)
 
     # Monkeypatch engine.run to deterministic picks
-    from src.gp_assistant.recommend import engine as eng
+    from src.gp_assistant.selection_engine import engine as eng
 
     def fake_engine_run(date=None, topk=3, universe="auto", symbols=None, risk_profile="normal"):  # noqa: ANN001
         return {

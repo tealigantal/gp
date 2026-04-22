@@ -12,12 +12,12 @@ def _stub_feat_df():
 
 def test_restrict_to_mainline_filters_when_true(monkeypatch):
     # produce 2 candidates with industries not in mainline/themes
-    from src.gp_assistant.recommend import candidate_gen as cg
+    from src.gp_assistant.selection_engine import candidate_gen as cg
 
     def fake_gen(symbols, env_grade, topk=3, snapshot=None):  # noqa: ANN001
         pool = [
-            {"symbol": "600519", "industry": "閻т粙鍘?, "liquidity": {"avg5_amount": 2e9, "grade": "A"}, "chip": {"avg_cost": 10.0, "band_90_low": 9.5, "band_90_high": 10.5}, "indicators": {"slope20": 0.2, "atr_pct": 0.02, "gap_pct": 0.0}},
-            {"symbol": "000001", "industry": "闁炬儼顢?, "liquidity": {"avg5_amount": 2e9, "grade": "A"}, "chip": {"avg_cost": 10.0, "band_90_low": 9.5, "band_90_high": 10.5}, "indicators": {"slope20": 0.2, "atr_pct": 0.02, "gap_pct": 0.0}},
+            {"symbol": "600519", "industry": "闁谎傜矙閸?, "liquidity": {"avg5_amount": 2e9, "grade": "A"}, "chip": {"avg_cost": 10.0, "band_90_low": 9.5, "band_90_high": 10.5}, "indicators": {"slope20": 0.2, "atr_pct": 0.02, "gap_pct": 0.0}},
+            {"symbol": "000001", "industry": "闂佺偓鍎奸、?, "liquidity": {"avg5_amount": 2e9, "grade": "A"}, "chip": {"avg_cost": 10.0, "band_90_low": 9.5, "band_90_high": 10.5}, "indicators": {"slope20": 0.2, "atr_pct": 0.02, "gap_pct": 0.0}},
         ]
         for it in pool:
             it["candidate_score"] = 0.3
@@ -26,18 +26,18 @@ def test_restrict_to_mainline_filters_when_true(monkeypatch):
     monkeypatch.setattr(cg, "generate_candidates", fake_gen)
 
     # Stub datahub + indicators
-    from src.gp_assistant.recommend import datahub as dh
+    from src.gp_assistant.selection_engine import datahub as dh
     monkeypatch.setattr(dh.MarketDataHub, "daily_ohlcv", lambda self, sym, as_of, min_len=250, prefer_cache_only=False: (_stub_feat_df(), {"len": 200}))
 
     from src.gp_assistant.strategy import indicators as indi
     monkeypatch.setattr(indi, "compute_indicators", lambda df: df.assign(slope20=0.2, atr_pct=0.02, gap_pct=0.0, ma20=10.0, amount_5d_avg=1e8))
 
     # Stub themes/mainline to unrelated sectors
-    from src.gp_assistant.recommend import theme_pool as tpool
-    monkeypatch.setattr(tpool, "build_themes", lambda hub, snapshot=None: [{"name": "閺傛媽鍏樺┃?, "source": "industry_snapshot"}])
+    from src.gp_assistant.selection_engine import theme_pool as tpool
+    monkeypatch.setattr(tpool, "build_themes", lambda hub, snapshot=None: [{"name": "闁哄倹濯介崗妯衡攦?, "source": "industry_snapshot"}])
 
-    from src.gp_assistant.recommend import mainline as ml
-    monkeypatch.setattr(ml, "build_mainline", lambda indicator="娴犲﹥妫?, topn=2, snapshot=None: {"indicator": indicator, "sectors": [{"name": "閸楀﹤顕辨担?}], "source": "snapshot"})
+    from src.gp_assistant.selection_engine import mainline as ml
+    monkeypatch.setattr(ml, "build_mainline", lambda indicator="濞寸姴锕ュΛ?, topn=2, snapshot=None: {"indicator": indicator, "sectors": [{"name": "闁告锕ら杈ㄦ媴?}], "source": "snapshot"})
 
     # Force restrict true
     monkeypatch.setenv("GP_RESTRICT_MAINLINE", "1")
@@ -54,12 +54,12 @@ def test_restrict_to_mainline_filters_when_true(monkeypatch):
 
 def test_off_mainline_downrank_when_false(monkeypatch):
     # Same stubs, but turn off restriction
-    from src.gp_assistant.recommend import candidate_gen as cg
+    from src.gp_assistant.selection_engine import candidate_gen as cg
 
     def fake_gen(symbols, env_grade, topk=3, snapshot=None):  # noqa: ANN001
         pool = [
-            {"symbol": "600519", "industry": "閻т粙鍘?, "liquidity": {"avg5_amount": 2e9, "grade": "A"}, "chip": {"avg_cost": 10.0, "band_90_low": 9.5, "band_90_high": 10.5}, "indicators": {"slope20": 0.2, "atr_pct": 0.02, "gap_pct": 0.0}},
-            {"symbol": "000001", "industry": "闁炬儼顢?, "liquidity": {"avg5_amount": 2e9, "grade": "A"}, "chip": {"avg_cost": 10.0, "band_90_low": 9.5, "band_90_high": 10.5}, "indicators": {"slope20": 0.2, "atr_pct": 0.02, "gap_pct": 0.0}},
+            {"symbol": "600519", "industry": "闁谎傜矙閸?, "liquidity": {"avg5_amount": 2e9, "grade": "A"}, "chip": {"avg_cost": 10.0, "band_90_low": 9.5, "band_90_high": 10.5}, "indicators": {"slope20": 0.2, "atr_pct": 0.02, "gap_pct": 0.0}},
+            {"symbol": "000001", "industry": "闂佺偓鍎奸、?, "liquidity": {"avg5_amount": 2e9, "grade": "A"}, "chip": {"avg_cost": 10.0, "band_90_low": 9.5, "band_90_high": 10.5}, "indicators": {"slope20": 0.2, "atr_pct": 0.02, "gap_pct": 0.0}},
         ]
         for it in pool:
             it["candidate_score"] = 0.3
@@ -68,17 +68,17 @@ def test_off_mainline_downrank_when_false(monkeypatch):
     monkeypatch.setattr(cg, "generate_candidates", fake_gen)
 
     # Stub datahub + indicators
-    from src.gp_assistant.recommend import datahub as dh
+    from src.gp_assistant.selection_engine import datahub as dh
     monkeypatch.setattr(dh.MarketDataHub, "daily_ohlcv", lambda self, sym, as_of, min_len=250, prefer_cache_only=False: (_stub_feat_df(), {"len": 200}))
 
     from src.gp_assistant.strategy import indicators as indi
     monkeypatch.setattr(indi, "compute_indicators", lambda df: df.assign(slope20=0.2, atr_pct=0.02, gap_pct=0.0, ma20=10.0, amount_5d_avg=1e8))
 
-    from src.gp_assistant.recommend import theme_pool as tpool
-    monkeypatch.setattr(tpool, "build_themes", lambda hub, snapshot=None: [{"name": "閺傛媽鍏樺┃?, "source": "industry_snapshot"}])
+    from src.gp_assistant.selection_engine import theme_pool as tpool
+    monkeypatch.setattr(tpool, "build_themes", lambda hub, snapshot=None: [{"name": "闁哄倹濯介崗妯衡攦?, "source": "industry_snapshot"}])
 
-    from src.gp_assistant.recommend import mainline as ml
-    monkeypatch.setattr(ml, "build_mainline", lambda indicator="娴犲﹥妫?, topn=2, snapshot=None: {"indicator": indicator, "sectors": [{"name": "閸楀﹤顕辨担?}], "source": "snapshot"})
+    from src.gp_assistant.selection_engine import mainline as ml
+    monkeypatch.setattr(ml, "build_mainline", lambda indicator="濞寸姴锕ュΛ?, topn=2, snapshot=None: {"indicator": indicator, "sectors": [{"name": "闁告锕ら杈ㄦ媴?}], "source": "snapshot"})
 
     # Turn off restriction
     monkeypatch.delenv("GP_RESTRICT_MAINLINE", raising=False)

@@ -38,7 +38,7 @@ def test_server_compact_payload_keeps_new_fields(monkeypatch):
         "volume": [1e7] * n,
         "amount": (close.values * 1.0) * 1e7,
     })
-    from src.gp_assistant.recommend import datahub as dh
+    from src.gp_assistant.selection_engine import datahub as dh
     def fake_daily(sym: str, as_of: str | None, min_len: int = 250, prefer_cache_only: bool = False):
         meta = {"len": len(df), "source": "fake", "insufficient_history": False}
         return df.copy(), meta

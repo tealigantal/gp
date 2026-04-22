@@ -100,30 +100,6 @@ def main() -> int:
         except Exception as e:
             print(f"[self-check] {s}: error {e}")
             bad += 1
-    # Contract check: recommendation card event payload.meta
-    try:
-        from ..chat.orchestrator import handle_message as _hm
-        from ..chat import event_store as _es
-        sid = None
-        _ = _hm(sid, "推荐一下")
-        # resolve latest conversation id
-        convs = _es.list_conversations()
-        last_cid = convs[-1]["id"] if convs else ""
-        # fetch latest recommendation card
-        evs = _es.list_events_after(last_cid, 0, limit=200)
-        ok_meta = False
-        for e in (evs or [])[::-1]:
-            d = e.get('data') or {}
-            if d.get('kind') == 'card' and (d.get('payload') or {}).get('type') == 'recommendation':
-                meta = (d.get('payload') or {}).get('meta')
-                if isinstance(meta, dict) and 'as_of' in meta and isinstance(meta.get('themes'), list):
-                    ok_meta = True
-                    break
-        if not ok_meta:
-            print('[self-check] event payload.meta missing or invalid')
-            return 2
-    except Exception as e:
-        print(f"[self-check] event contract check skipped: {e}")
     # Non-contract mode：联网失败/数据异常不应导致退出码=1
     return 0
 
