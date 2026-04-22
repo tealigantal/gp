@@ -3,9 +3,9 @@ from __future__ import annotations
 import types
 import pandas as pd
 import numpy as np
-from gp_assistant.recommend.refresh_service import refresh_symbols_v2
+from gp_assistant.selection_engine.refresh_service import refresh_symbols_v2
 from src.gp_assistant.strategy import library as strat_lib
-from gp_assistant.chat.refresh_service import refresh_symbols as chat_refresh
+from gp_assistant.chat_compat.refresh_service import refresh_symbols as chat_refresh
 
 
 def test_refresh_symbols_v2_and_chat_compat(monkeypatch):

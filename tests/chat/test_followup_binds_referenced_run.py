@@ -4,8 +4,8 @@ import json
 from pathlib import Path
 
 from gp_assistant.core.paths import store_dir
-from gp_assistant.chat import session_store as store
-from gp_assistant.chat.run_service import resolve_referenced_run
+from gp_assistant.chat_compat import session_store as store
+from gp_assistant.chat_compat.run_service import resolve_referenced_run
 
 
 def _write_artifact(run_id: str, trading_date: str) -> None:
@@ -43,4 +43,3 @@ def test_referenced_run_preferred_over_active(tmp_path, monkeypatch):
     store.update_state(sid, {"active_run_id": "run_new"})
     ref2 = resolve_referenced_run(sid)
     assert ref2.get("resolved_run_id") == "run_old"
-

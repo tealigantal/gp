@@ -3,7 +3,7 @@ from __future__ import annotations
 import types
 import pandas as pd
 
-from src.gp_assistant.recommend.agent import run as recommend_run
+from src.gp_assistant.selection_engine.agent import run as recommend_run
 from src.gp_assistant.strategy import library as strat_lib
 
 
@@ -59,4 +59,3 @@ def test_structural_bands_present_with_chip_fallback(monkeypatch):
     assert tp.get("execution_band_source") in {"direct", "chip_fallback"}
     diag = tp.get("diagnostics") or {}
     assert isinstance(diag, dict) and "band_source" in diag
-

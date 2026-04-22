@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from gp_assistant.recommend.calibration import calibrate_item_scores
+from gp_assistant.selection_engine.calibration import calibrate_item_scores
 
 
 def test_calibration_execution_actionable_higher():

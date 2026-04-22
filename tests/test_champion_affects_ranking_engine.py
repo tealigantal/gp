@@ -25,8 +25,8 @@ def test_champion_score_changes_order(monkeypatch):
 
     def fake_gen(symbols, env_grade, topk=3, snapshot=None):  # noqa: ANN001
         pool = [
-            {"symbol": "600519", "industry": "白酒", "liquidity": {"avg5_amount": 2e9, "grade": "A"}, "chip": {"avg_cost": 10.0, "band_90_low": 9.5, "band_90_high": 10.5}, "indicators": {"slope20": 0.5, "atr_pct": 0.02, "gap_pct": 0.0}},
-            {"symbol": "000001", "industry": "银行", "liquidity": {"avg5_amount": 2e9, "grade": "A"}, "chip": {"avg_cost": 10.0, "band_90_low": 9.5, "band_90_high": 10.5}, "indicators": {"slope20": 0.5, "atr_pct": 0.02, "gap_pct": 0.0}},
+            {"symbol": "600519", "industry": "閻т粙鍘?, "liquidity": {"avg5_amount": 2e9, "grade": "A"}, "chip": {"avg_cost": 10.0, "band_90_low": 9.5, "band_90_high": 10.5}, "indicators": {"slope20": 0.5, "atr_pct": 0.02, "gap_pct": 0.0}},
+            {"symbol": "000001", "industry": "闁炬儼顢?, "liquidity": {"avg5_amount": 2e9, "grade": "A"}, "chip": {"avg_cost": 10.0, "band_90_low": 9.5, "band_90_high": 10.5}, "indicators": {"slope20": 0.5, "atr_pct": 0.02, "gap_pct": 0.0}},
         ]
         for it in pool:
             it["candidate_score"] = 0.5
@@ -50,7 +50,7 @@ def test_champion_score_changes_order(monkeypatch):
     monkeypatch.setattr(champ, "choose_champion", fake_choose)
 
     # Run engine
-    from src.gp_assistant.recommend.engine import run as engine_run
+    from src.gp_assistant.selection_engine.engine import run as engine_run
 
     out = engine_run(topk=2)
     picks = out.get("picks") if isinstance(out, dict) else []
@@ -58,4 +58,3 @@ def test_champion_score_changes_order(monkeypatch):
     # 600519 should be first due to higher champion score
     assert str(picks[0].get("symbol")) in {"600519", "sh600519"}
     assert picks[0].get("score_breakdown", {}).get("champion_component", 0.0) >= picks[1].get("score_breakdown", {}).get("champion_component", 0.0)
-

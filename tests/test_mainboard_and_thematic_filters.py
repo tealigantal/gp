@@ -6,8 +6,8 @@ from pathlib import Path
 import pandas as pd
 
 from src.providers.boards import is_mainboard
-from src.gp_assistant.recommend.theme_hints import build_mover_hints
-from src.gp_assistant.recommend.theme_pool import build_themes
+from src.gp_assistant.selection_engine.theme_hints import build_mover_hints
+from src.gp_assistant.selection_engine.theme_pool import build_themes
 
 
 def test_is_mainboard_rules():
@@ -24,8 +24,8 @@ def test_mover_hints_filtered_to_mainboard():
     snap = pd.DataFrame(
         {
             "code": ["600519", "300750", "688001", "000001"],
-            "涨跌幅": [2.3, 9.9, 7.7, 1.1],
-            "name": ["贵州茅台", "宁德时代", "某科创", "平安银行"],
+            "濞戙劏绌奸獮?: [2.3, 9.9, 7.7, 1.1],
+            "name": ["鐠愰潧绐為懠鍛酱", "鐎逛礁鐥夐弮鏈靛敩", "閺屾劗顫栭崚?, "楠炲啿鐣ㄩ柧鎯邦攽"],
         }
     )
     hints = build_mover_hints(snap, topn=10)
@@ -40,14 +40,13 @@ def test_theme_pool_impl_uses_mainboard_only(monkeypatch):
 
     snap = pd.DataFrame(
         {
-            "代码": ["600519", "300750", "000001"],
-            "行业": ["白酒", "新能源", "银行"],
-            "涨跌幅": [2.2, 8.8, 0.9],
-            "成交额": [1e9, 2e9, 3e9],
+            "娴狅絿鐖?: ["600519", "300750", "000001"],
+            "鐞涘奔绗?: ["閻т粙鍘?, "閺傛媽鍏樺┃?, "闁炬儼顢?],
+            "濞戙劏绌奸獮?: [2.2, 8.8, 0.9],
+            "閹存劒姘︽０?: [1e9, 2e9, 3e9],
         }
     )
     themes = build_themes(DummyHub(), snapshot=snap)
     # Top2 themes must derive from mainboard codes only (300750 excluded)
     names = [t.get("name") for t in themes]
-    assert set(names).issubset({"白酒", "银行"})
-
+    assert set(names).issubset({"閻т粙鍘?, "闁炬儼顢?})

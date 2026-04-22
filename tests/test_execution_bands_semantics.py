@@ -3,7 +3,7 @@ from __future__ import annotations
 import types
 import pandas as pd
 
-from src.gp_assistant.recommend.agent import run as recommend_run
+from src.gp_assistant.selection_engine.agent import run as recommend_run
 from src.gp_assistant.strategy import library as strat_lib
 
 
@@ -56,4 +56,3 @@ def test_execution_bands_recenter_and_state(monkeypatch):
     # Fallback applied and state computed
     assert diag.get("band_source") in {"recent_window_fallback", "strategy_key_bands", "chip_fallback"}
     assert diag.get("execution_state") in {"actionable", "waiting_pullback", "observe_only"}
-

@@ -6,7 +6,7 @@ from fastapi.testclient import TestClient
 
 from gp_assistant.kernel import facade as k
 from gp_assistant.gateway.app import app
-from gp_assistant.recommend.artifact_store import persist_artifact_v2
+from gp_assistant.selection_engine.artifact_store import persist_artifact_v2
 
 
 def _persist_minimal(run_id: str) -> None:

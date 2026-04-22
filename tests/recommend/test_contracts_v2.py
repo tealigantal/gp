@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from gp_assistant.recommend.contracts import build_v2_from_v1
-from gp_assistant.recommend.validators import validate_pick_artifact_v2
+from gp_assistant.selection_engine.contracts import build_v2_from_v1
+from gp_assistant.selection_engine.validators import validate_pick_artifact_v2
 
 
 def test_v2_artifact_validator_happy_path():
@@ -11,8 +11,8 @@ def test_v2_artifact_validator_happy_path():
         "picks": [
             {
                 "symbol": "600519",
-                "name": "贵州茅台",
-                "theme": "白酒",
+                "name": "鐠愰潧绐為懠鍛酱",
+                "theme": "閻т粙鍘?,
                 "champion": {"strategy": "s01", "score": 0.9},
                 "last_close": 100.0,
                 "trade_plan": {
@@ -51,4 +51,3 @@ def test_v2_artifact_validator_happy_path():
     it = fixed["items"][0]
     assert it["pick_id"] and it["symbol"] == "600519"
     assert isinstance(it["take_profit"], list) and len(it["take_profit"]) >= 1
-

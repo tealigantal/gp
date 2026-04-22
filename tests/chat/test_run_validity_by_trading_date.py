@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from gp_assistant.recommend.trading_clock import is_run_valid_for_operation
+from gp_assistant.selection_engine.trading_clock import is_run_valid_for_operation
 
 
 def _dt(s: str) -> datetime:
@@ -48,4 +48,3 @@ def test_friday_eod_valid_on_weekend_and_preopen():
     assert is_run_valid_for_operation(art, sat, operation="recommend") is True
     assert is_run_valid_for_operation(art, sun, operation="recommend") is True
     assert is_run_valid_for_operation(art, mon_pre, operation="recommend") is True
-

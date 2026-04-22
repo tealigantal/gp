@@ -3,7 +3,7 @@ from __future__ import annotations
 import types
 import pandas as pd
 
-from src.gp_assistant.recommend.agent import run as recommend_run
+from src.gp_assistant.selection_engine.agent import run as recommend_run
 from src.gp_assistant.strategy import library as strat_lib
 
 
@@ -64,4 +64,3 @@ def test_execution_state_below_support_not_actionable(monkeypatch):
     # Rerank penalty should be applied in score_breakdown
     sb = picks[0].get("score_breakdown") or {}
     assert "execution_state_penalty" in sb and float(sb["execution_state_penalty"]) < 0.0
-

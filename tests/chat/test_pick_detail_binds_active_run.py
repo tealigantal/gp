@@ -6,11 +6,11 @@ os.environ.setdefault("STRICT_REAL_DATA", "1")
 
 
 def test_pick_detail_uses_active_run():
-    from gp_assistant.chat.orchestrator import handle_message
-    from gp_assistant.chat.tool_registry import build_registry
-    from gp_assistant.chat import session_store as store
+    from gp_assistant.chat_compat.orchestrator import handle_message
+    from gp_assistant.chat_compat.tool_registry import build_registry
+    from gp_assistant.chat_compat import session_store as store
 
-    out = handle_message(None, "给我推荐", None)
+    out = handle_message(None, "缂佹瑦鍨滈幒銊ㄥ礃", None)
     sid = out.get("session_id")
     st = store.get_state(sid)
     syms = list(st.get("active_symbols") or [])
@@ -19,4 +19,3 @@ def test_pick_detail_uses_active_run():
     reg = build_registry()
     d = reg.get_pick_detail(sid, syms[0])
     assert d.get("symbol") == syms[0]
-

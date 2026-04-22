@@ -8,9 +8,9 @@ os.environ.setdefault("STRICT_REAL_DATA", "1")
 
 
 def test_run_cutoff_detection_and_resolution():
-    from gp_assistant.recommend.run_policy import detect_cutoff
-    from gp_assistant.chat.run_service import get_active_run
-    from gp_assistant.chat import session_store as store
+    from gp_assistant.selection_engine.run_policy import detect_cutoff
+    from gp_assistant.chat_compat.run_service import get_active_run
+    from gp_assistant.chat_compat import session_store as store
 
     sid = store.ensure_session(None)
     # Before close -> INTRADAY
@@ -23,4 +23,3 @@ def test_run_cutoff_detection_and_resolution():
     assert out.get("active_run_id")
     st = store.get_state(sid)
     assert st.get("active_run_id") == out.get("active_run_id")
-

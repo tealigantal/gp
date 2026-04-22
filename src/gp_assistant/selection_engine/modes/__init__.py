@@ -1,2 +1,2 @@
-# src/gp_assistant/recommend/modes/__init__.py
+# src/gp_assistant/selection_engine/modes/__init__.py
 # modes package

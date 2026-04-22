@@ -21,14 +21,14 @@ def _render_themes(themes: Iterable[Dict[str, Any]]) -> str:
             continue
         strength = str((theme or {}).get("strength") or "").strip()
         parts.append(f"{name}({strength})" if strength else name)
-    return "、".join(parts) if parts else "N/A"
+    return ", ".join(parts) if parts else "N/A"
 
 
 def render_recommendation(payload: Dict[str, Any]) -> str:
     themes = _render_themes(payload.get("themes") or [])
     picks = payload.get("picks") or []
     env = (payload.get("env") or {}).get("grade") or "N/A"
-    return f"环境: {env}\n主题: {themes}\n候选数: {len(picks)}"
+    return f"env: {env}\nthemes: {themes}\npicks: {len(picks)}"
 
 
 def render_recommendation_narrative(payload: Dict[str, Any]) -> str:
@@ -46,7 +46,7 @@ def render_recommendation_narrative(payload: Dict[str, Any]) -> str:
         reasons = ", ".join(
             f"{item.get('symbol')}: {item.get('reason')}" for item in dropped if isinstance(item, dict)
         )
-        lines.append(f"strict 丢弃: {reasons or 'N/A'}")
+        lines.append(f"strict dropped: {reasons or 'N/A'}")
     snapshot = ((payload.get("data_status") or {}).get("snapshot") or {})
     lines.append(
         "snapshot: "

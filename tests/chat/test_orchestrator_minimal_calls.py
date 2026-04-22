@@ -3,8 +3,8 @@ from __future__ import annotations
 import json
 
 from gp_assistant.core.paths import store_dir
-from gp_assistant.chat import session_store as store
-from gp_assistant.chat.orchestrator import handle_message
+from gp_assistant.chat_compat import session_store as store
+from gp_assistant.chat_compat.orchestrator import handle_message
 
 
 def _write_artifact(run_id: str, trading_date: str, symbol: str) -> None:
@@ -47,7 +47,7 @@ def test_pick_detail_no_redundant_calls(monkeypatch, tmp_path):
     calls = {"gated": 0, "run": 0}
 
     import gp_assistant.kernel.facade as facade
-    import gp_assistant.recommend.artifact_store as astore
+    import gp_assistant.selection_engine.artifact_store as astore
     real_get = facade.get_gated_artifact_v2
 
     def _fake_get_gated(run_id=None, as_of=None):  # noqa: ANN001
@@ -56,7 +56,7 @@ def test_pick_detail_no_redundant_calls(monkeypatch, tmp_path):
 
     monkeypatch.setattr(facade, "get_gated_artifact_v2", _fake_get_gated)
 
-    import gp_assistant.recommend.runner as runner
+    import gp_assistant.selection_engine.runner as runner
 
     def _fake_run(**kwargs):  # noqa: ANN001
         calls["run"] += 1
@@ -64,7 +64,6 @@ def test_pick_detail_no_redundant_calls(monkeypatch, tmp_path):
 
     monkeypatch.setattr(runner, "run", _fake_run)
 
-    _ = handle_message(sid, "这只还能买吗", None)
+    _ = handle_message(sid, "鏉╂瑥褰ф潻妯垮厴娑旀澘鎮?, None)
     assert calls["run"] == 0
     assert calls["gated"] <= 2
-

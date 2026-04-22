@@ -1,42 +1,42 @@
-﻿import types
+import types
 import pandas as pd
 import numpy as np
 
-from gp_assistant.recommend.theme_pool import build_themes
-from gp_assistant.chat.render import render_recommendation
+from gp_assistant.selection_engine.theme_pool import build_themes
+from gp_assistant.chat_compat.render import render_recommendation
 from gp_assistant.strategy.chip_model import compute_chip
 
 
 def _mock_snapshot(no_industry: bool = True):
-    cols = ['代码','名称','最新价','成交额','涨跌幅']
+    cols = ['浠ｇ爜','鍚嶇О','鏈€鏂颁环','鎴愪氦棰?,'娑ㄨ穼骞?]
     df = pd.DataFrame({
-        '代码': ['000001','000002','000333'],
-        '名称': ['A','B','C'],
-        '最新价': [10, 20, 30],
-        '成交额': [1e9, 2e9, 1.5e9],
-        '涨跌幅': [1.2, -0.5, 3.0],
+        '浠ｇ爜': ['000001','000002','000333'],
+        '鍚嶇О': ['A','B','C'],
+        '鏈€鏂颁环': [10, 20, 30],
+        '鎴愪氦棰?: [1e9, 2e9, 1.5e9],
+        '娑ㄨ穼骞?: [1.2, -0.5, 3.0],
     })
     if not no_industry:
-        df['行业'] = ['X','Y','X']
+        df['琛屼笟'] = ['X','Y','X']
     return df
 
 
 def test_theme_concept_missing_change_triggers_fallback(monkeypatch):
-    # snapshot without 行业 column, concept source returns no change columns
-    snap = _mock_snapshot(no_industry=True).drop(columns=['涨跌幅'])
+    # snapshot without 琛屼笟 column, concept source returns no change columns
+    snap = _mock_snapshot(no_industry=True).drop(columns=['娑ㄨ穼骞?])
     class DummyHub:
         pass
     # mock akshare
     class DummyAK:
         @staticmethod
         def stock_board_concept_name_ths():
-            return pd.DataFrame({'板块名称': ['AI PC','阿尔茨海默概念']})
+            return pd.DataFrame({'鏉垮潡鍚嶇О': ['AI PC','闃垮皵鑼ㄦ捣榛樻蹇?]})
     monkeypatch.setitem(__import__('sys').modules, 'akshare', DummyAK())
     themes = build_themes(DummyHub(), snapshot=snap)
     assert themes == []  # no pseudo themes
     # also ensure render does not emit empty parentheses when strength missing
-    txt = render_recommendation({'env': {'grade':'C','reasons':[]}, 'themes': [{'name':'概念-示例','strength':''}], 'picks': []})
-    assert '概念-示例()' not in txt
+    txt = render_recommendation({'env': {'grade':'C','reasons':[]}, 'themes': [{'name':'姒傚康-绀轰緥','strength':''}], 'picks': []})
+    assert '姒傚康-绀轰緥()' not in txt
 
 
 def test_chip_uses_trailing_window_and_is_reasonable():

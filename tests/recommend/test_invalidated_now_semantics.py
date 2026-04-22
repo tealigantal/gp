@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from gp_assistant.recommend.validators import validate_pick_artifact_v2
+from gp_assistant.selection_engine.validators import validate_pick_artifact_v2
 
 
 def test_invalidated_now_only_blocks_actionable():

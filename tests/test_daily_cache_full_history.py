@@ -72,7 +72,7 @@ def test_daily_cache_merges_full_history(monkeypatch):
     from gp_assistant.providers import factory as pf
     monkeypatch.setattr(pf, "get_provider", lambda prefer=None: fake, raising=True)
 
-    from gp_assistant.recommend.datahub import MarketDataHub
+    from gp_assistant.selection_engine.datahub import MarketDataHub
     hub = MarketDataHub()
 
     df, meta = hub.daily_ohlcv("000001", as_of=None, min_len=250)

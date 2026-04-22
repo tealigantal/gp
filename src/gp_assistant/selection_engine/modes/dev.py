@@ -1,4 +1,4 @@
-# src/gp_assistant/recommend/modes/dev.py
+# src/gp_assistant/selection_engine/modes/dev.py
 from __future__ import annotations
 
 from typing import Any, Dict, List, Optional

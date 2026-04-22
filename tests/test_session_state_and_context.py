@@ -4,10 +4,10 @@ os.environ.setdefault("TZ", "Asia/Shanghai")
 
 from typing import Any, Dict
 
-from gp_assistant.chat import session_store as store
-from gp_assistant.chat import event_store
-from gp_assistant.chat.assistant_bundle import AssistantBundle
-from gp_assistant.chat.context_builder import build_turn_context
+from gp_assistant.chat_compat import session_store as store
+from gp_assistant.chat_compat import event_store
+from gp_assistant.chat_compat.assistant_bundle import AssistantBundle
+from gp_assistant.chat_compat.context_builder import build_turn_context
 
 
 def test_session_state_persists_extended_fields(tmp_path):
@@ -42,12 +42,12 @@ def test_build_turn_context_layers_with_assistant_bundle():
     event_store.ensure_participant(sid)
 
     # Append a user text via session_store (also mirrors to event_store)
-    store.append_message(sid, "user", "生成推荐")
+    store.append_message(sid, "user", "閻㈢喐鍨氶幒銊ㄥ礃")
 
     # Build and append a minimal assistant bundle event
     bundle = AssistantBundle.build(
         conversation_id=sid,
-        text="三只候选如下",
+        text="娑撳褰ч崐娆撯偓澶婎洤娑?,
         cards=[{"type": "recommendation", "items": [{"symbol": "600150"}, {"symbol": "601288"}, {"symbol": "002371"}]}],
         right_panel={
             "active_run_id": "run-abc",
@@ -95,4 +95,3 @@ def test_build_turn_context_layers_with_assistant_bundle():
         s = rts[-1]
         assert "tools_used" in s
         assert "active_run_id" in s
-

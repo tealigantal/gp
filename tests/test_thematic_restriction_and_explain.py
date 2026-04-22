@@ -16,8 +16,8 @@ def test_restrict_to_mainline_filters_when_true(monkeypatch):
 
     def fake_gen(symbols, env_grade, topk=3, snapshot=None):  # noqa: ANN001
         pool = [
-            {"symbol": "600519", "industry": "白酒", "liquidity": {"avg5_amount": 2e9, "grade": "A"}, "chip": {"avg_cost": 10.0, "band_90_low": 9.5, "band_90_high": 10.5}, "indicators": {"slope20": 0.2, "atr_pct": 0.02, "gap_pct": 0.0}},
-            {"symbol": "000001", "industry": "银行", "liquidity": {"avg5_amount": 2e9, "grade": "A"}, "chip": {"avg_cost": 10.0, "band_90_low": 9.5, "band_90_high": 10.5}, "indicators": {"slope20": 0.2, "atr_pct": 0.02, "gap_pct": 0.0}},
+            {"symbol": "600519", "industry": "閻т粙鍘?, "liquidity": {"avg5_amount": 2e9, "grade": "A"}, "chip": {"avg_cost": 10.0, "band_90_low": 9.5, "band_90_high": 10.5}, "indicators": {"slope20": 0.2, "atr_pct": 0.02, "gap_pct": 0.0}},
+            {"symbol": "000001", "industry": "闁炬儼顢?, "liquidity": {"avg5_amount": 2e9, "grade": "A"}, "chip": {"avg_cost": 10.0, "band_90_low": 9.5, "band_90_high": 10.5}, "indicators": {"slope20": 0.2, "atr_pct": 0.02, "gap_pct": 0.0}},
         ]
         for it in pool:
             it["candidate_score"] = 0.3
@@ -34,15 +34,15 @@ def test_restrict_to_mainline_filters_when_true(monkeypatch):
 
     # Stub themes/mainline to unrelated sectors
     from src.gp_assistant.recommend import theme_pool as tpool
-    monkeypatch.setattr(tpool, "build_themes", lambda hub, snapshot=None: [{"name": "新能源", "source": "industry_snapshot"}])
+    monkeypatch.setattr(tpool, "build_themes", lambda hub, snapshot=None: [{"name": "閺傛媽鍏樺┃?, "source": "industry_snapshot"}])
 
     from src.gp_assistant.recommend import mainline as ml
-    monkeypatch.setattr(ml, "build_mainline", lambda indicator="今日", topn=2, snapshot=None: {"indicator": indicator, "sectors": [{"name": "半导体"}], "source": "snapshot"})
+    monkeypatch.setattr(ml, "build_mainline", lambda indicator="娴犲﹥妫?, topn=2, snapshot=None: {"indicator": indicator, "sectors": [{"name": "閸楀﹤顕辨担?}], "source": "snapshot"})
 
     # Force restrict true
     monkeypatch.setenv("GP_RESTRICT_MAINLINE", "1")
 
-    from src.gp_assistant.recommend.engine import run as engine_run
+    from src.gp_assistant.selection_engine.engine import run as engine_run
 
     out = engine_run(topk=3)
     picks = out.get("picks") if isinstance(out, dict) else []
@@ -58,8 +58,8 @@ def test_off_mainline_downrank_when_false(monkeypatch):
 
     def fake_gen(symbols, env_grade, topk=3, snapshot=None):  # noqa: ANN001
         pool = [
-            {"symbol": "600519", "industry": "白酒", "liquidity": {"avg5_amount": 2e9, "grade": "A"}, "chip": {"avg_cost": 10.0, "band_90_low": 9.5, "band_90_high": 10.5}, "indicators": {"slope20": 0.2, "atr_pct": 0.02, "gap_pct": 0.0}},
-            {"symbol": "000001", "industry": "银行", "liquidity": {"avg5_amount": 2e9, "grade": "A"}, "chip": {"avg_cost": 10.0, "band_90_low": 9.5, "band_90_high": 10.5}, "indicators": {"slope20": 0.2, "atr_pct": 0.02, "gap_pct": 0.0}},
+            {"symbol": "600519", "industry": "閻т粙鍘?, "liquidity": {"avg5_amount": 2e9, "grade": "A"}, "chip": {"avg_cost": 10.0, "band_90_low": 9.5, "band_90_high": 10.5}, "indicators": {"slope20": 0.2, "atr_pct": 0.02, "gap_pct": 0.0}},
+            {"symbol": "000001", "industry": "闁炬儼顢?, "liquidity": {"avg5_amount": 2e9, "grade": "A"}, "chip": {"avg_cost": 10.0, "band_90_low": 9.5, "band_90_high": 10.5}, "indicators": {"slope20": 0.2, "atr_pct": 0.02, "gap_pct": 0.0}},
         ]
         for it in pool:
             it["candidate_score"] = 0.3
@@ -75,15 +75,15 @@ def test_off_mainline_downrank_when_false(monkeypatch):
     monkeypatch.setattr(indi, "compute_indicators", lambda df: df.assign(slope20=0.2, atr_pct=0.02, gap_pct=0.0, ma20=10.0, amount_5d_avg=1e8))
 
     from src.gp_assistant.recommend import theme_pool as tpool
-    monkeypatch.setattr(tpool, "build_themes", lambda hub, snapshot=None: [{"name": "新能源", "source": "industry_snapshot"}])
+    monkeypatch.setattr(tpool, "build_themes", lambda hub, snapshot=None: [{"name": "閺傛媽鍏樺┃?, "source": "industry_snapshot"}])
 
     from src.gp_assistant.recommend import mainline as ml
-    monkeypatch.setattr(ml, "build_mainline", lambda indicator="今日", topn=2, snapshot=None: {"indicator": indicator, "sectors": [{"name": "半导体"}], "source": "snapshot"})
+    monkeypatch.setattr(ml, "build_mainline", lambda indicator="娴犲﹥妫?, topn=2, snapshot=None: {"indicator": indicator, "sectors": [{"name": "閸楀﹤顕辨担?}], "source": "snapshot"})
 
     # Turn off restriction
     monkeypatch.delenv("GP_RESTRICT_MAINLINE", raising=False)
 
-    from src.gp_assistant.recommend.engine import run as engine_run
+    from src.gp_assistant.selection_engine.engine import run as engine_run
 
     out = engine_run(topk=3)
     picks = out.get("picks") if isinstance(out, dict) else []
@@ -91,4 +91,3 @@ def test_off_mainline_downrank_when_false(monkeypatch):
     # Explain text should indicate off-mainline downrank
     if picks:
         assert any("off_mainline_downrank" in str(p.get("explain", "")) for p in picks)
-

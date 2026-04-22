@@ -6,7 +6,7 @@ import json
 
 from gp_assistant.kernel import facade as k
 from gp_assistant.validation.strategy_health import save_strategy_health
-from gp_assistant.recommend.artifact_store import persist_artifact_v2
+from gp_assistant.selection_engine.artifact_store import persist_artifact_v2
 from gp_assistant.portfolio.store import portfolio_state_path
 
 
@@ -106,4 +106,3 @@ def test_missing_validation_summary_stable():
     _persist_art(rid, items)
     intents = k.build_order_intents(as_of=rid)
     assert len(intents) == 1
-

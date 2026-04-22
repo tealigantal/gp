@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from gp_assistant.recommend.artifact_store import _enrich_scores_and_gate
+from gp_assistant.selection_engine.artifact_store import _enrich_scores_and_gate
 from gp_assistant.validation.strategy_health import save_strategy_health
 
 
@@ -49,4 +49,3 @@ def test_strategy_health_penalty_applied():
     final_killed = float(obj3['items'][0]['final_score'])
     assert rel_killed < rel_degraded
     assert final_killed < final_degraded
-

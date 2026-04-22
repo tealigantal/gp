@@ -32,7 +32,7 @@ def _mk_df(dates: List[pd.Timestamp]) -> pd.DataFrame:
 
 def test_marketdatahub_rollover_forces_incremental(monkeypatch):
     # Lazy imports to ensure env vars are in place
-    import gp_assistant.recommend.datahub as dh
+    import gp_assistant.selection_engine.datahub as dh
 
     # In-memory history_store stubs
     store_q: Dict[str, Dict[str, Any]] = {}
@@ -137,7 +137,7 @@ def test_marketdatahub_rollover_forces_incremental(monkeypatch):
 
 
 def test_chat_tool_stale_refresh(monkeypatch):
-    from gp_assistant.chat.agent_tools import t_get_ohlcv
+    from gp_assistant.chat_compat.agent_tools import t_get_ohlcv
 
     today = pd.Timestamp.now().normalize()
     yesterday = today - pd.Timedelta(days=1)
@@ -151,7 +151,7 @@ def test_chat_tool_stale_refresh(monkeypatch):
             df2 = _mk_df([today])
             return df2, {"source": "store+network_merge", "rollover_forced": True}
 
-    import gp_assistant.chat.agent_tools as at
+    import gp_assistant.chat_compat.agent_tools as at
 
     monkeypatch.setattr(at, "MarketDataHub", lambda: FakeHub())
 
@@ -160,4 +160,3 @@ def test_chat_tool_stale_refresh(monkeypatch):
     data = r.data or {}
     bars = data.get("bars") or []
     assert bars and bars[-1]["date"] == today.date().isoformat()
-

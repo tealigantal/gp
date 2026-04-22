@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from gp_assistant.recommend.calibration import compute_no_trade_gate
+from gp_assistant.selection_engine.calibration import compute_no_trade_gate
 
 
 def test_no_trade_day_gate_triggers_when_all_observe_only():
@@ -13,4 +13,3 @@ def test_no_trade_day_gate_triggers_when_all_observe_only():
     gate = compute_no_trade_gate(art)
     assert gate.get("tradeable") is False
     assert isinstance(gate.get("reason"), str)
-

@@ -4,7 +4,7 @@ from typing import Any, Dict, List
 
 
 def _get_specs() -> List[Dict[str, Any]]:
-    from gp_assistant.chat.deepseek_agent import _tool_specs_full
+    from gp_assistant.chat_compat.deepseek_agent import _tool_specs_full
 
     return _tool_specs_full(strict=True)
 

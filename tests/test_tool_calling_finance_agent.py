@@ -35,7 +35,7 @@ def _last_bundle(cid: str) -> Dict[str, Any]:
 
 
 def test_tool_calling_finance_agent_requires_tool_results_for_finance_answers():
-    j1 = _start_chat("给我推荐3只")
+    j1 = _start_chat("缂佹瑦鍨滈幒銊ㄥ礃3閸?)
     cid = j1.get("session_id")
     b = _last_bundle(cid)
     assert isinstance(b.get("tool_results"), list)
@@ -43,9 +43,9 @@ def test_tool_calling_finance_agent_requires_tool_results_for_finance_answers():
 
 
 def test_explain_selection_set_never_fabricates_symbols():
-    j1 = _start_chat("生成推荐")
+    j1 = _start_chat("閻㈢喐鍨氶幒銊ㄥ礃")
     cid = j1.get("session_id")
-    j2 = _start_chat("为什么选这三支呀", session_id=cid)
+    j2 = _start_chat("娑撹桨绮堟稊鍫モ偓澶庣箹娑撳鏁崨鈧?, session_id=cid)
     b = _last_bundle(cid)
     g = b.get("grounding") or {}
     active = set([str(s) for s in (g.get("active_symbols") or [])])
@@ -55,17 +55,17 @@ def test_explain_selection_set_never_fabricates_symbols():
 
 
 def test_no_trade_bundle_never_contains_buy_semantics():
-    j1 = _start_chat("给我推荐3只")
+    j1 = _start_chat("缂佹瑦鍨滈幒銊ㄥ礃3閸?)
     cid = j1.get("session_id")
     b = _last_bundle(cid)
     g = b.get("grounding") or {}
     if g.get("tradeable") is False or ((g.get("run_gating") or {}).get("decision") not in (None, "allow")):
         txt = (b.get("text") or "").lower()
-        assert ("buy" not in txt) and ("买入" not in txt) and ("建仓" not in txt)
+        assert ("buy" not in txt) and ("娑旀澘鍙? not in txt) and ("瀵よ桨绮? not in txt)
 
 
 def test_focus_symbol_updates_session_and_next_turn_grounds_correctly():
-    j1 = _start_chat("给我推荐3只")
+    j1 = _start_chat("缂佹瑦鍨滈幒銊ㄥ礃3閸?)
     cid = j1.get("session_id")
     # set focus to second symbol if available; else skip
     b = _last_bundle(cid)
@@ -74,7 +74,7 @@ def test_focus_symbol_updates_session_and_next_turn_grounds_correctly():
         focus = syms[1]
         r = client.post("/api/chat/focus", json={"session_id": cid, "focus_symbol": focus})
         assert r.status_code == 200
-        _ = _start_chat("这只还能买吗", session_id=cid)
+        _ = _start_chat("鏉╂瑥褰ф潻妯垮厴娑旀澘鎮?, session_id=cid)
         b2 = _last_bundle(cid)
         cards = b2.get("cards") or []
         # pick_detail or exit_decision card should mention the focused symbol
@@ -86,7 +86,7 @@ def test_focus_symbol_updates_session_and_next_turn_grounds_correctly():
 
 
 def test_thread_api_returns_only_user_and_assistant_bundle():
-    j1 = _start_chat("测试线程")
+    j1 = _start_chat("濞村鐦痪璺ㄢ柤")
     cid = j1.get("session_id")
     its = _thread_items(cid)
     for it in its:
@@ -96,15 +96,15 @@ def test_thread_api_returns_only_user_and_assistant_bundle():
 
 def test_legacy_financial_messages_are_archived_and_hidden():
     # Archive script should be callable and not crash; returns ok
-    from gp_assistant.chat.archive_legacy_threads import archive_legacy_items
+    from gp_assistant.chat_compat.archive_legacy_threads import archive_legacy_items
     out = archive_legacy_items()
     assert out.get("ok") is True
 
 
 def test_agent_uses_tool_results_not_free_text_for_finance_followup():
-    j1 = _start_chat("给我推荐3只")
+    j1 = _start_chat("缂佹瑦鍨滈幒銊ㄥ礃3閸?)
     cid = j1.get("session_id")
-    _ = _start_chat("为什么选这三支呀", session_id=cid)
+    _ = _start_chat("娑撹桨绮堟稊鍫モ偓澶庣箹娑撳鏁崨鈧?, session_id=cid)
     b = _last_bundle(cid)
     tools = [str((t or {}).get("tool")) for t in (b.get("tool_results") or [])]
     assert "ensure_recommendation" in tools

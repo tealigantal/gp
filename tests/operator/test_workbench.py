@@ -5,7 +5,7 @@ from gp_assistant.kernel import facade as k
 from gp_assistant.gateway.app import app
 from fastapi.testclient import TestClient
 from gp_assistant.validation.strategy_health import save_strategy_health
-from gp_assistant.recommend.artifact_store import persist_artifact_v2
+from gp_assistant.selection_engine.artifact_store import persist_artifact_v2
 from gp_assistant.portfolio.store import portfolio_state_path
 
 

@@ -4,8 +4,8 @@ import json
 from pathlib import Path
 
 from gp_assistant.core.paths import store_dir
-from gp_assistant.chat import session_store as store
-from gp_assistant.chat.orchestrator import handle_message
+from gp_assistant.chat_compat import session_store as store
+from gp_assistant.chat_compat.orchestrator import handle_message
 
 
 def _write_artifact(run_id: str, trading_date: str) -> None:
@@ -41,15 +41,14 @@ def test_followup_does_not_refresh(monkeypatch, tmp_path):
         calls["n"] += 1
         return {"as_of": "2024-03-11", "picks": []}
 
-    import gp_assistant.recommend.runner as runner
+    import gp_assistant.selection_engine.runner as runner
 
     monkeypatch.setattr(runner, "run", _fake_run)
 
     # Follow-up style question should not trigger new run
-    handle_message(sid, "第二只为什么", None)
+    handle_message(sid, "缁楊兛绨╅崣顏冭礋娴犫偓娑?, None)
     assert calls["n"] == 0
 
     # Explicit refresh triggers recomputation
-    handle_message(sid, "刷新", None)
+    handle_message(sid, "閸掗攱鏌?, None)
     assert calls["n"] == 1
-

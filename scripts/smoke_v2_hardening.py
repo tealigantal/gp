@@ -44,16 +44,16 @@ def _fail(msg: str) -> None:
 
 
 def main() -> None:
-    from gp_assistant.recommend.artifact_store import (
+    from gp_assistant.selection_engine.artifact_store import (
         build_v2_dict_from_v1,
         persist_artifact_v2,
         read_artifact_v2,
         compare_subset,
         pick_detail as pick_detail_helper,
     )
-    from gp_assistant.recommend.validators import validate_pick_artifact_v2
-    from gp_assistant.recommend.calibration import calibrate_item_scores
-    from gp_assistant.chat import refresh_service as chat_refresh
+    from gp_assistant.selection_engine.validators import validate_pick_artifact_v2
+    from gp_assistant.selection_engine.calibration import calibrate_item_scores
+    from gp_assistant.chat_compat import refresh_service as chat_refresh
 
     # a) build_v2 -> scores present (non-default structure)
     v1 = _load_latest_v1()

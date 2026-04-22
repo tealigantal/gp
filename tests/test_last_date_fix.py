@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pandas as pd
 
-from src.gp_assistant.recommend.agent import run as recommend_run
+from src.gp_assistant.selection_engine.agent import run as recommend_run
 from src.gp_assistant.strategy import library as strat_lib
 
 
@@ -38,4 +38,3 @@ def test_last_date_prefers_date_column(monkeypatch):
     ld = picks[0].get("last_date")
     # Should format to YYYY-MM-DD (not bare integer index)
     assert isinstance(ld, str) and len(ld) >= 8 and ld[:4].isdigit(), f"unexpected last_date: {ld}"
-

@@ -1,4 +1,4 @@
-from gp_assistant.recommend.strict_output import normalize_payload
+from gp_assistant.selection_engine.strict_output import normalize_payload
 from gp_assistant.core.strict import is_strict
 
 
@@ -25,4 +25,3 @@ def test_strict_drops_picks_without_last_close_or_bands(monkeypatch):
     dp = out.get('debug', {}).get('dropped_picks') or []
     assert any(d.get('symbol') == 'AAA' for d in dp)
     assert any(d.get('symbol') == 'BBB' for d in dp)
-
