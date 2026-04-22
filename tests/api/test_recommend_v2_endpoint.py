@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from fastapi.testclient import TestClient
-from gp_assistant.server.app import app
+from gp_assistant.gateway.app import app
 
 
 def test_recommend_v2_endpoint_import_and_call():

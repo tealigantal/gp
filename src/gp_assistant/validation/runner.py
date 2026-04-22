@@ -21,7 +21,6 @@ from .event_stats import load_event_stats, save_event_stats
 from .walkforward_stats import load_walkforward, save_walkforward
 from .paper_trade import load_paperfolio
 from .strategy_health import compute_strategy_health, load_strategy_health, save_strategy_health
-from ..kernel.live_shadow import latest_live_shadow_summary
 
 
 def _utc_now_iso() -> str:

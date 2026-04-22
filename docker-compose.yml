@@ -1,4 +1,4 @@
-services:
+﻿services:
   gp:
     build:
       context: .
@@ -14,7 +14,9 @@ services:
       - ./configs:/app/configs
     # Use multiple workers to avoid head-of-line blocking by long CPU-bound tasks
     # Respect proxy headers (X-Forwarded-*) when behind Nginx
-    command: ["uvicorn", "gp_assistant.server.app:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "2", "--proxy-headers", "--forwarded-allow-ips", "*"]
+    command: ["uvicorn", "gp_assistant.gateway.app:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "2", "--proxy-headers", "--forwarded-allow-ips", "*"]
+    env_file:
+      - .env
     environment:
       TZ: ${TZ:-Asia/Shanghai}
 
@@ -30,9 +32,11 @@ services:
 
       # ---- provider ----
       DATA_PROVIDER: ${DATA_PROVIDER:-akshare}
-      # 0 表示不设超时（后端内部将按无限超时处理）
+      # 0 琛ㄧず涓嶈瓒呮椂锛堝悗绔唴閮ㄥ皢鎸夋棤闄愯秴鏃跺鐞嗭級
       GP_REQUEST_TIMEOUT_SEC: ${GP_REQUEST_TIMEOUT_SEC:-0}
       STRICT_REAL_DATA: ${STRICT_REAL_DATA:-1}
+      # 寮哄埗鍒锋柊鍥炵湅绐楀彛锛堝ぉ锛夛紝浠呭湪寮哄埗鍒锋柊锛坮efresh=true锛夋椂鐢卞悗绔鍙?      GP_FORCE_REFRESH_LOOKBACK_DAYS: ${GP_FORCE_REFRESH_LOOKBACK_DAYS:-3}
+      # 褰撴ā鍨嬫湭鎸夋彁绀轰紶閫?refresh:true 鏃讹紝鑷姩杩藉姞涓€娆″己鍒跺埛鏂?      GP_ENFORCE_FORCE_REFRESH_ON_MISSING: ${GP_ENFORCE_FORCE_REFRESH_ON_MISSING:-1}
 
       # optional akshare route priority
       AK_SPOT_PRIORITY: ${AK_SPOT_PRIORITY:-}
@@ -63,7 +67,7 @@ services:
       - "8000:8000"
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "python -c \"import urllib.request,sys; sys.exit(0) if urllib.request.urlopen('http://127.0.0.1:8000/api/health/live', timeout=2).status==200 else sys.exit(1)\""]
+      test: ["CMD-SHELL", "python -c \"import urllib.request,sys; sys.exit(0) if urllib.request.urlopen('http://127.0.0.1:8000/api/health', timeout=2).status==200 else sys.exit(1)\""]
       interval: 10s
       timeout: 5s
       retries: 30

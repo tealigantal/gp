@@ -5,7 +5,7 @@ from pathlib import Path
 
 from gp_assistant.validation.runner import run_validation_refresh
 from gp_assistant.kernel.facade import get_validation_summary
-from gp_assistant.server.app import app
+from gp_assistant.gateway.app import app
 from fastapi.testclient import TestClient
 
 

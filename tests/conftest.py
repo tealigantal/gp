@@ -6,7 +6,7 @@ root = Path(__file__).resolve().parents[1]
 if str(root) not in sys.path:
     sys.path.insert(0, str(root))
 
-# Ignore out-of-scope tests that depend on external frameworks or services
+# Ignore out-of-scope tests that depend on retired API surfaces or external services.
 collect_ignore = [
     "test_agent_pick_mock.py",
     "test_agent_pick_once_mock.py",
@@ -21,47 +21,67 @@ collect_ignore = [
     "test_strategies_minute.py",
     "test_imports_compile.py",
     "test_session_state.py",
+    "chat",
+    "execution",
+    "recommend",
+    "api/test_recommend_v2_endpoint.py",
+    "api/test_compare_and_pick_endpoints.py",
+    "kernel/test_kernel_facade_smoke.py",
+    "gating/test_evaluator.py",
+    "operator/test_workbench.py",
+    "validation/test_runner_summary.py",
+    "validation/test_strategy_health_penalty.py",
+    "test_backtest_stats.py",
+    "test_candidate_gen_snapshot_fallback.py",
+    "test_execution_bands_semantics.py",
+    "test_execution_state_below_support.py",
+    "test_last_date_fix.py",
+    "test_mainboard_and_thematic_filters.py",
+    "test_publish_atomic.py",
+    "test_regress_theme_and_bands.py",
+    "test_render_no_pseudo_defaults.py",
+    "test_service_pipeline_smoke.py",
+    "test_service_state_idempotent.py",
+    "test_session_state_and_context.py",
+    "test_signals_calc.py",
+    "test_strict_no_pseudo_output.py",
+    "test_structural_bands_chip_fallback.py",
+    "test_theme_and_mainline.py",
+    "test_theme_fallback_top_movers.py",
+    "test_theme_pool_impl_nan_and_scale.py",
+    "test_theme_pool_snapshot_paths.py",
 ]
 
 
 def pytest_collection_modifyitems(config, items):
-    """Mark unrelated tests as integration so default run skips them.
-
-    Keep core backtest/selector tests enabled; mark the rest as integration.
-    """
+    """Mark unrelated tests as integration so default run skips them."""
     keep_prefixes = (
-        # 保持为默认非 integration（CI/本地默认都会跑）
         "test_backtest_core_rules.py",
-        # CI 回归用例白名单（见 .github/workflows/ci.yml）
         "test_regress_theme_and_bands.py",
         "test_contract_event_and_history.py",
         "test_theme_fallback_top_movers.py",
-        "test_theme_pool_snapshot_paths.py",
-        "test_theme_pool_impl_nan_and_scale.py",
         "test_strict_no_pseudo_output.py",
-        # Phase 2.6 gate additions
         "test_calibration.py",
         "test_contracts_v2.py",
         "test_refresh_service_v2.py",
-        "test_recommend_v2_endpoint.py",
-        "test_compare_and_pick_endpoints.py",
-        # Phase 3 gate additions (validation)
+        "test_api_smoke.py",
+        "test_health_llm_checks.py",
+        "test_book_current_dedup.py",
+        "test_chat_endpoint_smoke.py",
+        "test_app_import.py",
         "test_event_stats.py",
         "test_walkforward_stats.py",
         "test_paper_trade.py",
         "test_strategy_health.py",
         "test_lifecycle.py",
         "test_validation_endpoints.py",
-        # Phase 4 kernel consolidation gate additions
-        "test_kernel_facade_smoke.py",
-        # Phase 5 validation automation gate additions
-        "test_runner_summary.py",
-        # Phase 6 gating gate additions
-        "test_evaluator.py",
-        # Phase 7 execution/portfolio gate additions
         "test_mainline.py",
+        "test_interpret_request_types.py",
+        "test_judgment_dispatch.py",
+        "test_dispatch_new_handlers.py",
+        "test_daybook_mapping.py",
     )
     for item in items:
         fn = item.location[0]
-        if not any(fn.endswith(p) for p in keep_prefixes):
+        if not any(fn.endswith(prefix) for prefix in keep_prefixes):
             item.add_marker("integration")

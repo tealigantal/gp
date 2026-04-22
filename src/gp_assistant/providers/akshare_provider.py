@@ -28,7 +28,13 @@ class AkShareProvider(MarketDataProvider):
     SRC_CACHE = "cache:memory"
 
     def __init__(self, timeout_sec: int = 60):
-        self.timeout_sec = timeout_sec
+        # Enforce a safe floor to avoid invalid timeouts
+        try:
+            self.timeout_sec = int(timeout_sec)
+        except Exception:
+            self.timeout_sec = 60
+        if self.timeout_sec <= 0:
+            self.timeout_sec = 10
         self._last_snapshot_meta: Dict[str, Any] = {}
         self._snapshot_cache_df: Optional[pd.DataFrame] = None
         self._snapshot_cache_ts: Optional[float] = None
@@ -237,7 +243,7 @@ class AkShareProvider(MarketDataProvider):
     def get_spot_snapshot(self):  # noqa: ANN001
         ak = self._import()
         cfg = load_config()
-        routes: List[str] = list(getattr(cfg, "ak_spot_priority", ["sina", "em"]))
+        routes: List[str] = list(getattr(cfg, "ak_spot_priority", ["em", "sina"]))
         t0 = time.time()
         attempts: List[Dict[str, Any]] = []
         try:
@@ -492,7 +498,7 @@ class AkShareProvider(MarketDataProvider):
     def get_daily(self, symbol: str, start: str | None, end: str | None) -> pd.DataFrame:  # noqa: D401
         ak = self._import()
         cfg = load_config()
-        routes: List[str] = list(getattr(cfg, "ak_daily_priority", ["tx", "sina", "em"]))
+        routes: List[str] = list(getattr(cfg, "ak_daily_priority", ["em", "sina", "tx"]))
         s_ymd = start.replace("-", "") if start else None
         e_ymd = end.replace("-", "") if end else None
 
@@ -639,26 +645,91 @@ class AkShareProvider(MarketDataProvider):
             pass
         raise DataProviderError(f"AkShare get_daily failed: {msg}", symbol=symbol)
 
+    # ---- Optional bulk daily fetch with small parallelism -------------------
+    def get_daily_batch(self, symbols: List[str], start: str | None, end: str | None) -> Dict[str, pd.DataFrame]:  # noqa: D401
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+        out: Dict[str, pd.DataFrame] = {}
+        syms = [str(s).strip() for s in (symbols or []) if str(s).strip()]
+        if not syms:
+            return out
+        # small bounded parallelism to avoid provider rate limits
+        try:
+            import os
+            max_workers = int(os.getenv('AK_BATCH_WORKERS', '6') or '6')
+        except Exception:
+            max_workers = 6
+        max_workers = max(1, min(12, max_workers))
+        def _one(s: str) -> tuple[str, pd.DataFrame]:
+            try:
+                df = self.get_daily(s, start, end)
+                return s, df
+            except Exception:
+                # propagate empty on failure for that symbol
+                import pandas as _pd
+                return s, _pd.DataFrame()
+        if max_workers == 1 or len(syms) == 1:
+            for s in syms:
+                k, v = _one(s)
+                if not v.empty:
+                    out[k] = v
+            return out
+        with ThreadPoolExecutor(max_workers=max_workers) as ex:
+            futs = [ex.submit(_one, s) for s in syms]
+            for fut in as_completed(futs):
+                k, v = fut.result()
+                if not v.empty:
+                    out[k] = v
+        return out
+
     # ---- Internals: request patch + retry ----------------------------------
     def _with_requests_timeout(self, fn):  # noqa: ANN001
         import requests  # type: ignore
         original = requests.sessions.Session.request
 
         def wrapped(session, method, url, **kwargs):  # noqa: ANN001
-            to = kwargs.get("timeout", None)
-            if to is None or (isinstance(to, (int, float)) and to < self.timeout_sec):
-                kwargs["timeout"] = self.timeout_sec
+            # Only enforce for AkShare-related hosts; leave others (e.g., LLM providers) untouched
+            is_ak_host = False
             try:
-                hdrs = dict(kwargs.get("headers") or {})
-                hdrs.setdefault("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120 Safari/537.36")
                 if isinstance(url, str):
-                    if "eastmoney.com" in url:
-                        hdrs.setdefault("Referer", "https://quote.eastmoney.com/")
-                    elif "sina.com" in url or "sinajs.cn" in url:
-                        hdrs.setdefault("Referer", "https://finance.sina.com.cn/")
-                kwargs["headers"] = hdrs
+                    u = url.lower()
+                    if ("eastmoney.com" in u) or ("sina.com" in u) or ("sinajs.cn" in u):
+                        is_ak_host = True
             except Exception:
-                pass
+                is_ak_host = False
+
+            if is_ak_host:
+                to = kwargs.get("timeout", None)
+                eff = None
+                try:
+                    eff = float(to) if to is not None else None
+                except Exception:
+                    eff = None
+                # Choose the larger of existing timeout and provider's timeout; enforce a positive floor
+                base = self.timeout_sec if isinstance(self.timeout_sec, (int, float)) else 0
+                try:
+                    base = float(base)
+                except Exception:
+                    base = 0.0
+                if eff is None or (isinstance(base, (int, float)) and eff < base):
+                    eff = float(base)
+                if eff is None or eff <= 0:
+                    eff = 10.0  # safe minimum to avoid 0 meaning immediate timeout
+                kwargs["timeout"] = eff
+                try:
+                    hdrs = dict(kwargs.get("headers") or {})
+                    hdrs.setdefault(
+                        "User-Agent",
+                        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120 Safari/537.36",
+                    )
+                    if isinstance(url, str):
+                        if "eastmoney.com" in url:
+                            hdrs.setdefault("Referer", "https://quote.eastmoney.com/")
+                        elif "sina.com" in url or "sinajs.cn" in url:
+                            hdrs.setdefault("Referer", "https://finance.sina.com.cn/")
+                    kwargs["headers"] = hdrs
+                except Exception:
+                    pass
+            # Non-AkShare hosts fall through with original kwargs (no forced timeout)
             return original(session, method, url, **kwargs)
 
         try:

@@ -5,7 +5,7 @@ from pathlib import Path
 
 from fastapi.testclient import TestClient
 
-from src.gp_assistant.server.app import app
+from gp_assistant.gateway.app import app
 from src.gp_assistant.core.paths import store_dir
 
 

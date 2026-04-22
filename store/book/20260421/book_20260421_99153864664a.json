@@ -1,0 +1,1336 @@
+{
+  "trading_day": "20260421",
+  "book_version": "book_20260421_99153864664a",
+  "updated_at": "2026-04-22T05:45:25.510614+00:00",
+  "regime": {
+    "grade": "D",
+    "reasons": [
+      "全市场均值涨跌幅=0.14%",
+      "上涨占比=43.54%"
+    ],
+    "recovery_conditions": [
+      "上涨家数占比>55%",
+      "全市场均值涨跌幅>+0.3%"
+    ],
+    "raw": {
+      "breadth": {
+        "mean_chg": 0.13562629380788083,
+        "up_ratio": 0.43544579625930635
+      }
+    }
+  },
+  "daybook": {
+    "trading_day": "20260421",
+    "generated_at": "2026-04-22T05:14:32.993740+00:00",
+    "regime": {
+      "grade": "D",
+      "reasons": [
+        "全市场均值涨跌幅=0.14%",
+        "上涨占比=43.54%"
+      ],
+      "recovery_conditions": [
+        "上涨家数占比>55%",
+        "全市场均值涨跌幅>+0.3%"
+      ],
+      "raw": {
+        "breadth": {
+          "mean_chg": 0.13562629380788083,
+          "up_ratio": 0.43544579625930635
+        }
+      }
+    },
+    "tradeable": true,
+    "reason": "generated 12 picks",
+    "themes": [
+      "行业-金属包装",
+      "行业-玻纤制造"
+    ],
+    "picks": [
+      {
+        "symbol": "002371",
+        "name": null,
+        "rank": 1,
+        "strategy_id": "S8",
+        "thesis": "接近计划买点，执行条件较充分，留意盘中确认。 主线覆盖不足，排序有下调。",
+        "entry_plan": {
+          "kind": "zone",
+          "low": 447.0,
+          "high": 463.98,
+          "price": 447.0
+        },
+        "stop_plan": {
+          "kind": "close_below_support",
+          "price": 447.0,
+          "invalidation": "收盘有效跌破支撑带",
+          "text": "收盘有效跌破支撑带"
+        },
+        "take_profit_plan": {
+          "kind": "targets",
+          "price": 472.84,
+          "targets": [
+            472.84,
+            475.0
+          ]
+        },
+        "scores": {
+          "final": 1.549960282204796,
+          "candidate": -0.058453874525633207,
+          "champion": 0.39580800558712126,
+          "reward_risk": 6.690476190476152
+        },
+        "risk_flags": [],
+        "why_selected": "相对同组候选综合条件更优。",
+        "why_not_others": [],
+        "evidence_refs": [
+          "002371"
+        ],
+        "style_label": "balanced"
+      },
+      {
+        "symbol": "603259",
+        "name": null,
+        "rank": 2,
+        "strategy_id": "S13",
+        "thesis": "接近计划买点，执行条件较充分，留意盘中确认。 主线覆盖不足，排序有下调。",
+        "entry_plan": {
+          "kind": "zone",
+          "low": 96.61,
+          "high": 98.1,
+          "price": 96.61
+        },
+        "stop_plan": {
+          "kind": "close_below_support",
+          "price": 96.61,
+          "invalidation": "收盘有效跌破支撑带",
+          "text": "收盘有效跌破支撑带"
+        },
+        "take_profit_plan": {
+          "kind": "targets",
+          "price": 106.19,
+          "targets": [
+            106.19,
+            106.33
+          ]
+        },
+        "scores": {
+          "final": 0.9922400519834762,
+          "candidate": -0.04826795624233786,
+          "champion": 0.38304000026680857,
+          "reward_risk": 3.9381443298969123
+        },
+        "risk_flags": [],
+        "why_selected": "相对同组候选综合条件更优。",
+        "why_not_others": [],
+        "evidence_refs": [
+          "603259"
+        ],
+        "style_label": "balanced"
+      },
+      {
+        "symbol": "002050",
+        "name": null,
+        "rank": 3,
+        "strategy_id": "S3",
+        "thesis": "结构候选靠前，但当前执行条件一般，建议观察等待更优位置。 主线覆盖不足，排序有下调。",
+        "entry_plan": {
+          "kind": "zone",
+          "low": 44.23,
+          "high": 48.453934426229516,
+          "price": 44.23
+        },
+        "stop_plan": {
+          "kind": "close_below_support",
+          "price": 44.23,
+          "invalidation": "收盘有效跌破支撑带",
+          "text": "收盘有效跌破支撑带"
+        },
+        "take_profit_plan": {
+          "kind": "targets",
+          "price": 52.16,
+          "targets": [
+            52.16,
+            53.724799999999995
+          ]
+        },
+        "scores": {
+          "final": 0.5300379623722169,
+          "candidate": -0.08624061782603461,
+          "champion": 0.3885813471084556,
+          "reward_risk": 3.218085106382973
+        },
+        "risk_flags": [],
+        "why_selected": "相对同组候选综合条件更优。",
+        "why_not_others": [],
+        "evidence_refs": [
+          "002050"
+        ],
+        "style_label": "stable"
+      },
+      {
+        "symbol": "000547",
+        "name": null,
+        "rank": 4,
+        "strategy_id": "S3",
+        "thesis": "结构候选靠前，但当前执行条件一般，建议观察等待更优位置。 主线覆盖不足，排序有下调。",
+        "entry_plan": {
+          "kind": "zone",
+          "low": 27.03,
+          "high": 28.947049180327873,
+          "price": 27.03
+        },
+        "stop_plan": {
+          "kind": "close_below_support",
+          "price": 27.03,
+          "invalidation": "收盘有效跌破支撑带",
+          "text": "收盘有效跌破支撑带"
+        },
+        "take_profit_plan": {
+          "kind": "targets",
+          "price": 31.03,
+          "targets": [
+            31.03,
+            31.960900000000002
+          ]
+        },
+        "scores": {
+          "final": 0.48042129835974307,
+          "candidate": -0.0854589725994807,
+          "champion": 0.3479576802101639,
+          "reward_risk": 3.081632653061223
+        },
+        "risk_flags": [],
+        "why_selected": "相对同组候选综合条件更优。",
+        "why_not_others": [],
+        "evidence_refs": [
+          "000547"
+        ],
+        "style_label": "stable"
+      },
+      {
+        "symbol": "600089",
+        "name": null,
+        "rank": 5,
+        "strategy_id": "S8",
+        "thesis": "接近计划买点，执行条件较充分，留意盘中确认。 主线覆盖不足，排序有下调。",
+        "entry_plan": {
+          "kind": "zone",
+          "low": 26.92,
+          "high": 27.77,
+          "price": 26.92
+        },
+        "stop_plan": {
+          "kind": "close_below_support",
+          "price": 26.92,
+          "invalidation": "收盘有效跌破支撑带",
+          "text": "收盘有效跌破支撑带"
+        },
+        "take_profit_plan": {
+          "kind": "targets",
+          "price": 28.32,
+          "targets": [
+            28.32,
+            28.59
+          ]
+        },
+        "scores": {
+          "final": 0.4361661252034813,
+          "candidate": -0.051815793179543615,
+          "champion": 0.3655137535238977,
+          "reward_risk": 1.2222222222222234
+        },
+        "risk_flags": [],
+        "why_selected": "相对同组候选综合条件更优。",
+        "why_not_others": [],
+        "evidence_refs": [
+          "600089"
+        ],
+        "style_label": "stable"
+      },
+      {
+        "symbol": "600276",
+        "name": null,
+        "rank": 6,
+        "strategy_id": "S1",
+        "thesis": "结构候选靠前，但当前执行条件一般，建议观察等待更优位置。 主线覆盖不足，排序有下调。",
+        "entry_plan": {
+          "kind": "zone",
+          "low": 53.61,
+          "high": 56.9395081967213,
+          "price": 53.61
+        },
+        "stop_plan": {
+          "kind": "close_below_support",
+          "price": 53.61,
+          "invalidation": "收盘有效跌破支撑带",
+          "text": "收盘有效跌破支撑带"
+        },
+        "take_profit_plan": {
+          "kind": "targets",
+          "price": 61.12,
+          "targets": [
+            61.12,
+            62.3424
+          ]
+        },
+        "scores": {
+          "final": 0.4069727099665699,
+          "candidate": -0.06830970549230378,
+          "champion": 0.4065718805870861,
+          "reward_risk": 2.5093457943925217
+        },
+        "risk_flags": [],
+        "why_selected": "相对同组候选综合条件更优。",
+        "why_not_others": [],
+        "evidence_refs": [
+          "600276"
+        ],
+        "style_label": "stable"
+      },
+      {
+        "symbol": "000426",
+        "name": null,
+        "rank": 7,
+        "strategy_id": "S3",
+        "thesis": "结构候选靠前，但当前执行条件一般，建议观察等待更优位置。 主线覆盖不足，排序有下调。",
+        "entry_plan": {
+          "kind": "zone",
+          "low": 41.55,
+          "high": 48.60704918032787,
+          "price": 41.55
+        },
+        "stop_plan": {
+          "kind": "close_below_support",
+          "price": 41.55,
+          "invalidation": "收盘有效跌破支撑带",
+          "text": "收盘有效跌破支撑带"
+        },
+        "take_profit_plan": {
+          "kind": "targets",
+          "price": 53.07,
+          "targets": [
+            53.07,
+            54.6621
+          ]
+        },
+        "scores": {
+          "final": 0.34816282581105834,
+          "candidate": -0.07691162004731783,
+          "champion": 0.36639851481915825,
+          "reward_risk": 2.4082840236686374
+        },
+        "risk_flags": [],
+        "why_selected": "相对同组候选综合条件更优。",
+        "why_not_others": [],
+        "evidence_refs": [
+          "000426"
+        ],
+        "style_label": "stable"
+      },
+      {
+        "symbol": "000938",
+        "name": null,
+        "rank": 8,
+        "strategy_id": "S12",
+        "thesis": "接近计划买点，执行条件较充分，留意盘中确认。 主线覆盖不足，排序有下调。",
+        "entry_plan": {
+          "kind": "zone",
+          "low": 26.98455494609109,
+          "high": 27.25712620817282,
+          "price": 26.98455494609109
+        },
+        "stop_plan": {
+          "kind": "close_below_support",
+          "price": 26.98455494609109,
+          "invalidation": "收盘有效跌破支撑带",
+          "text": "收盘有效跌破支撑带"
+        },
+        "take_profit_plan": {
+          "kind": "targets",
+          "price": 27.802268732336277,
+          "targets": [
+            27.802268732336277,
+            28.074839994418006
+          ]
+        },
+        "scores": {
+          "final": 0.23269654209959353,
+          "candidate": -0.07130775290994248,
+          "champion": 0.394222138488013,
+          "reward_risk": 0.30741106854172967
+        },
+        "risk_flags": [],
+        "why_selected": "相对同组候选综合条件更优。",
+        "why_not_others": [],
+        "evidence_refs": [
+          "000938"
+        ],
+        "style_label": "stable"
+      },
+      {
+        "symbol": "601899",
+        "name": null,
+        "rank": 9,
+        "strategy_id": "S3",
+        "thesis": "结构候选靠前，但当前执行条件一般，建议观察等待更优位置。 主线覆盖不足，排序有下调。",
+        "entry_plan": {
+          "kind": "zone",
+          "low": 33.66,
+          "high": 36.42524590163934,
+          "price": 33.66
+        },
+        "stop_plan": {
+          "kind": "close_below_support",
+          "price": 33.66,
+          "invalidation": "收盘有效跌破支撑带",
+          "text": "收盘有效跌破支撑带"
+        },
+        "take_profit_plan": {
+          "kind": "targets",
+          "price": 39.16,
+          "targets": [
+            39.16,
+            40.334799999999994
+          ]
+        },
+        "scores": {
+          "final": 0.22133586397292587,
+          "candidate": -0.06399486767705809,
+          "champion": 0.35626564319592874,
+          "reward_risk": 1.75
+        },
+        "risk_flags": [],
+        "why_selected": "相对同组候选综合条件更优。",
+        "why_not_others": [],
+        "evidence_refs": [
+          "601899"
+        ],
+        "style_label": "stable"
+      },
+      {
+        "symbol": "600096",
+        "name": null,
+        "rank": 10,
+        "strategy_id": "S7",
+        "thesis": "结构候选靠前，但当前执行条件一般，建议观察等待更优位置。 主线覆盖不足，排序有下调。",
+        "entry_plan": {
+          "kind": "zone",
+          "low": 31.11,
+          "high": 34.89095238095238,
+          "price": 31.11
+        },
+        "stop_plan": {
+          "kind": "close_below_support",
+          "price": 31.11,
+          "invalidation": "收盘有效跌破支撑带",
+          "text": "收盘有效跌破支撑带"
+        },
+        "take_profit_plan": {
+          "kind": "targets",
+          "price": 44.38,
+          "targets": [
+            44.38,
+            45.2676
+          ]
+        },
+        "scores": {
+          "final": 0.037597826826135106,
+          "candidate": -0.212289204291904,
+          "champion": 0.37734161953056855,
+          "reward_risk": 3.6076388888888857
+        },
+        "risk_flags": [],
+        "why_selected": "相对同组候选综合条件更优。",
+        "why_not_others": [],
+        "evidence_refs": [
+          "600096"
+        ],
+        "style_label": "stable"
+      },
+      {
+        "symbol": "002714",
+        "name": null,
+        "rank": 11,
+        "strategy_id": "S13",
+        "thesis": "结构候选靠前，但当前执行条件一般，建议观察等待更优位置。 主线覆盖不足，排序有下调。",
+        "entry_plan": {
+          "kind": "zone",
+          "low": 43.8,
+          "high": 44.17,
+          "price": 43.8
+        },
+        "stop_plan": {
+          "kind": "close_below_support",
+          "price": 43.8,
+          "invalidation": "收盘有效跌破支撑带",
+          "text": "收盘有效跌破支撑带"
+        },
+        "take_profit_plan": {
+          "kind": "targets",
+          "price": 46.44,
+          "targets": [
+            46.44,
+            48.8
+          ]
+        },
+        "scores": {
+          "final": -0.04506711726381474,
+          "candidate": -0.17704424373330058,
+          "champion": 0.37091110023173623,
+          "reward_risk": 0.5714285714285721
+        },
+        "risk_flags": [],
+        "why_selected": "相对同组候选综合条件更优。",
+        "why_not_others": [],
+        "evidence_refs": [
+          "002714"
+        ],
+        "style_label": "stable"
+      },
+      {
+        "symbol": "002261",
+        "name": null,
+        "rank": 12,
+        "strategy_id": "S13",
+        "thesis": "结构候选靠前，但当前执行条件一般，建议观察等待更优位置。 主线覆盖不足，排序有下调。",
+        "entry_plan": {
+          "kind": "zone",
+          "low": 35.03,
+          "high": 35.57,
+          "price": 35.03
+        },
+        "stop_plan": {
+          "kind": "close_below_support",
+          "price": 35.03,
+          "invalidation": "收盘有效跌破支撑带",
+          "text": "收盘有效跌破支撑带"
+        },
+        "take_profit_plan": {
+          "kind": "targets",
+          "price": 36.49,
+          "targets": [
+            36.49,
+            37.12
+          ]
+        },
+        "scores": {
+          "final": -0.06290804697848404,
+          "candidate": -0.05592706086894576,
+          "champion": 0.34673849577322735,
+          "reward_risk": 0.3035714285714323
+        },
+        "risk_flags": [],
+        "why_selected": "相对同组候选综合条件更优。",
+        "why_not_others": [],
+        "evidence_refs": [
+          "002261"
+        ],
+        "style_label": "stable"
+      }
+    ],
+    "reserve_symbols": [
+      "600519",
+      "600111",
+      "002594",
+      "600030",
+      "000725",
+      "002131",
+      "002156",
+      "603993",
+      "603799",
+      "603019",
+      "600309",
+      "002074",
+      "002202",
+      "603228",
+      "601138",
+      "603220",
+      "002407",
+      "000063",
+      "603920",
+      "000977",
+      "600989",
+      "600150",
+      "000960",
+      "600884",
+      "600703",
+      "600673",
+      "601698",
+      "000792",
+      "002460",
+      "002837"
+    ],
+    "source_meta": {
+      "raw_keys": [
+        "as_of",
+        "candidate_pool",
+        "data_status",
+        "debug",
+        "disclaimer",
+        "env",
+        "execution_checklist",
+        "mainline",
+        "message",
+        "mover_hints",
+        "picks",
+        "themes",
+        "timezone",
+        "tradeable"
+      ],
+      "topk": 12,
+      "risk_profile": "normal"
+    }
+  },
+  "board": [
+    {
+      "symbol": "002371",
+      "name": null,
+      "rank": 1,
+      "final_score": 1.549960282204796,
+      "live_score": 1.549960282204796,
+      "execution_state": "observe",
+      "can_open": false,
+      "stretched": false,
+      "invalidated": false,
+      "summary": "002371 结构候选，等待盘中5分状态。",
+      "style_label": "balanced",
+      "pick": {
+        "symbol": "002371",
+        "name": null,
+        "rank": 1,
+        "strategy_id": "S8",
+        "thesis": "接近计划买点，执行条件较充分，留意盘中确认。 主线覆盖不足，排序有下调。",
+        "entry_plan": {
+          "kind": "zone",
+          "low": 447.0,
+          "high": 463.98,
+          "price": 447.0
+        },
+        "stop_plan": {
+          "kind": "close_below_support",
+          "price": 447.0,
+          "invalidation": "收盘有效跌破支撑带",
+          "text": "收盘有效跌破支撑带"
+        },
+        "take_profit_plan": {
+          "kind": "targets",
+          "price": 472.84,
+          "targets": [
+            472.84,
+            475.0
+          ]
+        },
+        "scores": {
+          "final": 1.549960282204796,
+          "candidate": -0.058453874525633207,
+          "champion": 0.39580800558712126,
+          "reward_risk": 6.690476190476152
+        },
+        "risk_flags": [],
+        "why_selected": "相对同组候选综合条件更优。",
+        "why_not_others": [],
+        "evidence_refs": [
+          "002371"
+        ],
+        "style_label": "balanced"
+      },
+      "pulse": null
+    },
+    {
+      "symbol": "603259",
+      "name": null,
+      "rank": 2,
+      "final_score": 0.9922400519834762,
+      "live_score": 0.9922400519834762,
+      "execution_state": "observe",
+      "can_open": false,
+      "stretched": false,
+      "invalidated": false,
+      "summary": "603259 结构候选，等待盘中5分状态。",
+      "style_label": "balanced",
+      "pick": {
+        "symbol": "603259",
+        "name": null,
+        "rank": 2,
+        "strategy_id": "S13",
+        "thesis": "接近计划买点，执行条件较充分，留意盘中确认。 主线覆盖不足，排序有下调。",
+        "entry_plan": {
+          "kind": "zone",
+          "low": 96.61,
+          "high": 98.1,
+          "price": 96.61
+        },
+        "stop_plan": {
+          "kind": "close_below_support",
+          "price": 96.61,
+          "invalidation": "收盘有效跌破支撑带",
+          "text": "收盘有效跌破支撑带"
+        },
+        "take_profit_plan": {
+          "kind": "targets",
+          "price": 106.19,
+          "targets": [
+            106.19,
+            106.33
+          ]
+        },
+        "scores": {
+          "final": 0.9922400519834762,
+          "candidate": -0.04826795624233786,
+          "champion": 0.38304000026680857,
+          "reward_risk": 3.9381443298969123
+        },
+        "risk_flags": [],
+        "why_selected": "相对同组候选综合条件更优。",
+        "why_not_others": [],
+        "evidence_refs": [
+          "603259"
+        ],
+        "style_label": "balanced"
+      },
+      "pulse": null
+    },
+    {
+      "symbol": "002050",
+      "name": null,
+      "rank": 3,
+      "final_score": 0.5300379623722169,
+      "live_score": 0.5300379623722169,
+      "execution_state": "observe",
+      "can_open": false,
+      "stretched": false,
+      "invalidated": false,
+      "summary": "002050 结构候选，等待盘中5分状态。",
+      "style_label": "stable",
+      "pick": {
+        "symbol": "002050",
+        "name": null,
+        "rank": 3,
+        "strategy_id": "S3",
+        "thesis": "结构候选靠前，但当前执行条件一般，建议观察等待更优位置。 主线覆盖不足，排序有下调。",
+        "entry_plan": {
+          "kind": "zone",
+          "low": 44.23,
+          "high": 48.453934426229516,
+          "price": 44.23
+        },
+        "stop_plan": {
+          "kind": "close_below_support",
+          "price": 44.23,
+          "invalidation": "收盘有效跌破支撑带",
+          "text": "收盘有效跌破支撑带"
+        },
+        "take_profit_plan": {
+          "kind": "targets",
+          "price": 52.16,
+          "targets": [
+            52.16,
+            53.724799999999995
+          ]
+        },
+        "scores": {
+          "final": 0.5300379623722169,
+          "candidate": -0.08624061782603461,
+          "champion": 0.3885813471084556,
+          "reward_risk": 3.218085106382973
+        },
+        "risk_flags": [],
+        "why_selected": "相对同组候选综合条件更优。",
+        "why_not_others": [],
+        "evidence_refs": [
+          "002050"
+        ],
+        "style_label": "stable"
+      },
+      "pulse": null
+    },
+    {
+      "symbol": "000547",
+      "name": null,
+      "rank": 4,
+      "final_score": 0.48042129835974307,
+      "live_score": 0.48042129835974307,
+      "execution_state": "observe",
+      "can_open": false,
+      "stretched": false,
+      "invalidated": false,
+      "summary": "000547 结构候选，等待盘中5分状态。",
+      "style_label": "stable",
+      "pick": {
+        "symbol": "000547",
+        "name": null,
+        "rank": 4,
+        "strategy_id": "S3",
+        "thesis": "结构候选靠前，但当前执行条件一般，建议观察等待更优位置。 主线覆盖不足，排序有下调。",
+        "entry_plan": {
+          "kind": "zone",
+          "low": 27.03,
+          "high": 28.947049180327873,
+          "price": 27.03
+        },
+        "stop_plan": {
+          "kind": "close_below_support",
+          "price": 27.03,
+          "invalidation": "收盘有效跌破支撑带",
+          "text": "收盘有效跌破支撑带"
+        },
+        "take_profit_plan": {
+          "kind": "targets",
+          "price": 31.03,
+          "targets": [
+            31.03,
+            31.960900000000002
+          ]
+        },
+        "scores": {
+          "final": 0.48042129835974307,
+          "candidate": -0.0854589725994807,
+          "champion": 0.3479576802101639,
+          "reward_risk": 3.081632653061223
+        },
+        "risk_flags": [],
+        "why_selected": "相对同组候选综合条件更优。",
+        "why_not_others": [],
+        "evidence_refs": [
+          "000547"
+        ],
+        "style_label": "stable"
+      },
+      "pulse": null
+    },
+    {
+      "symbol": "600089",
+      "name": null,
+      "rank": 5,
+      "final_score": 0.4361661252034813,
+      "live_score": 0.4361661252034813,
+      "execution_state": "observe",
+      "can_open": false,
+      "stretched": false,
+      "invalidated": false,
+      "summary": "600089 结构候选，等待盘中5分状态。",
+      "style_label": "stable",
+      "pick": {
+        "symbol": "600089",
+        "name": null,
+        "rank": 5,
+        "strategy_id": "S8",
+        "thesis": "接近计划买点，执行条件较充分，留意盘中确认。 主线覆盖不足，排序有下调。",
+        "entry_plan": {
+          "kind": "zone",
+          "low": 26.92,
+          "high": 27.77,
+          "price": 26.92
+        },
+        "stop_plan": {
+          "kind": "close_below_support",
+          "price": 26.92,
+          "invalidation": "收盘有效跌破支撑带",
+          "text": "收盘有效跌破支撑带"
+        },
+        "take_profit_plan": {
+          "kind": "targets",
+          "price": 28.32,
+          "targets": [
+            28.32,
+            28.59
+          ]
+        },
+        "scores": {
+          "final": 0.4361661252034813,
+          "candidate": -0.051815793179543615,
+          "champion": 0.3655137535238977,
+          "reward_risk": 1.2222222222222234
+        },
+        "risk_flags": [],
+        "why_selected": "相对同组候选综合条件更优。",
+        "why_not_others": [],
+        "evidence_refs": [
+          "600089"
+        ],
+        "style_label": "stable"
+      },
+      "pulse": null
+    },
+    {
+      "symbol": "600276",
+      "name": null,
+      "rank": 6,
+      "final_score": 0.4069727099665699,
+      "live_score": 0.4069727099665699,
+      "execution_state": "observe",
+      "can_open": false,
+      "stretched": false,
+      "invalidated": false,
+      "summary": "600276 结构候选，等待盘中5分状态。",
+      "style_label": "stable",
+      "pick": {
+        "symbol": "600276",
+        "name": null,
+        "rank": 6,
+        "strategy_id": "S1",
+        "thesis": "结构候选靠前，但当前执行条件一般，建议观察等待更优位置。 主线覆盖不足，排序有下调。",
+        "entry_plan": {
+          "kind": "zone",
+          "low": 53.61,
+          "high": 56.9395081967213,
+          "price": 53.61
+        },
+        "stop_plan": {
+          "kind": "close_below_support",
+          "price": 53.61,
+          "invalidation": "收盘有效跌破支撑带",
+          "text": "收盘有效跌破支撑带"
+        },
+        "take_profit_plan": {
+          "kind": "targets",
+          "price": 61.12,
+          "targets": [
+            61.12,
+            62.3424
+          ]
+        },
+        "scores": {
+          "final": 0.4069727099665699,
+          "candidate": -0.06830970549230378,
+          "champion": 0.4065718805870861,
+          "reward_risk": 2.5093457943925217
+        },
+        "risk_flags": [],
+        "why_selected": "相对同组候选综合条件更优。",
+        "why_not_others": [],
+        "evidence_refs": [
+          "600276"
+        ],
+        "style_label": "stable"
+      },
+      "pulse": null
+    },
+    {
+      "symbol": "000426",
+      "name": null,
+      "rank": 7,
+      "final_score": 0.34816282581105834,
+      "live_score": 0.34816282581105834,
+      "execution_state": "observe",
+      "can_open": false,
+      "stretched": false,
+      "invalidated": false,
+      "summary": "000426 结构候选，等待盘中5分状态。",
+      "style_label": "stable",
+      "pick": {
+        "symbol": "000426",
+        "name": null,
+        "rank": 7,
+        "strategy_id": "S3",
+        "thesis": "结构候选靠前，但当前执行条件一般，建议观察等待更优位置。 主线覆盖不足，排序有下调。",
+        "entry_plan": {
+          "kind": "zone",
+          "low": 41.55,
+          "high": 48.60704918032787,
+          "price": 41.55
+        },
+        "stop_plan": {
+          "kind": "close_below_support",
+          "price": 41.55,
+          "invalidation": "收盘有效跌破支撑带",
+          "text": "收盘有效跌破支撑带"
+        },
+        "take_profit_plan": {
+          "kind": "targets",
+          "price": 53.07,
+          "targets": [
+            53.07,
+            54.6621
+          ]
+        },
+        "scores": {
+          "final": 0.34816282581105834,
+          "candidate": -0.07691162004731783,
+          "champion": 0.36639851481915825,
+          "reward_risk": 2.4082840236686374
+        },
+        "risk_flags": [],
+        "why_selected": "相对同组候选综合条件更优。",
+        "why_not_others": [],
+        "evidence_refs": [
+          "000426"
+        ],
+        "style_label": "stable"
+      },
+      "pulse": null
+    },
+    {
+      "symbol": "000938",
+      "name": null,
+      "rank": 8,
+      "final_score": 0.23269654209959353,
+      "live_score": 0.23269654209959353,
+      "execution_state": "observe",
+      "can_open": false,
+      "stretched": false,
+      "invalidated": false,
+      "summary": "000938 结构候选，等待盘中5分状态。",
+      "style_label": "stable",
+      "pick": {
+        "symbol": "000938",
+        "name": null,
+        "rank": 8,
+        "strategy_id": "S12",
+        "thesis": "接近计划买点，执行条件较充分，留意盘中确认。 主线覆盖不足，排序有下调。",
+        "entry_plan": {
+          "kind": "zone",
+          "low": 26.98455494609109,
+          "high": 27.25712620817282,
+          "price": 26.98455494609109
+        },
+        "stop_plan": {
+          "kind": "close_below_support",
+          "price": 26.98455494609109,
+          "invalidation": "收盘有效跌破支撑带",
+          "text": "收盘有效跌破支撑带"
+        },
+        "take_profit_plan": {
+          "kind": "targets",
+          "price": 27.802268732336277,
+          "targets": [
+            27.802268732336277,
+            28.074839994418006
+          ]
+        },
+        "scores": {
+          "final": 0.23269654209959353,
+          "candidate": -0.07130775290994248,
+          "champion": 0.394222138488013,
+          "reward_risk": 0.30741106854172967
+        },
+        "risk_flags": [],
+        "why_selected": "相对同组候选综合条件更优。",
+        "why_not_others": [],
+        "evidence_refs": [
+          "000938"
+        ],
+        "style_label": "stable"
+      },
+      "pulse": null
+    },
+    {
+      "symbol": "601899",
+      "name": null,
+      "rank": 9,
+      "final_score": 0.22133586397292587,
+      "live_score": 0.22133586397292587,
+      "execution_state": "observe",
+      "can_open": false,
+      "stretched": false,
+      "invalidated": false,
+      "summary": "601899 结构候选，等待盘中5分状态。",
+      "style_label": "stable",
+      "pick": {
+        "symbol": "601899",
+        "name": null,
+        "rank": 9,
+        "strategy_id": "S3",
+        "thesis": "结构候选靠前，但当前执行条件一般，建议观察等待更优位置。 主线覆盖不足，排序有下调。",
+        "entry_plan": {
+          "kind": "zone",
+          "low": 33.66,
+          "high": 36.42524590163934,
+          "price": 33.66
+        },
+        "stop_plan": {
+          "kind": "close_below_support",
+          "price": 33.66,
+          "invalidation": "收盘有效跌破支撑带",
+          "text": "收盘有效跌破支撑带"
+        },
+        "take_profit_plan": {
+          "kind": "targets",
+          "price": 39.16,
+          "targets": [
+            39.16,
+            40.334799999999994
+          ]
+        },
+        "scores": {
+          "final": 0.22133586397292587,
+          "candidate": -0.06399486767705809,
+          "champion": 0.35626564319592874,
+          "reward_risk": 1.75
+        },
+        "risk_flags": [],
+        "why_selected": "相对同组候选综合条件更优。",
+        "why_not_others": [],
+        "evidence_refs": [
+          "601899"
+        ],
+        "style_label": "stable"
+      },
+      "pulse": null
+    },
+    {
+      "symbol": "600096",
+      "name": null,
+      "rank": 10,
+      "final_score": 0.037597826826135106,
+      "live_score": 0.037597826826135106,
+      "execution_state": "observe",
+      "can_open": false,
+      "stretched": false,
+      "invalidated": false,
+      "summary": "600096 结构候选，等待盘中5分状态。",
+      "style_label": "stable",
+      "pick": {
+        "symbol": "600096",
+        "name": null,
+        "rank": 10,
+        "strategy_id": "S7",
+        "thesis": "结构候选靠前，但当前执行条件一般，建议观察等待更优位置。 主线覆盖不足，排序有下调。",
+        "entry_plan": {
+          "kind": "zone",
+          "low": 31.11,
+          "high": 34.89095238095238,
+          "price": 31.11
+        },
+        "stop_plan": {
+          "kind": "close_below_support",
+          "price": 31.11,
+          "invalidation": "收盘有效跌破支撑带",
+          "text": "收盘有效跌破支撑带"
+        },
+        "take_profit_plan": {
+          "kind": "targets",
+          "price": 44.38,
+          "targets": [
+            44.38,
+            45.2676
+          ]
+        },
+        "scores": {
+          "final": 0.037597826826135106,
+          "candidate": -0.212289204291904,
+          "champion": 0.37734161953056855,
+          "reward_risk": 3.6076388888888857
+        },
+        "risk_flags": [],
+        "why_selected": "相对同组候选综合条件更优。",
+        "why_not_others": [],
+        "evidence_refs": [
+          "600096"
+        ],
+        "style_label": "stable"
+      },
+      "pulse": null
+    },
+    {
+      "symbol": "002714",
+      "name": null,
+      "rank": 11,
+      "final_score": -0.04506711726381474,
+      "live_score": -0.04506711726381474,
+      "execution_state": "observe",
+      "can_open": false,
+      "stretched": false,
+      "invalidated": false,
+      "summary": "002714 结构候选，等待盘中5分状态。",
+      "style_label": "stable",
+      "pick": {
+        "symbol": "002714",
+        "name": null,
+        "rank": 11,
+        "strategy_id": "S13",
+        "thesis": "结构候选靠前，但当前执行条件一般，建议观察等待更优位置。 主线覆盖不足，排序有下调。",
+        "entry_plan": {
+          "kind": "zone",
+          "low": 43.8,
+          "high": 44.17,
+          "price": 43.8
+        },
+        "stop_plan": {
+          "kind": "close_below_support",
+          "price": 43.8,
+          "invalidation": "收盘有效跌破支撑带",
+          "text": "收盘有效跌破支撑带"
+        },
+        "take_profit_plan": {
+          "kind": "targets",
+          "price": 46.44,
+          "targets": [
+            46.44,
+            48.8
+          ]
+        },
+        "scores": {
+          "final": -0.04506711726381474,
+          "candidate": -0.17704424373330058,
+          "champion": 0.37091110023173623,
+          "reward_risk": 0.5714285714285721
+        },
+        "risk_flags": [],
+        "why_selected": "相对同组候选综合条件更优。",
+        "why_not_others": [],
+        "evidence_refs": [
+          "002714"
+        ],
+        "style_label": "stable"
+      },
+      "pulse": null
+    },
+    {
+      "symbol": "002261",
+      "name": null,
+      "rank": 12,
+      "final_score": -0.06290804697848404,
+      "live_score": -0.06290804697848404,
+      "execution_state": "observe",
+      "can_open": false,
+      "stretched": false,
+      "invalidated": false,
+      "summary": "002261 结构候选，等待盘中5分状态。",
+      "style_label": "stable",
+      "pick": {
+        "symbol": "002261",
+        "name": null,
+        "rank": 12,
+        "strategy_id": "S13",
+        "thesis": "结构候选靠前，但当前执行条件一般，建议观察等待更优位置。 主线覆盖不足，排序有下调。",
+        "entry_plan": {
+          "kind": "zone",
+          "low": 35.03,
+          "high": 35.57,
+          "price": 35.03
+        },
+        "stop_plan": {
+          "kind": "close_below_support",
+          "price": 35.03,
+          "invalidation": "收盘有效跌破支撑带",
+          "text": "收盘有效跌破支撑带"
+        },
+        "take_profit_plan": {
+          "kind": "targets",
+          "price": 36.49,
+          "targets": [
+            36.49,
+            37.12
+          ]
+        },
+        "scores": {
+          "final": -0.06290804697848404,
+          "candidate": -0.05592706086894576,
+          "champion": 0.34673849577322735,
+          "reward_risk": 0.3035714285714323
+        },
+        "risk_flags": [],
+        "why_selected": "相对同组候选综合条件更优。",
+        "why_not_others": [],
+        "evidence_refs": [
+          "002261"
+        ],
+        "style_label": "stable"
+      },
+      "pulse": null
+    }
+  ],
+  "watchset": [
+    "002050",
+    "002371",
+    "600118",
+    "600030",
+    "601698",
+    "603259",
+    "000547",
+    "600089",
+    "600276",
+    "000426",
+    "000938",
+    "601899",
+    "600096",
+    "002714",
+    "002261",
+    "600519",
+    "600111",
+    "002594",
+    "000725",
+    "002131",
+    "002156",
+    "603993",
+    "603799",
+    "603019",
+    "600309",
+    "002074",
+    "002202",
+    "603228",
+    "601138"
+  ],
+  "symbol_states": {},
+  "portfolio_snapshot": {
+    "as_of": "2026-03-20T13:34:01.357738+00:00",
+    "cash": null,
+    "equity": null,
+    "positions": [],
+    "pending_intents": [
+      {
+        "intent_id": "intent-45605cb1676e",
+        "run_id": "2099-07-01-PE",
+        "as_of": "2099-07-01-PE",
+        "symbol": "Q",
+        "side": "buy",
+        "decision_source": "gated_recommendation",
+        "gating_decision": {
+          "decision": "allow",
+          "level": "item",
+          "reasons": [],
+          "triggered_rules": [],
+          "warnings": [],
+          "inputs_snapshot": {
+            "final_score": 0.605,
+            "reliability_score": 1.0,
+            "invalidated_now": false,
+            "actionable": true,
+            "strategy": "S_OK8"
+          },
+          "fallback_used": false
+        },
+        "priority": 1.0,
+        "thesis": "S_OK8",
+        "entry_hint": null,
+        "stop_hint": null,
+        "invalidation": [],
+        "confidence": 1.0,
+        "sizing_hint": 1.0,
+        "status": "admitted",
+        "warnings": [],
+        "metadata": {
+          "created_at": "2026-03-20T13:34:01.356738+00:00"
+        },
+        "provenance": {
+          "artifact_version": "v2",
+          "symbol": "Q",
+          "strategy": "S_OK8"
+        }
+      }
+    ],
+    "recent_events": [
+      {
+        "event_id": "evt-9631fedb1eca",
+        "intent_id": "intent-45605cb1676e",
+        "event_type": "admitted",
+        "timestamp": "2026-03-20T13:34:01.357738+00:00",
+        "symbol": "Q",
+        "notes": "paper_admit",
+        "source_run_id": "2099-07-01-PE"
+      }
+    ],
+    "realized_pnl": null,
+    "unrealized_pnl": null,
+    "exposure_summary": {},
+    "warnings": []
+  },
+  "last_closed_5m": null,
+  "side_results": [],
+  "daybook_effective_day": "20260421",
+  "pulse_trade_day": "20260422",
+  "pulse_slot_at": "2026-04-22 13:45:00",
+  "market_phase": "INTRADAY_PM",
+  "data_status": "ok",
+  "calendar_source": "weekday"
+}

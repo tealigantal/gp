@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 import json
 from fastapi.testclient import TestClient
-from gp_assistant.server.app import app
+from gp_assistant.gateway.app import app
 
 
 def _persist_minimal_v2(as_of: str) -> None:

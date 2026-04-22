@@ -5,7 +5,7 @@ import types
 import pandas as pd
 from fastapi.testclient import TestClient
 
-from gp_assistant.server.app import app
+from gp_assistant.gateway.app import app
 from src.gp_assistant.strategy import library as strat_lib
 
 
@@ -60,4 +60,3 @@ def test_server_compact_payload_keeps_new_fields(monkeypatch):
     assert "execution_bands" in tp and isinstance(tp["execution_bands"], dict)
     assert "structural_bands" in tp and isinstance(tp["structural_bands"], dict)
     assert "diagnostics" in tp and isinstance(tp["diagnostics"], dict)
-
