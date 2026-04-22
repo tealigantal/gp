@@ -17,7 +17,27 @@ from typing import Any, Dict, List, Optional, Tuple
 import pandas as pd
 
 from ...core.paths import store_dir, data_dir
-from ....service.symbols import canonicalize_ts_code
+
+
+def canonicalize_ts_code(raw: str) -> Tuple[str, str, str]:
+    value = str(raw or "").strip().upper()
+    digits = "".join(ch for ch in value if ch.isdigit())
+    if len(digits) >= 6:
+        code6 = digits[-6:]
+    else:
+        code6 = digits.zfill(6) if digits else ""
+    suffix = ""
+    if value.endswith(".SH") or value.startswith("SH"):
+        suffix = "SH"
+    elif value.endswith(".SZ") or value.startswith("SZ"):
+        suffix = "SZ"
+    elif code6.startswith(("5", "6", "9")):
+        suffix = "SH"
+    elif code6:
+        suffix = "SZ"
+    ts_code = f"{code6}.{suffix}" if code6 and suffix else code6
+    display = ts_code or value
+    return ts_code, code6, display
 
 
 def _parse_date_keyword(d: Optional[str]) -> Tuple[Optional[str], Optional[str]]:

@@ -1,11 +1,11 @@
-# src/gp_assistant/recommend/runner.py
+# src/gp_assistant/selection_engine/runner.py
 """
 推荐“多模式”路由器。
 
 用法：
 - 默认：mode 为空 => 根据配置决定（dev_mode -> dev，否则 default）
 - 显式：POST /api/recommend { "mode": "dev" } 或 "default" 或你未来新增的模式名
-- 新增模式：在 src/gp_assistant/recommend/modes/<mode>.py 里实现 run(...)
+- 新增模式：在 src/gp_assistant/selection_engine/modes/<mode>.py 里实现 run(...)
 """
 
 from __future__ import annotations
@@ -57,7 +57,7 @@ def run(
         raise APIError(status_code=400, message="invalid recommend mode", detail={"mode": m})
 
     try:
-        mod = importlib.import_module(f"gp_assistant.recommend.modes.{m}")
+        mod = importlib.import_module(f"gp_assistant.selection_engine.modes.{m}")
     except ModuleNotFoundError as e:
         raise APIError(status_code=400, message="unknown recommend mode", detail={"mode": m}) from e
 

@@ -27,31 +27,13 @@ def main() -> int:
     cfg = load_config()
     mode = (os.getenv('GP_SELF_CHECK_MODE') or '').strip().lower()
     if mode == 'contract':
-        # Contract-only: orchestrator + event_store
         try:
-            from ..chat.orchestrator import handle_message as _hm
-            from ..chat import event_store as _es
-            sid = None
-            _ = _hm(sid, "推荐一下")
-            convs = _es.list_conversations()
-            ok_meta = False
-            for cv in (convs or [])[::-1]:
-                cid = cv.get('id') or ''
-                evs = _es.list_events_after(cid, 0, limit=200)
-                for e in (evs or [])[::-1]:
-                    d = e.get('data') or {}
-                    if d.get('kind') == 'card' and (d.get('payload') or {}).get('type') == 'recommendation':
-                        meta = (d.get('payload') or {}).get('meta')
-                        if isinstance(meta, dict) and 'as_of' in meta and isinstance(meta.get('themes'), list):
-                            ok_meta = True
-                            break
-                if ok_meta:
-                    break
-            if not ok_meta:
-                print('[self-check] contract: event payload.meta missing or invalid')
-                return 2
-            print('[self-check] contract: ok')
-            return 0
+            from .self_check_contract import main as contract_main
+
+            rc = int(contract_main())
+            if rc == 0:
+                print('[self-check] contract: ok')
+            return rc
         except Exception as e:
             print(f"[self-check] contract mode error: {e}")
             return 2

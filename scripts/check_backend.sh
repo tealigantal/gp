@@ -4,8 +4,8 @@ set -euo pipefail
 python -m compileall src
 python -m pytest -q \
   tests/test_regress_theme_and_bands.py \
-  tests/test_contract_event_and_history.py \
-  tests/test_theme_concept_fallback_no_snapshot.py \
+  tests/recommend/test_contracts_v2.py \
+  tests/test_theme_fallback_top_movers.py \
   tests/test_theme_pool_snapshot_paths.py \
   tests/test_theme_pool_impl_nan_and_scale.py \
   tests/test_strict_no_pseudo_output.py
@@ -23,5 +23,5 @@ python -m pytest -q \
   tests/validation/test_lifecycle.py \
   tests/api/test_validation_endpoints.py \
   tests/validation/test_strategy_health_penalty.py
-PYTHONPATH=src python -m gp_assistant.recommend.self_check_contract
+PYTHONPATH=src python -m gp_assistant.selection_engine.self_check_contract
 
