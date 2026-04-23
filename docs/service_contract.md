@@ -1,36 +1,138 @@
-# Service Output Contract
+# Service Contract
 
-This document defines the JSON schema for recommendation outputs written to `store/recommend/{date}.json` and `store/recommend/latest.json`.
+This document describes the current public-facing service contract at a high level.
 
-File layout:
-- `store/recommend/{date}.json` — daily recommendation result (preopen/intraday/close stages)
-- `store/recommend/latest.json` — the latest published result (symlink-like copy)
+## API Surface
 
-Schema (minimum fields):
+The current HTTP API is exposed by `src/gp_assistant/gateway/routes.py`.
+
+Primary endpoints:
+
+- `POST /api/chat`
+- `GET /api/health`
+- `GET /api/book/current`
+- `GET /api/session/{session_id}`
+- `GET /api/sessions`
+- `GET /api/run/{run_id}`
+- `GET /api/side-results`
+
+## Chat Request
+
+`POST /api/chat`
+
+Request shape:
+
+```json
 {
-  "as_of": "YYYYMMDD HH:MM:SS",
-  "timezone": "Asia/Shanghai",
-  "tradeable": true,
-  "message": "human-readable status",
-  "disclaimer": "disclaimer text",
-  "stage": "preopen|intraday|close",
-  "picks": [
-    {
-      "symbol": "000001.SZ",
-      "name": "optional company name",
-      "theme": "optional theme or concept",
-      "champion": { "strategy": "name", "score": 0.0, "params_hash": "...", "scenario": "base" },
-      "trade_plan": { "entry": 0.0, "stop": 0.0, "take": 0.0, "bands": {}, "actions": {} },
-      "tags": ["info", "risk"],
-      "risk": { "max_position": 0.1, "cooldown": 0 },
-      "debug": {}
-    }
-  ],
-  "debug": { "mode": "service", "degraded": false, "reasons": [] }
+  "session_id": "optional-session-id",
+  "message": "user input"
 }
+```
 
 Notes:
-- Fields must remain stable to avoid breaking the frontend. Additional fields can be added under `debug`.
-- The `champion` sub-object freezes the strategy identity used to generate the pick.
-- Intraday updates should preserve required keys and only update fields (e.g., signals, actions, metrics).
 
+- `session_id` is optional on the first turn.
+- `message` is required.
+
+## Chat Response
+
+The response model is defined in `src/gp_assistant/contracts/api.py` as `ChatResponse`.
+
+Current top-level fields:
+
+```json
+{
+  "session_id": "string",
+  "reply": "string",
+  "message": {},
+  "run_id": "string or null",
+  "symbols": [],
+  "right_panel": {},
+  "ui_items": [],
+  "planner_trace": {},
+  "evidence_refs": []
+}
+```
+
+Field intent:
+
+- `session_id`: stable conversation handle
+- `reply`: primary assistant text
+- `message`: structured narrative payload for the current turn
+- `run_id`: current published run when the turn produces or binds one
+- `symbols`: symbols relevant to the turn
+- `right_panel`: compact operational summary for clients
+- `ui_items`: future-facing structured UI payloads
+- `planner_trace`: parse / planning trace for debugging
+- `evidence_refs`: provenance references for the answer
+
+## Health Response
+
+`GET /api/health`
+
+Current fields:
+
+```json
+{
+  "status": "ok",
+  "trading_day": "optional-string",
+  "book_version": "optional-string",
+  "llm_ready": true,
+  "storage": {
+    "session_count": 0,
+    "transcript_count": 0,
+    "claim_count": 0,
+    "latest_session_at": null
+  }
+}
+```
+
+## Session Response
+
+`GET /api/session/{session_id}`
+
+Current shape:
+
+```json
+{
+  "session": {},
+  "recent_turns": [],
+  "recent_claims": []
+}
+```
+
+## Book Response
+
+`GET /api/book/current`
+
+Current shape:
+
+```json
+{
+  "book": {}
+}
+```
+
+The concrete `book` object is derived from `MarketBook` in `src/gp_assistant/contracts/objects.py`.
+
+## Run Response
+
+`GET /api/run/{run_id}`
+
+Current shape:
+
+```json
+{
+  "run": {}
+}
+```
+
+The concrete `run` object is derived from `AdviceRun` in `src/gp_assistant/contracts/objects.py`.
+
+## Stability Rules
+
+- Treat `src/gp_assistant/contracts/api.py` as the source of truth for HTTP response envelopes.
+- Treat `src/gp_assistant/contracts/objects.py` as the source of truth for internal structured domain models.
+- Add new fields conservatively.
+- Do not reintroduce retired `chat` or `recommend` compatibility contracts.
+- If a client needs stronger guarantees, document the exact field-level promise near the corresponding response model rather than in a historical compatibility shim.

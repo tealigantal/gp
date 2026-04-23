@@ -1,60 +1,127 @@
 # Ops Runbook
 
-This runbook describes day-to-day operations for the unified research + live recommendation system.
+This runbook describes how to run and verify the current GP Assistant service.
 
-Prerequisites
-- Configure `configs/config.yaml` (fees, slippage, max_positions, vol_unit)
-- Ensure directories exist: `data/`, `universe/`, `store/`, `results/`
+## Scope
 
-Runtime data & retention
-- Runtime outputs (sessions/search/recommend/cache/snapshots) are not versioned.
-- Periodic cleanup (keep last 14 days by default):
-  - `python -m scripts.retention --keep-days 14`
-  - Mount `store/` in Docker via compose; do not bake runtime data into the image.
+This document only covers the current service spine:
 
-1) Data Update
-- Basics + Daily bars:
-  - python gpbt.py fetch --provider tushare --start 20250101 --end 20250131
-- Candidate pool (daily):
-  - python gpbt.py build-candidates --date 20250106 --pool_size 20
-- Minute bars for pool (optional refresh):
-  - python gpbt.py fetch-min5-for-pool --provider tushare --date 20250106
+- API entry: `src/gp_assistant/gateway/`
+- turn loop: `src/gp_assistant/runtime/turn_loop.py`
+- market book refresh: `src/gp_assistant/book/`
+- session and transcript storage: `src/gp_assistant/memory/`
 
-2) Research Update
-- Experiment grid:
-  - python gpbt.py experiment --config configs/config.yaml --experiments configs/experiments/demo_grid.yaml --start 20250101 --end 20250131 --exp_id jan_grid
-- Tournament realistic (select champion OOS):
-  - python gpbt.py tournament --config configs/config.yaml --strategies configs/strategies/*.yaml --start 20250101 --end 20250131 --mode realistic --training_window 5 --reselect_interval weekly --tournament_id jan_tour --emit_registry store/registry/champion.json
+It does not cover retired workbench, legacy chat adapters, or the removed compatibility surface.
 
-3) Service Run (Daily)
-- Preopen (generate picks and publish):
-  - python gpbt.py service preopen --date 20250106 --topk 10
-- Intraday (idempotent, can run periodically every 5 minutes):
-  - python gpbt.py service intraday --date 20250106 --once
-- Close (finalize day and publish):
-  - python gpbt.py service close --date 20250106
-- Publish (re-publish latest as needed):
-  - python gpbt.py service publish --date 20250106
+## Prerequisites
 
-Cron Examples (Linux crontab)
-- Preopen 09:10 CST:
-  - 10 9 * * 1-5 cd /app/gp && /usr/bin/python gpbt.py service preopen --date $(date +\%Y\%m\%d) --topk 10
-- Intraday every 10 minutes 09:30–15:00:
-  - */10 9-15 * * 1-5 cd /app/gp && /usr/bin/python gpbt.py service intraday --date $(date +\%Y\%m\%d) --once
-- Close 15:10 CST:
-  - 10 15 * * 1-5 cd /app/gp && /usr/bin/python gpbt.py service close --date $(date +\%Y\%m\%d)
+- Python 3.11+
+- Node.js 18+ for the frontend
+- dependencies installed from `requirements.txt`
 
-Health Checks
-- Gate A: Basic
-  - python -m compileall -q .
-  - python -m pytest -q
-  - python -m backtest.runner_weekly --config configs/config.yaml --strategies configs/strategies/*.yaml --start 20250106 --end 20250110 --run_id demo_fixture
-  - python gpbt.py doctor --level basic
-- Gate B: Service
-  - python gpbt.py service preopen --date 20250106
-  - python gpbt.py service intraday --date 20250106 --once
-  - python gpbt.py service close --date 20250106
-- Gate C: Research
-  - python gpbt.py experiment --config configs/config.yaml --experiments configs/experiments/demo_grid.yaml --start 20250106 --end 20250110 --exp_id demo_matrix
-  - python gpbt.py tournament --config configs/config.yaml --strategies configs/strategies/*.yaml --start 20250106 --end 20250131 --mode realistic --training_window 5 --reselect_interval weekly --tournament_id demo_real --emit_registry store/registry/champion.json
+Backend setup:
 
+```bash
+python -m venv .venv
+.venv\Scripts\activate
+pip install -r requirements.txt
+```
+
+Frontend setup:
+
+```bash
+cd frontend
+npm ci
+```
+
+## Run Locally
+
+### Start the API
+
+```bash
+set PYTHONPATH=src
+python -m gp_assistant serve --host 127.0.0.1 --port 8000
+```
+
+### Start the frontend
+
+```bash
+cd frontend
+npm run dev
+```
+
+### Single-turn local execution
+
+```bash
+set PYTHONPATH=src
+python -m gp_assistant chat "给我三只当前可看的票"
+```
+
+### Refresh the market book once
+
+```bash
+set PYTHONPATH=src
+python -m gp_assistant pulse
+```
+
+## Main Runtime Checks
+
+Health:
+
+```bash
+curl http://127.0.0.1:8000/api/health
+```
+
+Core endpoints:
+
+- `POST /api/chat`
+- `GET /api/health`
+- `GET /api/book/current`
+- `GET /api/session/{session_id}`
+- `GET /api/sessions`
+- `GET /api/run/{run_id}`
+- `GET /api/side-results`
+
+## Recommended Local Validation
+
+Fast structural checks:
+
+```bash
+python -m compileall src
+```
+
+Service-facing tests:
+
+```bash
+python -m pytest -q tests/server/test_app_import.py tests/server/test_chat_endpoint_smoke.py
+python -m pytest -q tests/test_api_smoke.py
+python -m pytest -q tests/unit/test_interpret_request_types.py tests/unit/test_judgment_dispatch.py tests/unit/test_dispatch_new_handlers.py tests/unit/test_daybook_mapping.py
+```
+
+## Runtime Data
+
+The repository writes runtime artifacts under `store/`.
+
+Typical examples:
+
+- `store/book/`
+- `store/runs/`
+- `store/portfolio/`
+- `store/validation/`
+
+These files are workspace artifacts. Treat them as generated state unless a specific file is intentionally versioned.
+
+## Operational Notes
+
+- The service is session-based. `session_id` is the stable handle for follow-up turns.
+- `run_id` is the stable handle for a published recommendation result.
+- `book/current.json` is runtime state, not the primary source code contract.
+- Freshness behavior is defined in [data_freshness_policy.md](./data_freshness_policy.md).
+
+## When Something Looks Wrong
+
+1. Check `/api/health`.
+2. Run `python -m compileall src`.
+3. Run the server smoke tests listed above.
+4. Inspect `store/book/current.json` only as a debug artifact, not as a design reference.
+5. Use [PROGRESS.md](./PROGRESS.md) and [../src/gp_assistant/ARCHITECTURE.md](../src/gp_assistant/ARCHITECTURE.md) as the current structural references.
