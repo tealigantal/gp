@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import argparse
 import json
+
 import uvicorn
 
+from .evidence.daily_freshness import audit_daily_freshness
 from .gateway.app import app
 from .runtime.turn_loop import run_turn_sync
-from .book.engine import sync_book_once
+from .worker import reconcile_runtime_state, run_pulse_loop
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -17,7 +19,11 @@ def main(argv: list[str] | None = None) -> int:
     p_serve.add_argument("--host", default="127.0.0.1")
     p_serve.add_argument("--port", type=int, default=8000)
 
-    p_worker = sub.add_parser("pulse", help="advance market book to latest 5m")
+    sub.add_parser("pulse-loop", help="run the intraday slot worker loop")
+    sub.add_parser("replay-today", help="replay all closed slots up to the current slot")
+    sub.add_parser("rebuild-daybook", help="generate today daybook and preopen unavailable artifact")
+    sub.add_parser("postclose-archive", help="archive post-close state")
+    sub.add_parser("audit-daily-freshness", help="audit daily freshness and stale symbols")
 
     p_chat = sub.add_parser("chat", help="single-turn chat")
     p_chat.add_argument("message")
@@ -27,12 +33,27 @@ def main(argv: list[str] | None = None) -> int:
     if args.cmd == "serve":
         uvicorn.run(app, host=args.host, port=args.port)
         return 0
-    if args.cmd == "pulse":
-        out = sync_book_once()
-        print(json.dumps(out, ensure_ascii=False, indent=2))
+    if args.cmd == "pulse-loop":
+        run_pulse_loop()
+        return 0
+    if args.cmd == "replay-today":
+        print(json.dumps(reconcile_runtime_state(operation="replay_today"), ensure_ascii=False, indent=2))
+        return 0
+    if args.cmd == "rebuild-daybook":
+        print(json.dumps(reconcile_runtime_state(operation="rebuild_daybook"), ensure_ascii=False, indent=2))
+        return 0
+    if args.cmd == "postclose-archive":
+        print(json.dumps(reconcile_runtime_state(operation="postclose_archive"), ensure_ascii=False, indent=2))
+        return 0
+    if args.cmd == "audit-daily-freshness":
+        print(json.dumps(audit_daily_freshness(), ensure_ascii=False, indent=2))
         return 0
     if args.cmd == "chat":
         out = run_turn_sync(session_id=args.session_id, user_message=args.message)
         print(json.dumps(out, ensure_ascii=False, indent=2))
         return 0
     return 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

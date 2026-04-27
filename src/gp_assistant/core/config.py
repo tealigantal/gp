@@ -72,7 +72,7 @@ class AppConfig:
     dynamic_pool_size: int = int(os.getenv("GP_DYNAMIC_POOL_SIZE", "200"))
 
     # Mainline restriction
-    restrict_to_mainline: bool = _truthy(os.getenv("GP_RESTRICT_MAINLINE", "1"))
+    restrict_to_mainline: bool = _truthy(os.getenv("GP_RESTRICT_MAINLINE", "0"))
     mainline_top_n: int = int(os.getenv("GP_MAINLINE_TOP_N", "2"))
     mainline_mode: str = os.getenv("GP_MAINLINE_MODE", "auto")
     # Optional: require mainline to be present for tradeable
@@ -96,6 +96,14 @@ class AppConfig:
 
     # Cache TTL
     cache_refresh_ttl_sec: int = int(os.getenv("GP_CACHE_REFRESH_TTL_SEC", "300"))
+
+    # Intraday pulse/worker
+    intraday_fetch_workers: int = int(os.getenv("GP_INTRADAY_FETCH_WORKERS", "6"))
+    intraday_fetch_timeout_sec: int = int(os.getenv("GP_INTRADAY_FETCH_TIMEOUT_SEC", "20"))
+    intraday_poll_interval_sec: int = int(os.getenv("GP_INTRADAY_POLL_INTERVAL_SEC", "15"))
+    intraday_benchmark_symbol: str = os.getenv("GP_INTRADAY_BENCHMARK", "000300")
+    intraday_include_portfolio: bool = _truthy(os.getenv("GP_INTRADAY_INCLUDE_PORTFOLIO", "1"))
+    intraday_slot_baseline_days: int = int(os.getenv("GP_INTRADAY_SLOT_BASELINE_DAYS", "20"))
 
 
 def load_config() -> AppConfig:

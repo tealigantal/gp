@@ -123,6 +123,8 @@ class MarketDataHub:
         qparams = {"kind": "daily", "symbol": str(symbol), "provider": provider.name}
         qid = canonical_query_id(qparams)
         ensure_query(qid, qparams)
+        meta_q_initial = _query_meta(qid)
+        target_trading_day: Optional[str] = None
 
         # Network decision; force_network overrides TTL and other gates
         # In addition, allow a process-level override for short backfill during a forced refresh run.
@@ -187,6 +189,7 @@ class MarketDataHub:
                         return (pd.to_datetime(as_of_str).normalize() if as_of_str is not None else pd.Timestamp.now().normalize())
 
                 target = _resolve_target(as_of)
+                target_trading_day = target.date().isoformat()
                 if last_item_time is None:
                     do_network = True
                     meta["rollover_forced"] = True
@@ -322,9 +325,33 @@ class MarketDataHub:
         df = self._apply_as_of(df, as_of)
         df_norm, m = normalize_daily_ohlcv(df)
         meta.update(m)
+        meta_q_final = _query_meta(qid)
+        if target_trading_day is None:
+            try:
+                if as_of is not None:
+                    target_trading_day = pd.to_datetime(as_of).date().isoformat()
+                else:
+                    from ..runtime.market_clock import compute_market_state
+
+                    target_trading_day = pd.to_datetime(compute_market_state().target_daybook_effective_day).date().isoformat()
+            except Exception:
+                target_trading_day = None
+        last_item_time_final = meta_q_final.get("last_item_time") or meta_q_initial.get("last_item_time")
+        freshness_state = "missing"
+        if isinstance(last_item_time_final, str) and last_item_time_final.strip():
+            freshness_state = "current" if last_item_time_final == target_trading_day else "stale"
+        if network_error and freshness_state != "current":
+            freshness_state = "failed_refresh"
         meta["requested_as_of"] = as_of
         meta["len"] = len(df_norm)
         meta["insufficient_history"] = len(df_norm) < min_len
+        meta["target_trading_day"] = target_trading_day
+        meta["last_item_time"] = last_item_time_final
+        meta["last_fetch_at"] = meta_q_final.get("last_fetch_at") or meta_q_initial.get("last_fetch_at")
+        meta["freshness_state"] = freshness_state
+        meta["refresh_attempted"] = bool(network_attempted)
+        meta["refresh_succeeded"] = bool(network_attempted and freshness_state == "current")
+        meta["strict_blocked"] = freshness_state != "current"
         df_norm.attrs.update(meta)
         return df_norm, meta
 
@@ -448,7 +475,24 @@ class MarketDataHub:
             df = df.sort_values("date").reset_index(drop=True)
             df = self._apply_as_of(df, as_of)
             df_norm, m = normalize_daily_ohlcv(df)
-            meta = {"source": f"store:daily:{provider.name}", **m, "requested_as_of": as_of, "len": len(df_norm), "insufficient_history": False}
+            meta_q = _query_meta(qids[s])
+            last_item_time = meta_q.get("last_item_time")
+            target_trading_day = target.date().isoformat()
+            freshness_state = "current" if last_item_time == target_trading_day else ("stale" if last_item_time else "missing")
+            meta = {
+                "source": f"store:daily:{provider.name}",
+                **m,
+                "requested_as_of": as_of,
+                "len": len(df_norm),
+                "insufficient_history": False,
+                "target_trading_day": target_trading_day,
+                "last_item_time": last_item_time,
+                "last_fetch_at": meta_q.get("last_fetch_at"),
+                "freshness_state": freshness_state,
+                "refresh_attempted": s in fetch_list,
+                "refresh_succeeded": s in fetch_list and freshness_state == "current",
+                "strict_blocked": freshness_state != "current",
+            }
             df_norm.attrs.update(meta)
             out[s] = (df_norm, meta)
         return out

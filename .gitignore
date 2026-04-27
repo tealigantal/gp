@@ -27,6 +27,8 @@ store/backtest/
 store/snapshots/
 store/sessions/
 store/search/
+store/book/*.lock
+store/search/*.lock
 store/*.duckdb
 *.duckdb
 *.db

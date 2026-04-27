@@ -681,6 +681,76 @@ class AkShareProvider(MarketDataProvider):
                     out[k] = v
         return out
 
+    def _standardize_minute_bars(self, df: pd.DataFrame, *, symbol: str) -> pd.DataFrame:
+        rename_map = {
+            "时间": "trade_time",
+            "开盘": "open",
+            "最高": "high",
+            "最低": "low",
+            "收盘": "close",
+            "成交量": "vol",
+            "成交额": "amount",
+            "均价": "vwap",
+        }
+        src = df.copy()
+        for raw, canonical in rename_map.items():
+            if raw in src.columns and canonical not in src.columns:
+                src[canonical] = src[raw]
+        required = ["trade_time", "open", "high", "low", "close", "vol", "amount"]
+        missing = [col for col in required if col not in src.columns]
+        if missing:
+            raise DataProviderError(f"minute bars missing columns: {missing}", symbol=symbol)
+        src["trade_time"] = pd.to_datetime(src["trade_time"], errors="coerce")
+        for col in ["open", "high", "low", "close", "vol", "amount"]:
+            src[col] = pd.to_numeric(src[col], errors="coerce")
+        if "vwap" in src.columns:
+            src["vwap"] = pd.to_numeric(src["vwap"], errors="coerce")
+        src = src.dropna(subset=["trade_time", "open", "high", "low", "close"]).sort_values("trade_time").reset_index(drop=True)
+        return src
+
+    def get_minute_bars_5m(self, symbol: str, start_date: str, end_date: str) -> pd.DataFrame:
+        ak = self._import()
+        sym = self._to_em_symbol(symbol)
+        try:
+            df = self._call_with_retry(
+                lambda: self._with_requests_timeout(
+                    lambda: ak.stock_zh_a_hist_min_em(
+                        symbol=sym,
+                        start_date=start_date,
+                        end_date=end_date,
+                        period="5",
+                        adjust="",
+                    )
+                ),
+                retries=3,
+            )
+        except Exception as ex:  # noqa: BLE001
+            raise DataProviderError(f"AkShare minute fetch failed: {ex}", symbol=symbol) from ex
+        if df is None or df.empty:
+            raise DataProviderError("AkShare minute fetch empty", symbol=symbol)
+        return self._standardize_minute_bars(df, symbol=symbol)
+
+    def get_index_minute_bars_5m(self, symbol: str, start_date: str, end_date: str) -> pd.DataFrame:
+        ak = self._import()
+        idx = str(symbol).strip()
+        try:
+            df = self._call_with_retry(
+                lambda: self._with_requests_timeout(
+                    lambda: ak.index_zh_a_hist_min_em(
+                        symbol=idx,
+                        period="5",
+                        start_date=start_date,
+                        end_date=end_date,
+                    )
+                ),
+                retries=3,
+            )
+        except Exception as ex:  # noqa: BLE001
+            raise DataProviderError(f"AkShare index minute fetch failed: {ex}", symbol=idx) from ex
+        if df is None or df.empty:
+            raise DataProviderError("AkShare index minute fetch empty", symbol=idx)
+        return self._standardize_minute_bars(df, symbol=idx)
+
     # ---- Internals: request patch + retry ----------------------------------
     def _with_requests_timeout(self, fn):  # noqa: ANN001
         import requests  # type: ignore

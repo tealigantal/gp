@@ -1,12 +1,19 @@
 import { Alert, Card, Empty, Space, Tag, Typography } from 'antd'
-import type { CanonicalMessage, MarketBook, TranscriptEvent } from '../../../shared/contracts'
+import type {
+  CanonicalMessage,
+  CanonicalRecommendMessage,
+  MarketBook,
+  TranscriptEvent,
+} from '../../../shared/contracts'
 import { fmtTime } from '../../../shared/format'
 import { AssistantNarrativeBlock } from './AssistantNarrativeBlock'
+import { CompareMessageCard } from './CompareMessageCard'
 import { ExitDecisionMessage } from './ExitDecisionMessage'
 import { FollowupTextMessage } from './FollowupTextMessage'
 import { LiveCheckMessageCard } from './LiveCheckMessageCard'
 import { MainConclusionCard } from './MainConclusionCard'
 import { NoTradeMessageCard } from './NoTradeMessageCard'
+import { PickDetailMessageCard } from './PickDetailMessageCard'
 import { RecommendationMessageCard } from './RecommendationMessageCard'
 import { RunChangeMessageCard } from './RunChangeMessageCard'
 import { SuggestedFollowups } from './SuggestedFollowups'
@@ -19,38 +26,89 @@ interface ChatThreadProps {
   onPrompt?: (text: string) => void
 }
 
-const starterPrompts = ['今天给我 3 只', '为什么第一只是它？', '600519 现在还能买吗？']
+const starterPrompts = ['今天给我 3 只', '第二个还能冲吗', '为什么这次和上次不一样']
 
 function renderFromCanonical(message: CanonicalMessage | undefined, onPrompt?: (t: string) => void) {
   if (!message) return null
   if (message.message_kind === 'recommend') {
+    const recommendMessage = message as CanonicalRecommendMessage
     return (
       <Space direction="vertical" size={8} style={{ width: '100%' }}>
-        <RecommendationMessageCard picks={message.picks} onPrompt={onPrompt} />
-        <AssistantNarrativeBlock text={message.narrative_text} />
+        <RecommendationMessageCard picks={recommendMessage.picks} run={recommendMessage.run} onPrompt={onPrompt} />
+        <AssistantNarrativeBlock text={recommendMessage.narrative_text} />
+        <SuggestedFollowups suggestions={recommendMessage.followup_suggestions} onPick={(text) => onPrompt?.(text)} />
+      </Space>
+    )
+  }
+  if (message.message_kind === 'no_trade') {
+    return (
+      <Space direction="vertical" size={8} style={{ width: '100%' }}>
+        <NoTradeMessageCard
+          reason={message.reason}
+          text={message.narrative_text}
+          noTradeReasons={message.no_trade_reasons}
+          recoveryConditions={message.recovery_conditions}
+          marketSummary={message.market_summary}
+        />
         <SuggestedFollowups suggestions={message.followup_suggestions} onPick={(text) => onPrompt?.(text)} />
       </Space>
     )
   }
-  if (message.message_kind === 'no_trade') return <NoTradeMessageCard reason={message.reason} text={message.narrative_text} />
-  if (message.message_kind === 'exit') return <ExitDecisionMessage symbol={message.symbol || ''} text={message.narrative_text} />
-  if (message.message_kind === 'live_check') return <LiveCheckMessageCard text={message.narrative_text} />
-  if (message.message_kind === 'run_change') return <RunChangeMessageCard text={message.narrative_text} />
-  if (message.message_kind === 'chat') {
+  if (message.message_kind === 'pick_detail') {
     return (
       <Space direction="vertical" size={8} style={{ width: '100%' }}>
-        <FollowupTextMessage content={message.narrative_text} />
+        <PickDetailMessageCard detail={message.pick} text={message.narrative_text} />
         <SuggestedFollowups suggestions={message.followup_suggestions} onPick={(text) => onPrompt?.(text)} />
       </Space>
     )
   }
-  return <FollowupTextMessage content={message.narrative_text} />
+  if (message.message_kind === 'live_entry_check') {
+    return (
+      <Space direction="vertical" size={8} style={{ width: '100%' }}>
+        <LiveCheckMessageCard view={message.live_check} text={message.narrative_text} />
+        <SuggestedFollowups suggestions={message.followup_suggestions} onPick={(text) => onPrompt?.(text)} />
+      </Space>
+    )
+  }
+  if (message.message_kind === 'compare') {
+    return (
+      <Space direction="vertical" size={8} style={{ width: '100%' }}>
+        <CompareMessageCard compare={message.compare} text={message.narrative_text} />
+        <SuggestedFollowups suggestions={message.followup_suggestions} onPick={(text) => onPrompt?.(text)} />
+      </Space>
+    )
+  }
+  if (message.message_kind === 'exit_decision') {
+    return (
+      <Space direction="vertical" size={8} style={{ width: '100%' }}>
+        <ExitDecisionMessage view={message.exit_decision} text={message.narrative_text} />
+        <SuggestedFollowups suggestions={message.followup_suggestions} onPick={(text) => onPrompt?.(text)} />
+      </Space>
+    )
+  }
+  if (message.message_kind === 'run_change') {
+    return (
+      <Space direction="vertical" size={8} style={{ width: '100%' }}>
+        <RunChangeMessageCard text={message.narrative_text} change={message.run_change} />
+        <SuggestedFollowups suggestions={message.followup_suggestions} onPick={(text) => onPrompt?.(text)} />
+      </Space>
+    )
+  }
+  return (
+    <Space direction="vertical" size={8} style={{ width: '100%' }}>
+      <FollowupTextMessage content={message.narrative_text} />
+      <SuggestedFollowups suggestions={message.followup_suggestions} onPick={(text) => onPrompt?.(text)} />
+    </Space>
+  )
 }
 
 export function ChatThread({ turns, error, sending, book, onPrompt }: ChatThreadProps) {
+  const latestTurn = turns.length > 0 ? turns[turns.length - 1] : undefined
+  const latestMessage = (latestTurn?.meta as Record<string, unknown> | undefined)?.message as CanonicalMessage | undefined
+
   return (
     <div className="chat-thread">
-      <MainConclusionCard book={book} />
+      <MainConclusionCard book={book} latestMessage={latestMessage} />
       {error ? (
         <div aria-live="polite">
           <Alert type="error" showIcon message="对话失败" description={error} />
@@ -60,10 +118,7 @@ export function ChatThread({ turns, error, sending, book, onPrompt }: ChatThread
         {!turns.length && !sending ? (
           <Card className="empty-state-card">
             <Space direction="vertical" size={12} style={{ width: '100%' }}>
-              <Empty
-                image={Empty.PRESENTED_IMAGE_SIMPLE}
-                description="还没有对话。可以直接问盘中判断、推荐理由或策略说明。"
-              />
+              <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="还没有对话。可以直接问今天的机会、盘中能不能进，或者某只票的风控。" />
               <SuggestedFollowups suggestions={starterPrompts} onPick={(text) => onPrompt?.(text)} />
             </Space>
           </Card>
@@ -72,11 +127,10 @@ export function ChatThread({ turns, error, sending, book, onPrompt }: ChatThread
           const isAssistant = turn.role === 'assistant'
           const meta = (turn.meta || {}) as Record<string, unknown>
           const symbols = Array.isArray(meta.symbols) ? (meta.symbols as string[]) : []
-          const runId = typeof meta.run_id === 'string' ? meta.run_id : undefined
           const canonical = meta.message as CanonicalMessage | undefined
-
+          const runId = typeof meta.run_id === 'string' ? meta.run_id : undefined
           const header = (
-            <Space>
+            <Space wrap>
               <Tag color={isAssistant ? 'blue' : 'default'}>{isAssistant ? 'Assistant' : 'User'}</Tag>
               <Typography.Text type="secondary">{fmtTime(turn.created_at)}</Typography.Text>
               {runId ? <Tag>{runId}</Tag> : null}
@@ -85,7 +139,6 @@ export function ChatThread({ turns, error, sending, book, onPrompt }: ChatThread
               ))}
             </Space>
           )
-
           if (isAssistant) {
             return (
               <div key={`${turn.turn_id}-${turn.seq}`}>
@@ -94,21 +147,18 @@ export function ChatThread({ turns, error, sending, book, onPrompt }: ChatThread
               </div>
             )
           }
-
           return (
             <Card key={`${turn.turn_id}-${turn.seq}`} className="bubble bubble-user">
               <Space direction="vertical" size={8} style={{ width: '100%' }}>
                 {header}
-                <Typography.Paragraph style={{ whiteSpace: 'pre-wrap', marginBottom: 0 }}>
-                  {turn.content}
-                </Typography.Paragraph>
+                <Typography.Paragraph style={{ whiteSpace: 'pre-wrap', marginBottom: 0 }}>{turn.content}</Typography.Paragraph>
               </Space>
             </Card>
           )
         })}
         {sending ? (
           <div aria-live="polite">
-            <Alert type="info" showIcon message="顾问正在整理当前账本与上下文，请稍候。" />
+            <Alert type="info" showIcon message="顾问正在读取当前 run、5 分钟执行状态和上下文，请稍候。" />
           </div>
         ) : null}
       </Space>

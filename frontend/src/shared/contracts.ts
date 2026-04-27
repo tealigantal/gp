@@ -1,51 +1,243 @@
-// Chat contracts
 export interface ChatRequest {
   session_id?: string
   message: string
 }
 
-// Canonical message model
-export type CanonicalPick = {
+export type ExecutionState =
+  | 'BUY_NOW'
+  | 'WAIT_PULLBACK'
+  | 'WAIT_NEXT_SESSION'
+  | 'WATCH_ONLY'
+  | 'RISK_HIGH'
+  | 'INVALIDATED'
+  | 'UNAVAILABLE'
+
+export interface CanonicalPick {
   symbol: string
+  code: string
   name?: string | null
   rank: number
-  action: 'BUY' | 'WATCH' | 'INVALID'
-  state_label: string
+  action: 'BUY' | 'WATCH'
+  execution_state: ExecutionState
+  can_execute_now: boolean
   thesis?: string
-  entry_text?: string
-  stop_text?: string
-  take_text?: string
-  why_selected_text?: string
-  reason_short?: string
-  can_execute_now?: boolean
+  why_selected?: string
+  entry_text?: string | null
+  stop_text?: string | null
+  take_text?: string | null
+  invalidation?: string | null
+  confidence?: number
+  risk_level?: string
+  score?: number
+  final_score?: number
+  live_score?: number
+  daily_rank_score?: number
+  exec_score?: number
+  technical_basis?: string[]
+  reason_codes?: string[]
   missing_fields?: string[]
+  artifact_id?: string | null
+  slot_id?: string | null
+  vwap?: number | null
+  orb30_high?: number | null
+  orb30_low?: number | null
+  rs_index?: number | null
+  rs_industry?: number | null
+  slot_rel_vol?: number | null
+  entry_distance_pct?: number | null
+  data_provenance?: Record<string, unknown>
 }
 
-export type CanonicalRecommendMessage = {
-  message_kind: 'recommend'
-  lead_summary?: string
-  decision_state?: 'BUY' | 'WATCH' | 'INVALID'
-  market_summary?: string
-  execution_note?: string
-  risk_note?: string
+export interface CanonicalRunArtifact {
+  run_id: string
+  artifact_id?: string | null
+  book_version?: string | null
+  as_of: string
+  trading_day: string
+  daybook_effective_day?: string | null
+  pulse_trade_day?: string | null
+  pulse_slot_at?: string | null
+  market_phase?: string | null
+  slot_status?: string | null
+  run_action: 'RECOMMEND' | 'NO_TRADE' | 'DEGRADED'
+  tradeable: boolean
+  publish_allowed: boolean
+  non_trading: boolean
+  status_reason?: string | null
+  no_trade_reasons: string[]
+  recovery_conditions: string[]
+  themes: string[]
   picks: CanonicalPick[]
+  gate: Record<string, unknown>
+  data_quality: Record<string, unknown>
+  data_provenance: Record<string, unknown>
+  tool_trace: Record<string, unknown>
+}
+
+export interface LiveEntryDecision {
+  symbol: string
+  name?: string | null
+  execution_state: ExecutionState
+  can_execute_now: boolean
+  next_action: string
+  summary: string
+  gate_state?: string | null
+  gate_reasons?: string[]
+  vwap?: number | null
+  orb30_high?: number | null
+  orb30_low?: number | null
+  entry_text?: string | null
+  stop_text?: string | null
+  take_text?: string | null
+  entry_distance_pct?: number | null
+  slot_rel_vol?: number | null
+  rs_index?: number | null
+  rs_industry?: number | null
+  reason_codes?: string[]
+  data_provenance?: Record<string, unknown>
+  source_run_id?: string | null
+}
+
+export interface PickDetailArtifact {
+  symbol: string
+  name?: string | null
+  rank?: number | null
+  thesis: string
+  why_selected: string
+  entry_text?: string | null
+  stop_text?: string | null
+  take_text?: string | null
+  invalidation?: string | null
+  execution_state?: ExecutionState | null
+  risk_level?: string
+  reason_codes?: string[]
+  data_provenance?: Record<string, unknown>
+  source_run_id?: string | null
+}
+
+export interface ExitDecisionArtifact {
+  symbol: string
+  action: 'HOLD' | 'REDUCE' | 'SELL' | 'WATCH'
+  reason: string
+  trigger: string
+  stop?: number | null
+  invalidation?: string | null
+  take_profit?: number[]
+  current_state?: ExecutionState | string | null
+  confidence?: number
+  source_run_id?: string | null
+  data_provenance?: Record<string, unknown>
+}
+
+export interface CompareArtifact {
+  compared_symbols: string[]
+  leader_symbol?: string | null
+  ranking: Array<Record<string, unknown>>
+  comparison_points: string[]
+  source_run_id?: string | null
+  data_provenance?: Record<string, unknown>
+}
+
+export interface RunChangeArtifact {
+  current_run_id?: string | null
+  previous_run_id?: string | null
+  added: string[]
+  removed: string[]
+  rank_changes: Array<Record<string, unknown>>
+  gating_change: Record<string, unknown>
+  data_quality_change: Record<string, unknown>
+}
+
+export interface CanonicalRecommendMessage {
+  message_kind: 'recommend'
   narrative_text: string
+  lead_summary?: string
+  decision_state?: 'BUY' | 'WATCH'
+  market_summary?: string
+  execution_note?: string | null
+  risk_note?: string | null
+  picks: CanonicalPick[]
+  run: CanonicalRunArtifact
   followup_suggestions?: string[]
   freshness_meta?: Record<string, unknown>
 }
 
-export type CanonicalFollowupMessage = {
-  message_kind: 'followup' | 'compare' | 'exit' | 'no_trade' | 'explain' | 'live_check' | 'run_change' | 'chat'
+export interface CanonicalNoTradeMessage {
+  message_kind: 'no_trade'
   narrative_text: string
-  state_tags?: Array<{ label: string; value: string }>
-  symbols?: string[]
+  run?: CanonicalRunArtifact | null
+  market_summary?: string
   reason?: string
+  no_trade_reasons?: string[]
+  recovery_conditions?: string[]
+  followup_suggestions?: string[]
+  freshness_meta?: Record<string, unknown>
+}
+
+export interface CanonicalPickDetailMessage {
+  message_kind: 'pick_detail'
+  narrative_text: string
+  pick: PickDetailArtifact
+  run?: CanonicalRunArtifact | null
   symbol?: string | null
   followup_suggestions?: string[]
   freshness_meta?: Record<string, unknown>
 }
 
-export type CanonicalMessage = CanonicalRecommendMessage | CanonicalFollowupMessage
+export interface CanonicalLiveEntryMessage {
+  message_kind: 'live_entry_check'
+  narrative_text: string
+  live_check: LiveEntryDecision
+  run?: CanonicalRunArtifact | null
+  symbol?: string | null
+  followup_suggestions?: string[]
+  freshness_meta?: Record<string, unknown>
+}
+
+export interface CanonicalCompareMessage {
+  message_kind: 'compare'
+  narrative_text: string
+  compare: CompareArtifact
+  run?: CanonicalRunArtifact | null
+  symbols?: string[]
+  followup_suggestions?: string[]
+  freshness_meta?: Record<string, unknown>
+}
+
+export interface CanonicalExitDecisionMessage {
+  message_kind: 'exit_decision'
+  narrative_text: string
+  exit_decision: ExitDecisionArtifact
+  run?: CanonicalRunArtifact | null
+  symbol?: string | null
+  followup_suggestions?: string[]
+  freshness_meta?: Record<string, unknown>
+}
+
+export interface CanonicalRunChangeMessage {
+  message_kind: 'run_change'
+  narrative_text: string
+  run_change: RunChangeArtifact
+  followup_suggestions?: string[]
+  freshness_meta?: Record<string, unknown>
+}
+
+export interface CanonicalChatMessage {
+  message_kind: 'chat'
+  narrative_text: string
+  followup_suggestions?: string[]
+  freshness_meta?: Record<string, unknown>
+}
+
+export type CanonicalMessage =
+  | CanonicalRecommendMessage
+  | CanonicalNoTradeMessage
+  | CanonicalPickDetailMessage
+  | CanonicalLiveEntryMessage
+  | CanonicalCompareMessage
+  | CanonicalExitDecisionMessage
+  | CanonicalRunChangeMessage
+  | CanonicalChatMessage
 
 export interface ChatResponse {
   session_id: string
@@ -59,20 +251,62 @@ export interface ChatResponse {
   evidence_refs: string[]
 }
 
-// Health/book/run/session domain contracts
+export interface HealthStorageStats {
+  session_count: number
+  transcript_count: number
+  claim_count: number
+  latest_session_at?: string | null
+}
+
+export interface RuntimeToolInfo {
+  service: string
+  mode: 'always_on' | 'manual' | string
+  command: string
+  description: string
+  profile?: string | null
+}
+
+export interface RuntimeStatus {
+  market_phase: string
+  data_provider: string
+  auto_update_service: string
+  auto_update_expected: boolean
+  worker_poll_interval_sec: number
+  book_freshness: string
+  book_updated_at?: string | null
+  artifact_id?: string | null
+  daybook_effective_day?: string | null
+  pulse_trade_day?: string | null
+  pulse_slot_at?: string | null
+  last_closed_5m?: string | null
+  slot_status?: string | null
+  publish_allowed: boolean
+  daily_freshness_ready: boolean
+  daily_target_day?: string | null
+  daily_checked_count: number
+  daily_stale_count: number
+  daily_last_reconcile_at?: string | null
+  daily_blocking_reason?: string | null
+  daily_failed_symbols: string[]
+  services: RuntimeToolInfo[]
+}
+
+export interface OpsRunResponse {
+  operation: string
+  status: string
+  message: string
+  executed_at?: string | null
+  result: Record<string, unknown>
+  runtime: RuntimeStatus
+}
+
 export interface HealthResponse {
   status: string
   trading_day?: string | null
   book_version?: string | null
   llm_ready: boolean
   storage: HealthStorageStats
-}
-
-export interface HealthStorageStats {
-  session_count: number
-  transcript_count: number
-  claim_count: number
-  latest_session_at?: string | null
+  runtime: RuntimeStatus
 }
 
 export interface SessionState {
@@ -146,6 +380,14 @@ export interface SymbolPulse {
   entry_distance_pct?: number | null
   flags: string[]
   evidence_refs: string[]
+  live_score?: number
+  daily_rank_score?: number
+  exec_score?: number
+  action?: string
+  can_open?: boolean
+  signal_type?: string
+  trade_day?: string | null
+  slot_at?: string | null
 }
 
 export interface BoardEntry {
@@ -154,11 +396,28 @@ export interface BoardEntry {
   rank: number
   final_score: number
   live_score: number
+  daily_rank_score?: number
+  exec_score?: number
+  action?: string
   execution_state: string
   can_open: boolean
   stretched: boolean
+  extended?: boolean
   invalidated: boolean
+  signal_type?: string
+  entry_zone?: Record<string, unknown>
+  stop?: number | null
+  take?: number[]
+  vwap?: number | null
+  orb30_high?: number | null
+  orb30_low?: number | null
+  rs_index?: number | null
+  rs_industry?: number | null
+  slot_rel_vol?: number | null
   summary: string
+  reason_codes?: string[]
+  artifact_id?: string | null
+  slot_id?: string | null
   style_label?: string | null
   pick: AdvicePick
   pulse?: SymbolPulse | null
@@ -202,6 +461,10 @@ export interface MarketBook {
   pulse_slot_at?: string | null
   market_phase?: string | null
   data_status?: string | null
+  artifact_id?: string | null
+  slot_id?: string | null
+  slot_status?: string | null
+  publish_allowed?: boolean
   side_results: SideResult[]
 }
 
@@ -226,7 +489,6 @@ export interface RunResponse {
   run: AdviceRun
 }
 
-// Session list API
 export interface SessionListItem {
   session_id: string
   created_at: string

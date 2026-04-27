@@ -8,9 +8,11 @@ from ..contracts.objects import MarketBook
 def build_watchset(book: MarketBook, hot_symbols: List[str], holdings: List[str]) -> List[str]:
     out: List[str] = []
     seen: set[str] = set()
-    for sym in holdings + hot_symbols + [p.symbol for p in book.daybook.picks] + list(book.daybook.reserve_symbols[:15]):
+    tracked_reco = [p.symbol for p in book.daybook.picks[:10]]
+    reserve = [p.symbol for p in book.daybook.reserve_picks[:2]] or list(book.daybook.reserve_symbols[:2])
+    for sym in tracked_reco + reserve + holdings:
         s = str(sym).strip()
         if s and s not in seen:
             seen.add(s)
             out.append(s)
-    return out[:40]
+    return out

@@ -4,6 +4,8 @@ import json
 import sqlite3
 import threading
 import time
+import os
+from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from hashlib import sha256
 from pathlib import Path
@@ -13,6 +15,8 @@ from ..core.config import load_config
 from ..core.paths import store_dir
 
 _WRITE_LOCK = threading.RLock()
+_DB_LOCK = threading.RLock()
+_DB_LOCK_STATE = threading.local()
 
 _SCHEMA_LOCK = threading.Lock()
 _SCHEMA_INIT_PATHS: set[str] = set()
@@ -23,6 +27,55 @@ def _db_path() -> Path:
     p = store_dir() / "search" / "history.db"
     p.parent.mkdir(parents=True, exist_ok=True)
     return p
+
+
+def _db_lock_path() -> Path:
+    path = store_dir() / "search" / ".history.lock"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def _acquire_process_lock(path: Path, *, timeout_sec: float = 30.0, poll_sec: float = 0.05) -> None:
+    deadline = time.monotonic() + timeout_sec
+    while True:
+        try:
+            fd = os.open(str(path), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+            try:
+                payload = f"{os.getpid()} {time.time():.6f}\n".encode("utf-8")
+                os.write(fd, payload)
+            finally:
+                os.close(fd)
+            return
+        except FileExistsError:
+            if time.monotonic() >= deadline:
+                raise TimeoutError(f"Timed out waiting for history db lock: {path}")
+            time.sleep(poll_sec)
+
+
+def _release_process_lock(path: Path) -> None:
+    try:
+        path.unlink()
+    except FileNotFoundError:
+        return
+
+
+@contextmanager
+def history_db_lane():
+    path = _db_lock_path()
+    _DB_LOCK.acquire()
+    depth = int(getattr(_DB_LOCK_STATE, "depth", 0) or 0)
+    outermost = depth == 0
+    try:
+        if outermost:
+            _acquire_process_lock(path)
+        _DB_LOCK_STATE.depth = depth + 1
+        yield
+    finally:
+        next_depth = max(int(getattr(_DB_LOCK_STATE, "depth", 1) or 1) - 1, 0)
+        _DB_LOCK_STATE.depth = next_depth
+        if outermost:
+            _release_process_lock(path)
+        _DB_LOCK.release()
 
 
 def _connect() -> sqlite3.Connection:
@@ -114,7 +167,7 @@ def ensure_query(query_id: str, params: Dict[str, Any]) -> None:
         return
 
     pjson = json.dumps(params, ensure_ascii=False, sort_keys=True)
-    with _WRITE_LOCK:
+    with history_db_lane(), _WRITE_LOCK:
         if key in _ENSURED_QUERIES:
             return
         conn = _connect()
@@ -141,48 +194,50 @@ def ensure_query(query_id: str, params: Dict[str, Any]) -> None:
 
 
 def query_meta(query_id: str) -> Dict[str, Any]:
-    conn = _connect()
-    try:
-        cur = conn.execute(
-            "SELECT id, params, created_at, updated_at, last_fetch_at, last_item_time FROM queries WHERE id=?",
-            (query_id,),
-        )
-        r = cur.fetchone()
-        if r is None:
+    with history_db_lane():
+        conn = _connect()
+        try:
+            cur = conn.execute(
+                "SELECT id, params, created_at, updated_at, last_fetch_at, last_item_time FROM queries WHERE id=?",
+                (query_id,),
+            )
+            r = cur.fetchone()
+            if r is None:
+                return {
+                    "id": query_id,
+                    "params": None,
+                    "created_at": None,
+                    "updated_at": None,
+                    "last_fetch_at": None,
+                    "last_item_time": None,
+                }
             return {
-                "id": query_id,
-                "params": None,
-                "created_at": None,
-                "updated_at": None,
-                "last_fetch_at": None,
-                "last_item_time": None,
+                "id": r[0],
+                "params": json.loads(r[1]) if r[1] else None,
+                "created_at": r[2],
+                "updated_at": r[3],
+                "last_fetch_at": r[4],
+                "last_item_time": r[5],
             }
-        return {
-            "id": r[0],
-            "params": json.loads(r[1]) if r[1] else None,
-            "created_at": r[2],
-            "updated_at": r[3],
-            "last_fetch_at": r[4],
-            "last_item_time": r[5],
-        }
-    finally:
-        conn.close()
+        finally:
+            conn.close()
 
 
 def count_items(query_id: str, *, since: Optional[str] = None) -> int:
-    conn = _connect()
-    try:
-        if since is None:
-            cur = conn.execute("SELECT COUNT(*) FROM items WHERE query_id=?", (query_id,))
-        else:
-            cur = conn.execute(
-                "SELECT COUNT(*) FROM items WHERE query_id=? AND (item_time >= ?)",
-                (query_id, since),
-            )
-        r = cur.fetchone()
-        return int(r[0] or 0) if r else 0
-    finally:
-        conn.close()
+    with history_db_lane():
+        conn = _connect()
+        try:
+            if since is None:
+                cur = conn.execute("SELECT COUNT(*) FROM items WHERE query_id=?", (query_id,))
+            else:
+                cur = conn.execute(
+                    "SELECT COUNT(*) FROM items WHERE query_id=? AND (item_time >= ?)",
+                    (query_id, since),
+                )
+            r = cur.fetchone()
+            return int(r[0] or 0) if r else 0
+        finally:
+            conn.close()
 
 
 def watermark(query_id: str) -> Optional[str]:
@@ -251,7 +306,7 @@ def upsert_items(
     n_insert = 0
     n_update = 0
     max_time: Optional[str] = None
-    with _WRITE_LOCK:
+    with history_db_lane(), _WRITE_LOCK:
         conn = _connect()
         try:
             def _write() -> None:
@@ -338,36 +393,62 @@ def list_items(
     since: Optional[str] = None,
     limit: Optional[int] = None,
 ) -> List[Dict[str, Any]]:
-    conn = _connect()
-    try:
-        if since is None:
-            sql = "SELECT item_id, item_time, etag, payload, updated_at FROM items WHERE query_id=? ORDER BY item_time ASC"
-            args: Tuple[Any, ...] = (query_id,)
-        else:
-            sql = "SELECT item_id, item_time, etag, payload, updated_at FROM items WHERE query_id=? AND (item_time >= ?) ORDER BY item_time ASC"
-            args = (query_id, since)
-        if limit is not None:
-            sql += " LIMIT ?"
-            args = (*args, int(limit))
-        cur = conn.execute(sql, args)
-        out: List[Dict[str, Any]] = []
-        for r in cur.fetchall():
-            out.append(
-                {
-                    "item_id": r[0],
-                    "item_time": r[1],
-                    "etag": r[2],
-                    "payload": json.loads(r[3] or "{}"),
-                    "updated_at": r[4],
-                }
-            )
-        return out
-    finally:
-        conn.close()
+    with history_db_lane():
+        conn = _connect()
+        try:
+            if since is None:
+                sql = "SELECT item_id, item_time, etag, payload, updated_at FROM items WHERE query_id=? ORDER BY item_time ASC"
+                args: Tuple[Any, ...] = (query_id,)
+            else:
+                sql = "SELECT item_id, item_time, etag, payload, updated_at FROM items WHERE query_id=? AND (item_time >= ?) ORDER BY item_time ASC"
+                args = (query_id, since)
+            if limit is not None:
+                sql += " LIMIT ?"
+                args = (*args, int(limit))
+            cur = conn.execute(sql, args)
+            out: List[Dict[str, Any]] = []
+            for r in cur.fetchall():
+                out.append(
+                    {
+                        "item_id": r[0],
+                        "item_time": r[1],
+                        "etag": r[2],
+                        "payload": json.loads(r[3] or "{}"),
+                        "updated_at": r[4],
+                    }
+                )
+            return out
+        finally:
+            conn.close()
+
+
+def list_queries(*, kind: str | None = None) -> List[Dict[str, Any]]:
+    with history_db_lane():
+        conn = _connect()
+        try:
+            cur = conn.execute("SELECT params, last_fetch_at, last_item_time FROM queries")
+            out: List[Dict[str, Any]] = []
+            for params_json, last_fetch_at, last_item_time in cur.fetchall():
+                try:
+                    params = json.loads(params_json or "{}")
+                except Exception:
+                    continue
+                if kind and params.get("kind") != kind:
+                    continue
+                out.append(
+                    {
+                        "params": params,
+                        "last_fetch_at": last_fetch_at,
+                        "last_item_time": last_item_time,
+                    }
+                )
+            return out
+        finally:
+            conn.close()
 
 
 def reset_query(query_id: str) -> None:
-    with _WRITE_LOCK:
+    with history_db_lane(), _WRITE_LOCK:
         conn = _connect()
         try:
             def _write() -> None:
@@ -384,7 +465,7 @@ def reset_query(query_id: str) -> None:
 
 
 def drop_query(query_id: str) -> None:
-    with _WRITE_LOCK:
+    with history_db_lane(), _WRITE_LOCK:
         conn = _connect()
         try:
             def _write() -> None:
@@ -398,7 +479,7 @@ def drop_query(query_id: str) -> None:
 
 
 def vacuum() -> None:
-    with _WRITE_LOCK:
+    with history_db_lane(), _WRITE_LOCK:
         conn = _connect()
         try:
             def _write() -> None:

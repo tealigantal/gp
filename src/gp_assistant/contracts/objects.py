@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
-from pydantic import BaseModel, Field, ConfigDict
-from .intents import RequestType, SubjectType, FreshnessType
+
+from pydantic import BaseModel, ConfigDict, Field
+
+from .intents import FreshnessType, RequestType, SubjectType
 
 
 class GPModel(BaseModel):
@@ -43,11 +45,9 @@ class SessionState(GPModel):
     last_seen_book_version: Optional[str] = None
     last_turn_id: Optional[str] = None
     last_claim_ids: List[str] = Field(default_factory=list)
-    # Freshness metadata for validating active_run reuse
     active_run_daybook_effective_day: Optional[str] = None
     active_run_pulse_trade_day: Optional[str] = None
     active_run_pulse_slot_at: Optional[str] = None
-    # Focus recap for rank-based reference resolution
     last_focus_rank: Optional[int] = None
     last_focus_symbol: Optional[str] = None
 
@@ -68,6 +68,7 @@ class AdvicePick(GPModel):
     name: Optional[str] = None
     rank: int
     strategy_id: Optional[str] = None
+    industry: Optional[str] = None
     thesis: str = ""
     entry_plan: Dict[str, Any] = Field(default_factory=dict)
     stop_plan: Dict[str, Any] = Field(default_factory=dict)
@@ -78,6 +79,7 @@ class AdvicePick(GPModel):
     why_not_others: List[str] = Field(default_factory=list)
     evidence_refs: List[str] = Field(default_factory=list)
     style_label: Optional[str] = None
+    meta: Dict[str, Any] = Field(default_factory=dict)
 
 
 class DayBook(GPModel):
@@ -88,6 +90,7 @@ class DayBook(GPModel):
     reason: Optional[str] = None
     themes: List[str] = Field(default_factory=list)
     picks: List[AdvicePick] = Field(default_factory=list)
+    reserve_picks: List[AdvicePick] = Field(default_factory=list)
     reserve_symbols: List[str] = Field(default_factory=list)
     source_meta: Dict[str, Any] = Field(default_factory=dict)
 
@@ -104,7 +107,25 @@ class SymbolPulse(GPModel):
     entry_distance_pct: Optional[float] = None
     flags: List[str] = Field(default_factory=list)
     evidence_refs: List[str] = Field(default_factory=list)
-    # Freshness/canonical tracking for 5m
+    live_score: float = 0.0
+    daily_rank_score: float = 0.0
+    exec_score: float = 0.0
+    action: str = "WATCH"
+    can_open: bool = False
+    signal_type: str = "observe"
+    entry_zone: Dict[str, Any] = Field(default_factory=dict)
+    stop: Optional[float] = None
+    take: List[float] = Field(default_factory=list)
+    vwap: Optional[float] = None
+    orb30_high: Optional[float] = None
+    orb30_low: Optional[float] = None
+    rs_index: Optional[float] = None
+    rs_industry: Optional[float] = None
+    slot_rel_vol: Optional[float] = None
+    extended: bool = False
+    reason_codes: List[str] = Field(default_factory=list)
+    provider: Optional[str] = None
+    volume_baseline: Optional[float] = None
     trade_day: Optional[str] = None
     slot_at: Optional[str] = None
     is_stale: bool = False
@@ -117,11 +138,28 @@ class BoardEntry(GPModel):
     rank: int
     final_score: float
     live_score: float
+    daily_rank_score: float = 0.0
+    exec_score: float = 0.0
+    action: str = "WATCH"
     execution_state: str
     can_open: bool
     stretched: bool
+    extended: bool = False
     invalidated: bool
+    signal_type: str = "observe"
+    entry_zone: Dict[str, Any] = Field(default_factory=dict)
+    stop: Optional[float] = None
+    take: List[float] = Field(default_factory=list)
+    vwap: Optional[float] = None
+    orb30_high: Optional[float] = None
+    orb30_low: Optional[float] = None
+    rs_index: Optional[float] = None
+    rs_industry: Optional[float] = None
+    slot_rel_vol: Optional[float] = None
     summary: str
+    reason_codes: List[str] = Field(default_factory=list)
+    artifact_id: Optional[str] = None
+    slot_id: Optional[str] = None
     style_label: Optional[str] = None
     pick: AdvicePick
     pulse: Optional[SymbolPulse] = None
@@ -137,6 +175,63 @@ class SideResult(GPModel):
     refs: Dict[str, Any] = Field(default_factory=dict)
 
 
+class SlotGate(GPModel):
+    state: str = "UNAVAILABLE"
+    score: float = 0.0
+    reasons: List[str] = Field(default_factory=list)
+    breadth_score: float = 0.0
+    benchmark_score: float = 0.0
+    liquidity_score: float = 0.0
+    buyable_count: int = 0
+    metrics: Dict[str, Any] = Field(default_factory=dict)
+
+
+class SlotDataQuality(GPModel):
+    snapshot_age_sec: Optional[float] = None
+    symbols_expected: int = 0
+    symbols_received: int = 0
+    benchmark_received: bool = False
+    provider: Optional[str] = None
+    complete: bool = False
+    errors: List[str] = Field(default_factory=list)
+
+
+class TrackedUniverse(GPModel):
+    reco: List[str] = Field(default_factory=list)
+    reserve: List[str] = Field(default_factory=list)
+    portfolio: List[str] = Field(default_factory=list)
+    total: List[str] = Field(default_factory=list)
+
+
+class LiveSlotArtifact(GPModel):
+    artifact_id: str
+    slot_id: Optional[str] = None
+    trade_day: str
+    slot_at: Optional[str] = None
+    market_phase: str
+    slot_status: str = "UNAVAILABLE"
+    publish_allowed: bool = False
+    daybook_effective_day: str
+    gate: SlotGate = Field(default_factory=SlotGate)
+    tracked_universe: TrackedUniverse = Field(default_factory=TrackedUniverse)
+    board: List[BoardEntry] = Field(default_factory=list)
+    symbol_states: Dict[str, SymbolPulse] = Field(default_factory=dict)
+    data_quality: SlotDataQuality = Field(default_factory=SlotDataQuality)
+    portfolio_snapshot: Dict[str, Any] = Field(default_factory=dict)
+    provider_meta: Dict[str, Any] = Field(default_factory=dict)
+    side_results: List[SideResult] = Field(default_factory=list)
+    created_at: str
+    updated_at: str
+
+
+class CurrentSlotPointer(GPModel):
+    artifact_id: str
+    trade_day: str
+    slot_id: Optional[str] = None
+    slot_at: Optional[str] = None
+    updated_at: str
+
+
 class MarketBook(GPModel):
     trading_day: str
     book_version: str
@@ -149,13 +244,19 @@ class MarketBook(GPModel):
     portfolio_snapshot: Dict[str, Any] = Field(default_factory=dict)
     last_closed_5m: Optional[str] = None
     side_results: List[SideResult] = Field(default_factory=list)
-    # Freshness metadata snapshot for the book
+    artifact_id: Optional[str] = None
+    slot_id: Optional[str] = None
+    slot_status: Optional[str] = None
+    publish_allowed: bool = False
     daybook_effective_day: Optional[str] = None
     pulse_trade_day: Optional[str] = None
     pulse_slot_at: Optional[str] = None
     market_phase: Optional[str] = None
     data_status: Optional[str] = None
     calendar_source: Optional[str] = None
+    gate: SlotGate = Field(default_factory=SlotGate)
+    data_quality: SlotDataQuality = Field(default_factory=SlotDataQuality)
+    tracked_universe: TrackedUniverse = Field(default_factory=TrackedUniverse)
 
 
 class AdviceRun(GPModel):
@@ -169,12 +270,173 @@ class AdviceRun(GPModel):
     reason: Optional[str] = None
     picks: List[BoardEntry] = Field(default_factory=list)
     evidence_refs: List[str] = Field(default_factory=list)
-    # Freshness metadata for provenance
+    artifact_id: Optional[str] = None
+    slot_id: Optional[str] = None
+    slot_status: Optional[str] = None
+    publish_allowed: bool = False
     daybook_effective_day: Optional[str] = None
     pulse_trade_day: Optional[str] = None
     pulse_slot_at: Optional[str] = None
     market_phase: Optional[str] = None
     data_status: Optional[str] = None
+    run_action: Optional[str] = None
+    non_trading: bool = False
+    status_reason: Optional[str] = None
+    no_trade_reasons: List[str] = Field(default_factory=list)
+    recovery_conditions: List[str] = Field(default_factory=list)
+    data_quality: Dict[str, Any] = Field(default_factory=dict)
+    data_provenance: Dict[str, Any] = Field(default_factory=dict)
+    gate_state: Optional[str] = None
+    gate_reasons: List[str] = Field(default_factory=list)
+
+
+class CanonicalPick(GPModel):
+    symbol: str
+    code: str
+    name: Optional[str] = None
+    rank: int
+    action: str = "WATCH"
+    execution_state: str = "WATCH_ONLY"
+    can_execute_now: bool = False
+    thesis: str = ""
+    why_selected: str = ""
+    entry_zone: Dict[str, Any] = Field(default_factory=dict)
+    entry_text: Optional[str] = None
+    stop: Optional[float] = None
+    stop_text: Optional[str] = None
+    invalidation: Optional[str] = None
+    take_profit: List[float] = Field(default_factory=list)
+    take_text: Optional[str] = None
+    confidence: float = 0.0
+    risk_level: str = "medium"
+    score: float = 0.0
+    final_score: float = 0.0
+    live_score: float = 0.0
+    daily_rank_score: float = 0.0
+    exec_score: float = 0.0
+    technical_basis: List[str] = Field(default_factory=list)
+    reason_codes: List[str] = Field(default_factory=list)
+    missing_fields: List[str] = Field(default_factory=list)
+    artifact_id: Optional[str] = None
+    slot_id: Optional[str] = None
+    data_provenance: Dict[str, Any] = Field(default_factory=dict)
+    vwap: Optional[float] = None
+    orb30_high: Optional[float] = None
+    orb30_low: Optional[float] = None
+    rs_index: Optional[float] = None
+    rs_industry: Optional[float] = None
+    slot_rel_vol: Optional[float] = None
+    entry_distance_pct: Optional[float] = None
+
+
+class CanonicalRunArtifact(GPModel):
+    run_id: str
+    artifact_id: Optional[str] = None
+    book_version: Optional[str] = None
+    as_of: str
+    trading_day: str
+    daybook_effective_day: Optional[str] = None
+    pulse_trade_day: Optional[str] = None
+    pulse_slot_at: Optional[str] = None
+    market_phase: Optional[str] = None
+    slot_status: Optional[str] = None
+    run_action: str = "NO_TRADE"
+    tradeable: bool = False
+    publish_allowed: bool = False
+    non_trading: bool = False
+    status_reason: Optional[str] = None
+    no_trade_reasons: List[str] = Field(default_factory=list)
+    recovery_conditions: List[str] = Field(default_factory=list)
+    themes: List[str] = Field(default_factory=list)
+    picks: List[CanonicalPick] = Field(default_factory=list)
+    gate: Dict[str, Any] = Field(default_factory=dict)
+    data_quality: Dict[str, Any] = Field(default_factory=dict)
+    data_provenance: Dict[str, Any] = Field(default_factory=dict)
+    tool_trace: Dict[str, Any] = Field(default_factory=dict)
+
+
+class LiveEntryDecisionArtifact(GPModel):
+    symbol: str
+    name: Optional[str] = None
+    execution_state: str
+    can_execute_now: bool = False
+    next_action: str = ""
+    summary: str = ""
+    gate_state: Optional[str] = None
+    gate_reasons: List[str] = Field(default_factory=list)
+    vwap: Optional[float] = None
+    orb30_high: Optional[float] = None
+    orb30_low: Optional[float] = None
+    entry_text: Optional[str] = None
+    stop_text: Optional[str] = None
+    take_text: Optional[str] = None
+    entry_distance_pct: Optional[float] = None
+    slot_rel_vol: Optional[float] = None
+    rs_index: Optional[float] = None
+    rs_industry: Optional[float] = None
+    reason_codes: List[str] = Field(default_factory=list)
+    data_provenance: Dict[str, Any] = Field(default_factory=dict)
+    source_run_id: Optional[str] = None
+
+
+class PickDetailArtifact(GPModel):
+    symbol: str
+    name: Optional[str] = None
+    rank: Optional[int] = None
+    thesis: str = ""
+    why_selected: str = ""
+    entry_text: Optional[str] = None
+    stop_text: Optional[str] = None
+    take_text: Optional[str] = None
+    invalidation: Optional[str] = None
+    execution_state: Optional[str] = None
+    risk_level: str = "medium"
+    reason_codes: List[str] = Field(default_factory=list)
+    data_provenance: Dict[str, Any] = Field(default_factory=dict)
+    source_run_id: Optional[str] = None
+
+
+class NoTradeArtifact(GPModel):
+    run_action: str = "NO_TRADE"
+    market_summary: str = ""
+    status_reason: str = ""
+    no_trade_reasons: List[str] = Field(default_factory=list)
+    recovery_conditions: List[str] = Field(default_factory=list)
+    data_provenance: Dict[str, Any] = Field(default_factory=dict)
+    source_run_id: Optional[str] = None
+
+
+class ExitDecisionArtifact(GPModel):
+    symbol: str
+    action: str = "WATCH"
+    reason: str = ""
+    trigger: str = ""
+    stop: Optional[float] = None
+    invalidation: Optional[str] = None
+    take_profit: List[float] = Field(default_factory=list)
+    current_state: Optional[str] = None
+    confidence: float = 0.0
+    source_run_id: Optional[str] = None
+    data_provenance: Dict[str, Any] = Field(default_factory=dict)
+
+
+class CompareArtifact(GPModel):
+    compared_symbols: List[str] = Field(default_factory=list)
+    leader_symbol: Optional[str] = None
+    ranking: List[Dict[str, Any]] = Field(default_factory=list)
+    comparison_points: List[str] = Field(default_factory=list)
+    source_run_id: Optional[str] = None
+    data_provenance: Dict[str, Any] = Field(default_factory=dict)
+
+
+class RunChangeArtifact(GPModel):
+    current_run_id: Optional[str] = None
+    previous_run_id: Optional[str] = None
+    added: List[str] = Field(default_factory=list)
+    removed: List[str] = Field(default_factory=list)
+    rank_changes: List[Dict[str, Any]] = Field(default_factory=list)
+    gating_change: Dict[str, Any] = Field(default_factory=dict)
+    data_quality_change: Dict[str, Any] = Field(default_factory=dict)
 
 
 class EvidencePack(GPModel):
@@ -195,8 +457,15 @@ class Judgment(GPModel):
     kind: str
     summary: str
     run: Optional[AdviceRun] = None
+    canonical_run: Optional[CanonicalRunArtifact] = None
     subject_entry: Optional[BoardEntry] = None
     compare_entries: List[BoardEntry] = Field(default_factory=list)
+    pick_detail: Optional[PickDetailArtifact] = None
+    live_entry: Optional[LiveEntryDecisionArtifact] = None
+    no_trade: Optional[NoTradeArtifact] = None
+    exit_decision: Optional[ExitDecisionArtifact] = None
+    compare_view: Optional[CompareArtifact] = None
+    run_change_view: Optional[RunChangeArtifact] = None
     exit_view: Dict[str, Any] = Field(default_factory=dict)
     claims: List[Claim] = Field(default_factory=list)
     side_results: List[SideResult] = Field(default_factory=list)
@@ -207,7 +476,7 @@ class Judgment(GPModel):
 class ReplyBundle(GPModel):
     session_id: str
     text: str
-    kind: str | None = None
+    kind: Optional[str] = None
     run_id: Optional[str] = None
     symbols: List[str] = Field(default_factory=list)
     right_panel: Dict[str, Any] = Field(default_factory=dict)

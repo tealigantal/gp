@@ -1,27 +1,80 @@
 from __future__ import annotations
 
-from typing import Any, Dict, List, Tuple
+import re
+from typing import Dict, List, Tuple
 
-from ..contracts.objects import BoardEntry, MarketBook
+from ..contracts.objects import BoardEntry, MarketBook, TurnFrame
+
+_SYMBOL_RE = re.compile(r"(?<!\d)(?:60|68|00|30)\d{4}(?!\d)")
+_RANK_RE = re.compile(r"第\s*(\d{1,2})\s*(?:只|个|支)?")
 
 
 def _entry_by_symbol(entries: List[BoardEntry], symbol: str | None) -> BoardEntry | None:
     if not symbol:
         return None
     symbol = str(symbol).strip()
-    for e in entries:
-        if e.symbol == symbol:
-            return e
+    for entry in entries:
+        if entry.symbol == symbol:
+            return entry
     return None
 
 
 def _entry_by_rank(entries: List[BoardEntry], rank: int | None) -> BoardEntry | None:
     if rank is None:
         return None
-    for e in entries:
-        if e.rank == rank:
-            return e
+    for entry in entries:
+        if entry.rank == rank:
+            return entry
     return None
+
+
+def _extract_rank(raw: str) -> int | None:
+    match = _RANK_RE.search(raw or "")
+    if not match:
+        return None
+    try:
+        return int(match.group(1))
+    except Exception:
+        return None
+
+
+def inject_entity_hints(frame: TurnFrame, memory_ctx: Dict, book: MarketBook) -> TurnFrame:
+    refs = dict(frame.references or {})
+    raw = (frame.raw_message or "").strip()
+    session = memory_ctx["session"]
+    active_entries = list(book.board)
+    symbols = _SYMBOL_RE.findall(raw)
+    if symbols and not refs.get("symbol"):
+        refs["symbol"] = symbols[0]
+    if len(symbols) >= 2 and not refs.get("compare_symbols"):
+        refs["compare_symbols"] = symbols[:3]
+    if refs.get("rank") is None:
+        rank = _extract_rank(raw)
+        if rank is not None:
+            refs["rank"] = rank
+    if "focus_symbol" not in refs and isinstance(session.focus_subject, dict):
+        if session.focus_subject.get("type") == "symbol" and session.focus_subject.get("symbol"):
+            refs["focus_symbol"] = session.focus_subject.get("symbol")
+    if not refs.get("symbol"):
+        focus_symbol = refs.get("focus_symbol") or getattr(session, "last_focus_symbol", None)
+        if any(token in raw for token in ("这只", "这个票", "这个标的", "它")) and focus_symbol:
+            refs["symbol"] = focus_symbol
+    if frame.request == "compare" and not refs.get("compare_symbols"):
+        ranks = [entry.rank for entry in active_entries if f"第{entry.rank}" in raw]
+        if len(ranks) >= 2:
+            compare_symbols = []
+            for rank in ranks[:3]:
+                entry = _entry_by_rank(active_entries, rank)
+                if entry:
+                    compare_symbols.append(entry.symbol)
+            if compare_symbols:
+                refs["compare_symbols"] = compare_symbols
+    if frame.request in {"pick_detail", "live_entry_check", "exit_decision"} and not refs.get("symbol") and refs.get("rank") is not None:
+        entry = _entry_by_rank(active_entries, int(refs["rank"]))
+        if entry:
+            refs["symbol"] = entry.symbol
+    frame.references = refs
+    return frame
 
 
 def resolve_subject_and_compare(
@@ -33,32 +86,30 @@ def resolve_subject_and_compare(
 ) -> Tuple[BoardEntry | None, List[BoardEntry]]:
     refs = frame.references or {}
     subject_entry: BoardEntry | None = None
-    # 1) prefer active_run.picks then fallback to board for symbol
-    if isinstance(refs.get('symbol'), str):
-        subject_entry = _entry_by_symbol(active_entries, refs.get('symbol')) or _entry_by_symbol(book.board, refs.get('symbol'))
-    # 2) rank within active entries
-    if subject_entry is None and refs.get('rank') is not None:
+    if isinstance(refs.get("symbol"), str):
+        subject_entry = _entry_by_symbol(active_entries, refs.get("symbol")) or _entry_by_symbol(book.board, refs.get("symbol"))
+    if subject_entry is None and isinstance(refs.get("focus_symbol"), str):
+        subject_entry = _entry_by_symbol(active_entries, refs.get("focus_symbol")) or _entry_by_symbol(book.board, refs.get("focus_symbol"))
+    if subject_entry is None and refs.get("rank") is not None:
         try:
-            subject_entry = _entry_by_rank(active_entries, int(refs.get('rank')))
+            subject_entry = _entry_by_rank(active_entries, int(refs.get("rank")))
         except Exception:
             subject_entry = None
-    # 3) fallback to session focus symbol
     if subject_entry is None and isinstance(session.focus_subject, dict):
-        if session.focus_subject.get('type') == 'symbol':
-            subject_entry = _entry_by_symbol(active_entries, session.focus_subject.get('symbol')) or _entry_by_symbol(book.board, session.focus_subject.get('symbol'))
+        if session.focus_subject.get("type") == "symbol":
+            subject_entry = _entry_by_symbol(active_entries, session.focus_subject.get("symbol")) or _entry_by_symbol(book.board, session.focus_subject.get("symbol"))
 
     compare_entries: List[BoardEntry] = []
-    # Unify compare set: prefer explicit compare_symbols, else symbols, else session.compare_set
-    compare_symbols = []
-    if isinstance(refs.get('compare_symbols'), list) and refs.get('compare_symbols'):
-        compare_symbols = refs.get('compare_symbols')
-    elif isinstance(refs.get('symbols'), list) and refs.get('symbols'):
-        compare_symbols = refs.get('symbols')
+    compare_symbols: List[str] = []
+    if isinstance(refs.get("compare_symbols"), list) and refs.get("compare_symbols"):
+        compare_symbols = [str(symbol).strip() for symbol in refs["compare_symbols"] if str(symbol).strip()]
+    elif isinstance(refs.get("symbols"), list) and refs.get("symbols"):
+        compare_symbols = [str(symbol).strip() for symbol in refs["symbols"] if str(symbol).strip()]
     elif isinstance(session.compare_set, list) and session.compare_set:
-        compare_symbols = session.compare_set
+        compare_symbols = [str(symbol).strip() for symbol in session.compare_set if str(symbol).strip()]
     if compare_symbols:
-        want = set(str(s).strip() for s in compare_symbols if str(s).strip())
-        compare_entries = [e for e in (active_entries or book.board) if e.symbol in want]
-    if subject_entry and not compare_entries and frame.request == 'compare':
-        compare_entries = [subject_entry] + [e for e in book.board if e.symbol != subject_entry.symbol][:1]
+        wanted = set(compare_symbols)
+        compare_entries = [entry for entry in (active_entries or book.board) if entry.symbol in wanted]
+    if subject_entry and not compare_entries and frame.request == "compare":
+        compare_entries = [subject_entry] + [entry for entry in active_entries if entry.symbol != subject_entry.symbol][:1]
     return subject_entry, compare_entries

@@ -11,20 +11,29 @@ def make_recommendation(session_id: str, book: MarketBook, topk: int = 3) -> Jud
     run = publish_run(session_id=session_id, book=book, topk=topk)
     claims: List[Claim] = []
     for entry in run.picks:
-        claims.append(Claim(
-            claim_id=gen_id('claim'),
-            session_id=session_id,
-            subject_type='symbol',
-            subject_id=entry.symbol,
-            predicate='rank',
-            value={'rank': entry.rank, 'style_label': entry.style_label, 'execution_state': entry.execution_state},
-            evidence_refs=[run.run_id, book.book_version],
-            turn_id='pending',
-            created_at=now_iso(),
-        ))
-    summary = '已基于当前账本发布一轮推荐。' if run.tradeable else f'当前更偏观察：{run.reason or "账本不支持主动建仓"}'
+        claims.append(
+            Claim(
+                claim_id=gen_id("claim"),
+                session_id=session_id,
+                subject_type="symbol",
+                subject_id=entry.symbol,
+                predicate="rank",
+                value={"rank": entry.rank, "style_label": entry.style_label, "execution_state": entry.execution_state},
+                evidence_refs=[run.run_id, book.book_version],
+                turn_id="pending",
+                created_at=now_iso(),
+            )
+        )
+
+    if run.slot_status and run.slot_status != "OK":
+        summary = f"当前 slot 状态为 {run.slot_status}，执行数据降级，当前只保留观察级建议。"
+    elif run.tradeable:
+        summary = "已基于当前统一 artifact 生成本轮推荐。"
+    else:
+        summary = f"当前更偏观察，原因：{run.reason or '当前闸门未放行'}"
+
     return Judgment(
-        kind='recommend',
+        kind="recommend",
         summary=summary,
         run=run,
         compare_entries=run.picks,

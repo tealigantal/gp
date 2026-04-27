@@ -1,10 +1,14 @@
+import os
 import sys
+import tempfile
 from pathlib import Path
 
 
 root = Path(__file__).resolve().parents[1]
 if str(root) not in sys.path:
     sys.path.insert(0, str(root))
+
+os.environ.setdefault("GP_RUNS_DIR", str(Path(tempfile.gettempdir()) / "gp-pytest-runs"))
 
 # Ignore out-of-scope tests that depend on retired API surfaces or external services.
 collect_ignore = [

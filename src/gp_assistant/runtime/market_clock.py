@@ -1,12 +1,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, time, timedelta
-from typing import Optional
-
-import zoneinfo
+from datetime import date, datetime, time, timedelta
+from typing import Iterable, Optional
 
 import pandas as pd
+import zoneinfo
 
 from ..core.config import load_config
 
@@ -22,8 +21,14 @@ PHASE_OPEN_NO_FIRST_BAR = "OPEN_NO_FIRST_BAR"
 PHASE_INTRADAY_AM = "INTRADAY_AM"
 PHASE_LUNCH_BREAK = "LUNCH_BREAK"
 PHASE_INTRADAY_PM = "INTRADAY_PM"
+PHASE_CLOSING_AUCTION = "CLOSING_AUCTION"
 PHASE_POSTCLOSE_PENDING = "POSTCLOSE_PENDING"
 PHASE_POSTCLOSE_READY = "POSTCLOSE_READY"
+
+AM_SLOT_CLOSE_START = time(9, 35)
+AM_SLOT_CLOSE_END = time(11, 30)
+PM_SLOT_CLOSE_START = time(13, 5)
+PM_SLOT_CLOSE_END = time(14, 55)
 
 
 @dataclass
@@ -31,18 +36,19 @@ class MarketState:
     market_phase: str
     calendar_source: str
     is_trading_day: bool
-    # canonical targets
     target_daybook_effective_day: str
     target_pulse_trade_day: Optional[str]
     target_pulse_slot_at: Optional[str]
-    # data readiness hint (post-close)
-    data_status: str  # ok | close_pending | degraded
+    data_status: str
 
 
 def _tz_now(now: Optional[datetime]) -> datetime:
     cfg = load_config()
     tz = zoneinfo.ZoneInfo(getattr(cfg, "timezone", "Asia/Shanghai"))
-    return (now or datetime.now(tz=tz)).astimezone(tz)
+    current = now or datetime.now(tz=tz)
+    if current.tzinfo is None:
+        current = current.replace(tzinfo=tz)
+    return current.astimezone(tz)
 
 
 def _load_calendar_df():
@@ -61,7 +67,6 @@ def _is_open_day(d: pd.Timestamp, cal_df) -> bool:
                 return int(row.iloc[0]["is_open"]) == 1
             except Exception:
                 pass
-    # weekday fallback
     return d.weekday() < 5
 
 
@@ -70,43 +75,93 @@ def _last_open_day_on_or_before(d: pd.Timestamp, cal_df) -> pd.Timestamp:
         ymd = d.strftime("%Y%m%d")
         sub = cal_df[(cal_df["cal_date"] <= ymd) & (cal_df["is_open"] == 1)]
         if not sub.empty:
-            target_str = str(sub.iloc[-1]["cal_date"])  # last open day
             try:
-                return pd.to_datetime(target_str).normalize()
+                return pd.to_datetime(str(sub.iloc[-1]["cal_date"])).normalize()
             except Exception:
                 pass
-    # weekday fallback
     dd = d
     while dd.weekday() >= 5:
         dd = dd - pd.Timedelta(days=1)
     return dd.normalize()
 
 
-def _floor_5m_slot(dt: datetime) -> datetime:
-    # floor to previous 5-min boundary
-    minute = (dt.minute // 5) * 5
-    return dt.replace(minute=minute, second=0, microsecond=0)
+def _trade_day_for_now(tnow: datetime, cal_df) -> str:
+    today = pd.Timestamp(tnow.date())
+    if _is_open_day(today, cal_df):
+        return today.strftime("%Y%m%d")
+    return _last_open_day_on_or_before(today, cal_df).strftime("%Y%m%d")
 
 
-def _last_closed_5m_slot(now: datetime) -> Optional[datetime]:
-    t = now.time()
-    # Trading sessions for main boards
-    am_start, am_end = time(9, 30), time(11, 30)
-    pm_start, pm_end = time(13, 0), time(14, 55)
-    first_bar_close = time(9, 35)
+def _date_from_trade_day(trade_day: str) -> date:
+    return datetime.strptime(trade_day, "%Y%m%d").date()
 
-    if t < first_bar_close:
+
+def _combine(trade_day: str, hh: int, mm: int) -> datetime:
+    return datetime.combine(_date_from_trade_day(trade_day), time(hh, mm))
+
+
+def format_slot_at(slot_dt: datetime | None) -> Optional[str]:
+    if slot_dt is None:
         return None
-    if am_start <= t <= am_end:
-        return _floor_5m_slot(now)
-    if am_end < t < pm_start:
-        # lunch break: last closed is 11:30
-        return now.replace(hour=11, minute=30, second=0, microsecond=0)
-    if pm_start <= t <= pm_end:
-        return _floor_5m_slot(now)
-    if t > pm_end:
-        # after 14:55 but before close auction ends, the last closed 5m is 14:55
-        return now.replace(hour=14, minute=55, second=0, microsecond=0)
+    return slot_dt.strftime("%Y-%m-%d %H:%M:%S")
+
+
+def slot_id_for(slot_at: datetime | str | None) -> Optional[str]:
+    if slot_at is None:
+        return None
+    dt = pd.to_datetime(slot_at).to_pydatetime() if not isinstance(slot_at, datetime) else slot_at
+    return dt.strftime("%Y%m%d_%H%M")
+
+
+def iter_trade_slots(trade_day: str, *, up_to: datetime | str | None = None) -> list[datetime]:
+    slots: list[datetime] = []
+    cur = _combine(trade_day, 9, 35)
+    am_end = _combine(trade_day, 11, 30)
+    while cur <= am_end:
+        slots.append(cur)
+        cur += timedelta(minutes=5)
+    cur = _combine(trade_day, 13, 5)
+    pm_end = _combine(trade_day, 14, 55)
+    while cur <= pm_end:
+        slots.append(cur)
+        cur += timedelta(minutes=5)
+    if up_to is None:
+        return slots
+    cutoff = pd.to_datetime(up_to).to_pydatetime() if not isinstance(up_to, datetime) else up_to
+    return [slot for slot in slots if slot <= cutoff]
+
+
+def next_trade_slot(trade_day: str, slot_at: datetime | str | None) -> Optional[datetime]:
+    slots = iter_trade_slots(trade_day)
+    if slot_at is None:
+        return slots[0] if slots else None
+    current = pd.to_datetime(slot_at).to_pydatetime() if not isinstance(slot_at, datetime) else slot_at
+    for slot in slots:
+        if slot > current:
+            return slot
+    return None
+
+
+def last_closed_trade_slot(now: Optional[datetime] = None) -> Optional[datetime]:
+    tnow = _tz_now(now)
+    trade_day = _trade_day_for_now(tnow, _load_calendar_df())
+    tt = tnow.time()
+    if tt < AM_SLOT_CLOSE_START:
+        return None
+    if AM_SLOT_CLOSE_START <= tt <= AM_SLOT_CLOSE_END:
+        minute = (tt.minute // 5) * 5
+        floored = tnow.replace(minute=minute, second=0, microsecond=0)
+        return floored if floored.time() >= AM_SLOT_CLOSE_START else None
+    if AM_SLOT_CLOSE_END < tt < PM_SLOT_CLOSE_START:
+        return _combine(trade_day, 11, 30)
+    if PM_SLOT_CLOSE_START <= tt <= PM_SLOT_CLOSE_END:
+        minute = (tt.minute // 5) * 5
+        floored = tnow.replace(minute=minute, second=0, microsecond=0)
+        return floored if floored.time() >= PM_SLOT_CLOSE_START else _combine(trade_day, 11, 30)
+    if PM_SLOT_CLOSE_END < tt < time(15, 0):
+        return _combine(trade_day, 14, 55)
+    if tt >= time(15, 0):
+        return _combine(trade_day, 14, 55)
     return None
 
 
@@ -117,71 +172,61 @@ def compute_market_state(now: Optional[datetime] = None) -> MarketState:
 
     today = pd.Timestamp(tnow.date())
     is_open = _is_open_day(today, cal_df)
+    trade_day = _trade_day_for_now(tnow, cal_df)
 
-    # Determine phase by clock first
     tt = tnow.time()
-    preopen_start, preopen_end = time(9, 15), time(9, 30)
-    first_bar_close = time(9, 35)
-    am_start, am_end = time(9, 30), time(11, 30)
-    pm_start, pm_end = time(13, 0), time(14, 55)
-    close_auction_end = time(15, 0)  # 15:00 is completion boundary for daybook
-
     if not is_open:
         phase = PHASE_NON_TRADING
-    else:
-        if tt < preopen_start:
-            phase = PHASE_PREOPEN
-        elif preopen_start <= tt < preopen_end:
-            phase = PHASE_PREOPEN
-        elif preopen_end <= tt < first_bar_close:
-            phase = PHASE_OPEN_NO_FIRST_BAR
-        elif am_start <= tt <= am_end:
-            # note: for 9:35..11:30, we treat as AM
-            phase = PHASE_INTRADAY_AM
-        elif am_end < tt < pm_start:
-            phase = PHASE_LUNCH_BREAK
-        elif pm_start <= tt <= pm_end:
-            phase = PHASE_INTRADAY_PM
-        elif pm_end < tt < close_auction_end:
-            # closing auction till 15:00 still intraday for 5m purposes
-            phase = PHASE_INTRADAY_PM
-        else:
-            # >= 15:00 local
-            # we cannot know if close data is ready here; caller may degrade to pending
-            phase = PHASE_POSTCLOSE_PENDING
-
-    # Targets
-    # daybook_effective_day: last completed day before close; after 15:00 -> today
-    if phase == PHASE_POSTCLOSE_PENDING:
-        target_day = today.strftime("%Y%m%d")
-        data_status = "close_pending"
-    elif phase == PHASE_NON_TRADING:
-        target_day = _last_open_day_on_or_before(today - pd.Timedelta(days=0), cal_df).strftime("%Y%m%d")
-        data_status = "ok"
-    else:
-        # pre-open and intraday -> previous completed day
-        prev = _last_open_day_on_or_before(today - pd.Timedelta(days=1), cal_df)
-        target_day = prev.strftime("%Y%m%d")
-        data_status = "ok"
-
-    # pulse trade day and slot
-    if phase in {PHASE_INTRADAY_AM, PHASE_INTRADAY_PM, PHASE_OPEN_NO_FIRST_BAR, PHASE_LUNCH_BREAK} and is_open:
-        pulse_day = today.strftime("%Y%m%d")
-        slot_dt = _last_closed_5m_slot(tnow)
-        slot_str = slot_dt.strftime("%Y-%m-%d %H:%M:%S") if slot_dt else None
-    else:
         pulse_day = None
         slot_str = None
+        data_status = "ok"
+    elif tt < time(9, 30):
+        phase = PHASE_PREOPEN
+        pulse_day = trade_day
+        slot_str = None
+        data_status = "unavailable"
+    elif time(9, 30) <= tt < AM_SLOT_CLOSE_START:
+        phase = PHASE_OPEN_NO_FIRST_BAR
+        pulse_day = trade_day
+        slot_str = None
+        data_status = "unavailable"
+    elif AM_SLOT_CLOSE_START <= tt <= AM_SLOT_CLOSE_END:
+        phase = PHASE_INTRADAY_AM
+        pulse_day = trade_day
+        slot_str = format_slot_at(last_closed_trade_slot(tnow))
+        data_status = "ok"
+    elif AM_SLOT_CLOSE_END < tt < time(13, 0):
+        phase = PHASE_LUNCH_BREAK
+        pulse_day = trade_day
+        slot_str = format_slot_at(last_closed_trade_slot(tnow))
+        data_status = "ok"
+    elif time(13, 0) <= tt < PM_SLOT_CLOSE_START:
+        phase = PHASE_INTRADAY_PM
+        pulse_day = trade_day
+        slot_str = format_slot_at(last_closed_trade_slot(tnow))
+        data_status = "ok" if slot_str else "unavailable"
+    elif PM_SLOT_CLOSE_START <= tt <= PM_SLOT_CLOSE_END:
+        phase = PHASE_INTRADAY_PM
+        pulse_day = trade_day
+        slot_str = format_slot_at(last_closed_trade_slot(tnow))
+        data_status = "ok"
+    elif PM_SLOT_CLOSE_END < tt < time(15, 0):
+        phase = PHASE_CLOSING_AUCTION
+        pulse_day = trade_day
+        slot_str = format_slot_at(_combine(trade_day, 14, 55))
+        data_status = "ok"
+    else:
+        phase = PHASE_POSTCLOSE_PENDING
+        pulse_day = trade_day
+        slot_str = format_slot_at(_combine(trade_day, 14, 55))
+        data_status = "close_pending"
 
-    # Post-close ready detection is left to higher layers; we default PENDING here
-    market_phase = phase
     return MarketState(
-        market_phase=market_phase,
+        market_phase=phase,
         calendar_source=cal_src,
         is_trading_day=is_open,
-        target_daybook_effective_day=target_day,
+        target_daybook_effective_day=trade_day,
         target_pulse_trade_day=pulse_day,
         target_pulse_slot_at=slot_str,
         data_status=data_status,
     )
-

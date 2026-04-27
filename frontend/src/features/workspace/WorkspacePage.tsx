@@ -1,14 +1,16 @@
 import { Alert, Card, Layout, Spin } from 'antd'
-import { useAdvisorWorkspace } from './useAdvisorWorkspace'
 import { ChatThread } from './components/ChatThread'
 import { Composer } from './components/Composer'
 import { DecisionSnapshot } from './components/DecisionSnapshot'
 import { HeaderBar } from './components/HeaderBar'
+import { runtimeFreshnessMeta } from './runtimeLabels'
+import { useAdvisorWorkspace } from './useAdvisorWorkspace'
 
 const { Header, Sider, Content } = Layout
 
 export function WorkspacePage() {
   const workspace = useAdvisorWorkspace()
+  const runtimeFreshness = runtimeFreshnessMeta(workspace.health?.runtime)
 
   const prompt = async (message: string) => {
     workspace.setComposerValue(message)
@@ -22,6 +24,11 @@ export function WorkspacePage() {
       </div>
     )
   }
+
+  const showRuntimeAlert =
+    workspace.health?.runtime?.book_freshness === 'lagging' ||
+    workspace.health?.runtime?.book_freshness === 'degraded' ||
+    workspace.health?.runtime?.book_freshness === 'unavailable'
 
   return (
     <>
@@ -45,10 +52,19 @@ export function WorkspacePage() {
             <main id="workspace-main" className="center-pane-main">
               {!workspace.health?.llm_ready ? (
                 <Alert
-                  type="error"
+                  type="warning"
                   showIcon
                   message="LLM 当前不可用"
-                  description="请检查后端配置，并确认 `/api/health` 返回 `llm_ready=true`。"
+                  description="结构化卡片和降级文案仍可用，但语义理解与自然解释会变弱。"
+                  style={{ marginBottom: 12 }}
+                />
+              ) : null}
+              {showRuntimeAlert ? (
+                <Alert
+                  type={workspace.health?.runtime?.book_freshness === 'lagging' ? 'warning' : 'info'}
+                  showIcon
+                  message="运行状态提示"
+                  description={runtimeFreshness.note}
                   style={{ marginBottom: 12 }}
                 />
               ) : null}
@@ -73,9 +89,20 @@ export function WorkspacePage() {
               </Card>
             </main>
           </Content>
-          <Sider width={360} theme="light" className="right-sider snapshot-sider" role="complementary" aria-label="Decision snapshot">
+          <Sider width={376} theme="light" className="right-sider snapshot-sider" role="complementary" aria-label="Decision snapshot">
             <div className="panel-scroll">
-              <DecisionSnapshot book={workspace.book} session={workspace.session} latest={workspace.latestResponse} />
+              <DecisionSnapshot
+                book={workspace.book}
+                session={workspace.session}
+                latest={workspace.latestResponse}
+                health={workspace.health}
+                onRunTool={workspace.runTool}
+                onRefreshRuntime={workspace.refreshWorkspaceState}
+                runningToolService={workspace.runningToolService}
+                isRunningTool={workspace.isRunningTool}
+                opsResult={workspace.lastOpsResult}
+                opsError={workspace.lastOpsError}
+              />
             </div>
           </Sider>
         </Layout>

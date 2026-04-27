@@ -28,12 +28,55 @@ class HealthStorageStats(BaseModel):
     latest_session_at: Optional[str] = None
 
 
+class RuntimeToolInfo(BaseModel):
+    service: str
+    mode: str
+    command: str
+    description: str
+    profile: Optional[str] = None
+
+
+class RuntimeStatus(BaseModel):
+    market_phase: str = "UNKNOWN"
+    data_provider: str = "unknown"
+    auto_update_service: str = "gp-worker"
+    auto_update_expected: bool = False
+    worker_poll_interval_sec: int = 15
+    book_freshness: str = "unavailable"
+    book_updated_at: Optional[str] = None
+    artifact_id: Optional[str] = None
+    daybook_effective_day: Optional[str] = None
+    pulse_trade_day: Optional[str] = None
+    pulse_slot_at: Optional[str] = None
+    last_closed_5m: Optional[str] = None
+    slot_status: Optional[str] = None
+    publish_allowed: bool = False
+    daily_freshness_ready: bool = False
+    daily_target_day: Optional[str] = None
+    daily_checked_count: int = 0
+    daily_stale_count: int = 0
+    daily_last_reconcile_at: Optional[str] = None
+    daily_blocking_reason: Optional[str] = None
+    daily_failed_symbols: List[str] = Field(default_factory=list)
+    services: List[RuntimeToolInfo] = Field(default_factory=list)
+
+
+class OpsRunResponse(BaseModel):
+    operation: str
+    status: str = "ok"
+    message: str
+    executed_at: Optional[str] = None
+    result: Dict[str, Any] = Field(default_factory=dict)
+    runtime: RuntimeStatus = Field(default_factory=RuntimeStatus)
+
+
 class HealthResponse(BaseModel):
     status: str
     trading_day: Optional[str] = None
     book_version: Optional[str] = None
     llm_ready: bool = False
     storage: HealthStorageStats = Field(default_factory=HealthStorageStats)
+    runtime: RuntimeStatus = Field(default_factory=RuntimeStatus)
 
 
 class SessionResponse(BaseModel):

@@ -86,6 +86,11 @@ def get_provider(prefer: Literal["local", "online", "auto", "akshare", "official
 
     local, ak, off = _get_singletons(cfg)
 
+    if prefer == "akshare":
+        return ak
+    if prefer == "official":
+        return off
+
     # When user explicitly sets DATA_PROVIDER, honor it strictly (no healthchecks in hot paths)
     if choice == "akshare":
         return ak

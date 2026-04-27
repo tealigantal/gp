@@ -62,6 +62,12 @@ def commit_turn(session_id: str, user_message: str, reply: ReplyBundle, judgment
             session.active_run_id = judgment.run.run_id
             session.last_seen_book_version = judgment.run.book_version
             session.focus_subject = {'type': 'run', 'run_id': judgment.run.run_id}
+            if judgment.run.picks:
+                session.last_focus_symbol = judgment.run.picks[0].symbol
+                try:
+                    session.last_focus_rank = int(judgment.run.picks[0].rank)
+                except Exception:
+                    pass
             # snapshot run freshness metadata for reuse validation
             try:
                 session.active_run_daybook_effective_day = judgment.run.daybook_effective_day

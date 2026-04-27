@@ -4,19 +4,16 @@ import type {
   ChatRequest,
   ChatResponse,
   HealthResponse,
+  OpsRunResponse,
   RunResponse,
-  SessionResponse,
   SessionListItem,
+  SessionResponse,
   SideResult,
 } from './contracts'
 
-const DEFAULT_API_TIMEOUT_MS = 60_000
-const rawChatTimeout = Number(import.meta.env.VITE_CHAT_TIMEOUT_MS ?? '0')
-const CHAT_TIMEOUT_MS = Number.isFinite(rawChatTimeout) && rawChatTimeout >= 0 ? rawChatTimeout : 0
-
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL || '',
-  timeout: DEFAULT_API_TIMEOUT_MS,
+  timeout: 0,
 })
 
 export async function getHealth() {
@@ -50,25 +47,28 @@ export async function getSessions(limit = 20) {
 }
 
 export async function postChat(payload: ChatRequest) {
-  const { data } = await api.post<ChatResponse>('/api/chat', payload, {
-    // Chat can legitimately take much longer than the normal dashboard requests.
-    timeout: CHAT_TIMEOUT_MS,
-  })
+  const { data } = await api.post<ChatResponse>('/api/chat', payload)
+  return data
+}
+
+export async function runOpsTool(service: string) {
+  const { data } = await api.post<OpsRunResponse>(`/api/ops/${encodeURIComponent(service)}/run`)
   return data
 }
 
 export function readApiError(error: unknown): string {
   if (error instanceof AxiosError) {
     if (error.code === AxiosError.ECONNABORTED) {
-      return '对话请求超时。后端可能仍在处理中，请稍后查看会话结果，或增大 VITE_CHAT_TIMEOUT_MS。'
+      return '请求超时。后端可能仍在处理中，请稍后刷新结果。'
     }
     const payload = (error.response?.data ?? {}) as Record<string, unknown>
-    const detail = (payload['detail'] ?? {}) as Record<string, unknown>
-    const err = (payload['error'] ?? {}) as Record<string, unknown>
+    const detail = (payload.detail ?? {}) as Record<string, unknown>
+    const err = (payload.error ?? {}) as Record<string, unknown>
     return (
-      (typeof detail['reason'] === 'string' ? (detail['reason'] as string) : undefined) ||
-      (typeof detail['message'] === 'string' ? (detail['message'] as string) : undefined) ||
-      (typeof err['message'] === 'string' ? (err['message'] as string) : undefined) ||
+      (typeof detail.reason === 'string' ? detail.reason : undefined) ||
+      (typeof detail.message === 'string' ? detail.message : undefined) ||
+      (typeof payload.detail === 'string' ? payload.detail : undefined) ||
+      (typeof err.message === 'string' ? err.message : undefined) ||
       error.message
     )
   }

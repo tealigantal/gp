@@ -65,6 +65,10 @@ from ..strategy.champion import choose_champion  # type: ignore
 from ..strategy.indicators import compute_indicators  # type: ignore
 
 
+def _clip(value: float, lo: float = 0.0, hi: float = 1.0) -> float:
+    return max(lo, min(hi, float(value)))
+
+
 def _write_outputs(as_of: str, payload: Dict[str, Any]) -> None:
     out_dir = store_dir() / "recommend"
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -257,8 +261,8 @@ def run(date: Optional[str] = None, topk: int = 3, universe: str = "auto", symbo
         mainline_names_pref = [str(s.get("name")) for s in (mainline.get("sectors") or [])] if isinstance(mainline, dict) else []
     except Exception:
         mainline_names_pref = []
-    restrict_for_prefilter = bool(getattr(cfg, "restrict_to_mainline", False) and (isinstance(mainline, dict) and (mainline.get("sectors") or [])))
-    industry_prefilter = list({*theme_names_pref, *mainline_names_pref}) if restrict_for_prefilter else None
+    restrict_for_prefilter = False
+    industry_prefilter = None
 
     # Candidates with stats (build once; share features in-run to avoid recomputation)
     t0 = time.perf_counter()
@@ -319,18 +323,13 @@ def run(date: Optional[str] = None, topk: int = 3, universe: str = "auto", symbo
         except Exception:
             pass
 
-    restrict_mainline = bool(getattr(cfg, "restrict_to_mainline", False))
+    restrict_mainline = False
     # detect mainline availability: sectors present -> available; errors + empty sectors -> unavailable
     mainline_available = bool(isinstance(mainline, dict) and (mainline.get("sectors") or []))
     mainline_errors = (list(mainline.get("errors") or []) if isinstance(mainline, dict) else [])
-    restrict_effective = bool(restrict_mainline and mainline_available)
+    restrict_effective = False
     pool_before_thematic = int(len(pool))
-    if restrict_effective:
-        # Filter pool only when mainline is available (union with themes)
-        pool = themed_pool
-    else:
-        # mainline unavailable or restriction disabled -> do not hard filter here
-        pass
+    # 主线不再承担硬过滤职责，只保留软标签/解释用途。
     # Empty-source diagnostics (before strategy evaluation)
     empty_reason: Optional[str] = None
     if cand_stats.get("candidates_out_count", 0) == 0:
@@ -675,6 +674,7 @@ def run(date: Optional[str] = None, topk: int = 3, universe: str = "auto", symbo
         sym = str(cand.get("symbol"))
         it: Dict[str, Any] = {
             "symbol": sym,
+            "industry": cand.get("industry"),
             "theme": (cand.get("industry") or cand.get("source_reason") or "行业轮动"),
             "market_theme": (themes[0]["name"] if themes else None),
             "flags": cand.get("flags", {}),
@@ -721,6 +721,63 @@ def run(date: Optional[str] = None, topk: int = 3, universe: str = "auto", symbo
             it.setdefault("last_close", None)
             it.setdefault("last_date", None)
         picks.append(it)
+
+    def _window_return(df_feat: pd.DataFrame | None, bars: int) -> float:
+        if df_feat is None or len(df_feat) <= bars:
+            return 0.0
+        try:
+            end_close = float(df_feat["close"].iloc[-1])
+            start_close = float(df_feat["close"].iloc[-(bars + 1)])
+            if start_close <= 0:
+                return 0.0
+            return end_close / start_close - 1.0
+        except Exception:
+            return 0.0
+
+    industry_stats: Dict[str, Dict[str, Any]] = {}
+    for cand in pool:
+        industry_name = str(cand.get("industry") or "").strip()
+        if not industry_name:
+            continue
+        feat = feats_by_symbol.get(str(cand.get("symbol")))
+        bucket = industry_stats.setdefault(industry_name, {"r3": [], "r5": [], "r10": [], "up": []})
+        r3 = _window_return(feat, 3)
+        r5 = _window_return(feat, 5)
+        r10 = _window_return(feat, 10)
+        bucket["r3"].append(r3)
+        bucket["r5"].append(r5)
+        bucket["r10"].append(r10)
+        bucket["up"].append(1.0 if r3 > 0 else 0.0)
+
+    def _industry_strength(industry_name: str) -> float:
+        stat = industry_stats.get(industry_name) or {}
+        if not stat:
+            return 0.0
+        avg3 = float(sum(stat.get("r3", []) or [0.0]) / max(1, len(stat.get("r3", []) or [])))
+        avg5 = float(sum(stat.get("r5", []) or [0.0]) / max(1, len(stat.get("r5", []) or [])))
+        avg10 = float(sum(stat.get("r10", []) or [0.0]) / max(1, len(stat.get("r10", []) or [])))
+        breadth = float(sum(stat.get("up", []) or [0.0]) / max(1, len(stat.get("up", []) or [])))
+        momentum = 0.30 * _clip(avg3 / 0.06, 0.0, 1.0) + 0.35 * _clip(avg5 / 0.10, 0.0, 1.0) + 0.35 * _clip(avg10 / 0.15, 0.0, 1.0)
+        return float(_clip(0.75 * momentum + 0.25 * breadth, 0.0, 1.0))
+
+    top_peer_window = sorted(pool, key=lambda item: float(item.get("candidate_score", 0.0) or 0.0), reverse=True)[: max(5, min(15, len(pool)))]
+    peer_counts: Dict[str, int] = {}
+    for cand in top_peer_window:
+        industry_name = str(cand.get("industry") or "").strip()
+        if industry_name:
+            peer_counts[industry_name] = peer_counts.get(industry_name, 0) + 1
+
+    def _peer_consensus(industry_name: str) -> float:
+        if not industry_name or not top_peer_window:
+            return 0.0
+        return float(peer_counts.get(industry_name, 0) / max(1, len(top_peer_window)))
+
+    for item in picks:
+        industry_name = str(item.get("industry") or "").strip()
+        item["industry_strength_score"] = _industry_strength(industry_name)
+        item["peer_consensus_score"] = _peer_consensus(industry_name)
+        item["mainline_soft_score"] = min(0.05, 0.05 * float(item.get("mainline_overlap_score", 0.0) or 0.0))
+
     # Second-stage rerank by candidate/thematic/champion with execution penalties and breakdown
     def _score_components(item: Dict[str, Any]) -> Dict[str, float]:
         champ = item.get("champion", {}) or {}
@@ -734,10 +791,9 @@ def run(date: Optional[str] = None, topk: int = 3, universe: str = "auto", symbo
         pen = RERANK_STATE_PENALTY.get(state, 0.0)
         # candidate base score
         cand_s = float(item.get("candidate_score", 0.0))
-        # thematic components
-        theme_s = float(item.get("theme_overlap_score", 0.0))
-        mainline_s = float(item.get("mainline_overlap_score", 0.0))
-        thematic = 0.6 * mainline_s + 0.4 * theme_s
+        industry_strength = float(item.get("industry_strength_score", 0.0) or 0.0)
+        peer_consensus = float(item.get("peer_consensus_score", 0.0) or 0.0)
+        mainline_soft = float(item.get("mainline_soft_score", 0.0) or 0.0)
         # soft overextension penalty if extension metrics available
         ext_pen = 0.0
         try:
@@ -761,7 +817,9 @@ def run(date: Optional[str] = None, topk: int = 3, universe: str = "auto", symbo
         return {
             "champion_component": 0.6 * champ_s,
             "candidate_component": 0.4 * cand_s,
-            "thematic_component": 0.2 * thematic,
+            "industry_strength_component": 0.15 * industry_strength,
+            "peer_consensus_component": 0.10 * peer_consensus,
+            "mainline_soft_component": mainline_soft,
             "reward_risk_component": 0.2 * rr,
             "entry_gap_penalty": -0.3 * entry_gap,
             "execution_state_penalty": pen,
@@ -779,18 +837,20 @@ def run(date: Optional[str] = None, topk: int = 3, universe: str = "auto", symbo
             # brief explanations: split user-facing vs debug
             champ_sc = float((item.get("champion") or {}).get("score") or 0.0)
             state = str(((item.get("trade_plan") or {}).get("diagnostics") or {}).get("execution_state") or "")
-            # thematic and candidate parts in explain; plus reason text
-            th = float(item.get("theme_overlap_score", 0.0) or 0.0)
             ml = float(item.get("mainline_overlap_score", 0.0) or 0.0)
+            ind_strength = float(item.get("industry_strength_score", 0.0) or 0.0)
+            peer_consensus = float(item.get("peer_consensus_score", 0.0) or 0.0)
             cand_base = float(item.get("candidate_score", 0.0) or 0.0)
             reason_parts = []
-            if th > 0 or ml > 0:
-                reason_parts.append("within_mainline")
-            else:
-                reason_parts.append("off_mainline_downrank")
+            if ind_strength > 0.4:
+                reason_parts.append("industry_strength")
+            if peer_consensus > 0.2:
+                reason_parts.append("peer_consensus")
+            if ml > 0:
+                reason_parts.append("mainline_tag")
             # Debug-only string
             item["debug_explain"] = (
-                f"champ={champ_sc:.2f}, cand={cand_base:.2f}, th={th:.2f}/ml={ml:.2f}, "
+                f"champ={champ_sc:.2f}, cand={cand_base:.2f}, ind={ind_strength:.2f}, peer={peer_consensus:.2f}, ml={ml:.2f}, "
                 f"state={state}, rr={((item.get('trade_plan') or {}).get('diagnostics') or {}).get('reward_risk')}; "
                 + " ".join(reason_parts)
             )
@@ -813,8 +873,12 @@ def run(date: Optional[str] = None, topk: int = 3, universe: str = "auto", symbo
                 user_msg = "状态偏弱或跌破支撑，建议谨慎，等待重回计划区间。"
             else:
                 user_msg = "候选结构较优，具体执行以盘中信号为准。"
-            if 'off_mainline_downrank' in reason_parts:
-                user_msg += " 主线覆盖不足，排序有下调。"
+            if 'industry_strength' in reason_parts:
+                user_msg += " 所属行业近期强度较高。"
+            if 'peer_consensus' in reason_parts:
+                user_msg += " 同行业高分候选集中度较好。"
+            if 'mainline_tag' in reason_parts:
+                user_msg += " 主线仅作为解释标签，不构成硬门槛。"
             item["user_thesis"] = user_msg
             item["why_selected_text"] = "相对同组候选综合条件更优。"
         except Exception:
@@ -1004,19 +1068,13 @@ def run(date: Optional[str] = None, topk: int = 3, universe: str = "auto", symbo
     tradeable = not dbg.get("degraded") and _is_clean_live_snapshot(snap_meta) \
         and cand_stats.get("universe_after_filter_count", 0) >= getattr(cfg, "tradeable_min_universe", 50) \
         and cand_stats.get("candidates_out_count", 0) >= getattr(cfg, "tradeable_min_candidates", 20)
-    try:
-        if bool(getattr(cfg, "require_mainline_for_tradeable", False)) and not (mainline.get("sectors")):
-            degrade_record(dbg, "MAINLINE_MISSING", {})
-            tradeable = False
-    except Exception:
-        pass
     # Only block when blocking degrade codes present; else allow with warnings
     if tradeable:
         try:
-            blk_env = os.getenv("GP_BLOCKING_DEGRADE_CODES", "SNAPSHOT_MISSING,MAINLINE_FILTERED_ALL,UNIVERSE_TOO_SMALL,CANDIDATE_TOO_SMALL")
+            blk_env = os.getenv("GP_BLOCKING_DEGRADE_CODES", "SNAPSHOT_MISSING,UNIVERSE_TOO_SMALL,CANDIDATE_TOO_SMALL")
             blocking = {c.strip() for c in blk_env.split(',') if c.strip()}
         except Exception:
-            blocking = {"SNAPSHOT_MISSING", "MAINLINE_FILTERED_ALL", "UNIVERSE_TOO_SMALL", "CANDIDATE_TOO_SMALL"}
+            blocking = {"SNAPSHOT_MISSING", "UNIVERSE_TOO_SMALL", "CANDIDATE_TOO_SMALL"}
         present = {str(x.get("reason_code")) for x in (dbg.get("degrade_reasons") or [])}
         if blocking & present:
             degrade_record(dbg, "INSUFFICIENT_EVIDENCE_TRADEABLE", {"reason": "blocking_degrade_present", "blocking": sorted(list(blocking & present))})

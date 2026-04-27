@@ -1,9 +1,9 @@
 import '@testing-library/jest-dom/vitest'
 
-// antd responsive uses matchMedia; provide minimal polyfill for jsdom
-if (!('matchMedia' in window)) {
-  // @ts-expect-error - define for tests
-  window.matchMedia = (query: string) => ({
+// antd responsive uses matchMedia; jsdom needs a stable polyfill.
+Object.defineProperty(window, 'matchMedia', {
+  writable: true,
+  value: (query: string) => ({
     media: query,
     matches: false,
     onchange: null,
@@ -12,5 +12,5 @@ if (!('matchMedia' in window)) {
     addEventListener: () => {},
     removeEventListener: () => {},
     dispatchEvent: () => false,
-  })
-}
+  }),
+})

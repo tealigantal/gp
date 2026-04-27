@@ -1,6 +1,10 @@
-# syntax=docker/dockerfile:1.7
+ARG BASE_PY_IMAGE=docker.m.daocloud.io/library/python:3.11-slim-bookworm
+FROM ${BASE_PY_IMAGE}
 
-FROM python:3.11-slim-bookworm
+ARG PIP_INDEX_URL=https://pypi.org/simple
+ARG HTTP_PROXY=http://host.docker.internal:7890
+ARG HTTPS_PROXY=http://host.docker.internal:7890
+ARG ALL_PROXY=http://host.docker.internal:7890
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
@@ -8,25 +12,18 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PIP_NO_CACHE_DIR=1 \
     PIP_DEFAULT_TIMEOUT=100 \
     PIP_ROOT_USER_ACTION=ignore \
+    PIP_INDEX_URL=${PIP_INDEX_URL} \
+    HTTP_PROXY=${HTTP_PROXY} \
+    HTTPS_PROXY=${HTTPS_PROXY} \
+    ALL_PROXY=${ALL_PROXY} \
     PYTHONPATH=/app/src \
     TZ=Asia/Shanghai
 
-ARG PIP_INDEX_URL=https://pypi.org/simple
-ENV PIP_INDEX_URL=${PIP_INDEX_URL}
-
 WORKDIR /app
-
-RUN apt-get update -o Acquire::Retries=3 \
-    && apt-get install -y --no-install-recommends \
-        ca-certificates \
-        curl \
-    && update-ca-certificates \
-    && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt /app/requirements.txt
 
-RUN --mount=type=cache,target=/root/.cache/pip \
-    PIP_NO_CACHE_DIR=0 python -m pip install --upgrade pip setuptools wheel \
+RUN PIP_NO_CACHE_DIR=0 python -m pip install --upgrade pip setuptools wheel \
     && PIP_NO_CACHE_DIR=0 pip install -r /app/requirements.txt
 
 COPY src/ /app/src/
@@ -34,4 +31,4 @@ COPY pyproject.toml /app/pyproject.toml
 
 EXPOSE 8000
 
-CMD ["uvicorn", "gp_assistant.server.app:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "gp_assistant.gateway.app:app", "--host", "0.0.0.0", "--port", "8000"]

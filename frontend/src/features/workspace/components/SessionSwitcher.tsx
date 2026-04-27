@@ -13,7 +13,7 @@ export function SessionSwitcher({ sessions, currentId, onSelect, onNew, loading 
   const items = sessions.map((session) => ({
     key: session.session_id,
     label: (
-      <div style={{ display: 'flex', flexDirection: 'column', minWidth: 220 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', minWidth: 240 }}>
         <Typography.Text strong>
           {new Date(session.updated_at).toLocaleDateString('zh-CN', { month: '2-digit', day: '2-digit' })}{' '}
           {new Date(session.updated_at).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}
@@ -28,7 +28,7 @@ export function SessionSwitcher({ sessions, currentId, onSelect, onNew, loading 
   const current = sessions.find((session) => session.session_id === currentId)
   const currentLabel = current
     ? `${new Date(current.updated_at).toLocaleDateString('zh-CN', { month: '2-digit', day: '2-digit' })} ${new Date(current.updated_at).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}`
-    : 'Current session'
+    : '当前会话'
 
   return (
     <Space wrap>

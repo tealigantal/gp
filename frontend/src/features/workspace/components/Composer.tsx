@@ -15,7 +15,7 @@ export function Composer({ value, onChange, onSubmit, disabled, llmReady }: Comp
         <Alert
           type="warning"
           showIcon
-          message="LLM 当前不可用，请检查后端配置并确认 `/api/health` 返回 `llm_ready=true`。"
+          message="LLM 当前不可用，请先检查后端配置，并确认 `/api/health` 返回 `llm_ready=true`。"
           style={{ marginBottom: 12 }}
         />
       ) : null}
@@ -24,7 +24,7 @@ export function Composer({ value, onChange, onSubmit, disabled, llmReady }: Comp
           value={value}
           onChange={(event) => onChange(event.target.value)}
           autoSize={{ minRows: 2, maxRows: 5 }}
-          placeholder="例如：今天给我 3 只；为什么第一只是它；600519 现在还能买吗；S1-S14 都是什么。"
+          placeholder="例如：今天给我 3 只；为什么第一只是它；600519 现在还能拿吗；之前那只怎么没了"
           aria-label="Message composer"
           name="message"
           autoComplete="off"

@@ -21,4 +21,3 @@ export function FollowupTextMessage({ content, tags = [] }: FollowupTextMessageP
     </Card>
   )
 }
-

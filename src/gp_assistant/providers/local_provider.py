@@ -26,6 +26,7 @@ class LocalParquetProvider(MarketDataProvider):
 
     def __init__(self, root: Path | None = None):
         self.root = (root or data_dir()) / "bars" / "daily"
+        self.min5_root = (root or data_dir()) / "bars" / "min5"
 
     def _file_for(self, symbol: str) -> Path:
         ts_code = _infer_ts_code(symbol)
@@ -102,3 +103,28 @@ class LocalParquetProvider(MarketDataProvider):
         # Fallback: try to extract names from daily parquet if present (not guaranteed)
         # Return empty DataFrame if unavailable
         return pd.DataFrame(columns=["ts_code", "name"])  # type: ignore[name-defined]
+
+    def get_minute_bars_5m(self, symbol: str, start_date: str, end_date: str) -> pd.DataFrame:
+        ts_code = _infer_ts_code(symbol)
+        folder = self.min5_root / f"ts_code={ts_code}"
+        if not folder.exists():
+            raise DataProviderError(f"local min5 missing: {folder}", symbol=symbol)
+        start_dt = pd.to_datetime(start_date)
+        end_dt = pd.to_datetime(end_date)
+        parts: list[pd.DataFrame] = []
+        for day in pd.date_range(start_dt.normalize(), end_dt.normalize(), freq="D"):
+            p = folder / f"date={day.strftime('%Y%m%d')}.parquet"
+            if not p.exists():
+                continue
+            part = pd.read_parquet(p)
+            if "trade_time" not in part.columns:
+                continue
+            part = part.copy()
+            part["trade_time"] = pd.to_datetime(part["trade_time"])
+            part = part[(part["trade_time"] >= start_dt) & (part["trade_time"] <= end_dt)]
+            if not part.empty:
+                parts.append(part)
+        if not parts:
+            raise DataProviderError(f"local min5 empty for {symbol}", symbol=symbol)
+        out = pd.concat(parts, ignore_index=True).sort_values("trade_time").reset_index(drop=True)
+        return out

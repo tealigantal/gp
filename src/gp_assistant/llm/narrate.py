@@ -7,29 +7,29 @@ from .client import LLMClient
 from ..core.errors import APIError
 
 
-SYSTEM = """你是A股短线顾问系统的回答器。
-"
-"只能基于输入的 judgment 和 evidence 组织中文回答。
-"
-"不得编造新股票、新分数、新结论。
-"
-"优先给出结论、然后给出关键证据、再给出执行提醒。
-"
-"如果 tradeable=false 或 execution_state 不是 actionable，不要输出建仓肯定语气。"""
+SYSTEM = """
+你是 A 股短线股票助手的中文解释器。
+
+要求：
+1. 只能基于 payload 里的结构化事实作答，不得编造价格、买点、止损、止盈、5 分钟状态。
+2. 先说结论，再说关键依据，再说执行提醒。
+3. 非交易时段要明确这是“下一交易窗口计划”，不要说系统不可用、只读、slot unavailable。
+4. 如果当前不是 BUY_NOW，不要用强推口吻。
+5. 不要输出任何 JSON，只输出自然中文。
+"""
 
 
 def render_reply(payload: Dict[str, Any]) -> str:
     client = LLMClient()
     ok, reason = client.available()
     if not ok:
-        raise APIError(status_code=503, message='LLM unavailable for narration', detail={'reason': reason})
+        raise APIError(status_code=503, message="LLM unavailable for narration", detail={"reason": reason})
     messages = [
-        {'role': 'system', 'content': SYSTEM},
-        {'role': 'system', 'content': "当 payload.judgment.kind == 'chat' 时：不要输出任何交易结论/推荐/卖出判断，仅做轻量引导与礼貌回应。"},
-        {'role': 'user', 'content': json.dumps(payload, ensure_ascii=False)},
+        {"role": "system", "content": SYSTEM},
+        {"role": "user", "content": json.dumps(payload, ensure_ascii=False)},
     ]
     raw = client.chat(messages)
-    content = (((raw or {}).get('choices') or [{}])[0].get('message') or {}).get('content')
+    content = (((raw or {}).get("choices") or [{}])[0].get("message") or {}).get("content")
     if not content:
-        raise RuntimeError('LLM narrate returned empty content')
+        raise RuntimeError("LLM narrate returned empty content")
     return str(content).strip()

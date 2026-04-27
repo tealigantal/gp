@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, useTransition } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import type { ChatResponse, TranscriptEvent } from '../../shared/contracts'
-import { getCurrentBook, getHealth, getSession, getSessions, postChat, readApiError } from '../../shared/api'
+import type { ChatResponse, OpsRunResponse, TranscriptEvent } from '../../shared/contracts'
+import { getCurrentBook, getHealth, getSession, getSessions, postChat, readApiError, runOpsTool } from '../../shared/api'
 import { loadSessionId, newSessionId, saveSessionId } from '../../shared/session'
 
 interface PendingTurn {
@@ -15,6 +15,10 @@ interface SendMessageVariables {
   sessionId: string
 }
 
+interface RunToolVariables {
+  service: string
+}
+
 const HEALTH_POLL_MS = 30_000
 const BOOK_POLL_MS = 15_000
 const SESSION_STALE_MS = 30_000
@@ -25,6 +29,8 @@ export function useAdvisorWorkspace() {
   const activeSessionIdRef = useRef(sessionId)
   const [composerValue, setComposerValue] = useState('')
   const [lastError, setLastError] = useState<string | null>(null)
+  const [lastOpsError, setLastOpsError] = useState<string | null>(null)
+  const [lastOpsResult, setLastOpsResult] = useState<OpsRunResponse | null>(null)
   const [pendingTurn, setPendingTurn] = useState<PendingTurn | null>(null)
   const [latestResponse, setLatestResponse] = useState<ChatResponse | null>(null)
   const [isSessionSwitching, startSessionTransition] = useTransition()
@@ -67,6 +73,15 @@ export function useAdvisorWorkspace() {
     refetchOnReconnect: false,
   })
 
+  const refreshWorkspaceState = async () => {
+    await Promise.all([
+      healthQuery.refetch(),
+      bookQuery.refetch(),
+      sessionQuery.refetch(),
+      sessionsListQuery.refetch(),
+    ])
+  }
+
   const sendMessageMutation = useMutation({
     mutationFn: ({ message, sessionId }: SendMessageVariables) => postChat({ session_id: sessionId, message }),
     onMutate: async ({ message, sessionId }) => {
@@ -90,6 +105,21 @@ export function useAdvisorWorkspace() {
         setLastError(readApiError(error))
       }
       setPendingTurn((prev) => (prev?.sessionId === variables.sessionId ? null : prev))
+    },
+  })
+
+  const runToolMutation = useMutation({
+    mutationFn: ({ service }: RunToolVariables) => runOpsTool(service),
+    onMutate: () => {
+      setLastOpsError(null)
+      setLastOpsResult(null)
+    },
+    onSuccess: async (data) => {
+      setLastOpsResult(data)
+      await refreshWorkspaceState()
+    },
+    onError: (error) => {
+      setLastOpsError(readApiError(error))
     },
   })
 
@@ -140,6 +170,8 @@ export function useAdvisorWorkspace() {
       setSessionIdState(next)
       setComposerValue('')
       setLastError(null)
+      setLastOpsError(null)
+      setLastOpsResult(null)
       setPendingTurn(null)
       setLatestResponse(null)
     })
@@ -153,6 +185,10 @@ export function useAdvisorWorkspace() {
     await sendMessageMutation.mutateAsync({ message: trimmed, sessionId })
   }
 
+  const runTool = async (service: string) => {
+    await runToolMutation.mutateAsync({ service })
+  }
+
   return {
     sessionId,
     setSessionId,
@@ -162,6 +198,8 @@ export function useAdvisorWorkspace() {
     submitMessage,
     isSending: sendMessageMutation.isPending,
     lastError,
+    lastOpsError,
+    lastOpsResult,
     latestResponse,
     turns,
     health: healthQuery.data,
@@ -169,6 +207,10 @@ export function useAdvisorWorkspace() {
     session: sessionQuery.data,
     sessions: sessionsListQuery.data || [],
     isSessionSwitching,
+    runTool,
+    refreshWorkspaceState,
+    runningToolService: runToolMutation.variables?.service || null,
+    isRunningTool: runToolMutation.isPending,
     isInitialLoading:
       healthQuery.isLoading || bookQuery.isLoading || sessionQuery.isLoading,
   }
