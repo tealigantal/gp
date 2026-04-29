@@ -8,6 +8,7 @@ from typing import Literal
 
 RequestType = Literal[
     "chat",
+    "term_explain",
     "recommend",
     "pick_detail",
     "live_entry_check",

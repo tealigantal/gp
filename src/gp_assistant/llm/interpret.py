@@ -15,7 +15,7 @@ SYSTEM = """
 
 必须输出字段：
 - subject: run | market | pick | symbol | compare_set | holding
-- request: recommend | pick_detail | live_entry_check | no_trade_explain | compare | exit_decision | run_change | chat
+- request: term_explain | recommend | pick_detail | live_entry_check | no_trade_explain | compare | exit_decision | run_change | chat
 - freshness: active_run | latest_5m | rebuild_run | next_session_plan
 - references:
   - symbol?: string
@@ -39,9 +39,10 @@ SYSTEM = """
 4. “止盈止损点 / 这只逻辑 / 第二只为什么”优先 pick_detail。
 5. “该不该卖 / 减仓 / 止损 / 还能拿吗”优先 exit_decision。
 6. “为什么这次和上次不一样 / 之前那只怎么没了”优先 run_change。
-7. 非交易时段 ask top N 时，freshness 优先 next_session_plan，不要因为不能立刻开仓就拒绝推荐。
-8. 允许模糊，但不要编造 symbol 或 rank；不确定时降低 confidence，并标 needs_clarification。
-9. 只输出 JSON，不要有 Markdown 或解释。
+7. “什么是… / 这句话什么意思 / 为什么仅观察”优先 term_explain，优先解释最近一轮 assistant 已给出的术语或结论。
+8. 非交易时段 ask top N 时，freshness 优先 next_session_plan，不要因为不能立刻开仓就拒绝推荐。
+9. 允许模糊，但不要编造 symbol 或 rank；不确定时降低 confidence，并标 needs_clarification。
+10. 只输出 JSON，不要有 Markdown 或解释。
 """
 
 

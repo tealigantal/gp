@@ -16,7 +16,7 @@ from .workflow import (
 def make_judgment(session_id: str, frame: TurnFrame, evidence: EvidencePack) -> Judgment:
     topk = int(frame.constraints.get("topk") or 3)
 
-    if frame.request == "chat":
+    if frame.request in {"chat", "term_explain"}:
         return judge_chat()
     if frame.request == "recommend":
         return recommend_workflow(session_id=session_id, evidence=evidence, topk=topk)

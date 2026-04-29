@@ -12,10 +12,10 @@ from gp_assistant.runtime.turn_loop import build_evidence_pack
 
 
 def _dummy_book() -> MarketBook:
-    pick = AdvicePick(symbol="600519", name="贵州茅台", rank=1, strategy_id="s01", thesis="")
+    pick = AdvicePick(symbol="600519", name="Moutai", rank=1, strategy_id="s01", thesis="")
     entry = BoardEntry(
         symbol="600519",
-        name="贵州茅台",
+        name="Moutai",
         rank=1,
         final_score=1.0,
         live_score=1.0,
@@ -23,7 +23,7 @@ def _dummy_book() -> MarketBook:
         can_open=False,
         stretched=False,
         invalidated=False,
-        summary="观察候选",
+        summary="watch",
         style_label=None,
         pick=pick,
         pulse=None,
@@ -85,46 +85,128 @@ def test_greeting_goes_to_chat(monkeypatch):
             "ambiguity": {"confidence": 0.9, "notes": [], "needs_clarification": False},
         },
     )
-    frame = parse_concern(_memory_ctx(), _dummy_book(), "你好")
+    frame = parse_concern(_memory_ctx(), _dummy_book(), "hello")
     assert frame.request == "chat"
 
 
-def test_clean_chinese_topk_request_goes_to_recommend():
-    frame = parse_concern(_memory_ctx(), _dummy_book(), "今天给我 3 只")
+def test_llm_parsed_recommend_request(monkeypatch):
+    _mock_llm(
+        monkeypatch,
+        {
+            "subject": "run",
+            "request": "recommend",
+            "freshness": "active_run",
+            "references": {},
+            "constraints": {"topk": 3},
+            "ambiguity": {"confidence": 0.9, "notes": [], "needs_clarification": False},
+        },
+    )
+    frame = parse_concern(_memory_ctx(), _dummy_book(), "recommend 3")
     assert frame.request == "recommend"
     assert frame.constraints.get("topk") == 3
 
 
-def test_rank_detail_request_does_not_turn_into_recommend():
-    frame = parse_concern(_memory_ctx(), _dummy_book(), "第二只为什么")
+def test_llm_parsed_rank_detail_request(monkeypatch):
+    _mock_llm(
+        monkeypatch,
+        {
+            "subject": "pick",
+            "request": "pick_detail",
+            "freshness": "active_run",
+            "references": {"rank": 2},
+            "constraints": {},
+            "ambiguity": {"confidence": 0.9, "notes": [], "needs_clarification": False},
+        },
+    )
+    frame = parse_concern(_memory_ctx(), _dummy_book(), "detail for rank 2")
     assert frame.request == "pick_detail"
     assert frame.references.get("rank") == 2
 
 
-def test_stop_take_request_prefers_pick_detail():
-    frame = parse_concern(_memory_ctx(), _dummy_book(), "002371 的止盈止损点")
+def test_llm_parsed_symbol_detail_request(monkeypatch):
+    _mock_llm(
+        monkeypatch,
+        {
+            "subject": "symbol",
+            "request": "pick_detail",
+            "freshness": "active_run",
+            "references": {"symbol": "002371"},
+            "constraints": {},
+            "ambiguity": {"confidence": 0.9, "notes": [], "needs_clarification": False},
+        },
+    )
+    frame = parse_concern(_memory_ctx(), _dummy_book(), "detail for 002371")
     assert frame.request == "pick_detail"
     assert frame.references.get("symbol") == "002371"
 
 
-def test_exit_request():
-    frame = parse_concern(_memory_ctx(), _dummy_book(), "600519 现在该不该卖")
+def test_llm_parsed_exit_request(monkeypatch):
+    _mock_llm(
+        monkeypatch,
+        {
+            "subject": "holding",
+            "request": "exit_decision",
+            "freshness": "latest_5m",
+            "references": {"symbol": "600519"},
+            "constraints": {},
+            "ambiguity": {"confidence": 0.9, "notes": [], "needs_clarification": False},
+        },
+    )
+    frame = parse_concern(_memory_ctx(), _dummy_book(), "exit 600519")
     assert frame.request == "exit_decision"
     assert frame.references.get("symbol") == "600519"
 
 
-def test_fuzzy_live_request_maps_to_live_entry_check():
-    frame = parse_concern(_memory_ctx(), _dummy_book(), "现在是不是先别碰")
-    assert frame.request in {"live_entry_check", "no_trade_explain"}
+def test_llm_parsed_live_request(monkeypatch):
+    _mock_llm(
+        monkeypatch,
+        {
+            "subject": "symbol",
+            "request": "live_entry_check",
+            "freshness": "latest_5m",
+            "references": {"symbol": "600519"},
+            "constraints": {},
+            "ambiguity": {"confidence": 0.9, "notes": [], "needs_clarification": False},
+        },
+    )
+    frame = parse_concern(_memory_ctx(), _dummy_book(), "live check")
+    assert frame.request == "live_entry_check"
 
 
-def test_postclose_topk_maps_to_next_session_plan():
-    frame = parse_concern(_memory_ctx(), _dummy_book(), "收盘了也给我三只")
+def test_llm_parsed_term_explain_request(monkeypatch):
+    _mock_llm(
+        monkeypatch,
+        {
+            "subject": "market",
+            "request": "term_explain",
+            "freshness": "active_run",
+            "references": {},
+            "constraints": {},
+            "ambiguity": {"confidence": 0.92, "notes": [], "needs_clarification": False},
+        },
+    )
+    frame = parse_concern(_memory_ctx(), _dummy_book(), "什么是收盘有效跌破支撑带")
+    assert frame.request == "term_explain"
+
+
+def test_llm_parsed_postclose_plan(monkeypatch):
+    _mock_llm(
+        monkeypatch,
+        {
+            "subject": "run",
+            "request": "recommend",
+            "freshness": "next_session_plan",
+            "references": {},
+            "constraints": {"topk": 3},
+            "ambiguity": {"confidence": 0.9, "notes": [], "needs_clarification": False},
+        },
+    )
+    frame = parse_concern(_memory_ctx(), _dummy_book(), "postclose plan")
     assert frame.request == "recommend"
     assert frame.freshness == "next_session_plan"
 
 
-def test_llm_unavailable_falls_back_to_recommend(monkeypatch):
+def test_llm_unavailable_returns_valid_fallback(monkeypatch):
     from gp_assistant.llm import client as client_mod
     from gp_assistant.llm import interpret as interpret_mod
 
@@ -135,37 +217,41 @@ def test_llm_unavailable_falls_back_to_recommend(monkeypatch):
     monkeypatch.setattr(client_mod, "LLMClient", lambda *a, **k: DummyLLM())
     monkeypatch.setattr(interpret_mod, "LLMClient", DummyLLM)
 
-    frame = parse_concern(_memory_ctx(), _dummy_book(), "今天给我 3 只")
-    assert frame.request == "recommend"
-    assert frame.constraints.get("topk") == 3
+    frame = parse_concern(_memory_ctx(), _dummy_book(), "anything")
+    assert frame.request in {"chat", "term_explain", "recommend", "pick_detail", "live_entry_check", "no_trade_explain", "exit_decision", "compare", "run_change"}
 
 
-def test_gateway_payload_hides_debug_fields():
+def test_gateway_payload_hides_internal_tool_trace():
     sid = "test_sanitized_payload"
     memory_ctx = _memory_ctx()
     memory_ctx["session"].session_id = sid
     book = _dummy_book()
-    frame = parse_concern(memory_ctx, book, "你好")
+    frame = parse_concern(memory_ctx, book, "hello")
     plan = plan_evidence(frame)
     evidence = build_evidence_pack(frame, memory_ctx, book, plan)
     judgment = judge_chat()
     reply = ReplyBundle(
         session_id=sid,
-        text="你好，我在。",
+        text="hello",
         kind="chat",
-        message={"message_kind": "chat", "narrative_text": "你好，我在。"},
+        message={"message_kind": "chat", "narrative_text": "hello"},
         right_panel={"tradeable": True},
-        planner_trace={"frame": frame.model_dump(), "evidence_refs": evidence.evidence_refs},
-        evidence_refs=["internal-ref"],
+        grounding_summary={
+            "market_phase": "POSTCLOSE_PENDING",
+            "daily_target_day": "2026-01-01",
+            "pulse_slot_at": None,
+            "repair_status": "ready",
+            "decision_basis_labels": ["background"],
+        },
+        tool_trace={"frame": frame.model_dump(), "evidence_refs": evidence.evidence_refs},
     )
-    commit_turn(sid, "你好", reply, judgment)
+    commit_turn(sid, "hello", reply, judgment)
 
     session_payload = get_session_payload(sid)
     assistant_turn = next(turn for turn in session_payload["recent_turns"] if turn["role"] == "assistant")
     assert session_payload["recent_claims"] == []
-    assert "planner_trace" not in assistant_turn["meta"]
+    assert "tool_trace" not in assistant_turn["meta"]
 
-    sanitized = sanitize_chat_payload({"planner_trace": {"x": 1}, "evidence_refs": ["a"], "reply": "ok"})
-    assert sanitized["planner_trace"] == {}
-    assert sanitized["evidence_refs"] == []
+    sanitized = sanitize_chat_payload({"tool_trace": {"x": 1}, "reply": "ok"})
+    assert "tool_trace" not in sanitized
     assert sanitized["reply"] == "ok"

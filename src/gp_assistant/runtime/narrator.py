@@ -3,9 +3,11 @@ from __future__ import annotations
 from typing import Any, Dict, List, Optional
 
 from ..contracts.objects import (
+    DecisionBasis,
     CanonicalPick,
     CanonicalRunArtifact,
     EvidencePack,
+    GroundingSummary,
     Judgment,
     ReplyBundle,
     TranscriptEvent,
@@ -13,6 +15,7 @@ from ..contracts.objects import (
 )
 from ..core.errors import APIError
 from ..llm.narrate import render_reply
+from .repair import load_repair_status_snapshot
 
 
 def _freshness_meta(evidence: EvidencePack, run: CanonicalRunArtifact | None = None) -> Dict[str, Any]:
@@ -182,6 +185,21 @@ def _fallback_text(judgment: Judgment) -> str:
     return _chat_fallback_text()
 
 
+def build_default_text(judgment: Judgment) -> str:
+    return _fallback_text(judgment)
+
+
+def _text_has_min_signal(text: str, judgment: Judgment) -> bool:
+    body = str(text or "").strip()
+    if len(body) < 24:
+        return False
+    if judgment.kind in {"recommend", "pick_detail", "live_entry_check"} and len(body) < 40:
+        return False
+    if judgment.kind in {"recommend", "pick_detail", "live_entry_check"} and "\n" not in body:
+        return False
+    return True
+
+
 def _dialogue_context(turns: List[TranscriptEvent] | None) -> List[Dict[str, Any]]:
     if not turns:
         return []
@@ -319,23 +337,87 @@ def _message_payload(frame: TurnFrame, evidence: EvidencePack, judgment: Judgmen
     }
 
 
-def build_reply(
+def _repair_state() -> tuple[str, str | None]:
+    snapshot = load_repair_status_snapshot()
+    if snapshot is None:
+        return "ready", None
+    status = str(snapshot.repair_status or "ready").strip().lower()
+    if status in {"running", "blocked", "failed", "ready"}:
+        return status, snapshot.repair_stage
+    if status == "idle":
+        return "ready", None
+    return "ready", snapshot.repair_stage
+
+
+def _decision_basis(evidence: EvidencePack, judgment: Judgment) -> DecisionBasis:
+    run = judgment.canonical_run
+    labels: list[str] = []
+    risk_notes: list[str] = []
+    selection_reason = judgment.summary
+    execution_reason = None
+    if run is not None:
+        labels.append("日线计划")
+        if run.pulse_slot_at:
+            labels.append("5分钟执行")
+        if run.no_trade_reasons:
+            labels.append("风险约束")
+            risk_notes.extend(run.no_trade_reasons[:4])
+        if run.picks:
+            top = run.picks[0]
+            if top.reason_codes:
+                labels.append("入选理由")
+                risk_notes.extend(top.reason_codes[:4])
+            selection_reason = top.why_selected or top.thesis or run.status_reason or judgment.summary
+            execution_reason = top.entry_text or top.stop_text or top.take_text
+    elif judgment.pick_detail is not None:
+        labels.extend(["标的逻辑", "执行计划"])
+        selection_reason = judgment.pick_detail.why_selected or judgment.pick_detail.thesis or judgment.summary
+        execution_reason = judgment.pick_detail.entry_text or judgment.pick_detail.stop_text or judgment.pick_detail.take_text
+    elif judgment.live_entry is not None:
+        labels.extend(["5分钟执行", "风控约束"])
+        selection_reason = judgment.live_entry.summary or judgment.summary
+        execution_reason = judgment.live_entry.next_action
+    elif judgment.compare_view is not None:
+        labels.extend(["相对强弱", "执行优先级"])
+        selection_reason = judgment.summary
+    elif judgment.exit_decision is not None:
+        labels.extend(["持仓风控", "止盈止损"])
+        selection_reason = judgment.exit_decision.reason or judgment.summary
+        execution_reason = judgment.exit_decision.trigger
+    if not labels:
+        labels.append("业务背景")
+    repair_status, repair_stage = _repair_state()
+    return DecisionBasis(
+        labels=list(dict.fromkeys(labels)),
+        market_phase=evidence.book.market_phase,
+        daily_target_day=evidence.book.daybook_effective_day or evidence.book.daybook.trading_day,
+        pulse_slot_at=evidence.book.pulse_slot_at,
+        selection_reason=selection_reason,
+        execution_reason=execution_reason,
+        risk_notes=list(dict.fromkeys([str(item) for item in risk_notes if str(item).strip()])),
+        repair_status=repair_status,
+        repair_stage=repair_stage,
+    )
+
+
+def _grounding_summary(evidence: EvidencePack, judgment: Judgment) -> GroundingSummary:
+    basis = _decision_basis(evidence, judgment)
+    return GroundingSummary(
+        market_phase=basis.market_phase,
+        daily_target_day=basis.daily_target_day,
+        pulse_slot_at=basis.pulse_slot_at,
+        repair_status=basis.repair_status,
+        decision_basis_labels=basis.labels,
+    )
+
+
+def build_structured_reply(
     session_id: str,
-    frame: TurnFrame,
     evidence: EvidencePack,
     judgment: Judgment,
     *,
-    recent_turns: List[TranscriptEvent] | None = None,
+    text: str,
 ) -> ReplyBundle:
-    fallback_text = _fallback_text(judgment)
-    try:
-        text = render_reply(_message_payload(frame, evidence, judgment, recent_turns))
-    except (APIError, RuntimeError):
-        text = fallback_text
-
-    if not text:
-        text = fallback_text
-
     run = judgment.canonical_run
     message = _build_canonical_message(evidence, judgment, text)
     symbols: List[str] = []
@@ -367,6 +449,29 @@ def build_reply(
         right_panel=right_panel,
         ui_items=[],
         message=message,
-        evidence_refs=judgment.evidence_refs,
-        planner_trace={"frame": frame.model_dump()},
+        grounding_summary=_grounding_summary(evidence, judgment).model_dump(),
+        decision_basis=_decision_basis(evidence, judgment).model_dump(),
+        tool_trace={},
     )
+
+
+def build_reply(
+    session_id: str,
+    frame: TurnFrame,
+    evidence: EvidencePack,
+    judgment: Judgment,
+    *,
+    recent_turns: List[TranscriptEvent] | None = None,
+) -> ReplyBundle:
+    fallback_text = _fallback_text(judgment)
+    try:
+        text = render_reply(_message_payload(frame, evidence, judgment, recent_turns))
+    except (APIError, RuntimeError):
+        text = fallback_text
+
+    if not text or not _text_has_min_signal(text, judgment):
+        text = fallback_text
+
+    reply = build_structured_reply(session_id, evidence, judgment, text=text)
+    reply.tool_trace = {"frame": frame.model_dump()}
+    return reply

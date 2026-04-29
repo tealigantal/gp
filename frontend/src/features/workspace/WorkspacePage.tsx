@@ -2,6 +2,7 @@ import { Alert, Card, Layout, Spin } from 'antd'
 import { ChatThread } from './components/ChatThread'
 import { Composer } from './components/Composer'
 import { DecisionSnapshot } from './components/DecisionSnapshot'
+import { DebugDrawer } from './components/DebugDrawer'
 import { HeaderBar } from './components/HeaderBar'
 import { runtimeFreshnessMeta } from './runtimeLabels'
 import { useAdvisorWorkspace } from './useAdvisorWorkspace'
@@ -102,6 +103,11 @@ export function WorkspacePage() {
                 isRunningTool={workspace.isRunningTool}
                 opsResult={workspace.lastOpsResult}
                 opsError={workspace.lastOpsError}
+              />
+              <DebugDrawer
+                session={workspace.session}
+                diagnostics={workspace.diagnostics}
+                latestResponse={workspace.latestResponse}
               />
             </div>
           </Sider>

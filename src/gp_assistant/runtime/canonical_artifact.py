@@ -342,27 +342,34 @@ def build_canonical_pick(entry: BoardEntry, book: MarketBook) -> CanonicalPick:
 
 
 def build_canonical_run(*, book: MarketBook, run: AdviceRun, picks: Iterable[BoardEntry]) -> CanonicalRunArtifact:
-    canonical_picks = [build_canonical_pick(entry, book) for entry in picks]
+    canonical_picks_all = [build_canonical_pick(entry, book) for entry in picks]
     gate_state = str(book.gate.state or "").upper()
-    has_plan = bool(canonical_picks)
+    has_plan = bool(canonical_picks_all)
     stale_daily_picks = [
         pick.symbol
-        for pick in canonical_picks
+        for pick in canonical_picks_all
         if str(pick.data_provenance.get("daily_freshness_state") or "").strip().lower() not in {"", "current"}
     ]
+    daybook_freshness = dict(book.daybook.source_meta.get("daily_freshness") or {})
+    blocked_reason = _as_text(daybook_freshness.get("blocking_reason"))
     degraded = (
         not bool(book.data_quality.complete)
         or gate_state in {"DEGRADED", "UNAVAILABLE"}
         or bool(_market_phase_non_trading(book.market_phase))
     )
+    executable_count = sum(1 for pick in canonical_picks_all if pick.execution_state in {"BUY_NOW", "WAIT_PULLBACK", "WAIT_NEXT_SESSION"})
+    watch_only_count = sum(1 for pick in canonical_picks_all if pick.execution_state in {"WATCH_ONLY", "UNAVAILABLE"})
     if not has_plan:
         run_action = "NO_TRADE"
     elif stale_daily_picks:
+        run_action = "NO_TRADE"
+    elif gate_state == "BLOCKED" and executable_count == 0 and watch_only_count == len(canonical_picks_all):
         run_action = "NO_TRADE"
     elif degraded and gate_state != "ALLOW":
         run_action = "DEGRADED"
     else:
         run_action = "RECOMMEND"
+    canonical_picks = [] if run_action == "NO_TRADE" else canonical_picks_all
 
     no_trade_reasons: List[str] = []
     if run_action == "NO_TRADE":

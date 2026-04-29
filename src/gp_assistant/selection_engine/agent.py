@@ -776,7 +776,7 @@ def run(date: Optional[str] = None, topk: int = 3, universe: str = "auto", symbo
         industry_name = str(item.get("industry") or "").strip()
         item["industry_strength_score"] = _industry_strength(industry_name)
         item["peer_consensus_score"] = _peer_consensus(industry_name)
-        item["mainline_soft_score"] = min(0.05, 0.05 * float(item.get("mainline_overlap_score", 0.0) or 0.0))
+        item["mainline_soft_score"] = 0.0
 
     # Second-stage rerank by candidate/thematic/champion with execution penalties and breakdown
     def _score_components(item: Dict[str, Any]) -> Dict[str, float]:
@@ -846,8 +846,6 @@ def run(date: Optional[str] = None, topk: int = 3, universe: str = "auto", symbo
                 reason_parts.append("industry_strength")
             if peer_consensus > 0.2:
                 reason_parts.append("peer_consensus")
-            if ml > 0:
-                reason_parts.append("mainline_tag")
             # Debug-only string
             item["debug_explain"] = (
                 f"champ={champ_sc:.2f}, cand={cand_base:.2f}, ind={ind_strength:.2f}, peer={peer_consensus:.2f}, ml={ml:.2f}, "
@@ -877,8 +875,6 @@ def run(date: Optional[str] = None, topk: int = 3, universe: str = "auto", symbo
                 user_msg += " 所属行业近期强度较高。"
             if 'peer_consensus' in reason_parts:
                 user_msg += " 同行业高分候选集中度较好。"
-            if 'mainline_tag' in reason_parts:
-                user_msg += " 主线仅作为解释标签，不构成硬门槛。"
             item["user_thesis"] = user_msg
             item["why_selected_text"] = "相对同组候选综合条件更优。"
         except Exception:

@@ -229,6 +229,15 @@ export interface CanonicalChatMessage {
   freshness_meta?: Record<string, unknown>
 }
 
+export interface CanonicalTermExplainMessage {
+  message_kind: 'term_explain'
+  narrative_text: string
+  term?: string
+  source_message_kind?: string
+  followup_suggestions?: string[]
+  freshness_meta?: Record<string, unknown>
+}
+
 export type CanonicalMessage =
   | CanonicalRecommendMessage
   | CanonicalNoTradeMessage
@@ -237,6 +246,7 @@ export type CanonicalMessage =
   | CanonicalCompareMessage
   | CanonicalExitDecisionMessage
   | CanonicalRunChangeMessage
+  | CanonicalTermExplainMessage
   | CanonicalChatMessage
 
 export interface ChatResponse {
@@ -247,8 +257,13 @@ export interface ChatResponse {
   symbols: string[]
   right_panel: Record<string, unknown>
   ui_items: Array<Record<string, unknown>>
-  planner_trace: Record<string, unknown>
-  evidence_refs: string[]
+  grounding_summary: {
+    market_phase?: string | null
+    daily_target_day?: string | null
+    pulse_slot_at?: string | null
+    repair_status: string
+    decision_basis_labels: string[]
+  }
 }
 
 export interface HealthStorageStats {
@@ -281,13 +296,15 @@ export interface RuntimeStatus {
   last_closed_5m?: string | null
   slot_status?: string | null
   publish_allowed: boolean
-  daily_freshness_ready: boolean
+  repair_status: string
+  repair_stage: string
   daily_target_day?: string | null
-  daily_checked_count: number
-  daily_stale_count: number
-  daily_last_reconcile_at?: string | null
-  daily_blocking_reason?: string | null
-  daily_failed_symbols: string[]
+  pulse_target_trade_day?: string | null
+  pulse_target_slot_at?: string | null
+  last_repair_started_at?: string | null
+  last_repair_finished_at?: string | null
+  blocking_reason?: string | null
+  artifact_status: string
   services: RuntimeToolInfo[]
 }
 
@@ -349,6 +366,37 @@ export interface SessionResponse {
   session: SessionState
   recent_turns: TranscriptEvent[]
   recent_claims: Claim[]
+}
+
+export interface SessionDiagnosticsResponse {
+  session_id: string
+  focus: {
+    active_run_id?: string | null
+    previous_run_id?: string | null
+    last_focus_symbol?: string | null
+    last_focus_rank?: number | null
+    compare_set: string[]
+  }
+  latest_assistant?: {
+    turn_id?: string
+    seq?: number
+    created_at?: string
+    message_kind?: string
+    narrative_text?: string
+    symbol?: string | null
+    run_action?: string | null
+    followup_suggestions?: string[]
+  } | null
+  assistant_messages: Array<{
+    turn_id?: string
+    seq?: number
+    created_at?: string
+    message_kind?: string
+    narrative_text?: string
+    symbol?: string | null
+    run_action?: string | null
+    followup_suggestions?: string[]
+  }>
 }
 
 export interface AdvicePick {

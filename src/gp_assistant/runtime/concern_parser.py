@@ -10,18 +10,18 @@ from ..llm.interpret import parse_turn_frame
 from ..runtime.utils import gen_id
 
 _SYMBOL_RE = re.compile(r"(?<!\d)(?:60|68|00|30)\d{4}(?!\d)")
-_ARABIC_RANK_RE = re.compile(r"第\s*(\d{1,2})\s*(?:只|个|支)?")
-_TOPK_REQUEST_RE = re.compile(
-    r"(?:推荐|给我|来|挑|选|看看).{0,8}?(\d{1,2}|一|二|三|四|五|六|七|八|九|十|两)\s*(?:只|个|支)"
-)
+_ARABIC_RANK_RE = re.compile(r"第\s*(\d{1,2})\s*(?:只|个|名|票)?")
+_TOPK_REQUEST_RE = re.compile(r"(?:推荐|给我|看看|来个).{0,8}?(\d{1,2}|一|二|三|四|五|六|七|八|九|十)\s*(?:只|个|票|标的)?")
 _REFRESH_WORDS = ("重新", "刷新", "再看", "重跑", "更新")
 _POSTCLOSE_WORDS = ("收盘", "盘后", "明天开盘前", "非交易", "下一交易窗口")
-_LIVE_WORDS = ("现在还能买吗", "还能冲吗", "现在能不能上", "追是不是有点晚", "这个位置还能进吗", "盘中", "等回踩", "现在是不是先别碰")
+_LIVE_WORDS = ("现在还能买吗", "还能冲吗", "现在能不能上", "这个位置还能进吗", "盘中", "等回踩", "现在是不是先别追")
 _NO_TRADE_WORDS = ("不太适合做", "先别动", "为什么建议空仓", "今天没票是为什么", "风险大不大", "今天是不是不太适合做")
 _EXIT_WORDS = ("该不该卖", "要不要止损", "到目标了要不要减", "还能拿吗", "是不是该走了", "减仓", "卖出")
-_COMPARE_WORDS = ("比呢", "比较", "和第二只", "和第一只", "哪个更稳", "为什么第二个不是第一")
+_COMPARE_WORDS = ("比较", "对比", "哪个好", "哪个更强", "谁更稳", "为什么第二个不是第一个")
 _RUN_CHANGE_WORDS = ("为什么这次和上次不一样", "之前那只怎么没了", "为什么榜单变了", "上次推荐", "这次为什么不在")
-_DETAIL_WORDS = ("为什么", "逻辑是什么", "止盈止损点", "风控怎么看", "支撑压力在哪")
+_DETAIL_WORDS = ("为什么", "逻辑是什么", "止盈止损点", "风控怎么看", "支撑压力在哪", "为什么能上榜", "入选理由")
+_DECISION_BASIS_WORDS = ("怎么得出的", "怎么得出来的", "怎么来的", "依据是什么", "为什么这么判断", "怎么判断的")
+_TERM_EXPLAIN_WORDS = ("什么是", "什么意思", "这句话什么意思", "为什么仅观察", "为什么只观察", "为什么进观察", "为什么是观察")
 _CHAT_WORDS = ("你好", "您好", "help", "你是谁", "怎么用")
 _ZH_NUMBER_MAP = {"一": 1, "二": 2, "三": 3, "四": 4, "五": 5, "六": 6, "七": 7, "八": 8, "九": 9, "十": 10, "两": 2}
 _ZH_RANK_MAP = {
@@ -107,6 +107,13 @@ def _fallback_semantic_parse(memory_ctx: Dict[str, Any], book: MarketBook, user_
 
     if _contains_any(msg, _CHAT_WORDS):
         return _fallback_frame(msg, subject="market", request="chat", freshness="active_run", confidence=0.95, note="chat fallback")
+    if _contains_any(msg, _TERM_EXPLAIN_WORDS):
+        refs = {}
+        if symbol_match:
+            refs["symbol"] = symbol_match[0]
+        elif focus_symbol:
+            refs["symbol"] = focus_symbol
+        return _fallback_frame(msg, subject=("symbol" if refs.get("symbol") else "market"), request="term_explain", freshness="active_run", references=refs, confidence=0.92, note="term explain fallback")
     if _contains_any(msg, _RUN_CHANGE_WORDS):
         return _fallback_frame(msg, subject="run", request="run_change", freshness="active_run", confidence=0.88, note="run change fallback")
     if _contains_any(msg, _COMPARE_WORDS):
@@ -115,15 +122,10 @@ def _fallback_semantic_parse(memory_ctx: Dict[str, Any], book: MarketBook, user_
             refs["compare_symbols"] = symbol_match[:3]
         elif rank is not None:
             refs["rank"] = rank
-        return _fallback_frame(msg, subject="compare_set", request="compare", freshness="active_run", references=refs, confidence=0.8, note="compare fallback")
+        return _fallback_frame(msg, subject="compare_set", request="compare", freshness="active_run", references=refs, confidence=0.82, note="compare fallback")
     if _contains_any(msg, _EXIT_WORDS):
         refs = {"symbol": symbol_match[0]} if symbol_match else ({"symbol": focus_symbol} if focus_symbol else {})
         return _fallback_frame(msg, subject="holding", request="exit_decision", freshness="latest_5m", references=refs, confidence=0.86, note="exit fallback")
-    if _contains_any(msg, _NO_TRADE_WORDS):
-        refs = {"symbol": focus_symbol} if focus_symbol and ("这只" in msg or "这个票" in msg) else {}
-        subject = "symbol" if refs.get("symbol") else "market"
-        request = "live_entry_check" if subject == "symbol" else "no_trade_explain"
-        return _fallback_frame(msg, subject=subject, request=request, freshness=freshness, references=refs, confidence=0.78, note="risk fallback")
     if _contains_any(msg, _LIVE_WORDS):
         refs = {}
         if symbol_match:
@@ -134,20 +136,26 @@ def _fallback_semantic_parse(memory_ctx: Dict[str, Any], book: MarketBook, user_
             refs["symbol"] = focus_symbol
         request = "live_entry_check" if refs else "no_trade_explain"
         subject = "symbol" if refs else "market"
-        return _fallback_frame(msg, subject=subject, request=request, freshness="latest_5m", references=refs, confidence=0.8, note="live fallback")
-    if _contains_any(msg, _DETAIL_WORDS):
+        return _fallback_frame(msg, subject=subject, request=request, freshness="latest_5m", references=refs, confidence=0.82, note="live fallback")
+    if _contains_any(msg, _DETAIL_WORDS) or _contains_any(msg, _DECISION_BASIS_WORDS):
         refs = {}
         if symbol_match:
             refs["symbol"] = symbol_match[0]
         elif rank is not None:
             refs["rank"] = rank
-        elif focus_symbol:
+        elif focus_symbol and ("这只" in msg or "这个" in msg):
             refs["symbol"] = focus_symbol
         request = "pick_detail" if refs else "no_trade_explain"
         subject = "symbol" if refs and refs.get("symbol") else ("pick" if refs.get("rank") else "market")
-        return _fallback_frame(msg, subject=subject, request=request, freshness="active_run", references=refs, confidence=0.82, note="detail fallback")
+        return _fallback_frame(msg, subject=subject, request=request, freshness=freshness, references=refs, confidence=0.84, note="detail fallback")
+    if _contains_any(msg, _NO_TRADE_WORDS):
+        refs = {"symbol": focus_symbol} if focus_symbol and ("这只" in msg or "这个" in msg) else {}
+        subject = "symbol" if refs.get("symbol") else "market"
+        request = "live_entry_check" if subject == "symbol" else "no_trade_explain"
+        return _fallback_frame(msg, subject=subject, request=request, freshness=freshness, references=refs, confidence=0.78, note="risk fallback")
+
     topk = _parse_topk(msg)
-    if topk is not None or ("机会" in msg or "靠谱" in msg or "值得看" in msg or "推荐" in msg):
+    if topk is not None or _contains_any(msg, ("机会", "推荐", "标的", "看看", "值得看", "榜单")):
         return _fallback_frame(
             msg,
             subject="run",
@@ -179,7 +187,12 @@ def normalize_turn_frame(frame: TurnFrame, book: MarketBook | None = None) -> Tu
         frame.constraints["topk"] = _clamp_topk(int(frame.constraints.get("topk") or 3))
     if frame.request == "live_entry_check" and frame.freshness == "active_run":
         frame.freshness = "latest_5m"
-    if frame.request == "recommend" and frame.freshness == "active_run" and book is not None and str(book.market_phase or "").upper() in {"POSTCLOSE_PENDING", "POSTCLOSE_READY", "PREOPEN", "OPEN_NO_FIRST_BAR", "NON_TRADING"}:
+    if (
+        frame.request == "recommend"
+        and frame.freshness == "active_run"
+        and book is not None
+        and str(book.market_phase or "").upper() in {"POSTCLOSE_PENDING", "POSTCLOSE_READY", "PREOPEN", "OPEN_NO_FIRST_BAR", "NON_TRADING"}
+    ):
         frame.freshness = "next_session_plan"
     ambiguity = frame.ambiguity or {}
     try:
@@ -218,6 +231,7 @@ def _validate_intent(frame: TurnFrame, memory_ctx: Dict[str, Any]) -> TurnFrame:
 def validate_turn_frame(frame: TurnFrame) -> TurnFrame:
     allowed_requests = {
         "chat",
+        "term_explain",
         "recommend",
         "pick_detail",
         "live_entry_check",
@@ -239,12 +253,23 @@ def validate_turn_frame(frame: TurnFrame) -> TurnFrame:
 
 def parse_concern(memory_ctx: Dict[str, Any], book: MarketBook, user_message: str) -> TurnFrame:
     context = build_context(memory_ctx, book)
-    frame = parse_turn_frame(context, user_message)
+    fallback = _fallback_semantic_parse(memory_ctx, book, user_message)
+    try:
+        frame = parse_turn_frame(context, user_message)
+    except Exception:
+        frame = fallback
     notes = " ".join((frame.ambiguity or {}).get("notes") or []).lower()
-    if frame.request == "chat" and "llm unavailable" in notes:
-        frame = _fallback_semantic_parse(memory_ctx, book, user_message)
-    elif frame.request == "chat" and _parse_topk(user_message or "") is not None:
-        frame = _fallback_semantic_parse(memory_ctx, book, user_message)
+    if frame.request == "chat" and ("llm unavailable" in notes or _parse_topk(user_message or "") is not None or fallback.request != "chat"):
+        frame = fallback
+    frame = normalize_turn_frame(frame, book=book)
+    frame = inject_entity_hints(frame, memory_ctx, book)
+    frame = _validate_intent(frame, memory_ctx)
+    frame = normalize_turn_frame(frame, book=book)
+    return validate_turn_frame(frame)
+
+
+def quick_parse_concern(memory_ctx: Dict[str, Any], book: MarketBook, user_message: str) -> TurnFrame:
+    frame = _fallback_semantic_parse(memory_ctx, book, user_message)
     frame = normalize_turn_frame(frame, book=book)
     frame = inject_entity_hints(frame, memory_ctx, book)
     frame = _validate_intent(frame, memory_ctx)

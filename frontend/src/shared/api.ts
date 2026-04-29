@@ -6,6 +6,7 @@ import type {
   HealthResponse,
   OpsRunResponse,
   RunResponse,
+  SessionDiagnosticsResponse,
   SessionListItem,
   SessionResponse,
   SideResult,
@@ -31,6 +32,11 @@ export async function getSession(sessionId: string) {
   return data
 }
 
+export async function getSessionDiagnostics(sessionId: string) {
+  const { data } = await api.get<SessionDiagnosticsResponse>(`/api/session/${encodeURIComponent(sessionId)}/diagnostics`)
+  return data
+}
+
 export async function getRun(runId: string) {
   const { data } = await api.get<RunResponse>(`/api/run/${encodeURIComponent(runId)}`)
   return data
@@ -51,8 +57,9 @@ export async function postChat(payload: ChatRequest) {
   return data
 }
 
-export async function runOpsTool(service: string) {
-  const { data } = await api.post<OpsRunResponse>(`/api/ops/${encodeURIComponent(service)}/run`)
+export async function runOpsTool(operation: string) {
+  const cleaned = String(operation || '').replace(/^repair-/, '')
+  const { data } = await api.post<OpsRunResponse>(`/api/ops/repair/${encodeURIComponent(cleaned)}`)
   return data
 }
 

@@ -32,6 +32,21 @@ function renderFromCanonical(message: CanonicalMessage | undefined, onPrompt?: (
   if (!message) return null
   if (message.message_kind === 'recommend') {
     const recommendMessage = message as CanonicalRecommendMessage
+    const blocked = recommendMessage.run?.run_action === 'NO_TRADE' || (recommendMessage.picks || []).length === 0
+    if (blocked) {
+      return (
+        <Space direction="vertical" size={8} style={{ width: '100%' }}>
+          <NoTradeMessageCard
+            reason={recommendMessage.run?.status_reason || recommendMessage.narrative_text}
+            text={recommendMessage.narrative_text}
+            noTradeReasons={recommendMessage.run?.no_trade_reasons || []}
+            recoveryConditions={recommendMessage.run?.recovery_conditions || []}
+            marketSummary={recommendMessage.run?.status_reason || recommendMessage.narrative_text}
+          />
+          <SuggestedFollowups suggestions={recommendMessage.followup_suggestions} onPick={(text) => onPrompt?.(text)} />
+        </Space>
+      )
+    }
     return (
       <Space direction="vertical" size={8} style={{ width: '100%' }}>
         <RecommendationMessageCard picks={recommendMessage.picks} run={recommendMessage.run} onPrompt={onPrompt} />
@@ -90,6 +105,14 @@ function renderFromCanonical(message: CanonicalMessage | undefined, onPrompt?: (
     return (
       <Space direction="vertical" size={8} style={{ width: '100%' }}>
         <RunChangeMessageCard text={message.narrative_text} change={message.run_change} />
+        <SuggestedFollowups suggestions={message.followup_suggestions} onPick={(text) => onPrompt?.(text)} />
+      </Space>
+    )
+  }
+  if (message.message_kind === 'term_explain') {
+    return (
+      <Space direction="vertical" size={8} style={{ width: '100%' }}>
+        <FollowupTextMessage content={message.narrative_text} />
         <SuggestedFollowups suggestions={message.followup_suggestions} onPick={(text) => onPrompt?.(text)} />
       </Space>
     )

@@ -18,15 +18,15 @@ from ..contracts.api import (
     SessionResponse,
 )
 from ..core.config import load_config
-from ..evidence.daily_freshness import audit_daily_freshness, book_symbols, load_latest_daily_freshness_report
+from ..evidence.daily_freshness import audit_daily_freshness
 from ..evidence.market_service import current_trading_day
 from ..gateway.events import list_side_results
-from ..gateway.sessions import get_session_payload, sanitize_chat_payload
-from ..runtime.lanes import book_lane, session_lane
+from ..gateway.sessions import get_session_diagnostics, get_session_payload, sanitize_chat_payload
 from ..llm.client import LLMClient
 from ..memory._sqlite import gateway_stats
 from ..memory.session_store import list_sessions
 from ..memory.transcript_store import load_recent
+from ..runtime.lanes import book_lane, session_lane
 from ..runtime.market_clock import (
     PHASE_CLOSING_AUCTION,
     PHASE_INTRADAY_AM,
@@ -38,6 +38,7 @@ from ..runtime.market_clock import (
     PHASE_PREOPEN,
     compute_market_state,
 )
+from ..runtime.repair import load_repair_status_snapshot
 from ..runtime.turn_loop import run_turn_sync
 from ..runtime.utils import now_iso
 from ..worker import reconcile_runtime_state
@@ -51,54 +52,54 @@ def _runtime_services() -> list[RuntimeToolInfo]:
             service="gp",
             mode="always_on",
             command="uvicorn gp_assistant.gateway.app:app --host 0.0.0.0 --port 8000 --workers 2",
-            description="对外 API 服务，负责聊天、book、session 和 run 查询。",
+            description="主 API 服务，负责聊天、会话、book 和运行时状态读取。",
         ),
         RuntimeToolInfo(
             service="gp-worker",
             mode="always_on",
             command="python -m gp_assistant.cli pulse-loop",
-            description="常驻 5 分钟 worker，按当前市场时段自动做运行时 reconcile。",
+            description="后台 worker，按市场时段自动修复日线、5 分钟线和 current artifact。",
         ),
         RuntimeToolInfo(
-            service="gp-rebuild-daybook",
+            service="repair-start",
             mode="manual",
             profile="ops",
-            command="python -m gp_assistant.cli rebuild-daybook",
-            description="先校验日线 freshness，再重建当日 daybook 和盘前初始化产物。",
+            command="python -m gp_assistant.cli repair-start",
+            description="立即启动一次有边界的运行时修复。",
         ),
         RuntimeToolInfo(
-            service="gp-replay-today",
+            service="repair-retry",
             mode="manual",
             profile="ops",
-            command="python -m gp_assistant.cli replay-today",
-            description="只回放今天已收盘的 5 分钟 slot，不修日线。",
+            command="python -m gp_assistant.cli repair-retry",
+            description="重试当前市场时段对应的运行时修复计划。",
         ),
         RuntimeToolInfo(
-            service="gp-postclose-archive",
+            service="repair-audit",
             mode="manual",
             profile="ops",
-            command="python -m gp_assistant.cli postclose-archive",
-            description="只处理收盘后状态补齐和归档，不修日线。",
+            command="python -m gp_assistant.cli repair-audit",
+            description="执行显式 daily freshness audit，用于运维诊断。",
         ),
     ]
 
 
-def _ops_executor(service: str) -> tuple[str, Callable[[], dict[str, Any]]] | None:
+def _ops_executor(operation: str) -> tuple[str, Callable[[], dict[str, Any]]] | None:
     mapping: dict[str, tuple[str, Callable[[], dict[str, Any]]]] = {
-        "gp-rebuild-daybook": (
-            "已重建当日 daybook 和盘前初始化产物。",
-            lambda: reconcile_runtime_state(operation="rebuild_daybook"),
+        "repair-start": (
+            "已启动一次运行时修复。",
+            lambda: reconcile_runtime_state(operation="repair_start"),
         ),
-        "gp-replay-today": (
-            "已按当前时点回放今天已收盘的 5 分钟 slot。",
-            lambda: reconcile_runtime_state(operation="replay_today"),
+        "repair-retry": (
+            "已重试当前运行时修复。",
+            lambda: reconcile_runtime_state(operation="repair_retry"),
         ),
-        "gp-postclose-archive": (
-            "已补齐收盘后状态并执行归档。",
-            lambda: reconcile_runtime_state(operation="postclose_archive"),
+        "repair-audit": (
+            "已完成一次 daily freshness audit。",
+            lambda: audit_daily_freshness(limit=25),
         ),
     }
-    return mapping.get(service)
+    return mapping.get(operation)
 
 
 def _book_freshness(book, market_phase: str, target_slot_at: str | None) -> str:
@@ -124,6 +125,7 @@ def _book_freshness(book, market_phase: str, target_slot_at: str | None) -> str:
 def _runtime_status(book) -> RuntimeStatus:
     cfg = load_config()
     ms = compute_market_state()
+    snapshot = load_repair_status_snapshot()
     auto_update_expected = ms.market_phase in {
         PHASE_PREOPEN,
         PHASE_OPEN_NO_FIRST_BAR,
@@ -133,13 +135,8 @@ def _runtime_status(book) -> RuntimeStatus:
         PHASE_CLOSING_AUCTION,
         PHASE_POSTCLOSE_PENDING,
     }
-    audit = audit_daily_freshness(symbols=book_symbols(book) if book else [], as_of=ms.target_daybook_effective_day, limit=10)
-    latest_report = load_latest_daily_freshness_report() or {}
-    blocking_reason = None
-    if audit.get("focus_stale_symbols"):
-        blocking_reason = f"今天日线还没补齐到 {audit['target_day']}，当前不发布正式推荐。"
     return RuntimeStatus(
-        market_phase=ms.market_phase,
+        market_phase=str(snapshot.market_phase if snapshot else ms.market_phase),
         data_provider=str(getattr(cfg.provider, "data_provider", "unknown") or "unknown"),
         auto_update_service="gp-worker",
         auto_update_expected=auto_update_expected,
@@ -153,13 +150,15 @@ def _runtime_status(book) -> RuntimeStatus:
         last_closed_5m=(getattr(book, "last_closed_5m", None) if book else None),
         slot_status=(getattr(book, "slot_status", None) if book else None),
         publish_allowed=bool(getattr(book, "publish_allowed", False) if book else False),
-        daily_freshness_ready=not bool(audit.get("focus_stale_symbols")),
-        daily_target_day=audit.get("target_day"),
-        daily_checked_count=len(audit.get("focus_symbols") or []),
-        daily_stale_count=len(audit.get("focus_stale_symbols") or []),
-        daily_last_reconcile_at=latest_report.get("last_reconcile_at"),
-        daily_blocking_reason=blocking_reason or latest_report.get("blocking_reason"),
-        daily_failed_symbols=list((latest_report.get("failed_symbols") or [])[:10]),
+        repair_status=str(snapshot.repair_status if snapshot else "idle"),
+        repair_stage=str(snapshot.repair_stage if snapshot else "idle"),
+        daily_target_day=(snapshot.daily_target_day if snapshot else ms.target_daybook_effective_day),
+        pulse_target_trade_day=(snapshot.pulse_target_trade_day if snapshot else ms.target_pulse_trade_day),
+        pulse_target_slot_at=(snapshot.pulse_target_slot_at if snapshot else ms.target_pulse_slot_at),
+        last_repair_started_at=(snapshot.last_repair_started_at if snapshot else None),
+        last_repair_finished_at=(snapshot.last_repair_finished_at if snapshot else None),
+        blocking_reason=(snapshot.blocking_reason if snapshot else None),
+        artifact_status=str(snapshot.artifact_status if snapshot else (getattr(book, "slot_status", None) or "unavailable")),
         services=_runtime_services(),
     )
 
@@ -176,7 +175,8 @@ def chat(req: ChatRequest) -> ChatResponse:
 @router.get("/health", response_model=HealthResponse)
 @router.get("/api/health", response_model=HealthResponse)
 def health() -> HealthResponse:
-    book = load_current_book()
+    with book_lane():
+        book = load_current_book()
     ok, _ = LLMClient().available()
     return HealthResponse(
         status="ok",
@@ -188,29 +188,26 @@ def health() -> HealthResponse:
     )
 
 
-@router.get("/api/health/daily-freshness")
-def daily_freshness_health() -> dict[str, Any]:
-    book = load_current_book()
-    return audit_daily_freshness(symbols=book_symbols(book) if book else [], as_of=current_trading_day(), limit=25)
-
-
-@router.post("/api/ops/{service}/run", response_model=OpsRunResponse)
-def run_ops(service: str) -> OpsRunResponse:
-    executor = _ops_executor(service)
-    if executor is None:
-        raise HTTPException(status_code=404, detail=f"Unknown ops service: {service}")
-    default_message, fn = executor
+@router.get("/api/ops/repair/status")
+def repair_status() -> dict[str, Any]:
     with book_lane():
-        result = fn()
+        book = load_current_book()
+    return {"runtime": _runtime_status(book).model_dump()}
+
+
+@router.post("/api/ops/repair/{operation}", response_model=OpsRunResponse)
+def run_repair_ops(operation: str) -> OpsRunResponse:
+    executor = _ops_executor(f"repair-{operation}")
+    if executor is None:
+        raise HTTPException(status_code=404, detail=f"Unknown repair operation: {operation}")
+    default_message, fn = executor
+    result = fn()
+    with book_lane():
         book = load_current_book()
     status = "blocked" if bool(result.get("blocked")) else "ok"
-    message = (
-        result.get("message")
-        or result.get("daily_freshness", {}).get("blocking_reason")
-        or default_message
-    )
+    message = result.get("message") or default_message
     return OpsRunResponse(
-        operation=service,
+        operation=f"repair-{operation}",
         status=status,
         message=message,
         executed_at=now_iso(),
@@ -243,6 +240,11 @@ def get_session(session_id: str) -> SessionResponse:
     return SessionResponse(**get_session_payload(session_id))
 
 
+@router.get("/api/session/{session_id}/diagnostics")
+def get_session_diagnostics_view(session_id: str) -> dict[str, Any]:
+    return get_session_diagnostics(session_id)
+
+
 @router.get("/api/side-results")
 def side_results() -> list[dict]:
     return list_side_results()
@@ -265,7 +267,7 @@ def list_session_overviews(limit: int = 20) -> list[dict]:
                 "session_id": s.session_id,
                 "created_at": s.created_at,
                 "updated_at": s.updated_at,
-                "title": title or "对话",
+                "title": title or "新会话",
                 "preview": preview or "",
                 "active_run_id": s.active_run_id,
             }

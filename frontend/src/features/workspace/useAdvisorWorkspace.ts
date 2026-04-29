@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, useTransition } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { ChatResponse, OpsRunResponse, TranscriptEvent } from '../../shared/contracts'
-import { getCurrentBook, getHealth, getSession, getSessions, postChat, readApiError, runOpsTool } from '../../shared/api'
+import { getCurrentBook, getHealth, getSession, getSessionDiagnostics, getSessions, postChat, readApiError, runOpsTool } from '../../shared/api'
 import { loadSessionId, newSessionId, saveSessionId } from '../../shared/session'
 
 interface PendingTurn {
@@ -19,7 +19,7 @@ interface RunToolVariables {
   service: string
 }
 
-const HEALTH_POLL_MS = 30_000
+const HEALTH_POLL_MS = 5_000
 const BOOK_POLL_MS = 15_000
 const SESSION_STALE_MS = 30_000
 
@@ -42,10 +42,11 @@ export function useAdvisorWorkspace() {
   const healthQuery = useQuery({
     queryKey: ['health'],
     queryFn: getHealth,
-    staleTime: HEALTH_POLL_MS,
+    staleTime: 0,
     refetchInterval: HEALTH_POLL_MS,
-    refetchOnWindowFocus: false,
-    refetchOnReconnect: false,
+    refetchIntervalInBackground: true,
+    refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
   })
 
   const bookQuery = useQuery({
@@ -65,6 +66,14 @@ export function useAdvisorWorkspace() {
     refetchOnReconnect: false,
   })
 
+  const diagnosticsQuery = useQuery({
+    queryKey: ['session-diagnostics', sessionId],
+    queryFn: () => getSessionDiagnostics(sessionId),
+    staleTime: SESSION_STALE_MS,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+  })
+
   const sessionsListQuery = useQuery({
     queryKey: ['sessions', 20],
     queryFn: () => getSessions(20),
@@ -78,6 +87,7 @@ export function useAdvisorWorkspace() {
       healthQuery.refetch(),
       bookQuery.refetch(),
       sessionQuery.refetch(),
+      diagnosticsQuery.refetch(),
       sessionsListQuery.refetch(),
     ])
   }
@@ -96,6 +106,7 @@ export function useAdvisorWorkspace() {
       }
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['session', variables.sessionId] }),
+        queryClient.invalidateQueries({ queryKey: ['session-diagnostics', variables.sessionId] }),
         queryClient.invalidateQueries({ queryKey: ['book', 'current'] }),
         queryClient.invalidateQueries({ queryKey: ['sessions', 20] }),
       ])
@@ -205,6 +216,7 @@ export function useAdvisorWorkspace() {
     health: healthQuery.data,
     book: bookQuery.data?.book,
     session: sessionQuery.data,
+    diagnostics: diagnosticsQuery.data,
     sessions: sessionsListQuery.data || [],
     isSessionSwitching,
     runTool,
@@ -212,6 +224,6 @@ export function useAdvisorWorkspace() {
     runningToolService: runToolMutation.variables?.service || null,
     isRunningTool: runToolMutation.isPending,
     isInitialLoading:
-      healthQuery.isLoading || bookQuery.isLoading || sessionQuery.isLoading,
+      healthQuery.isLoading || bookQuery.isLoading || sessionQuery.isLoading || diagnosticsQuery.isLoading,
   }
 }
