@@ -14,7 +14,7 @@ function resolveState(book?: MarketBook, latestMessage?: CanonicalMessage) {
       title: '今天先不硬做，优先等更清晰的交易机会。',
       tag: '空仓 / 观察',
       color: 'default' as const,
-      reason: run.status_reason || '当前市场和执行条件不足以支撑强行开仓，先保留弹性。',
+      reason: run.status_reason || '当前市场和执行条件不足以支持强行开仓，先保留弹性。',
     }
   }
   if (run?.non_trading) {
@@ -57,16 +57,18 @@ export function MainConclusionCard({ book, latestMessage }: MainConclusionCardPr
   return (
     <Card className="main-conclusion-card" styles={{ body: { display: 'flex', flexDirection: 'column', gap: 18 } }}>
       <div className="main-conclusion-hero">
-        <div>
-          <Typography.Text className="eyebrow">Market Brief</Typography.Text>
-          <Typography.Title level={3} style={{ margin: '6px 0 0' }}>
+        <div className="main-conclusion-copy">
+          <Typography.Title level={3} style={{ margin: 0 }}>
             {state.title}
           </Typography.Title>
+          <Typography.Paragraph className="hero-copy">{state.reason}</Typography.Paragraph>
         </div>
-        <Tag color={state.color}>{state.tag}</Tag>
+        <div className="hero-status">
+          <Tag color={state.color}>{state.tag}</Tag>
+          <Typography.Text className="hero-timestamp">book 更新 {updatedAt}</Typography.Text>
+        </div>
       </div>
-      <Typography.Paragraph className="hero-copy">{state.reason}</Typography.Paragraph>
-      <Space wrap size={12}>
+      <Space wrap size={12} className="main-conclusion-metrics">
         <div className="mini-block">
           <Typography.Text strong>执行原则</Typography.Text>
           <Typography.Paragraph style={{ marginBottom: 0 }}>

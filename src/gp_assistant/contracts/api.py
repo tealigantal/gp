@@ -42,6 +42,7 @@ class RuntimeStatus(BaseModel):
     data_provider: str = "unknown"
     auto_update_service: str = "gp-worker"
     auto_update_expected: bool = False
+    intraday_runtime_enabled: bool = False
     worker_poll_interval_sec: int = 15
     book_freshness: str = "unavailable"
     book_updated_at: Optional[str] = None

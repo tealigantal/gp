@@ -31,7 +31,7 @@ export function SessionSwitcher({ sessions, currentId, onSelect, onNew, loading 
     : '当前会话'
 
   return (
-    <Space wrap>
+    <Space wrap className="session-switcher">
       <Dropdown
         menu={{
           items,
@@ -41,11 +41,11 @@ export function SessionSwitcher({ sessions, currentId, onSelect, onNew, loading 
         trigger={['click']}
         disabled={!items.length}
       >
-        <Button aria-label="Switch sessions" loading={loading}>
+        <Button aria-label="Switch sessions" loading={loading} className="session-picker-btn">
           {currentLabel}
         </Button>
       </Dropdown>
-      <Button type="primary" onClick={onNew} aria-label="Start a new session">
+      <Button type="primary" onClick={onNew} aria-label="Start a new session" className="session-new-btn">
         新建会话
       </Button>
     </Space>

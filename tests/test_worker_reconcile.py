@@ -31,6 +31,7 @@ def test_reconcile_runtime_state_uses_single_dispatch_path(monkeypatch):
 
 
 def test_postclose_archive_self_heals_before_archiving(monkeypatch):
+    monkeypatch.setattr(worker, "_intraday_runtime_enabled", lambda: True)
     state = SimpleNamespace(
         market_phase=PHASE_POSTCLOSE_PENDING,
         target_daybook_effective_day="20240320",

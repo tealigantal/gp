@@ -23,6 +23,13 @@ export function marketPhaseLabel(phase?: string | null) {
 }
 
 export function runtimeFreshnessMeta(runtime?: RuntimeStatus | null) {
+  if (runtime?.intraday_runtime_enabled === false) {
+    return {
+      label: '5 分钟执行态已停用',
+      color: 'default',
+      note: '当前运行态只保留日级计划与观察结论，不再接入盘中 5 分钟执行数据。',
+    }
+  }
   const key = String(runtime?.book_freshness || '').toLowerCase()
   const mapping: Record<string, { label: string; color: string; note: string }> = {
     current: {

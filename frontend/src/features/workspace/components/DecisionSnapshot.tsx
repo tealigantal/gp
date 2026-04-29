@@ -66,15 +66,17 @@ export function DecisionSnapshot({
 
   return (
     <Space direction="vertical" size={14} style={{ width: '100%' }}>
-      <div>
-        <Typography.Text className="eyebrow">Workspace Snapshot</Typography.Text>
-        <Typography.Title level={4} style={{ margin: '4px 0 0' }}>
+      <div className="snapshot-summary">
+        <Typography.Title level={4} style={{ margin: 0 }}>
           当前决策快照
         </Typography.Title>
+        <Typography.Text className="section-subtitle">
+          用一列信息看清当前 run、时效、手工恢复路径和关注标的。
+        </Typography.Text>
       </div>
 
-      <Card className="snapshot-card" size="small">
-        <Space size={8} wrap>
+      <Card className="snapshot-card snapshot-overview-card" size="small">
+        <Space size={[8, 8]} wrap>
           <Tag color={tag.color}>{tag.text}</Tag>
           <Tag>会话更新时间 {fmtDateTime(session?.session?.updated_at || session?.session?.created_at)}</Tag>
           <Tag>run {run?.run_id || latest?.run_id || '--'}</Tag>
@@ -96,7 +98,9 @@ export function DecisionSnapshot({
         <Descriptions size="small" column={1}>
           <Descriptions.Item label="盘面时段">{marketPhaseLabel(run?.market_phase || book?.market_phase)}</Descriptions.Item>
           <Descriptions.Item label="最新 5 分钟">{fmtDateTime(run?.pulse_slot_at || book?.last_closed_5m)}</Descriptions.Item>
-          <Descriptions.Item label="Daybook 生效日">{run?.daybook_effective_day || book?.daybook_effective_day || '--'}</Descriptions.Item>
+          <Descriptions.Item label="Daybook 生效日">
+            {run?.daybook_effective_day || book?.daybook_effective_day || '--'}
+          </Descriptions.Item>
           <Descriptions.Item label="slot 状态">{run?.slot_status || book?.slot_status || '--'}</Descriptions.Item>
           <Descriptions.Item label="数据质量">{dataQualityLabel(run)}</Descriptions.Item>
         </Descriptions>

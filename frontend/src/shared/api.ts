@@ -58,8 +58,7 @@ export async function postChat(payload: ChatRequest) {
 }
 
 export async function runOpsTool(operation: string) {
-  const cleaned = String(operation || '').replace(/^repair-/, '')
-  const { data } = await api.post<OpsRunResponse>(`/api/ops/repair/${encodeURIComponent(cleaned)}`)
+  const { data } = await api.post<OpsRunResponse>(`/api/ops/repair/${encodeURIComponent(String(operation || ''))}`)
   return data
 }
 

@@ -50,6 +50,8 @@ from .runtime.market_clock import (
 )
 from .runtime.utils import gen_id, now_iso
 
+INTRADAY_RUNTIME_DISABLED_REASON = "intraday_runtime_disabled"
+
 
 def _portfolio_symbols(snapshot: Dict[str, Any]) -> list[str]:
     return [
@@ -144,6 +146,14 @@ def _slot_text(value: str | None) -> str:
     return str(value or "")
 
 
+def _intraday_runtime_enabled() -> bool:
+    return bool(getattr(load_config(), "intraday_runtime_enabled", False))
+
+
+def _intraday_runtime_disabled_message() -> str:
+    return "当前配置已关闭盘中 5 分钟接入，仅保留日级计划与观察状态。"
+
+
 def _needs_preopen_refresh(current: LiveSlotArtifact | None, *, trade_day: str, market_phase: str, force: bool) -> bool:
     if force or current is None:
         return True
@@ -176,6 +186,28 @@ def _needs_target_slot_rebuild(
     if current_slot == target_slot_at and current.market_phase != market_phase:
         return True
     return current_slot == target_slot_at and current.slot_status == "UNAVAILABLE"
+
+
+def _needs_intraday_disabled_refresh(
+    current: LiveSlotArtifact | None,
+    *,
+    trade_day: str,
+    target_slot_at: str,
+    market_phase: str,
+    force: bool,
+) -> bool:
+    if force or current is None:
+        return True
+    if current.trade_day != trade_day or current.daybook_effective_day != trade_day:
+        return True
+    if _slot_text(current.slot_at) != target_slot_at:
+        return True
+    if current.market_phase != market_phase:
+        return True
+    if current.slot_status != "UNAVAILABLE":
+        return True
+    reason = str((getattr(current, "provider_meta", {}) or {}).get("reason") or "").strip()
+    return reason != INTRADAY_RUNTIME_DISABLED_REASON
 
 
 def _build_slot_artifact_from_bundle(
@@ -292,6 +324,63 @@ def _build_slot_artifact_from_bundle(
     return artifact
 
 
+def _save_intraday_disabled_artifact(
+    *,
+    daybook: DayBook,
+    trade_day: str,
+    target_slot: str,
+    market_phase: str,
+    freshness: Dict[str, Any],
+    force: bool = False,
+) -> Dict[str, Any]:
+    portfolio_snapshot = load_portfolio_snapshot()
+    tracked = _tracked_universe(daybook, portfolio_snapshot)
+    current = load_current_slot_artifact()
+    if not _needs_intraday_disabled_refresh(
+        current,
+        trade_day=trade_day,
+        target_slot_at=target_slot,
+        market_phase=market_phase,
+        force=force,
+    ):
+        return {
+            "trade_day": trade_day,
+            "artifact_id": current.artifact_id,
+            "slot_at": current.slot_at,
+            "slot_status": current.slot_status,
+            "tracked_total": len(current.tracked_universe.total),
+            "market_phase": market_phase,
+            "daily_freshness": freshness,
+            "disabled": True,
+            "reason": INTRADAY_RUNTIME_DISABLED_REASON,
+            "message": _intraday_runtime_disabled_message(),
+            "noop": True,
+        }
+    artifact = build_unavailable_artifact(
+        daybook=daybook,
+        tracked_universe=tracked,
+        market_phase=market_phase,
+        trade_day=trade_day,
+        slot_at=target_slot,
+        portfolio_snapshot=portfolio_snapshot,
+        reason=INTRADAY_RUNTIME_DISABLED_REASON,
+        previous_artifact=current,
+    )
+    saved = _save_artifact(daybook, artifact)
+    saved.update(
+        {
+            "trade_day": trade_day,
+            "tracked_total": len(tracked.total),
+            "market_phase": market_phase,
+            "daily_freshness": freshness,
+            "disabled": True,
+            "reason": INTRADAY_RUNTIME_DISABLED_REASON,
+            "message": _intraday_runtime_disabled_message(),
+        }
+    )
+    return saved
+
+
 def run_preopen_init(*, now=None, force: bool = False) -> Dict[str, Any]:
     ms = compute_market_state(now)
     trade_day = ms.target_daybook_effective_day
@@ -353,6 +442,15 @@ def boot_replay_to_current_slot(*, now=None, force: bool = False) -> Dict[str, A
             "daily_freshness": freshness,
             "message": freshness.get("blocking_reason") or "日线数据未补齐到目标交易日，先不回放盘中 5 分钟执行态。",
         }
+    if not _intraday_runtime_enabled():
+        return _save_intraday_disabled_artifact(
+            daybook=daybook,
+            trade_day=trade_day,
+            target_slot=target_slot,
+            market_phase=ms.market_phase,
+            freshness=freshness,
+            force=force,
+        )
     portfolio_snapshot = load_portfolio_snapshot()
     tracked = _tracked_universe(daybook, portfolio_snapshot)
     slot_baselines = load_slot_volume_baselines(trade_day, tracked.total)
@@ -435,15 +533,25 @@ def run_postclose_archive(*, now=None, force: bool = False) -> Dict[str, Any]:
         }
     replay_result = None
     if ms.target_pulse_slot_at:
-        current = load_current_slot_artifact()
-        if _needs_target_slot_rebuild(
-            current,
-            trade_day=ms.target_daybook_effective_day,
-            target_slot_at=ms.target_pulse_slot_at,
-            market_phase=ms.market_phase,
-            force=force,
-        ):
-            replay_result = boot_replay_to_current_slot(now=now, force=True)
+        if not _intraday_runtime_enabled():
+            replay_result = _save_intraday_disabled_artifact(
+                daybook=daybook,
+                trade_day=ms.target_daybook_effective_day,
+                target_slot=ms.target_pulse_slot_at,
+                market_phase=ms.market_phase,
+                freshness=freshness,
+                force=force,
+            )
+        else:
+            current = load_current_slot_artifact()
+            if _needs_target_slot_rebuild(
+                current,
+                trade_day=ms.target_daybook_effective_day,
+                target_slot_at=ms.target_pulse_slot_at,
+                market_phase=ms.market_phase,
+                force=force,
+            ):
+                replay_result = boot_replay_to_current_slot(now=now, force=True)
     current = load_current_slot_artifact()
     if current is None:
         return {"trade_day": ms.target_daybook_effective_day, "archived": False, "reason": "no_current_artifact"}

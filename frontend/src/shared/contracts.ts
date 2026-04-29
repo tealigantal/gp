@@ -286,6 +286,7 @@ export interface RuntimeStatus {
   data_provider: string
   auto_update_service: string
   auto_update_expected: boolean
+  intraday_runtime_enabled?: boolean
   worker_poll_interval_sec: number
   book_freshness: string
   book_updated_at?: string | null
@@ -298,7 +299,13 @@ export interface RuntimeStatus {
   publish_allowed: boolean
   repair_status: string
   repair_stage: string
+  daily_freshness_ready?: boolean
   daily_target_day?: string | null
+  daily_checked_count?: number
+  daily_stale_count?: number
+  daily_last_reconcile_at?: string | null
+  daily_blocking_reason?: string | null
+  daily_failed_symbols?: string[]
   pulse_target_trade_day?: string | null
   pulse_target_slot_at?: string | null
   last_repair_started_at?: string | null

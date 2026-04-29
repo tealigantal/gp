@@ -111,6 +111,8 @@ Typical examples:
 
 These files are workspace artifacts. Treat them as generated state unless a specific file is intentionally versioned.
 
+`store/book/` and `store/runs/` are generated runtime outputs and should stay out of version control.
+
 ## Operational Notes
 
 - The service is session-based. `session_id` is the stable handle for follow-up turns.

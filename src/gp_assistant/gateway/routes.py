@@ -18,7 +18,6 @@ from ..contracts.api import (
     SessionResponse,
 )
 from ..core.config import load_config
-from ..evidence.daily_freshness import audit_daily_freshness
 from ..evidence.market_service import current_trading_day
 from ..gateway.events import list_side_results
 from ..gateway.sessions import get_session_diagnostics, get_session_payload, sanitize_chat_payload
@@ -61,24 +60,24 @@ def _runtime_services() -> list[RuntimeToolInfo]:
             description="后台 worker，按市场时段自动修复日线、5 分钟线和 current artifact。",
         ),
         RuntimeToolInfo(
-            service="repair-start",
+            service="gp-rebuild-daybook",
             mode="manual",
             profile="ops",
-            command="python -m gp_assistant.cli repair-start",
+            command="python -m gp_assistant.cli rebuild-daybook",
             description="立即启动一次有边界的运行时修复。",
         ),
         RuntimeToolInfo(
-            service="repair-retry",
+            service="gp-replay-today",
             mode="manual",
             profile="ops",
-            command="python -m gp_assistant.cli repair-retry",
+            command="python -m gp_assistant.cli replay-today",
             description="重试当前市场时段对应的运行时修复计划。",
         ),
         RuntimeToolInfo(
-            service="repair-audit",
+            service="gp-postclose-archive",
             mode="manual",
             profile="ops",
-            command="python -m gp_assistant.cli repair-audit",
+            command="python -m gp_assistant.cli postclose-archive",
             description="执行显式 daily freshness audit，用于运维诊断。",
         ),
     ]
@@ -86,25 +85,27 @@ def _runtime_services() -> list[RuntimeToolInfo]:
 
 def _ops_executor(operation: str) -> tuple[str, Callable[[], dict[str, Any]]] | None:
     mapping: dict[str, tuple[str, Callable[[], dict[str, Any]]]] = {
-        "repair-start": (
+        "gp-rebuild-daybook": (
             "已启动一次运行时修复。",
-            lambda: reconcile_runtime_state(operation="repair_start"),
+            lambda: reconcile_runtime_state(operation="rebuild_daybook"),
         ),
-        "repair-retry": (
+        "gp-replay-today": (
             "已重试当前运行时修复。",
-            lambda: reconcile_runtime_state(operation="repair_retry"),
+            lambda: reconcile_runtime_state(operation="replay_today"),
         ),
-        "repair-audit": (
+        "gp-postclose-archive": (
             "已完成一次 daily freshness audit。",
-            lambda: audit_daily_freshness(limit=25),
+            lambda: reconcile_runtime_state(operation="postclose_archive"),
         ),
     }
     return mapping.get(operation)
 
 
-def _book_freshness(book, market_phase: str, target_slot_at: str | None) -> str:
+def _book_freshness(book, market_phase: str, target_slot_at: str | None, *, intraday_runtime_enabled: bool) -> str:
     if book is None:
         return "unavailable"
+    if not intraday_runtime_enabled:
+        return "daily_only"
     slot_status = str(getattr(book, "slot_status", "") or "").upper()
     if slot_status and slot_status != "OK":
         return "degraded"
@@ -122,8 +123,22 @@ def _book_freshness(book, market_phase: str, target_slot_at: str | None) -> str:
     return "unavailable"
 
 
+def _daily_freshness_fields(book) -> dict[str, Any]:
+    source_meta = getattr(getattr(book, "daybook", None), "source_meta", {}) or {}
+    freshness = dict(source_meta.get("daily_freshness") or {})
+    return {
+        "daily_freshness_ready": bool(freshness.get("ready", False)),
+        "daily_checked_count": int(freshness.get("checked_count") or len(freshness.get("checked_symbols") or [])),
+        "daily_stale_count": int(freshness.get("stale_count") or len(freshness.get("stale_symbols") or [])),
+        "daily_last_reconcile_at": freshness.get("last_reconcile_at") or freshness.get("generated_at") or freshness.get("reconciled_at"),
+        "daily_blocking_reason": freshness.get("blocking_reason"),
+        "daily_failed_symbols": list(freshness.get("failed_symbols") or []),
+    }
+
+
 def _runtime_status(book) -> RuntimeStatus:
     cfg = load_config()
+    intraday_runtime_enabled = bool(getattr(cfg, "intraday_runtime_enabled", False))
     ms = compute_market_state()
     snapshot = load_repair_status_snapshot()
     auto_update_expected = ms.market_phase in {
@@ -135,13 +150,20 @@ def _runtime_status(book) -> RuntimeStatus:
         PHASE_CLOSING_AUCTION,
         PHASE_POSTCLOSE_PENDING,
     }
+    daily_freshness = _daily_freshness_fields(book) if book else {}
     return RuntimeStatus(
         market_phase=str(snapshot.market_phase if snapshot else ms.market_phase),
         data_provider=str(getattr(cfg.provider, "data_provider", "unknown") or "unknown"),
         auto_update_service="gp-worker",
         auto_update_expected=auto_update_expected,
+        intraday_runtime_enabled=intraday_runtime_enabled,
         worker_poll_interval_sec=max(5, int(getattr(cfg, "intraday_poll_interval_sec", 15) or 15)),
-        book_freshness=_book_freshness(book, ms.market_phase, ms.target_pulse_slot_at),
+        book_freshness=_book_freshness(
+            book,
+            ms.market_phase,
+            ms.target_pulse_slot_at,
+            intraday_runtime_enabled=intraday_runtime_enabled,
+        ),
         book_updated_at=(getattr(book, "updated_at", None) if book else None),
         artifact_id=(getattr(book, "artifact_id", None) if book else None),
         daybook_effective_day=(getattr(book, "daybook_effective_day", None) if book else None),
@@ -157,9 +179,18 @@ def _runtime_status(book) -> RuntimeStatus:
         pulse_target_slot_at=(snapshot.pulse_target_slot_at if snapshot else ms.target_pulse_slot_at),
         last_repair_started_at=(snapshot.last_repair_started_at if snapshot else None),
         last_repair_finished_at=(snapshot.last_repair_finished_at if snapshot else None),
-        blocking_reason=(snapshot.blocking_reason if snapshot else None),
+        blocking_reason=(
+            snapshot.blocking_reason
+            if snapshot and snapshot.blocking_reason
+            else (
+                "当前配置已关闭盘中 5 分钟接入，仅保留日级计划与观察状态。"
+                if not intraday_runtime_enabled
+                else None
+            )
+        ),
         artifact_status=str(snapshot.artifact_status if snapshot else (getattr(book, "slot_status", None) or "unavailable")),
         services=_runtime_services(),
+        **daily_freshness,
     )
 
 
@@ -197,7 +228,7 @@ def repair_status() -> dict[str, Any]:
 
 @router.post("/api/ops/repair/{operation}", response_model=OpsRunResponse)
 def run_repair_ops(operation: str) -> OpsRunResponse:
-    executor = _ops_executor(f"repair-{operation}")
+    executor = _ops_executor(operation)
     if executor is None:
         raise HTTPException(status_code=404, detail=f"Unknown repair operation: {operation}")
     default_message, fn = executor
@@ -207,7 +238,7 @@ def run_repair_ops(operation: str) -> OpsRunResponse:
     status = "blocked" if bool(result.get("blocked")) else "ok"
     message = result.get("message") or default_message
     return OpsRunResponse(
-        operation=f"repair-{operation}",
+        operation=operation,
         status=status,
         message=message,
         executed_at=now_iso(),

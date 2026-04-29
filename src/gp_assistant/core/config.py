@@ -98,6 +98,7 @@ class AppConfig:
     cache_refresh_ttl_sec: int = int(os.getenv("GP_CACHE_REFRESH_TTL_SEC", "300"))
 
     # Intraday pulse/worker
+    intraday_runtime_enabled: bool = _truthy(os.getenv("GP_INTRADAY_RUNTIME_ENABLED", "0"))
     intraday_fetch_workers: int = int(os.getenv("GP_INTRADAY_FETCH_WORKERS", "6"))
     intraday_fetch_timeout_sec: int = int(os.getenv("GP_INTRADAY_FETCH_TIMEOUT_SEC", "20"))
     intraday_poll_interval_sec: int = int(os.getenv("GP_INTRADAY_POLL_INTERVAL_SEC", "15"))

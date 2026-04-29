@@ -48,7 +48,13 @@ function recommendedTools(runtime?: RuntimeStatus | null, manualTools: RuntimeTo
   const toolSet = new Set(manualTools.map((item) => item.service))
   const out: string[] = []
   if (runtime?.daily_freshness_ready === false && toolSet.has('gp-rebuild-daybook')) out.push('gp-rebuild-daybook')
-  if ((runtime?.slot_status || '').toUpperCase() !== 'OK' && toolSet.has('gp-replay-today')) out.push('gp-replay-today')
+  if (
+    runtime?.intraday_runtime_enabled !== false &&
+    (runtime?.slot_status || '').toUpperCase() !== 'OK' &&
+    toolSet.has('gp-replay-today')
+  ) {
+    out.push('gp-replay-today')
+  }
   if (runtime?.market_phase === 'POSTCLOSE_PENDING' && toolSet.has('gp-postclose-archive')) out.push('gp-postclose-archive')
   return [...new Set(out)]
 }
@@ -76,6 +82,7 @@ export function OperationsStatusCard({
             <Space wrap>
               <Tag color="green">{runtime?.auto_update_service || 'gp-worker'}</Tag>
               <Tag color={freshness.color}>{freshness.label}</Tag>
+              {runtime?.intraday_runtime_enabled === false ? <Tag>日级模式</Tag> : null}
               {runtime?.data_provider ? <Tag>数据源 {runtime.data_provider}</Tag> : null}
               {runtime?.worker_poll_interval_sec ? <Tag>{runtime.worker_poll_interval_sec}s 轮询</Tag> : null}
             </Space>
