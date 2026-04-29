@@ -439,6 +439,39 @@ class RunChangeArtifact(GPModel):
     data_quality_change: Dict[str, Any] = Field(default_factory=dict)
 
 
+class GroundingSummary(GPModel):
+    market_phase: Optional[str] = None
+    daily_target_day: Optional[str] = None
+    pulse_slot_at: Optional[str] = None
+    repair_status: str = "ready"
+    decision_basis_labels: List[str] = Field(default_factory=list)
+
+
+class DecisionBasis(GPModel):
+    labels: List[str] = Field(default_factory=list)
+    market_phase: Optional[str] = None
+    daily_target_day: Optional[str] = None
+    pulse_slot_at: Optional[str] = None
+    selection_reason: Optional[str] = None
+    execution_reason: Optional[str] = None
+    risk_notes: List[str] = Field(default_factory=list)
+    repair_status: str = "ready"
+    repair_stage: Optional[str] = None
+
+
+class AgentToolResult(GPModel):
+    tool_name: str
+    reply_text: str = ""
+    message: Dict[str, Any] = Field(default_factory=dict)
+    right_panel: Dict[str, Any] = Field(default_factory=dict)
+    ui_items: List[Dict[str, Any]] = Field(default_factory=list)
+    run_id: Optional[str] = None
+    symbols: List[str] = Field(default_factory=list)
+    grounding_summary: GroundingSummary = Field(default_factory=GroundingSummary)
+    decision_basis: DecisionBasis = Field(default_factory=DecisionBasis)
+    tool_trace: Dict[str, Any] = Field(default_factory=dict)
+
+
 class EvidencePack(GPModel):
     frame: TurnFrame
     session: SessionState
@@ -484,3 +517,6 @@ class ReplyBundle(GPModel):
     message: Dict[str, Any] = Field(default_factory=dict)
     evidence_refs: List[str] = Field(default_factory=list)
     planner_trace: Dict[str, Any] = Field(default_factory=dict)
+    grounding_summary: Dict[str, Any] = Field(default_factory=dict)
+    decision_basis: Dict[str, Any] = Field(default_factory=dict)
+    tool_trace: Dict[str, Any] = Field(default_factory=dict)

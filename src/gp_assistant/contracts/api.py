@@ -19,6 +19,7 @@ class ChatResponse(BaseModel):
     ui_items: List[Dict[str, Any]] = Field(default_factory=list)
     planner_trace: Dict[str, Any] = Field(default_factory=dict)
     evidence_refs: List[str] = Field(default_factory=list)
+    grounding_summary: Dict[str, Any] = Field(default_factory=dict)
 
 
 class HealthStorageStats(BaseModel):
@@ -51,8 +52,16 @@ class RuntimeStatus(BaseModel):
     last_closed_5m: Optional[str] = None
     slot_status: Optional[str] = None
     publish_allowed: bool = False
+    repair_status: str = "idle"
+    repair_stage: str = "idle"
     daily_freshness_ready: bool = False
     daily_target_day: Optional[str] = None
+    pulse_target_trade_day: Optional[str] = None
+    pulse_target_slot_at: Optional[str] = None
+    last_repair_started_at: Optional[str] = None
+    last_repair_finished_at: Optional[str] = None
+    blocking_reason: Optional[str] = None
+    artifact_status: Optional[str] = None
     daily_checked_count: int = 0
     daily_stale_count: int = 0
     daily_last_reconcile_at: Optional[str] = None
