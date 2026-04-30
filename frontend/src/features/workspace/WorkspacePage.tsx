@@ -2,7 +2,6 @@ import { Alert, Card, Layout, Spin, Typography } from 'antd'
 import { ChatThread } from './components/ChatThread'
 import { Composer } from './components/Composer'
 import { DecisionSnapshot } from './components/DecisionSnapshot'
-import { DebugDrawer } from './components/DebugDrawer'
 import { HeaderBar } from './components/HeaderBar'
 import { runtimeFreshnessMeta } from './runtimeLabels'
 import { useAdvisorWorkspace } from './useAdvisorWorkspace'
@@ -60,8 +59,8 @@ export function WorkspacePage() {
                         className="workspace-alert workspace-alert-warning"
                         type="warning"
                         showIcon
-                        message="LLM 当前不可用"
-                        description="结构化卡片和降级文案仍可用，但语义理解与自然解释会变弱。"
+                        message="自然语言助手当前不可用"
+                        description="结构化卡片和历史会话仍可查看，但连续追问、解释和口语化改写会明显变弱。"
                       />
                     ) : null}
                     {showRuntimeAlert ? (
@@ -69,34 +68,36 @@ export function WorkspacePage() {
                         className="workspace-alert"
                         type={workspace.health?.runtime?.book_freshness === 'lagging' ? 'warning' : 'info'}
                         showIcon
-                        message="运行状态提示"
+                        message="运行态提示"
                         description={runtimeFreshness.note}
                       />
                     ) : null}
                   </div>
                 ) : null}
+
                 <Card
                   className="chat-card"
                   styles={{ body: { display: 'flex', flexDirection: 'column', gap: 18, minHeight: 0 } }}
                 >
                   <div className="chat-card-header">
                     <div>
+                      <Typography.Text className="section-kicker">Conversation Workspace</Typography.Text>
                       <Typography.Title level={4} style={{ margin: 0 }}>
-                        对话工作区
+                        用一条连续对话，把推荐、执行、风控和变化都问清楚
                       </Typography.Title>
                       <Typography.Text className="section-subtitle">
-                        直接问机会、买点、盘中执行、风控和前后 run 变化。
+                        直接追问今天的候选、为什么当前只观察、某只票还能不能买，或者上一轮为什么变了。
                       </Typography.Text>
                     </div>
                     <Typography.Text className="chat-card-caption">
-                      {workspace.turns.length ? `${workspace.turns.length} 条消息` : '从一个问题开始'}
+                      {workspace.turns.length ? `已记录 ${workspace.turns.length} 条消息` : '从一句自然语言问题开始'}
                     </Typography.Text>
                   </div>
                   <ChatThread
                     turns={workspace.turns}
                     error={workspace.lastError}
                     sending={workspace.isSending}
-                    book={workspace.book}
+                    runtime={workspace.health?.runtime}
                     onPrompt={prompt}
                   />
                   <Composer
@@ -111,25 +112,16 @@ export function WorkspacePage() {
             </main>
           </Content>
           <Sider
-            width={392}
+            width={440}
             theme="light"
             className="right-sider snapshot-sider"
             role="complementary"
             aria-label="Decision snapshot"
           >
             <aside className="snapshot-shell">
-              <div className="snapshot-shell-header">
-                <Typography.Title level={4} style={{ margin: 0 }}>
-                  决策控制台
-                </Typography.Title>
-                <Typography.Text className="section-subtitle">
-                  看运行时、手工恢复工具、当前计划和 top symbols。
-                </Typography.Text>
-              </div>
               <div className="panel-scroll">
                 <DecisionSnapshot
                   book={workspace.book}
-                  session={workspace.session}
                   latest={workspace.latestResponse}
                   health={workspace.health}
                   onRunTool={workspace.runTool}
@@ -138,11 +130,6 @@ export function WorkspacePage() {
                   isRunningTool={workspace.isRunningTool}
                   opsResult={workspace.lastOpsResult}
                   opsError={workspace.lastOpsError}
-                />
-                <DebugDrawer
-                  session={workspace.session}
-                  diagnostics={workspace.diagnostics}
-                  latestResponse={workspace.latestResponse}
                 />
               </div>
             </aside>

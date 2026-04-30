@@ -339,7 +339,14 @@ class MarketDataHub:
         last_item_time_final = meta_q_final.get("last_item_time") or meta_q_initial.get("last_item_time")
         freshness_state = "missing"
         if isinstance(last_item_time_final, str) and last_item_time_final.strip():
-            freshness_state = "current" if last_item_time_final == target_trading_day else "stale"
+            try:
+                freshness_state = (
+                    "current"
+                    if pd.to_datetime(last_item_time_final).normalize() >= pd.to_datetime(target_trading_day).normalize()
+                    else "stale"
+                )
+            except Exception:
+                freshness_state = "current" if last_item_time_final >= str(target_trading_day) else "stale"
         if network_error and freshness_state != "current":
             freshness_state = "failed_refresh"
         meta["requested_as_of"] = as_of
@@ -478,7 +485,16 @@ class MarketDataHub:
             meta_q = _query_meta(qids[s])
             last_item_time = meta_q.get("last_item_time")
             target_trading_day = target.date().isoformat()
-            freshness_state = "current" if last_item_time == target_trading_day else ("stale" if last_item_time else "missing")
+            freshness_state = "missing"
+            if last_item_time:
+                try:
+                    freshness_state = (
+                        "current"
+                        if pd.to_datetime(last_item_time).normalize() >= pd.to_datetime(target_trading_day).normalize()
+                        else "stale"
+                    )
+                except Exception:
+                    freshness_state = "current" if str(last_item_time) >= str(target_trading_day) else "stale"
             meta = {
                 "source": f"store:daily:{provider.name}",
                 **m,

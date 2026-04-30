@@ -6,6 +6,7 @@ from typing import Any, Dict
 from .context_engine import build_context
 from .reference_resolver import inject_entity_hints
 from ..contracts.objects import MarketBook, TurnFrame
+from ..core.config import load_config
 from ..llm.interpret import parse_turn_frame
 from ..runtime.utils import gen_id
 
@@ -36,6 +37,10 @@ _ZH_RANK_MAP = {
     "第九": 9,
     "第十": 10,
 }
+
+
+def _intraday_runtime_enabled() -> bool:
+    return bool(getattr(load_config(), "intraday_runtime_enabled", False))
 
 
 def _contains_any(text: str, keywords: tuple[str, ...] | list[str]) -> bool:
@@ -70,6 +75,24 @@ def _parse_rank(text: str) -> int | None:
         return None
 
 
+def _looks_like_term_explain(text: str) -> bool:
+    msg = str(text or "").strip()
+    if not msg:
+        return False
+    if _contains_any(msg, _TERM_EXPLAIN_WORDS):
+        return True
+    hard_patterns = (
+        "什么是",
+        "什么意思",
+        "这句话什么意思",
+        "为什么仅观察",
+        "为什么只观察",
+        "为什么进观察",
+        "为什么观察",
+    )
+    return any(token in msg for token in hard_patterns)
+
+
 def _fallback_frame(
     user_message: str,
     *,
@@ -97,13 +120,14 @@ def _fallback_frame(
 
 def _fallback_semantic_parse(memory_ctx: Dict[str, Any], book: MarketBook, user_message: str) -> TurnFrame:
     msg = (user_message or "").strip()
+    intraday_enabled = _intraday_runtime_enabled()
     focus_symbol = None
     session = memory_ctx["session"]
     if isinstance(session.focus_subject, dict):
         focus_symbol = session.focus_subject.get("symbol") or getattr(session, "last_focus_symbol", None)
     symbol_match = _SYMBOL_RE.findall(msg)
     rank = _parse_rank(msg)
-    freshness = "next_session_plan" if _contains_any(msg, _POSTCLOSE_WORDS) else "latest_5m" if _contains_any(msg, _LIVE_WORDS) else "active_run"
+    freshness = "next_session_plan" if _contains_any(msg, _POSTCLOSE_WORDS) else ("latest_5m" if _contains_any(msg, _LIVE_WORDS) and intraday_enabled else "active_run")
 
     if _contains_any(msg, _CHAT_WORDS):
         return _fallback_frame(msg, subject="market", request="chat", freshness="active_run", confidence=0.95, note="chat fallback")
@@ -125,7 +149,7 @@ def _fallback_semantic_parse(memory_ctx: Dict[str, Any], book: MarketBook, user_
         return _fallback_frame(msg, subject="compare_set", request="compare", freshness="active_run", references=refs, confidence=0.82, note="compare fallback")
     if _contains_any(msg, _EXIT_WORDS):
         refs = {"symbol": symbol_match[0]} if symbol_match else ({"symbol": focus_symbol} if focus_symbol else {})
-        return _fallback_frame(msg, subject="holding", request="exit_decision", freshness="latest_5m", references=refs, confidence=0.86, note="exit fallback")
+        return _fallback_frame(msg, subject="holding", request="exit_decision", freshness=("latest_5m" if intraday_enabled else "active_run"), references=refs, confidence=0.86, note="exit fallback")
     if _contains_any(msg, _LIVE_WORDS):
         refs = {}
         if symbol_match:
@@ -136,7 +160,7 @@ def _fallback_semantic_parse(memory_ctx: Dict[str, Any], book: MarketBook, user_
             refs["symbol"] = focus_symbol
         request = "live_entry_check" if refs else "no_trade_explain"
         subject = "symbol" if refs else "market"
-        return _fallback_frame(msg, subject=subject, request=request, freshness="latest_5m", references=refs, confidence=0.82, note="live fallback")
+        return _fallback_frame(msg, subject=subject, request=request, freshness=("latest_5m" if intraday_enabled else "active_run"), references=refs, confidence=0.82, note="live fallback")
     if _contains_any(msg, _DETAIL_WORDS) or _contains_any(msg, _DECISION_BASIS_WORDS):
         refs = {}
         if symbol_match:
@@ -180,13 +204,16 @@ def normalize_turn_frame(frame: TurnFrame, book: MarketBook | None = None) -> Tu
     }
     frame.request = request_alias.get(frame.request, frame.request)
     frame.freshness = freshness_alias.get(frame.freshness, frame.freshness)
+    intraday_enabled = _intraday_runtime_enabled()
     frame.references = frame.references or {}
     frame.constraints = frame.constraints or {}
     frame.constraints.setdefault("allow_derived_data", True)
     if frame.request == "recommend":
         frame.constraints["topk"] = _clamp_topk(int(frame.constraints.get("topk") or 3))
-    if frame.request == "live_entry_check" and frame.freshness == "active_run":
+    if frame.request == "live_entry_check" and frame.freshness == "active_run" and intraday_enabled:
         frame.freshness = "latest_5m"
+    if not intraday_enabled and frame.freshness == "latest_5m":
+        frame.freshness = "active_run"
     if (
         frame.request == "recommend"
         and frame.freshness == "active_run"
@@ -258,6 +285,16 @@ def parse_concern(memory_ctx: Dict[str, Any], book: MarketBook, user_message: st
         frame = parse_turn_frame(context, user_message)
     except Exception:
         frame = fallback
+    if _looks_like_term_explain(user_message) and frame.request != "term_explain":
+        frame = fallback if fallback.request == "term_explain" else _fallback_frame(
+            user_message,
+            subject=("symbol" if (fallback.references or {}).get("symbol") else "market"),
+            request="term_explain",
+            freshness="active_run",
+            references=(fallback.references or {}),
+            confidence=0.9,
+            note="term explain override",
+        )
     notes = " ".join((frame.ambiguity or {}).get("notes") or []).lower()
     if frame.request == "chat" and ("llm unavailable" in notes or _parse_topk(user_message or "") is not None or fallback.request != "chat"):
         frame = fallback

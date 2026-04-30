@@ -30,7 +30,7 @@ from .contracts.objects import (
 )
 from .core.config import load_config
 from .core.logging import logger
-from .evidence.daily_freshness import daybook_symbols, reconcile_daily_freshness
+from .evidence.daily_freshness import TARGET_CURRENT_PENDING, daybook_symbols, reconcile_daily_freshness, resolve_daily_target
 from .evidence.market_service import build_slot_breadth_snapshot, fetch_intraday_bundle, load_slot_volume_baselines
 from .evidence.portfolio_service import load_portfolio_snapshot
 from .runtime.lanes import book_lane
@@ -130,10 +130,12 @@ def _save_artifact(daybook: DayBook, artifact: LiveSlotArtifact) -> Dict[str, An
 def _load_or_build_daybook(trade_day: str) -> DayBook:
     daybook = load_daybook(trade_day)
     freshness = dict(daybook.source_meta.get("daily_freshness") or {}) if daybook is not None else {}
+    target_info = resolve_daily_target(trade_day)
+    target_day = str(target_info.get("target_day") or "")
     should_rebuild = (
         daybook is None
         or not freshness
-        or freshness.get("target_day") != f"{trade_day[:4]}-{trade_day[4:6]}-{trade_day[6:8]}"
+        or freshness.get("target_day") != target_day
         or not bool(freshness.get("ready", False))
     )
     if should_rebuild:
@@ -521,6 +523,16 @@ def run_postclose_archive(*, now=None, force: bool = False) -> Dict[str, Any]:
     ms = compute_market_state(now)
     daybook = _load_or_build_daybook(ms.target_daybook_effective_day)
     freshness = dict(daybook.source_meta.get("daily_freshness") or {})
+    if freshness.get("target_mode") == TARGET_CURRENT_PENDING:
+        return {
+            "trade_day": ms.target_daybook_effective_day,
+            "market_phase": ms.market_phase,
+            "archived": False,
+            "pending": True,
+            "reason": "eod_daily_pending",
+            "daily_freshness": freshness,
+            "message": "今日收盘日线尚未就绪，worker 会按探测 TTL 自动重试；当前不执行正式收盘归档。",
+        }
     if freshness and not bool(freshness.get("ready", True)):
         return {
             "trade_day": ms.target_daybook_effective_day,

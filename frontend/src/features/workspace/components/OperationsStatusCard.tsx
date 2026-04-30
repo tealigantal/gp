@@ -1,6 +1,7 @@
-import { Alert, Button, Card, Descriptions, List, Space, Tag, Typography } from 'antd'
+import { Alert, Button, Space, Tag, Typography } from 'antd'
 import type { OpsRunResponse, RuntimeStatus, RuntimeToolInfo } from '../../../shared/contracts'
-import { fmtDateTime, marketPhaseLabel, runtimeFreshnessMeta } from '../runtimeLabels'
+import { isIntradayEnabled } from '../presentation'
+import { dailyTargetModeMeta, fmtDateTime, runtimeFreshnessMeta } from '../runtimeLabels'
 
 interface OperationsStatusCardProps {
   runtime?: RuntimeStatus | null
@@ -13,16 +14,16 @@ interface OperationsStatusCardProps {
 }
 
 function toolActionLabel(service: string) {
-  if (service === 'gp-rebuild-daybook') return '重建日计划'
-  if (service === 'gp-replay-today') return '回放今日 5 分钟'
+  if (service === 'gp-rebuild-daybook') return '重建日线计划'
+  if (service === 'gp-replay-today') return '回放今日执行态'
   if (service === 'gp-postclose-archive') return '执行收盘归档'
   return '立即执行'
 }
 
 function toolPurpose(service: string) {
-  if (service === 'gp-rebuild-daybook') return '重做日级推荐底稿，不修 5 分钟。'
-  if (service === 'gp-replay-today') return '补齐盘中执行态，不修日线。'
-  if (service === 'gp-postclose-archive') return '固化收盘后状态。'
+  if (service === 'gp-rebuild-daybook') return '重做日线推荐底稿，不处理 5 分钟执行态。'
+  if (service === 'gp-replay-today') return '补齐盘中执行态，不重算日线候选。'
+  if (service === 'gp-postclose-archive') return '固化收盘后的最终状态。'
   return ''
 }
 
@@ -36,6 +37,7 @@ function summarizeResult(result?: Record<string, unknown>) {
   if (typeof result.slot_status === 'string' && result.slot_status) bits.push(`slot 状态 ${result.slot_status}`)
   if (typeof result.artifact_id === 'string' && result.artifact_id) bits.push(`artifact ${result.artifact_id}`)
   if (typeof result.noop === 'boolean' && result.noop) bits.push('这次没有新增产物')
+  if (typeof result.reason === 'string' && result.reason) bits.push(result.reason)
   if (current && typeof current === 'object') {
     const currentRecord = current as Record<string, unknown>
     if (typeof currentRecord.slot_status === 'string' && currentRecord.slot_status) bits.push(`当前 slot ${currentRecord.slot_status}`)
@@ -47,15 +49,19 @@ function summarizeResult(result?: Record<string, unknown>) {
 function recommendedTools(runtime?: RuntimeStatus | null, manualTools: RuntimeToolInfo[] = []) {
   const toolSet = new Set(manualTools.map((item) => item.service))
   const out: string[] = []
-  if (runtime?.daily_freshness_ready === false && toolSet.has('gp-rebuild-daybook')) out.push('gp-rebuild-daybook')
+  const eodPending = runtime?.daily_target_mode === 'current_pending'
+  const previousCompleted = runtime?.daily_target_mode === 'previous_completed'
+  if (runtime?.daily_freshness_ready === false && !eodPending && !previousCompleted && toolSet.has('gp-rebuild-daybook')) {
+    out.push('gp-rebuild-daybook')
+  }
   if (
-    runtime?.intraday_runtime_enabled !== false &&
+    isIntradayEnabled(runtime) &&
     (runtime?.slot_status || '').toUpperCase() !== 'OK' &&
     toolSet.has('gp-replay-today')
   ) {
     out.push('gp-replay-today')
   }
-  if (runtime?.market_phase === 'POSTCLOSE_PENDING' && toolSet.has('gp-postclose-archive')) out.push('gp-postclose-archive')
+  if (runtime?.market_phase === 'POSTCLOSE_PENDING' && !eodPending && toolSet.has('gp-postclose-archive')) out.push('gp-postclose-archive')
   return [...new Set(out)]
 }
 
@@ -69,104 +75,106 @@ export function OperationsStatusCard({
   opsError,
 }: OperationsStatusCardProps) {
   const freshness = runtimeFreshnessMeta(runtime)
+  const dailyMode = dailyTargetModeMeta(runtime)
   const manualTools = (runtime?.services || []).filter((item) => item.mode !== 'always_on')
   const suggestedTools = recommendedTools(runtime, manualTools)
   const opSummary = summarizeResult(opsResult?.result)
-  const dailyBlocked = runtime?.daily_freshness_ready === false
+  const eodPending = runtime?.daily_target_mode === 'current_pending'
+  const previousCompleted = runtime?.daily_target_mode === 'previous_completed'
+  const dailyBlocked = runtime?.daily_freshness_ready === false && !eodPending && !previousCompleted
 
   return (
-    <Card className="snapshot-card ops-card" size="small" title="运行与工具">
-      <Space direction="vertical" size={14} style={{ width: '100%' }}>
-        <Card size="small" className="ops-subcard" title="自动更新状态">
-          <Space direction="vertical" size={8} style={{ width: '100%' }}>
-            <Space wrap>
-              <Tag color="green">{runtime?.auto_update_service || 'gp-worker'}</Tag>
-              <Tag color={freshness.color}>{freshness.label}</Tag>
-              {runtime?.intraday_runtime_enabled === false ? <Tag>日级模式</Tag> : null}
-              {runtime?.data_provider ? <Tag>数据源 {runtime.data_provider}</Tag> : null}
-              {runtime?.worker_poll_interval_sec ? <Tag>{runtime.worker_poll_interval_sec}s 轮询</Tag> : null}
-            </Space>
-            <Typography.Paragraph type="secondary" style={{ margin: 0 }}>
-              {freshness.note}
-            </Typography.Paragraph>
-          </Space>
-        </Card>
+    <section className="snapshot-section ops-card" aria-label="运行态与修复工具">
+      <div className="snapshot-section-title">
+        <Typography.Text strong>运行态与修复工具</Typography.Text>
+        <Tag color={freshness.color}>{freshness.label}</Tag>
+      </div>
 
-        <Card size="small" className="ops-subcard" title="日线 Freshness">
-          <Space direction="vertical" size={8} style={{ width: '100%' }}>
-            <Space wrap>
-              <Tag color={dailyBlocked ? 'volcano' : 'green'}>{dailyBlocked ? '日线未就绪' : '日线已补齐'}</Tag>
-              <Tag>目标交易日 {runtime?.daily_target_day || '--'}</Tag>
-              <Tag>检查 {runtime?.daily_checked_count ?? 0}</Tag>
-              <Tag>过期 {runtime?.daily_stale_count ?? 0}</Tag>
-            </Space>
-            <Typography.Paragraph type="secondary" style={{ marginBottom: 0 }}>
-              {runtime?.daily_blocking_reason || '当前决策链相关 symbol 会在推荐前做严格日线 freshness 校验。'}
-            </Typography.Paragraph>
-            {runtime?.daily_last_reconcile_at ? (
-              <Typography.Text type="secondary">最近校准：{fmtDateTime(runtime.daily_last_reconcile_at)}</Typography.Text>
-            ) : null}
-            {runtime?.daily_failed_symbols?.length ? (
-              <Typography.Text type="secondary">刷新失败：{runtime.daily_failed_symbols.slice(0, 6).join('、')}</Typography.Text>
-            ) : null}
-          </Space>
-        </Card>
+      <Space direction="vertical" size={12} style={{ width: '100%' }}>
+        <div className="ops-status-strip">
+          <Tag color="green">{runtime?.auto_update_service || 'gp-worker'}</Tag>
+          {isIntradayEnabled(runtime) ? <Tag>盘中执行态开启</Tag> : <Tag>日线模式</Tag>}
+          {runtime?.data_provider ? <Tag>数据源 {runtime.data_provider}</Tag> : null}
+          {dailyMode ? <Tag color={dailyMode.color}>{dailyMode.label}</Tag> : null}
+          <Tag color={eodPending ? 'gold' : dailyBlocked ? 'volcano' : 'green'}>
+            {eodPending ? '等待收盘日线' : dailyBlocked ? '日线未就绪' : '日线已补齐'}
+          </Tag>
+        </div>
 
-        <Card size="small" className="ops-subcard" title="手工恢复工具">
-          <Space direction="vertical" size={12} style={{ width: '100%' }}>
-            <Space wrap className="ops-action-bar">
-              <Button onClick={() => void onRefreshRuntime?.()}>刷新状态</Button>
-              {suggestedTools.map((service) => (
-                <Button
-                  key={service}
-                  type={service === 'gp-rebuild-daybook' ? 'primary' : 'default'}
-                  loading={isRunningTool && runningToolService === service}
-                  disabled={Boolean(isRunningTool && runningToolService !== service)}
-                  onClick={() => void onRunTool?.(service)}
-                >
-                  {toolActionLabel(service)}
-                </Button>
-              ))}
-            </Space>
+        <Typography.Paragraph type="secondary" className="ops-note">
+          {dailyBlocked ? runtime?.daily_blocking_reason || freshness.note : freshness.note}
+        </Typography.Paragraph>
 
-            {manualTools.length > 0 ? (
-              <List
-                className="ops-tool-list"
-                size="small"
-                dataSource={manualTools}
-                renderItem={(item) => (
-                  <List.Item
-                    actions={[
-                      <Button
-                        key={`${item.service}-run`}
-                        size="small"
-                        type={item.service === 'gp-rebuild-daybook' && dailyBlocked ? 'primary' : 'default'}
-                        loading={isRunningTool && runningToolService === item.service}
-                        disabled={Boolean(isRunningTool && runningToolService !== item.service)}
-                        onClick={() => void onRunTool?.(item.service)}
-                      >
-                        {toolActionLabel(item.service)}
-                      </Button>,
-                    ]}
-                  >
-                    <div className="ops-tool-row">
-                      <Space wrap>
-                        <Tag>{item.service}</Tag>
-                        {item.profile ? <Tag color="blue">{item.profile}</Tag> : null}
-                      </Space>
-                      <Typography.Paragraph style={{ margin: '6px 0 0' }}>
-                        {toolPurpose(item.service) || item.description}
-                      </Typography.Paragraph>
-                      <Typography.Text type="secondary" className="tool-service-note">
-                        {item.command}
-                      </Typography.Text>
-                    </div>
-                  </List.Item>
-                )}
-              />
-            ) : null}
-          </Space>
-        </Card>
+        <div className="ops-compact-grid">
+          <div>
+            <span>book 更新时间</span>
+            <strong>{fmtDateTime(runtime?.book_updated_at)}</strong>
+          </div>
+          <div>
+            <span>日线目标</span>
+            <strong>{runtime?.daily_target_day || '--'}</strong>
+          </div>
+          <div>
+            <span>目标 slot</span>
+            <strong>{runtime?.pulse_slot_at || '--'}</strong>
+          </div>
+          <div>
+            <span>检查 / 过期</span>
+            <strong>
+              {runtime?.daily_checked_count ?? 0} / {runtime?.daily_stale_count ?? 0}
+            </strong>
+          </div>
+          {eodPending ? (
+            <>
+              <div>
+                <span>等待日线</span>
+                <strong>{runtime?.pending_eod_day || '--'}</strong>
+              </div>
+              <div>
+                <span>EOD 探测</span>
+                <strong>{runtime?.eod_probe?.ok_count ?? 0} / 3</strong>
+              </div>
+              <div>
+                <span>下次自愈</span>
+                <strong>{fmtDateTime(runtime?.eod_probe?.next_retry_after)}</strong>
+              </div>
+            </>
+          ) : null}
+        </div>
+
+        <Space wrap className="ops-action-bar">
+          <Button onClick={() => void onRefreshRuntime?.()}>刷新状态</Button>
+          {manualTools.map((item) => (
+            <Button
+              key={item.service}
+              type={
+                suggestedTools.includes(item.service) || (item.service === 'gp-rebuild-daybook' && dailyBlocked)
+                  ? 'primary'
+                  : 'default'
+              }
+              loading={isRunningTool && runningToolService === item.service}
+              disabled={Boolean(isRunningTool && runningToolService !== item.service)}
+              onClick={() => void onRunTool?.(item.service)}
+              title={toolPurpose(item.service) || item.description}
+            >
+              {toolActionLabel(item.service)}
+            </Button>
+          ))}
+        </Space>
+
+        {manualTools.length > 0 ? (
+          <div className="ops-tool-tags">
+            {manualTools.map((item) => (
+              <Tag key={item.service}>{item.service}</Tag>
+            ))}
+          </div>
+        ) : null}
+
+        {runtime?.daily_failed_symbols?.length ? (
+          <Typography.Text type="secondary" className="ops-note">
+            刷新失败：{runtime.daily_failed_symbols.slice(0, 6).join('、')}
+          </Typography.Text>
+        ) : null}
 
         {opsError ? <Alert type="error" showIcon message="手工工具执行失败" description={opsError} /> : null}
 
@@ -178,15 +186,7 @@ export function OperationsStatusCard({
             description={opSummary || '执行完成，页面状态已自动刷新。'}
           />
         ) : null}
-
-        <Descriptions size="small" column={1}>
-          <Descriptions.Item label="当前时段">{marketPhaseLabel(runtime?.market_phase)}</Descriptions.Item>
-          <Descriptions.Item label="book 更新时间">{fmtDateTime(runtime?.book_updated_at)}</Descriptions.Item>
-          <Descriptions.Item label="最新 5 分钟">{fmtDateTime(runtime?.last_closed_5m)}</Descriptions.Item>
-          <Descriptions.Item label="目标 slot">{runtime?.pulse_slot_at || '--'}</Descriptions.Item>
-          <Descriptions.Item label="slot 状态">{runtime?.slot_status || '--'}</Descriptions.Item>
-        </Descriptions>
       </Space>
-    </Card>
+    </section>
   )
 }

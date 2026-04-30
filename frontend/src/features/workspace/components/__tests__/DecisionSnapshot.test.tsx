@@ -1,6 +1,6 @@
 import { render, screen } from '@testing-library/react'
 import { DecisionSnapshot } from '../DecisionSnapshot'
-import type { ChatResponse, HealthResponse, MarketBook, SessionResponse } from '../../../../shared/contracts'
+import type { ChatResponse, HealthResponse, MarketBook } from '../../../../shared/contracts'
 
 function bookWithFallback(): MarketBook {
   return {
@@ -75,21 +75,7 @@ const health: HealthResponse = {
   },
 }
 
-const session: SessionResponse = {
-  session: {
-    session_id: 's1',
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-    focus_subject: {},
-    compare_set: [],
-    user_preferences: {},
-    last_claim_ids: [],
-  },
-  recent_turns: [],
-  recent_claims: [],
-}
-
-it('uses the same run_id and artifact_id from latest message snapshot', () => {
+it('omits retired decision snapshot hero metadata', () => {
   const latest: ChatResponse = {
     session_id: 's1',
     reply: 'ok',
@@ -124,52 +110,14 @@ it('uses the same run_id and artifact_id from latest message snapshot', () => {
     planner_trace: {},
     evidence_refs: [],
   }
-  render(<DecisionSnapshot book={bookWithFallback()} session={session} latest={latest} health={health} />)
-  expect(screen.getByText(/run_123/)).toBeInTheDocument()
-  expect(screen.getByText(/artifact_123/)).toBeInTheDocument()
-})
-
-it('shows next-session wording for postclose plans', () => {
-  const latest: ChatResponse = {
-    session_id: 's1',
-    reply: 'ok',
-    run_id: 'run_123',
-    symbols: [],
-    message: {
-      message_kind: 'recommend',
-      narrative_text: 'ok',
-      picks: [],
-      run: {
-        run_id: 'run_123',
-        artifact_id: 'artifact_123',
-        as_of: new Date().toISOString(),
-        trading_day: '20260101',
-        run_action: 'DEGRADED',
-        tradeable: true,
-        publish_allowed: false,
-        non_trading: true,
-        no_trade_reasons: [],
-        recovery_conditions: [],
-        themes: [],
-        picks: [],
-        gate: {},
-        data_quality: { complete: false },
-        data_provenance: {},
-        tool_trace: {},
-      },
-    },
-    right_panel: {},
-    ui_items: [],
-    planner_trace: {},
-    evidence_refs: [],
-  }
-  render(<DecisionSnapshot book={bookWithFallback()} session={session} latest={latest} health={health} />)
-  expect(screen.getByText('下一交易窗口计划')).toBeInTheDocument()
+  render(<DecisionSnapshot book={bookWithFallback()} latest={latest} health={health} />)
+  expect(screen.queryByText(/Decision Snapshot/i)).not.toBeInTheDocument()
+  expect(screen.queryByText(/run_123/)).not.toBeInTheDocument()
+  expect(screen.queryByText(/artifact_123/)).not.toBeInTheDocument()
 })
 
 it('shows runtime tools from health status', () => {
-  render(<DecisionSnapshot book={bookWithFallback()} session={session} latest={null} health={health} />)
-  expect(screen.getByText('运行与工具')).toBeInTheDocument()
+  render(<DecisionSnapshot book={bookWithFallback()} latest={null} health={health} />)
   expect(screen.getByText('gp-worker')).toBeInTheDocument()
   expect(screen.getByText('gp-replay-today')).toBeInTheDocument()
 })

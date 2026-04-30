@@ -1,9 +1,12 @@
 from datetime import datetime
 
+import pandas as pd
+
 from gp_assistant.runtime.market_clock import (
     PHASE_CLOSING_AUCTION,
     PHASE_INTRADAY_PM,
     PHASE_LUNCH_BREAK,
+    _last_open_day_on_or_before,
     compute_market_state,
     iter_trade_slots,
     last_closed_trade_slot,
@@ -26,3 +29,16 @@ def test_iter_trade_slots_covers_two_sessions_without_1500_slot():
     assert slots[0].strftime("%H:%M") == "09:35"
     assert slots[-1].strftime("%H:%M") == "14:55"
     assert "15:00" not in {slot.strftime("%H:%M") for slot in slots}
+
+
+def test_last_open_day_uses_weekday_fallback_when_calendar_is_stale():
+    stale_calendar = pd.DataFrame(
+        [
+            {"cal_date": "20250109", "is_open": 1},
+            {"cal_date": "20250110", "is_open": 1},
+        ]
+    )
+
+    result = _last_open_day_on_or_before(pd.Timestamp("2026-04-29"), stale_calendar)
+
+    assert result.strftime("%Y%m%d") == "20260429"

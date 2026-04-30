@@ -5,6 +5,7 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 from ..contracts.objects import MarketBook, SessionState
+from ..core.config import load_config
 from .market_clock import (
     compute_market_state,
     PHASE_NON_TRADING,
@@ -15,6 +16,10 @@ from .market_clock import (
     PHASE_INTRADAY_PM,
     PHASE_POSTCLOSE_PENDING,
 )
+
+
+def _intraday_runtime_enabled() -> bool:
+    return bool(getattr(load_config(), "intraday_runtime_enabled", False))
 
 
 @dataclass
@@ -163,6 +168,11 @@ def make_refresh_plan(
     ms = compute_market_state(now)
     parsed = _simple_preparse(user_message, session=session, book=book)
     level = _decide_level(ms.market_phase, parsed['want_rebuild'], parsed['want_live'])
+    if not _intraday_runtime_enabled():
+        if level == "L1":
+            level = "L0"
+        elif level == "L3":
+            level = "L2"
     scope = _decide_scope(parsed['symbols']) if level == 'L1' else ('watchset' if level in {'L2', 'L3'} else 'none')
     invalidate = _invalidate_active_run(session, ms.__dict__, requires_live=(level in {'L1', 'L3'}))
     reasons: List[str] = []
@@ -198,6 +208,8 @@ def make_dashboard_refresh_plan(now: Optional[datetime] = None) -> RefreshPlan:
     """
     ms = compute_market_state(now)
     intraday = ms.market_phase in {PHASE_OPEN_NO_FIRST_BAR, PHASE_INTRADAY_AM, PHASE_LUNCH_BREAK, PHASE_INTRADAY_PM}
+    if intraday and not _intraday_runtime_enabled():
+        intraday = False
     level = 'L1' if intraday else 'L2'
     scope = 'watchset' if intraday else 'watchset'
     return RefreshPlan(

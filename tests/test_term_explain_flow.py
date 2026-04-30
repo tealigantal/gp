@@ -51,8 +51,10 @@ def test_term_explain_result_uses_recent_assistant_message():
     result = turn_loop._term_explain_result(session_id="s1", memory_ctx={"session": session, "recent_turns": [turn]}, book=book, frame=frame)
 
     assert result.message["message_kind"] == "term_explain"
-    assert "WATCH_ONLY" in result.reply_text
-    assert "buyable_count=0" in result.reply_text
+    assert "仅观察" in result.reply_text
+    assert "暂时只观察" in result.reply_text
+    assert "WATCH_ONLY" not in result.reply_text
+    assert "buyable_count=0" not in result.reply_text
     assert "先观察，不做主动追价" in result.reply_text
 
 

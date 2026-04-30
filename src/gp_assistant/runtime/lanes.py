@@ -5,7 +5,7 @@ import time
 from collections import defaultdict
 from contextlib import contextmanager
 from pathlib import Path
-from threading import Lock, RLock, local
+from threading import Event, Lock, RLock, Thread, local
 
 from ..core.paths import store_dir
 
@@ -15,6 +15,8 @@ _book_thread_lock = RLock()
 _book_thread_state = local()
 _BOOK_LOCK_TIMEOUT_SEC = 30.0
 _BOOK_LOCK_POLL_SEC = 0.05
+_BOOK_LOCK_STALE_SEC = float(os.getenv("GP_BOOK_LOCK_STALE_SEC", "20"))
+_BOOK_LOCK_HEARTBEAT_SEC = 5.0
 
 
 def _book_lock_path() -> Path:
@@ -35,9 +37,34 @@ def _acquire_process_lock(path: Path) -> None:
                 os.close(fd)
             return
         except FileExistsError:
+            if _is_stale_process_lock(path):
+                _release_process_lock(path)
+                continue
             if time.monotonic() >= deadline:
                 raise TimeoutError(f"Timed out waiting for book reconcile lock: {path}")
             time.sleep(_BOOK_LOCK_POLL_SEC)
+
+
+def _is_stale_process_lock(path: Path) -> bool:
+    try:
+        age = time.time() - path.stat().st_mtime
+    except FileNotFoundError:
+        return False
+    return age >= max(1.0, _BOOK_LOCK_STALE_SEC)
+
+
+def _start_lock_heartbeat(path: Path) -> Event:
+    stop = Event()
+
+    def _beat() -> None:
+        while not stop.wait(_BOOK_LOCK_HEARTBEAT_SEC):
+            try:
+                os.utime(path, None)
+            except FileNotFoundError:
+                return
+
+    Thread(target=_beat, name="gp-book-lock-heartbeat", daemon=True).start()
+    return stop
 
 
 def _release_process_lock(path: Path) -> None:
@@ -63,14 +90,18 @@ def book_lane():
     _book_thread_lock.acquire()
     depth = int(getattr(_book_thread_state, "depth", 0) or 0)
     outermost = depth == 0
+    heartbeat_stop: Event | None = None
     try:
         if outermost:
             _acquire_process_lock(path)
+            heartbeat_stop = _start_lock_heartbeat(path)
         _book_thread_state.depth = depth + 1
         yield
     finally:
         next_depth = max(int(getattr(_book_thread_state, "depth", 1) or 1) - 1, 0)
         _book_thread_state.depth = next_depth
         if outermost:
+            if heartbeat_stop is not None:
+                heartbeat_stop.set()
             _release_process_lock(path)
         _book_thread_lock.release()

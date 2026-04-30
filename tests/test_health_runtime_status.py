@@ -1,6 +1,8 @@
 import os
+from contextlib import nullcontext
 from types import SimpleNamespace
 
+import pytest
 from fastapi.testclient import TestClient
 
 os.environ.setdefault("STRICT_REAL_DATA", "0")
@@ -11,6 +13,21 @@ from gp_assistant.gateway import routes  # noqa: E402
 
 
 client = TestClient(app)
+
+
+@pytest.fixture(autouse=True)
+def _skip_book_lane(monkeypatch):
+    monkeypatch.setattr(routes, "book_lane", nullcontext)
+    monkeypatch.setattr(
+        routes,
+        "resolve_daily_target",
+        lambda *_, **__: {
+            "target_day": "2026-01-01",
+            "target_mode": "current_pending",
+            "pending_eod_day": "2026-01-01",
+            "eod_probe": {"ready": False, "ok_count": 1, "next_retry_after": "2026-01-01T15:05:00+08:00"},
+        },
+    )
 
 
 class _Book:
@@ -36,6 +53,9 @@ class _Book:
                 "daily_freshness": {
                     "ready": False,
                     "target_day": "2026-01-01",
+                    "target_mode": "current_pending",
+                    "pending_eod_day": "2026-01-01",
+                    "eod_probe": {"ready": False, "ok_count": 1, "next_retry_after": "2026-01-01T15:05:00+08:00"},
                     "checked_symbols": ["002371", "002716"],
                     "checked_count": 2,
                     "stale_symbols": ["002371"],
@@ -66,6 +86,9 @@ def test_health_includes_runtime_tools(monkeypatch):
     assert runtime.get("auto_update_service") == "gp-worker"
     assert runtime.get("book_freshness") == "degraded"
     assert runtime.get("daily_freshness_ready") is False
+    assert runtime.get("daily_target_mode") == "current_pending"
+    assert runtime.get("pending_eod_day") == "2026-01-01"
+    assert runtime.get("eod_probe", {}).get("ok_count") == 1
     assert runtime.get("daily_checked_count") == 2
     assert runtime.get("daily_stale_count") == 1
     assert runtime.get("daily_failed_symbols") == ["002716"]
@@ -117,3 +140,31 @@ def test_repair_status_returns_runtime_snapshot(monkeypatch):
     assert runtime["artifact_id"] == "artifact_1"
     assert runtime["daily_checked_count"] == 2
     assert runtime["daily_failed_symbols"] == ["002716"]
+
+
+def test_runtime_daily_target_prefers_resolver_over_stale_book(monkeypatch):
+    monkeypatch.setattr(routes, "load_config", lambda: _config(True))
+    monkeypatch.setattr(routes, "load_current_book", lambda: _Book())
+    monkeypatch.setattr(
+        routes,
+        "resolve_daily_target",
+        lambda *_, **__: {
+            "target_day": "2026-04-29",
+            "target_mode": "previous_completed",
+            "pending_eod_day": None,
+            "eod_probe": None,
+        },
+    )
+
+    response = client.get("/api/health")
+
+    assert response.status_code == 200, response.text
+    runtime = response.json()["runtime"]
+    assert runtime["daily_target_day"] == "2026-04-29"
+    assert runtime["daily_target_mode"] == "previous_completed"
+    assert runtime["pending_eod_day"] is None
+    assert runtime["eod_probe"] is None
+    assert runtime["daily_checked_count"] == 0
+    assert runtime["daily_stale_count"] == 0
+    assert runtime["daily_blocking_reason"] is None
+    assert runtime["daily_failed_symbols"] == []

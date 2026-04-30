@@ -16,6 +16,8 @@ from ..contracts.objects import (
     RunChangeArtifact,
     SlotGate,
 )
+from ..core.config import load_config
+from .dialogue_text import clean_user_reason, clean_user_reasons
 from ..runtime.market_clock import (
     PHASE_CLOSING_AUCTION,
     PHASE_INTRADAY_AM,
@@ -29,6 +31,10 @@ from ..runtime.market_clock import (
 
 
 BUY_SIGNAL_STATES = {"breakout_buy", "reclaim_buy", "afternoon_relaunch_buy"}
+
+
+def _intraday_runtime_enabled() -> bool:
+    return bool(getattr(load_config(), "intraday_runtime_enabled", False))
 
 
 def _as_text(value: Any) -> Optional[str]:
@@ -433,6 +439,7 @@ def build_canonical_run(*, book: MarketBook, run: AdviceRun, picks: Iterable[Boa
 
 
 def build_no_trade_view(run: CanonicalRunArtifact, book: MarketBook) -> NoTradeArtifact:
+    intraday_enabled = _intraday_runtime_enabled()
     if run.run_action == "NO_TRADE":
         reasons = run.no_trade_reasons
         summary = "今天不硬给票，当前更适合空仓或等待。"
@@ -443,12 +450,18 @@ def build_no_trade_view(run: CanonicalRunArtifact, book: MarketBook) -> NoTradeA
         elif run.run_action == "DEGRADED":
             reasons.append("市场环境或执行数据偏弱，先降级观察。")
         summary = "当前不建议立刻动手，但计划并未失效。"
+    reasons = _clean_user_reasons(reasons)
+    recovery_conditions = [] if not intraday_enabled else list(run.recovery_conditions or [])
+    market_summary = clean_user_reason(book.daybook.reason) or summary
+    status_reason = run.status_reason or summary
+    if not intraday_enabled and "5 分钟" in status_reason:
+        status_reason = "当前只保留日线计划和观察结论，不提供 5 分钟级别的执行判断。"
     return NoTradeArtifact(
         run_action=run.run_action,
-        market_summary=_as_text(book.daybook.reason) or summary,
-        status_reason=run.status_reason or summary,
+        market_summary=market_summary,
+        status_reason=status_reason,
         no_trade_reasons=reasons,
-        recovery_conditions=run.recovery_conditions,
+        recovery_conditions=recovery_conditions,
         data_provenance=run.data_provenance,
         source_run_id=run.run_id,
     )
@@ -474,6 +487,7 @@ def build_pick_detail_view(run: CanonicalRunArtifact, pick: CanonicalPick) -> Pi
 
 
 def build_live_entry_view(run: CanonicalRunArtifact, pick: CanonicalPick) -> LiveEntryDecisionArtifact:
+    intraday_enabled = _intraday_runtime_enabled()
     next_action = {
         "BUY_NOW": "按计划分批执行，避免追高超过买入区。",
         "WAIT_PULLBACK": "逻辑仍在，等回踩买入区或 VWAP 再确认。",
@@ -492,6 +506,9 @@ def build_live_entry_view(run: CanonicalRunArtifact, pick: CanonicalPick) -> Liv
         "INVALIDATED": "价格已经跌破失效条件，计划失效。",
         "UNAVAILABLE": "必要的盘中执行数据暂不完整。",
     }.get(pick.execution_state, "继续观察。")
+    if not intraday_enabled:
+        next_action = "当前不接入 5 分钟执行数据，先按日线计划观察，不做盘中追价。"
+        summary = "当前只保留日线计划和观察结论，不提供 5 分钟级别的即时入场判断。"
     return LiveEntryDecisionArtifact(
         symbol=pick.symbol,
         name=pick.name,

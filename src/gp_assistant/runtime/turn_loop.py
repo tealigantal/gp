@@ -23,6 +23,7 @@ from ..llm.client import LLMClient
 from ..memory.service import commit_turn, load_memory_context
 from ..worker import reconcile_runtime_state
 from .concern_parser import parse_concern, quick_parse_concern
+from .dialogue_text import clean_user_reasons, execution_state_label, explain_observation_reasons, intraday_runtime_enabled
 from .evidence_planner import plan_evidence
 from .grounding import validate_reply
 from .narrator import build_default_text, build_reply, build_structured_reply
@@ -294,10 +295,10 @@ def _term_explain_result(
         gate_reasons = list(live_check.get("gate_reasons") or run.get("gate", {}).get("reasons") or [])
         state = str(live_check.get("execution_state") or "").strip() or "WATCH_ONLY"
         next_action = str(live_check.get("next_action") or "").strip() or "先等更清晰的入场确认。"
-        reasons_text = "；".join(gate_reasons[:4]) if gate_reasons else "当前盘中闸门未放行，或者个股还没回到更合适的买点。"
+        reasons_text = explain_observation_reasons(gate_reasons)
         reply_text = (
-            f"这里说“仅观察”，结论是现在不建议主动追进，而不是这只票已经失效。\n"
-            f"关键依据是：当前执行状态是 {state}，盘中约束主要来自 {reasons_text}。\n"
+            f"这里说“仅观察”，意思是现在先不建议主动追进去，不是这只票已经彻底失效。\n"
+            f"当前状态更接近“{execution_state_label(state)}”，{reasons_text}。\n"
             f"执行上先按“{next_action}”处理，等闸门放行、回踩确认或量能条件改善后再看。"
         )
         suggestions = ["这只现在还能买吗", "什么条件下才算能买", "今天给我 3 只"]
@@ -371,19 +372,25 @@ def _tool_schema(name: str, description: str) -> Dict[str, Any]:
 
 
 def _assistant_context_result(book: MarketBook) -> AgentToolResult:
+    intraday_enabled = intraday_runtime_enabled()
+    reply_text = (
+        "你好，我可以直接帮你看今天的候选、某只票还能不能买、止盈止损怎么设，或者解释上一条结论。"
+        if intraday_enabled
+        else "你好，我可以直接帮你看今天的候选、解释某只票为什么入选，或者说明当前该观察什么。盘中 5 分钟执行数据现在是停用的。"
+    )
     summary = GroundingSummary(
         market_phase=book.market_phase,
         daily_target_day=book.daybook_effective_day or book.daybook.trading_day,
         pulse_slot_at=book.pulse_slot_at,
         repair_status="ready",
-        decision_basis_labels=["产品背景", "风险边界"],
+        decision_basis_labels=["product_context", "risk_boundary"],
     )
     return AgentToolResult(
         tool_name="get_assistant_context",
-        reply_text="这是一个 A 股短线股票助手，结论基于日线、盘中 5 分钟线、市场阶段、执行状态和风控条件，不会自动下单，也不会对外暴露内部实现。",
+        reply_text=reply_text,
         message={
             "message_kind": "chat",
-            "narrative_text": "这是一个 A 股短线股票助手，结论基于日线、盘中 5 分钟线、市场阶段、执行状态和风控条件。",
+            "narrative_text": reply_text,
             "followup_suggestions": ["给我当前推荐的前三个标的", "这只票为什么能上榜", "今天适合空仓观察还是执行计划"],
             "freshness_meta": {
                 "market_phase": book.market_phase,
@@ -592,33 +599,12 @@ def _market_phase_label(value: str | None) -> str:
 
 
 def _execution_state_label(value: str | None) -> str | None:
-    mapping = {
-        "BUY_NOW": "可执行",
-        "BREAKOUT_BUY": "等待放量突破确认",
-        "RECLAIM_BUY": "等待回踩确认",
-        "AFTERNOON_RELAUNCH_BUY": "等待午后重新走强确认",
-        "WAIT_PULLBACK": "更适合等回踩确认",
-        "WAIT_NEXT_SESSION": "更适合放到下一交易窗口再确认",
-        "WATCH_ONLY": "暂时以观察为主",
-        "OBSERVE": "暂时以观察为主",
-        "RISK_HIGH": "风险偏高",
-        "INVALIDATED": "已触发失效条件",
-        "UNAVAILABLE": "执行数据暂不完整",
-    }
-    key = str(value or "").strip().upper()
-    return mapping.get(key)
+    label = execution_state_label(value)
+    return label if label != "继续观察" else None
 
 
 def _safe_risk_notes(notes: list[str] | None) -> list[str]:
-    out: list[str] = []
-    for raw in notes or []:
-        text = str(raw or "").strip()
-        if not text:
-            continue
-        has_cjk = any("\u4e00" <= ch <= "\u9fff" for ch in text)
-        if has_cjk or " " in text:
-            out.append(text)
-    return out
+    return clean_user_reasons(notes or [])
 
 
 def _explain_decision_text(reply: ReplyBundle, judgment: Judgment) -> str:
@@ -626,8 +612,11 @@ def _explain_decision_text(reply: ReplyBundle, judgment: Judgment) -> str:
     parts: list[str] = []
     market_phase = _market_phase_label(basis.market_phase)
     daily_target_day = basis.daily_target_day or "当前交易日"
-    pulse_slot_at = basis.pulse_slot_at or "最新可读快照"
-    parts.append(f"这个结论是基于当前{market_phase}的快照得出的，日线使用的是 {daily_target_day}，盘中参考到 {pulse_slot_at}。")
+    if intraday_runtime_enabled():
+        pulse_slot_at = basis.pulse_slot_at or "最新可读快照"
+        parts.append(f"这个结论是基于当前{market_phase}的快照得出的，日线使用的是 {daily_target_day}，盘中参考到 {pulse_slot_at}。")
+    else:
+        parts.append(f"这个结论是基于当前{market_phase}的快照得出的，当前只使用日线计划和观察结论，生效日是 {daily_target_day}。")
 
     detail = judgment.pick_detail
     if detail is not None:

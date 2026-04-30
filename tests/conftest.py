@@ -60,6 +60,12 @@ def pytest_collection_modifyitems(config, items):
         "test_judgment_dispatch.py",
         "test_dispatch_new_handlers.py",
         "test_daybook_mapping.py",
+        "test_daily_freshness.py",
+        "test_worker_reconcile.py",
+        "test_health_runtime_status.py",
+        "test_akshare_request_timeout.py",
+        "test_runtime_lanes.py",
+        "test_market_clock_slots.py",
     )
     for item in items:
         fn = item.location[0]

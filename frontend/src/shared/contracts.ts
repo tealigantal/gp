@@ -301,6 +301,15 @@ export interface RuntimeStatus {
   repair_stage: string
   daily_freshness_ready?: boolean
   daily_target_day?: string | null
+  daily_target_mode?: 'previous_completed' | 'current_ready' | 'current_pending' | string
+  pending_eod_day?: string | null
+  eod_probe?: {
+    ready?: boolean
+    checked_at?: string | null
+    ok_count?: number
+    next_retry_after?: string | null
+    error?: string | null
+  } | null
   daily_checked_count?: number
   daily_stale_count?: number
   daily_last_reconcile_at?: string | null

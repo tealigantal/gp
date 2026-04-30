@@ -1,16 +1,45 @@
 from __future__ import annotations
 
 import json
+import os
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Iterable
 
 import pandas as pd
 
 from ..core.paths import store_dir
-from ..runtime.market_clock import compute_market_state
+from ..runtime.market_clock import (
+    PHASE_CLOSING_AUCTION,
+    PHASE_INTRADAY_AM,
+    PHASE_INTRADAY_PM,
+    PHASE_LUNCH_BREAK,
+    PHASE_NON_TRADING,
+    PHASE_OPEN_NO_FIRST_BAR,
+    PHASE_POSTCLOSE_PENDING,
+    PHASE_PREOPEN,
+    compute_market_state,
+    _last_open_day_on_or_before,
+    _load_calendar_df,
+)
 from ..runtime.utils import now_iso
 from ..search.history_store import canonical_query_id, ensure_query, list_queries, query_meta
 from ..selection_engine.datahub import MarketDataHub
+
+
+TARGET_PREVIOUS_COMPLETED = "previous_completed"
+TARGET_CURRENT_READY = "current_ready"
+TARGET_CURRENT_PENDING = "current_pending"
+
+_UNFINISHED_CURRENT_DAY_PHASES = {
+    PHASE_PREOPEN,
+    PHASE_OPEN_NO_FIRST_BAR,
+    PHASE_INTRADAY_AM,
+    PHASE_LUNCH_BREAK,
+    PHASE_INTRADAY_PM,
+    PHASE_CLOSING_AUCTION,
+}
+_EOD_PROBE_SYMBOLS = ("000001", "600000", "600519")
 
 
 def _history_db_path() -> Path:
@@ -19,6 +48,12 @@ def _history_db_path() -> Path:
 
 def _report_path() -> Path:
     path = store_dir() / "cache" / "runtime" / "daily_freshness.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def _eod_probe_path() -> Path:
+    path = store_dir() / "cache" / "runtime" / "eod_daily_probe.json"
     path.parent.mkdir(parents=True, exist_ok=True)
     return path
 
@@ -37,13 +72,191 @@ def save_daily_freshness_report(report: dict[str, Any]) -> None:
     _report_path().write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
-def resolve_target_trading_day(as_of: str | None = None) -> str:
-    if as_of:
+def _date_iso(value: Any) -> str | None:
+    if value is None:
+        return None
+    try:
+        return pd.to_datetime(value).date().isoformat()
+    except Exception:
+        s = str(value).strip()
+        digits = "".join(ch for ch in s if ch.isdigit())
+        if len(digits) >= 8:
+            return f"{digits[:4]}-{digits[4:6]}-{digits[6:8]}"
+    return None
+
+
+def _date_ymd(value: Any) -> str | None:
+    iso = _date_iso(value)
+    return iso.replace("-", "") if iso else None
+
+
+def _iso_from_ymd(ymd: str) -> str:
+    return f"{ymd[:4]}-{ymd[4:6]}-{ymd[6:8]}"
+
+
+def _previous_open_day_ymd(ymd: str) -> str:
+    base = pd.to_datetime(_iso_from_ymd(ymd)).normalize()
+    cal_df = _load_calendar_df()
+    prev = _last_open_day_on_or_before(base - pd.Timedelta(days=1), cal_df)
+    return prev.strftime("%Y%m%d")
+
+
+def _freshness_state(last_item_time: Any, target_iso: str) -> str:
+    lit = _date_iso(last_item_time)
+    if not lit:
+        return "missing"
+    try:
+        return "current" if pd.to_datetime(lit).normalize() >= pd.to_datetime(target_iso).normalize() else "stale"
+    except Exception:
+        return "current" if lit >= target_iso else "stale"
+
+
+def _probe_ttl_sec() -> int:
+    try:
+        return max(30, int(os.getenv("GP_EOD_PROBE_TTL_SEC", "300") or "300"))
+    except Exception:
+        return 300
+
+
+def _read_eod_probe_cache(target_iso: str, ttl_sec: int) -> dict[str, Any] | None:
+    path = _eod_probe_path()
+    if not path.exists():
+        return None
+    try:
+        cached = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return None
+    if not isinstance(cached, dict) or cached.get("target_day") != target_iso:
+        return None
+    checked_at = cached.get("checked_at")
+    if not isinstance(checked_at, str) or not checked_at.strip():
+        return None
+    try:
+        checked = datetime.fromisoformat(checked_at)
+        if checked.tzinfo is None:
+            checked = checked.replace(tzinfo=timezone.utc)
+        age = (datetime.now(timezone.utc) - checked.astimezone(timezone.utc)).total_seconds()
+        if age <= ttl_sec:
+            return cached
+    except Exception:
+        return None
+    return None
+
+
+def probe_eod_daily_ready(target_day: str, *, force: bool = False) -> dict[str, Any]:
+    target_ymd = _date_ymd(target_day) or str(target_day).replace("-", "")[:8]
+    target_iso = _iso_from_ymd(target_ymd)
+    ttl_sec = _probe_ttl_sec()
+    cached = None if force else _read_eod_probe_cache(target_iso, ttl_sec)
+    if cached is not None:
+        return cached
+
+    checked_at = now_iso()
+    now = datetime.now(timezone.utc)
+    next_retry_after = (now + timedelta(seconds=ttl_sec)).isoformat()
+    hub = MarketDataHub()
+    ok_count = 0
+    checks: list[dict[str, Any]] = []
+    errors: list[str] = []
+    for symbol in _EOD_PROBE_SYMBOLS:
         try:
-            return pd.to_datetime(as_of).strftime("%Y%m%d")
-        except Exception:
-            return str(as_of).replace("-", "")[:8]
-    return str(compute_market_state().target_daybook_effective_day)
+            df, _meta = hub.daily_ohlcv(symbol, as_of=target_iso, min_len=1, prefer_cache_only=False, force_network=True)
+            last = None
+            if df is not None and len(df) > 0 and "date" in df.columns:
+                last = _date_iso(df.iloc[-1]["date"])
+            ready = last == target_iso
+            if ready:
+                ok_count += 1
+            checks.append({"symbol": symbol, "last": last, "ready": ready, "len": int(len(df) if df is not None else 0)})
+        except Exception as ex:  # noqa: BLE001
+            msg = f"{type(ex).__name__}: {ex}"
+            errors.append(f"{symbol}:{msg}")
+            checks.append({"symbol": symbol, "ready": False, "error": msg})
+    ready = ok_count >= 2
+    probe = {
+        "target_day": target_iso,
+        "ready": ready,
+        "checked_at": checked_at,
+        "ok_count": ok_count,
+        "checks": checks,
+        "next_retry_after": None if ready else next_retry_after,
+        "error": "; ".join(errors[:2]) if errors else None,
+        "ttl_sec": ttl_sec,
+    }
+    try:
+        _eod_probe_path().write_text(json.dumps(probe, ensure_ascii=False, indent=2), encoding="utf-8")
+    except Exception:
+        pass
+    return probe
+
+
+def resolve_daily_target(
+    as_of: str | None = None,
+    *,
+    now=None,
+    force_probe: bool = False,
+    allow_probe: bool = True,
+) -> dict[str, Any]:
+    ms = compute_market_state(now)
+    current_ymd = str(ms.target_daybook_effective_day)
+    requested_ymd = _date_ymd(as_of) or current_ymd
+
+    if requested_ymd != current_ymd:
+        return {
+            "target_ymd": requested_ymd,
+            "target_day": _iso_from_ymd(requested_ymd),
+            "target_mode": TARGET_CURRENT_READY,
+            "daybook_trading_day": requested_ymd,
+            "pending_eod_day": None,
+            "eod_probe": None,
+            "market_phase": ms.market_phase,
+        }
+
+    if ms.market_phase == PHASE_POSTCLOSE_PENDING:
+        if allow_probe:
+            probe = probe_eod_daily_ready(current_ymd, force=force_probe)
+        else:
+            probe = _read_eod_probe_cache(_iso_from_ymd(current_ymd), _probe_ttl_sec())
+        if bool((probe or {}).get("ready")):
+            target_ymd = current_ymd
+            mode = TARGET_CURRENT_READY
+            pending = None
+        else:
+            target_ymd = _previous_open_day_ymd(current_ymd)
+            mode = TARGET_CURRENT_PENDING
+            pending = _iso_from_ymd(current_ymd)
+        return {
+            "target_ymd": target_ymd,
+            "target_day": _iso_from_ymd(target_ymd),
+            "target_mode": mode,
+            "daybook_trading_day": current_ymd,
+            "pending_eod_day": pending,
+            "eod_probe": probe,
+            "market_phase": ms.market_phase,
+        }
+
+    if ms.market_phase in _UNFINISHED_CURRENT_DAY_PHASES:
+        target_ymd = _previous_open_day_ymd(current_ymd)
+        mode = TARGET_PREVIOUS_COMPLETED
+    elif ms.market_phase == PHASE_NON_TRADING:
+        target_ymd = current_ymd
+        mode = TARGET_PREVIOUS_COMPLETED
+    else:
+        target_ymd = current_ymd
+        mode = TARGET_CURRENT_READY
+    return {
+        "target_ymd": target_ymd,
+        "target_day": _iso_from_ymd(target_ymd),
+        "target_mode": mode,
+        "daybook_trading_day": current_ymd,
+        "pending_eod_day": None,
+        "eod_probe": None,
+        "market_phase": ms.market_phase,
+    }
+
+
+def resolve_target_trading_day(as_of: str | None = None) -> str:
+    return str(resolve_daily_target(as_of).get("target_ymd") or "")
 
 
 def target_day_iso(as_of: str | None = None) -> str:
@@ -105,11 +318,7 @@ def inspect_symbol_freshness(symbol: str, *, as_of: str | None = None, provider_
     meta = query_meta(qid)
     target_iso = target_day_iso(as_of)
     last_item_time = str(meta.get("last_item_time") or "").strip() or None
-    freshness_state = "missing"
-    if last_item_time == target_iso:
-        freshness_state = "current"
-    elif last_item_time:
-        freshness_state = "stale"
+    freshness_state = _freshness_state(last_item_time, target_iso)
     return {
         "symbol": symbol,
         "query_id": qid,
@@ -127,7 +336,8 @@ def reconcile_daily_freshness(
     min_len: int = 250,
     strict: bool = True,
 ) -> dict[str, Any]:
-    target_iso = target_day_iso(as_of)
+    target_info = resolve_daily_target(as_of)
+    target_iso = str(target_info["target_day"])
     checked = normalize_symbols(symbols)
     hub = MarketDataHub()
     symbol_reports: list[dict[str, Any]] = []
@@ -150,17 +360,19 @@ def reconcile_daily_freshness(
             last_date = None
             if df is not None and len(df) > 0 and "date" in df.columns:
                 last_date = str(pd.to_datetime(df.iloc[-1]["date"]).date())
+            state = "current" if last_date == target_iso else str(meta.get("freshness_state") or ("stale" if last_date else "missing"))
             report = {
                 **before,
                 "last_item_time": last_date or before["last_item_time"],
                 "last_fetch_at": meta.get("last_fetch_at") or before["last_fetch_at"],
-                "freshness_state": str(meta.get("freshness_state") or ("current" if last_date == target_iso else "stale")),
+                "freshness_state": state,
                 "source": meta.get("source"),
                 "refresh_attempted": bool(meta.get("refresh_attempted") or was_stale),
-                "refresh_succeeded": bool(meta.get("refresh_succeeded") or last_date == target_iso),
-                "strict_blocked": strict and last_date != target_iso,
+                "refresh_succeeded": bool(meta.get("refresh_succeeded") or state == "current"),
+                "strict_blocked": strict and state != "current",
                 "len": int(meta.get("len") or len(df)),
                 "insufficient_history": bool(meta.get("insufficient_history")),
+                "target_mode": target_info.get("target_mode"),
             }
         except Exception as ex:  # noqa: BLE001
             report = {
@@ -170,9 +382,9 @@ def reconcile_daily_freshness(
                 "freshness_state": "failed_refresh" if was_stale else before["freshness_state"],
                 "strict_blocked": strict,
                 "error": f"{type(ex).__name__}: {ex}",
+                "target_mode": target_info.get("target_mode"),
             }
-        last_item_time = str(report.get("last_item_time") or "").strip()
-        if last_item_time == target_iso and report.get("freshness_state") != "failed_refresh":
+        if report.get("freshness_state") == "current":
             fresh_symbols.append(symbol)
             if was_stale:
                 refreshed_symbols.append(symbol)
@@ -185,6 +397,10 @@ def reconcile_daily_freshness(
     ready = len(stale_symbols) == 0 and len(failed_symbols) == 0
     report = {
         "target_day": target_iso,
+        "target_mode": target_info.get("target_mode"),
+        "daybook_trading_day": target_info.get("daybook_trading_day"),
+        "pending_eod_day": target_info.get("pending_eod_day"),
+        "eod_probe": target_info.get("eod_probe"),
         "checked_symbols": checked,
         "fresh_symbols": fresh_symbols,
         "stale_symbols": stale_symbols,

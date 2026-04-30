@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import tempfile
-from types import SimpleNamespace
 from pathlib import Path
+from types import SimpleNamespace
 
 from gp_assistant import worker
 from gp_assistant.runtime.market_clock import PHASE_INTRADAY_PM, PHASE_POSTCLOSE_PENDING, PHASE_PREOPEN
@@ -107,3 +107,59 @@ def test_replay_today_stops_when_daybook_daily_freshness_blocked(monkeypatch):
     assert result["blocked"] is True
     assert result["reason"] == "daily_freshness_blocked"
     assert "日线数据未补齐" in result["message"]
+
+
+def test_load_or_build_daybook_accepts_previous_completed_daily_target(monkeypatch):
+    daybook = SimpleNamespace(
+        source_meta={
+            "daily_freshness": {
+                "ready": True,
+                "target_day": "2026-04-29",
+                "target_mode": "previous_completed",
+            }
+        }
+    )
+    build_calls: list[str] = []
+
+    monkeypatch.setattr(worker, "load_daybook", lambda trade_day: daybook)
+    monkeypatch.setattr(
+        worker,
+        "resolve_daily_target",
+        lambda trade_day: {"target_day": "2026-04-29", "target_mode": "previous_completed"},
+    )
+    monkeypatch.setattr(worker, "build_daybook", lambda trade_day, **_: build_calls.append(trade_day) or daybook)
+    monkeypatch.setattr(worker, "save_daybook", lambda built: None)
+
+    result = worker._load_or_build_daybook("20260430")
+
+    assert result is daybook
+    assert build_calls == []
+
+
+def test_postclose_archive_waits_when_eod_daily_pending(monkeypatch):
+    state = SimpleNamespace(
+        market_phase=PHASE_POSTCLOSE_PENDING,
+        target_daybook_effective_day="20260430",
+        target_pulse_trade_day="20260430",
+        target_pulse_slot_at="2026-04-30 14:55:00",
+    )
+    daybook = SimpleNamespace(
+        source_meta={
+            "daily_freshness": {
+                "ready": True,
+                "target_day": "2026-04-29",
+                "target_mode": "current_pending",
+                "pending_eod_day": "2026-04-30",
+                "eod_probe": {"ready": False, "ok_count": 1},
+            }
+        }
+    )
+
+    monkeypatch.setattr(worker, "compute_market_state", lambda now=None: state)
+    monkeypatch.setattr(worker, "_load_or_build_daybook", lambda trade_day: daybook)
+
+    result = worker.run_postclose_archive()
+
+    assert result["archived"] is False
+    assert result["pending"] is True
+    assert result["reason"] == "eod_daily_pending"

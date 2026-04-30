@@ -8,7 +8,7 @@ This folder is split into:
 ## Current
 
 - [PROGRESS.md](./PROGRESS.md)
-  Latest project status and recent cleanup progress.
+  Latest project status, dialogue-assistant progress, 5-minute runtime status, and validation snapshot.
 - [ops_runbook.md](./ops_runbook.md)
   Operational notes and routine commands.
 - [data_freshness_policy.md](./data_freshness_policy.md)

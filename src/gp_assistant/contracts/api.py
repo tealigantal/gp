@@ -57,6 +57,9 @@ class RuntimeStatus(BaseModel):
     repair_stage: str = "idle"
     daily_freshness_ready: bool = False
     daily_target_day: Optional[str] = None
+    daily_target_mode: Optional[str] = None
+    pending_eod_day: Optional[str] = None
+    eod_probe: Optional[Dict[str, Any]] = None
     pulse_target_trade_day: Optional[str] = None
     pulse_target_slot_at: Optional[str] = None
     last_repair_started_at: Optional[str] = None

@@ -1,6 +1,8 @@
 from datetime import datetime
+from types import SimpleNamespace
 
 from gp_assistant.contracts.objects import DayBook, MarketBook, SessionState
+from gp_assistant.runtime import freshness_policy
 from gp_assistant.runtime.freshness_policy import make_refresh_plan
 from gp_assistant.runtime.market_clock import (
     PHASE_NON_TRADING,
@@ -40,6 +42,13 @@ def test_intraday_plan_keeps_today_daybook_and_slot():
     assert plan.level == "L1"
     assert plan.target_daybook_effective_day == "20240320"
     assert plan.target_pulse_trade_day == "20240320"
+
+
+def test_intraday_plan_downgrades_when_runtime_disabled(monkeypatch):
+    monkeypatch.setattr(freshness_policy, "load_config", lambda: SimpleNamespace(intraday_runtime_enabled=False))
+    sess = _mk_session()
+    plan = make_refresh_plan(session=sess, book=_mk_book("20240319"), user_message="live", now=datetime(2024, 3, 20, 10, 0))
+    assert plan.level == "L0"
 
 
 def test_postclose_invalidates_old_run():

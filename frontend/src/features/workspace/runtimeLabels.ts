@@ -22,7 +22,36 @@ export function marketPhaseLabel(phase?: string | null) {
   return mapping[String(phase || '').toUpperCase()] || phase || '--'
 }
 
+export function dailyTargetModeMeta(runtime?: RuntimeStatus | null) {
+  const mode = String(runtime?.daily_target_mode || '').toLowerCase()
+  if (mode === 'previous_completed') {
+    return {
+      label: '使用上一已完成日线',
+      color: 'blue',
+      note: `日线目标为 ${runtime?.daily_target_day || '--'}，这是盘中正式口径，不属于故障。`,
+    }
+  }
+  if (mode === 'current_pending') {
+    const retry = runtime?.eod_probe?.next_retry_after ? `下次探测 ${fmtDateTime(runtime.eod_probe.next_retry_after)}。` : ''
+    return {
+      label: '等待今日收盘日线',
+      color: 'gold',
+      note: `今日 ${runtime?.pending_eod_day || runtime?.daily_target_day || '--'} 收盘日线尚未确认，worker 会自动重试。${retry}`,
+    }
+  }
+  if (mode === 'current_ready') {
+    return {
+      label: '今日日线已就绪',
+      color: 'green',
+      note: `日线目标 ${runtime?.daily_target_day || '--'} 已就绪，可用于正式计划。`,
+    }
+  }
+  return null
+}
+
 export function runtimeFreshnessMeta(runtime?: RuntimeStatus | null) {
+  const dailyMode = dailyTargetModeMeta(runtime)
+  if (dailyMode) return dailyMode
   if (runtime?.intraday_runtime_enabled === false) {
     return {
       label: '5 分钟执行态已停用',

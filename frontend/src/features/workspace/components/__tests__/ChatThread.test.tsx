@@ -104,7 +104,7 @@ it('renders recommendation picks with entry stop take and execution state', () =
   expect(screen.getByText(/10.20 - 10.35/)).toBeInTheDocument()
   expect(screen.getByText(/9.98/)).toBeInTheDocument()
   expect(screen.getByText(/10.88/)).toBeInTheDocument()
-  expect(screen.getByText('BUY_NOW')).toBeInTheDocument()
+  expect(screen.getAllByText('现在可执行').length).toBeGreaterThan(0)
   expect(screen.getAllByText(/日线截止 2026-01-01/).length).toBeGreaterThan(0)
 })
 
@@ -144,7 +144,7 @@ it('renders live entry card', () => {
     run: makeRun(),
   }
   render(<ChatThread {...baseProps} turns={[assistantTurn(message)]} />)
-  expect(screen.getByText('WAIT_PULLBACK')).toBeInTheDocument()
+  expect(screen.getAllByText(/等回踩确认/).length).toBeGreaterThan(0)
   expect(screen.getByText(/等回踩买入区再确认/)).toBeInTheDocument()
 })
 

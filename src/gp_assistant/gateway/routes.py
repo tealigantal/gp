@@ -38,6 +38,7 @@ from ..runtime.market_clock import (
     compute_market_state,
 )
 from ..runtime.repair import load_repair_status_snapshot
+from ..evidence.daily_freshness import resolve_daily_target
 from ..runtime.turn_loop import run_turn_sync
 from ..runtime.utils import now_iso
 from ..worker import reconcile_runtime_state
@@ -128,6 +129,10 @@ def _daily_freshness_fields(book) -> dict[str, Any]:
     freshness = dict(source_meta.get("daily_freshness") or {})
     return {
         "daily_freshness_ready": bool(freshness.get("ready", False)),
+        "daily_target_day": freshness.get("target_day"),
+        "daily_target_mode": freshness.get("target_mode"),
+        "pending_eod_day": freshness.get("pending_eod_day"),
+        "eod_probe": freshness.get("eod_probe"),
         "daily_checked_count": int(freshness.get("checked_count") or len(freshness.get("checked_symbols") or [])),
         "daily_stale_count": int(freshness.get("stale_count") or len(freshness.get("stale_symbols") or [])),
         "daily_last_reconcile_at": freshness.get("last_reconcile_at") or freshness.get("generated_at") or freshness.get("reconciled_at"),
@@ -136,7 +141,15 @@ def _daily_freshness_fields(book) -> dict[str, Any]:
     }
 
 
-def _runtime_status(book) -> RuntimeStatus:
+def _load_current_book_best_effort():
+    try:
+        with book_lane():
+            return load_current_book(), None
+    except TimeoutError as ex:
+        return None, str(ex)
+
+
+def _runtime_status(book, *, lock_error: str | None = None) -> RuntimeStatus:
     cfg = load_config()
     intraday_runtime_enabled = bool(getattr(cfg, "intraday_runtime_enabled", False))
     ms = compute_market_state()
@@ -151,6 +164,37 @@ def _runtime_status(book) -> RuntimeStatus:
         PHASE_POSTCLOSE_PENDING,
     }
     daily_freshness = _daily_freshness_fields(book) if book else {}
+    daily_target = resolve_daily_target(ms.target_daybook_effective_day, allow_probe=False)
+    daily_target_day = daily_target.get("target_day") or daily_freshness.get("daily_target_day")
+    daily_target_mode = daily_target.get("target_mode") or daily_freshness.get("daily_target_mode")
+    pending_eod_day = (
+        daily_target.get("pending_eod_day")
+        if "pending_eod_day" in daily_target
+        else daily_freshness.get("pending_eod_day")
+    )
+    eod_probe = (
+        daily_target.get("eod_probe")
+        if "eod_probe" in daily_target
+        else daily_freshness.get("eod_probe")
+    )
+    source_target_day = daily_freshness.get("daily_target_day")
+    if source_target_day and daily_target_day and str(source_target_day) != str(daily_target_day):
+        daily_freshness = {
+            **daily_freshness,
+            "daily_freshness_ready": False,
+            "daily_checked_count": 0,
+            "daily_stale_count": 0,
+            "daily_last_reconcile_at": None,
+            "daily_blocking_reason": None,
+            "daily_failed_symbols": [],
+        }
+    daily_runtime = {
+        **daily_freshness,
+        "daily_target_day": str(daily_target_day) if daily_target_day else (snapshot.daily_target_day if snapshot else None),
+        "daily_target_mode": str(daily_target_mode) if daily_target_mode else None,
+        "pending_eod_day": str(pending_eod_day) if pending_eod_day else None,
+        "eod_probe": eod_probe if isinstance(eod_probe, dict) else None,
+    }
     return RuntimeStatus(
         market_phase=str(snapshot.market_phase if snapshot else ms.market_phase),
         data_provider=str(getattr(cfg.provider, "data_provider", "unknown") or "unknown"),
@@ -174,7 +218,6 @@ def _runtime_status(book) -> RuntimeStatus:
         publish_allowed=bool(getattr(book, "publish_allowed", False) if book else False),
         repair_status=str(snapshot.repair_status if snapshot else "idle"),
         repair_stage=str(snapshot.repair_stage if snapshot else "idle"),
-        daily_target_day=(snapshot.daily_target_day if snapshot else ms.target_daybook_effective_day),
         pulse_target_trade_day=(snapshot.pulse_target_trade_day if snapshot else ms.target_pulse_trade_day),
         pulse_target_slot_at=(snapshot.pulse_target_slot_at if snapshot else ms.target_pulse_slot_at),
         last_repair_started_at=(snapshot.last_repair_started_at if snapshot else None),
@@ -183,14 +226,18 @@ def _runtime_status(book) -> RuntimeStatus:
             snapshot.blocking_reason
             if snapshot and snapshot.blocking_reason
             else (
-                "当前配置已关闭盘中 5 分钟接入，仅保留日级计划与观察状态。"
-                if not intraday_runtime_enabled
-                else None
+                lock_error
+                if lock_error
+                else (
+                    "当前配置已关闭盘中 5 分钟接入，仅保留日级计划与观察状态。"
+                    if not intraday_runtime_enabled
+                    else None
+                )
             )
         ),
         artifact_status=str(snapshot.artifact_status if snapshot else (getattr(book, "slot_status", None) or "unavailable")),
         services=_runtime_services(),
-        **daily_freshness,
+        **daily_runtime,
     )
 
 
@@ -206,8 +253,7 @@ def chat(req: ChatRequest) -> ChatResponse:
 @router.get("/health", response_model=HealthResponse)
 @router.get("/api/health", response_model=HealthResponse)
 def health() -> HealthResponse:
-    with book_lane():
-        book = load_current_book()
+    book, lock_error = _load_current_book_best_effort()
     ok, _ = LLMClient().available()
     return HealthResponse(
         status="ok",
@@ -215,15 +261,14 @@ def health() -> HealthResponse:
         book_version=(book.book_version if book else None),
         llm_ready=ok,
         storage=gateway_stats(),
-        runtime=_runtime_status(book),
+        runtime=_runtime_status(book, lock_error=lock_error),
     )
 
 
 @router.get("/api/ops/repair/status")
 def repair_status() -> dict[str, Any]:
-    with book_lane():
-        book = load_current_book()
-    return {"runtime": _runtime_status(book).model_dump()}
+    book, lock_error = _load_current_book_best_effort()
+    return {"runtime": _runtime_status(book, lock_error=lock_error).model_dump()}
 
 
 @router.post("/api/ops/repair/{operation}", response_model=OpsRunResponse)
@@ -233,8 +278,7 @@ def run_repair_ops(operation: str) -> OpsRunResponse:
         raise HTTPException(status_code=404, detail=f"Unknown repair operation: {operation}")
     default_message, fn = executor
     result = fn()
-    with book_lane():
-        book = load_current_book()
+    book, lock_error = _load_current_book_best_effort()
     status = "blocked" if bool(result.get("blocked")) else "ok"
     message = result.get("message") or default_message
     return OpsRunResponse(
@@ -243,15 +287,14 @@ def run_repair_ops(operation: str) -> OpsRunResponse:
         message=message,
         executed_at=now_iso(),
         result=result,
-        runtime=_runtime_status(book),
+        runtime=_runtime_status(book, lock_error=lock_error),
     )
 
 
 @router.get("/api/book/current", response_model=BookResponse)
 def current_book() -> BookResponse:
-    with book_lane():
-        book = load_current_book()
-    return BookResponse(book=book.model_dump())
+    book, _lock_error = _load_current_book_best_effort()
+    return BookResponse(book=book.model_dump() if book else {})
 
 
 @router.get("/api/book/slot/{artifact_id}", response_model=BookResponse)

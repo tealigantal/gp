@@ -73,7 +73,11 @@ def _is_open_day(d: pd.Timestamp, cal_df) -> bool:
 def _last_open_day_on_or_before(d: pd.Timestamp, cal_df) -> pd.Timestamp:
     if isinstance(cal_df, pd.DataFrame) and not cal_df.empty and {"cal_date", "is_open"} <= set(cal_df.columns):
         ymd = d.strftime("%Y%m%d")
-        sub = cal_df[(cal_df["cal_date"] <= ymd) & (cal_df["is_open"] == 1)]
+        cal_dates = cal_df["cal_date"].astype(str)
+        if not cal_dates.empty and ymd <= str(cal_dates.max()):
+            sub = cal_df[(cal_dates <= ymd) & (cal_df["is_open"] == 1)]
+        else:
+            sub = pd.DataFrame()
         if not sub.empty:
             try:
                 return pd.to_datetime(str(sub.iloc[-1]["cal_date"])).normalize()
