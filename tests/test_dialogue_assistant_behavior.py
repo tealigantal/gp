@@ -53,7 +53,7 @@ def _book() -> MarketBook:
     )
 
 
-def test_term_explain_request_overrides_bad_llm_parse(monkeypatch):
+def test_term_explain_request_uses_llm_parse(monkeypatch):
     from gp_assistant.runtime import concern_parser
 
     monkeypatch.setattr(concern_parser, "load_config", lambda: SimpleNamespace(intraday_runtime_enabled=True))
@@ -64,10 +64,10 @@ def test_term_explain_request_overrides_bad_llm_parse(monkeypatch):
             {
                 "frame_id": "f1",
                 "raw_message": message,
-                "subject": "symbol",
-                "request": "pick_detail",
+                "subject": "market",
+                "request": "term_explain",
                 "freshness": "active_run",
-                "references": {"symbol": "600111"},
+                "references": {},
                 "constraints": {},
                 "ambiguity": {"confidence": 0.9, "notes": [], "needs_clarification": False},
             }

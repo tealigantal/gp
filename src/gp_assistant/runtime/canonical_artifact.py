@@ -450,7 +450,7 @@ def build_no_trade_view(run: CanonicalRunArtifact, book: MarketBook) -> NoTradeA
         elif run.run_action == "DEGRADED":
             reasons.append("市场环境或执行数据偏弱，先降级观察。")
         summary = "当前不建议立刻动手，但计划并未失效。"
-    reasons = _clean_user_reasons(reasons)
+    reasons = clean_user_reasons(reasons)
     recovery_conditions = [] if not intraday_enabled else list(run.recovery_conditions or [])
     market_summary = clean_user_reason(book.daybook.reason) or summary
     status_reason = run.status_reason or summary

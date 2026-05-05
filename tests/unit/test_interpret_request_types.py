@@ -1,8 +1,13 @@
 from __future__ import annotations
 
+import inspect
 import json
+import logging
+
+import pytest
 
 from gp_assistant.contracts.objects import AdvicePick, BoardEntry, DayBook, MarketBook, ReplyBundle
+from gp_assistant.core.errors import IntentLLMUnavailable, IntentParseFailed
 from gp_assistant.gateway.sessions import get_session_payload, sanitize_chat_payload
 from gp_assistant.judgment.chat import judge_chat
 from gp_assistant.memory.service import commit_turn
@@ -71,6 +76,26 @@ def _mock_llm(monkeypatch, content_obj: dict):
 
     monkeypatch.setattr(client_mod, "LLMClient", lambda *a, **k: DummyLLM())
     monkeypatch.setattr(interpret_mod, "LLMClient", DummyLLM)
+
+
+def _mock_llm_contents(monkeypatch, contents: list[str]):
+    from gp_assistant.llm import client as client_mod
+    from gp_assistant.llm import interpret as interpret_mod
+
+    class DummyLLM:
+        def __init__(self):
+            self.contents = list(contents)
+
+        def available(self):
+            return True, "ok"
+
+        def chat(self, messages, json_mode=False, **kwargs):
+            content = self.contents.pop(0) if self.contents else contents[-1]
+            return {"choices": [{"message": {"content": content}}]}
+
+    instance = DummyLLM()
+    monkeypatch.setattr(client_mod, "LLMClient", lambda *a, **k: instance)
+    monkeypatch.setattr(interpret_mod, "LLMClient", lambda *a, **k: instance)
 
 
 def test_greeting_goes_to_chat(monkeypatch):
@@ -206,7 +231,7 @@ def test_llm_parsed_postclose_plan(monkeypatch):
     assert frame.freshness == "next_session_plan"
 
 
-def test_llm_unavailable_returns_valid_fallback(monkeypatch):
+def test_llm_unavailable_raises(monkeypatch):
     from gp_assistant.llm import client as client_mod
     from gp_assistant.llm import interpret as interpret_mod
 
@@ -217,15 +242,139 @@ def test_llm_unavailable_returns_valid_fallback(monkeypatch):
     monkeypatch.setattr(client_mod, "LLMClient", lambda *a, **k: DummyLLM())
     monkeypatch.setattr(interpret_mod, "LLMClient", DummyLLM)
 
+    with pytest.raises(IntentLLMUnavailable):
+        parse_concern(_memory_ctx(), _dummy_book(), "anything")
+
+
+def test_invalid_json_rewrite_once_succeeds(monkeypatch):
+    valid = {
+        "subject": "market",
+        "request": "chat",
+        "freshness": "active_run",
+        "references": {},
+        "constraints": {},
+        "ambiguity": {"confidence": 0.7, "notes": ["rewritten"], "needs_clarification": False},
+    }
+    _mock_llm_contents(monkeypatch, ["不是 JSON", json.dumps(valid, ensure_ascii=False)])
+
     frame = parse_concern(_memory_ctx(), _dummy_book(), "anything")
-    assert frame.request in {"chat", "term_explain", "recommend", "pick_detail", "live_entry_check", "no_trade_explain", "exit_decision", "compare", "run_change"}
+
+    assert frame.request == "chat"
+    assert frame.ambiguity["notes"] == ["rewritten"]
 
 
-def test_gateway_payload_hides_internal_tool_trace():
+def test_invalid_json_twice_raises_parse_failed(monkeypatch):
+    _mock_llm_contents(monkeypatch, ["不是 JSON", "{still bad"])
+
+    with pytest.raises(IntentParseFailed) as exc_info:
+        parse_concern(_memory_ctx(), _dummy_book(), "anything")
+
+    assert exc_info.value.attempts == 2
+
+
+def test_router_prompt_contract_is_strict_utf8_json():
+    from gp_assistant.llm.interpret import SYSTEM
+    from gp_assistant.runtime import concern_parser
+
+    assert "严格 JSON" in SYSTEM
+    assert "只输出 JSON" in SYSTEM
+    assert "不要 Markdown" in SYSTEM
+    assert "闲聊、问候、能力咨询使用 chat" in SYSTEM
+    for mojibake_fragment in ("浣犳", "闂", "婵", "瑙ｆ瀽", "鎰忓浘"):
+        assert mojibake_fragment not in SYSTEM
+
+    source = inspect.getsource(concern_parser)
+    assert "quick_parse_concern" not in source
+    assert "_fallback_semantic_parse" not in source
+
+
+@pytest.mark.parametrize(
+    ("message", "expected_request"),
+    [
+        ("止盈怎么计算的", "term_explain"),
+        ("这个目标价咋来的", "term_explain"),
+        ("继续", "term_explain"),
+        ("？", "term_explain"),
+        ("你好", "chat"),
+    ],
+)
+def test_llm_semantic_samples_accept_mocked_frames(monkeypatch, message, expected_request):
+    _mock_llm(
+        monkeypatch,
+        {
+            "subject": "market" if expected_request == "chat" else "pick",
+            "request": expected_request,
+            "freshness": "active_run",
+            "references": {},
+            "constraints": {},
+            "ambiguity": {"confidence": 0.9, "notes": [], "needs_clarification": False},
+        },
+    )
+
+    frame = parse_concern(_memory_ctx(), _dummy_book(), message)
+
+    assert frame.request == expected_request
+
+
+def test_invalid_json_retry_logs_structured_metadata(monkeypatch, caplog):
+    valid = {
+        "subject": "market",
+        "request": "chat",
+        "freshness": "active_run",
+        "references": {},
+        "constraints": {},
+        "ambiguity": {"confidence": 0.7, "notes": ["rewritten"], "needs_clarification": False},
+    }
+    _mock_llm_contents(monkeypatch, ["not JSON", json.dumps(valid, ensure_ascii=False)])
+    caplog.set_level(logging.INFO, logger="gp_assistant.llm.interpret")
+
+    frame = parse_concern(_memory_ctx(), _dummy_book(), "hello")
+
+    assert frame.request == "chat"
+    retry = next(record for record in caplog.records if record.message == "intent_parse_retry")
+    assert retry.retry_count == 1
+    assert retry.parse_error_type == "JSONDecodeError"
+    success = next(record for record in caplog.records if record.message == "intent_parse_success")
+    assert success.intent_request == "chat"
+    assert success.intent_subject == "market"
+    assert success.retry_count == 1
+    assert not hasattr(retry, "raw_output")
+
+
+def test_gateway_payload_hides_internal_tool_trace(monkeypatch):
     sid = "test_sanitized_payload"
     memory_ctx = _memory_ctx()
     memory_ctx["session"].session_id = sid
     book = _dummy_book()
+    # Use the LLM parser contract even in this storage-focused test.
+    from gp_assistant.llm import interpret as interpret_mod
+
+    class DummyLLM:
+        def available(self):
+            return True, "ok"
+
+        def chat(self, messages, json_mode=False, **kwargs):
+            return {
+                "choices": [
+                    {
+                        "message": {
+                            "content": json.dumps(
+                                {
+                                    "subject": "market",
+                                    "request": "chat",
+                                    "freshness": "active_run",
+                                    "references": {},
+                                    "constraints": {},
+                                    "ambiguity": {"confidence": 0.9, "notes": [], "needs_clarification": False},
+                                },
+                                ensure_ascii=False,
+                            )
+                        }
+                    }
+                ]
+            }
+
+    monkeypatch.setattr(interpret_mod, "LLMClient", DummyLLM)
     frame = parse_concern(memory_ctx, book, "hello")
     plan = plan_evidence(frame)
     evidence = build_evidence_pack(frame, memory_ctx, book, plan)

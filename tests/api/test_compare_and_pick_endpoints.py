@@ -1,13 +1,13 @@
 from __future__ import annotations
 
-from pathlib import Path
 import json
 from fastapi.testclient import TestClient
+from gp_assistant.core.paths import store_dir
 from gp_assistant.gateway.app import app
 
 
 def _persist_minimal_v2(as_of: str) -> None:
-    base = Path('store/recommend')
+    base = store_dir() / 'recommend'
     base.mkdir(parents=True, exist_ok=True)
     obj = {
         'run_id': as_of,

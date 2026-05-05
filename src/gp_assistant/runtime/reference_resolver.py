@@ -55,20 +55,6 @@ def inject_entity_hints(frame: TurnFrame, memory_ctx: Dict, book: MarketBook) ->
     if "focus_symbol" not in refs and isinstance(session.focus_subject, dict):
         if session.focus_subject.get("type") == "symbol" and session.focus_subject.get("symbol"):
             refs["focus_symbol"] = session.focus_subject.get("symbol")
-    if not refs.get("symbol"):
-        focus_symbol = refs.get("focus_symbol") or getattr(session, "last_focus_symbol", None)
-        if any(token in raw for token in ("这只", "这个票", "这个标的", "它")) and focus_symbol:
-            refs["symbol"] = focus_symbol
-    if frame.request == "compare" and not refs.get("compare_symbols"):
-        ranks = [entry.rank for entry in active_entries if f"第{entry.rank}" in raw]
-        if len(ranks) >= 2:
-            compare_symbols = []
-            for rank in ranks[:3]:
-                entry = _entry_by_rank(active_entries, rank)
-                if entry:
-                    compare_symbols.append(entry.symbol)
-            if compare_symbols:
-                refs["compare_symbols"] = compare_symbols
     if frame.request in {"pick_detail", "live_entry_check", "exit_decision"} and not refs.get("symbol") and refs.get("rank") is not None:
         entry = _entry_by_rank(active_entries, int(refs["rank"]))
         if entry:

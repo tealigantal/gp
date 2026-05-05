@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any, Callable
 
 from fastapi import APIRouter, HTTPException
+from fastapi.responses import JSONResponse
 
 from ..book.engine import load_current_book
 from ..book.repo import load_run, load_slot_artifact
@@ -18,9 +19,11 @@ from ..contracts.api import (
     SessionResponse,
 )
 from ..core.config import load_config
+from ..core.errors import APIError, IntentLLMUnavailable, IntentParseFailed
 from ..evidence.market_service import current_trading_day
 from ..gateway.events import list_side_results
 from ..gateway.sessions import get_session_diagnostics, get_session_payload, sanitize_chat_payload
+from ..kernel import facade as kernel_facade
 from ..llm.client import LLMClient
 from ..memory._sqlite import gateway_stats
 from ..memory.session_store import list_sessions
@@ -44,6 +47,17 @@ from ..runtime.utils import now_iso
 from ..worker import reconcile_runtime_state
 
 router = APIRouter()
+
+
+def _artifact_not_found(error: str) -> JSONResponse:
+    return JSONResponse(
+        status_code=404,
+        content={
+            "ok": False,
+            "artifact_version": "v2",
+            "error": error,
+        },
+    )
 
 
 def _runtime_services() -> list[RuntimeToolInfo]:
@@ -245,9 +259,67 @@ def _runtime_status(book, *, lock_error: str | None = None) -> RuntimeStatus:
 @router.post("/api/chat", response_model=ChatResponse)
 def chat(req: ChatRequest) -> ChatResponse:
     session_id = req.session_id or "default"
-    with session_lane(session_id):
-        out = run_turn_sync(session_id=session_id, user_message=req.message)
+    try:
+        with session_lane(session_id):
+            out = run_turn_sync(session_id=session_id, user_message=req.message)
+    except IntentLLMUnavailable as ex:
+        raise APIError(
+            status_code=503,
+            message="LLM 意图解析服务不可用",
+            detail={"reason": ex.reason},
+        ) from ex
+    except IntentParseFailed as ex:
+        raise APIError(
+            status_code=502,
+            message="LLM 意图解析返回非法 JSON",
+            detail=ex.detail(),
+        ) from ex
     return ChatResponse(**sanitize_chat_payload(out))
+
+
+@router.get("/api/recommend_v2")
+def recommend_v2(run_id: str | None = None, as_of: str | None = None):
+    try:
+        return kernel_facade.get_artifact_v2(run_id=run_id, as_of=as_of)
+    except FileNotFoundError:
+        return _artifact_not_found("recommend_v2_unavailable")
+
+
+@router.post("/api/compare")
+def compare_symbols(body: dict[str, Any]):
+    run_id = body.get("run_id") or body.get("as_of")
+    raw_symbols = body.get("symbols") or []
+    symbols = [str(symbol).strip() for symbol in raw_symbols if str(symbol).strip()] if isinstance(raw_symbols, list) else []
+    try:
+        return kernel_facade.compare_symbols(str(run_id) if run_id else None, symbols)
+    except FileNotFoundError:
+        return _artifact_not_found("recommend_v2_unavailable")
+
+
+@router.get("/api/pick")
+def pick_detail(run_id: str | None = None, symbol: str | None = None):
+    if not symbol:
+        return JSONResponse(
+            status_code=400,
+            content={"ok": False, "artifact_version": "v2", "error": "symbol_required"},
+        )
+    try:
+        return kernel_facade.get_pick_detail(run_id, symbol)
+    except FileNotFoundError:
+        return _artifact_not_found("recommend_v2_unavailable")
+
+
+@router.get("/api/validation/summary")
+def validation_summary():
+    return kernel_facade.get_validation_summary()
+
+
+@router.get("/api/workbench")
+def workbench(run_id: str | None = None, as_of: str | None = None):
+    try:
+        return kernel_facade.get_workbench_snapshot(run_id=run_id, as_of=as_of)
+    except FileNotFoundError:
+        return _artifact_not_found("recommend_v2_unavailable")
 
 
 @router.get("/health", response_model=HealthResponse)

@@ -9,8 +9,11 @@ if str(root) not in sys.path:
     sys.path.insert(0, str(root))
 
 os.environ.setdefault("GP_RUNS_DIR", str(Path(tempfile.gettempdir()) / "gp-pytest-runs"))
+os.environ.setdefault("GP_STORE_DIR", str(root / ".pytest-tmp" / "store"))
 
 # Ignore out-of-scope tests that depend on retired API surfaces or external services.
+# Files listed here are skipped before import, so default collection cannot be
+# broken by retired or environment-dependent modules.
 collect_ignore = [
     "test_agent_pick_mock.py",
     "test_agent_pick_once_mock.py",
@@ -25,7 +28,6 @@ collect_ignore = [
     "test_strategies_minute.py",
     "test_imports_compile.py",
     "test_session_state.py",
-    "execution",
     "test_backtest_stats.py",
     "test_candidate_gen_snapshot_fallback.py",
     "test_execution_bands_semantics.py",
@@ -55,7 +57,20 @@ def pytest_collection_modifyitems(config, items):
         "test_strategy_health.py",
         "test_lifecycle.py",
         "test_validation_endpoints.py",
+        "test_runner_summary.py",
+        "test_strategy_health_penalty.py",
+        "test_evaluator.py",
+        "test_kernel_facade_smoke.py",
+        "test_workbench.py",
         "test_mainline.py",
+        "test_compare_and_pick_endpoints.py",
+        "test_compare_endpoint.py",
+        "test_pick_detail_endpoint.py",
+        "test_recommend_v2_endpoint.py",
+        "test_chg_normalize_inference.py",
+        "test_theme_pool_impl_nan_and_scale.py",
+        "test_theme_pool_snapshot_paths.py",
+        "test_champion_affects_ranking_engine.py",
         "test_interpret_request_types.py",
         "test_judgment_dispatch.py",
         "test_dispatch_new_handlers.py",

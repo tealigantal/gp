@@ -33,3 +33,44 @@ def test_chat_endpoint_smoke(monkeypatch):
     payload = response.json()
     assert payload.get("session_id")
     assert payload.get("reply") == "echo:测试一下"
+
+
+def test_chat_endpoint_maps_intent_llm_unavailable(monkeypatch):
+    from gp_assistant.core.errors import IntentLLMUnavailable
+    from gp_assistant.gateway.app import app
+    from gp_assistant.gateway import routes
+
+    def _fake_run_turn_sync(*, session_id: str, user_message: str):
+        raise IntentLLMUnavailable("LLM_API_KEY 未配置")
+
+    monkeypatch.setattr(routes, "run_turn_sync", _fake_run_turn_sync)
+
+    client = TestClient(app)
+    response = client.post("/api/chat", json={"message": "测试一下"})
+    assert response.status_code == 503, response.text
+    payload = response.json()
+    assert payload["error"]["message"] == "LLM 意图解析服务不可用"
+    assert payload["error"]["detail"]["reason"] == "LLM_API_KEY 未配置"
+
+
+def test_chat_endpoint_maps_intent_parse_failed(monkeypatch):
+    from gp_assistant.core.errors import IntentParseFailed
+    from gp_assistant.gateway.app import app
+    from gp_assistant.gateway import routes
+
+    def _fake_run_turn_sync(*, session_id: str, user_message: str):
+        raise IntentParseFailed(
+            "LLM intent parser returned invalid JSON after retry",
+            reason="JSONDecodeError",
+            raw_output="{bad",
+            attempts=2,
+        )
+
+    monkeypatch.setattr(routes, "run_turn_sync", _fake_run_turn_sync)
+
+    client = TestClient(app)
+    response = client.post("/api/chat", json={"message": "测试一下"})
+    assert response.status_code == 502, response.text
+    payload = response.json()
+    assert payload["error"]["message"] == "LLM 意图解析返回非法 JSON"
+    assert payload["error"]["detail"]["attempts"] == 2
