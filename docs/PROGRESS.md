@@ -1,6 +1,6 @@
 # Current Progress
 
-Last updated: 2026-04-29
+Last updated: 2026-05-05
 
 ## Snapshot
 
@@ -20,6 +20,17 @@ The current product direction is:
 - one shared decision source for recommendation, follow-up, comparison, exit, and run-change answers
 
 ## Recent Changes
+
+### 2026-05-05
+
+- Hardened the intent path so `/api/chat` now depends on the LLM router for market-facing requests instead of silently falling back to local semantic heuristics.
+- Added explicit API error mapping for intent failures:
+  - `503` when the intent LLM is unavailable
+  - `502` when the LLM returns invalid JSON after one repair attempt
+- Added `src/gp_assistant/kernel/` as the public service facade for recommendation v2 artifacts, compare, pick detail, validation summary, portfolio state, execution intent preview, paper execution, and workbench aggregation.
+- Added active API routes for `recommend_v2`, `compare`, `pick`, `validation/summary`, and `workbench`.
+- Improved follow-up explanation grounding so short user questions can explain recent structured business facts instead of repeating prior prose or fabricating prices.
+- Fixed the current README and ops runbook UTF-8 Chinese text, and added `.gitattributes` to align repository text files with the LF line-ending policy already declared in `.editorconfig`.
 
 ### 2026-04-29
 
@@ -47,6 +58,8 @@ The current product direction is:
 ## Current State
 
 - Main flow remains aligned around `gateway -> runtime -> judgment -> reply -> workspace`.
+- Intent parsing is now a hard LLM dependency for `/api/chat`; unavailable or malformed intent responses are surfaced as explicit API errors instead of hidden fallback behavior.
+- `kernel.facade` is the current cross-cutting service boundary for recommendation artifacts, validation, portfolio, execution preview, and workbench aggregation.
 - The 5-minute runtime is currently treated as an optional capability. When disabled, the product now consistently falls back to day-level planning and observation wording.
 - The Workspace page now presents:
   - a conversation-first left pane
@@ -70,6 +83,16 @@ Manual browser verification completed locally with screenshots for:
 - desktop Workspace
 - mobile Workspace
 
+The following backend checks passed locally during the 2026-05-05 cleanup pass:
+
+- `pytest tests\unit\test_interpret_request_types.py tests\test_term_explain_flow.py tests\server\test_chat_endpoint_smoke.py tests\kernel\test_kernel_facade_smoke.py -q`
+- `python -m compileall -q src`
+- `pytest -q`
+
+The default test suite passed with only existing `datetime.utcnow()` deprecation warnings in `validation/paper_trade.py`.
+
+Real LLM-connected acceptance was not run in this shell because `LLMClient().available()` returned `llm_ready=false` with `LLM_BASE_URL 未配置`.
+
 ## Current Documentation Anchors
 
 Use these files first when resuming work on this area:
@@ -81,7 +104,11 @@ Use these files first when resuming work on this area:
 - `src/gp_assistant/runtime/dialogue_text.py`
   Shared text cleaning, observation explanation, and state labeling.
 - `src/gp_assistant/runtime/concern_parser.py`
-  Request parsing and `term_explain` / intraday-disabled routing behavior.
+  LLM-backed request parsing and normalization behavior.
+- `src/gp_assistant/llm/interpret.py`
+  Strict JSON intent router prompt, one-shot repair, and parse error reporting.
+- `src/gp_assistant/kernel/facade.py`
+  Public service facade for recommendation v2, compare, pick detail, validation, portfolio, execution preview, and workbench aggregation.
 - `src/gp_assistant/runtime/freshness_policy.py`
   Freshness downgrades when intraday execution is disabled.
 - `frontend/src/features/workspace/`
@@ -91,7 +118,7 @@ Use these files first when resuming work on this area:
 
 ## Next Cleanup Candidates
 
-- Continue normalizing any remaining older Chinese templates or source files that still carry historical encoding damage outside the actively used Workspace path.
+- Continue normalizing any remaining older Chinese templates or source files that still carry historical encoding damage outside README, ops runbook, and the actively used Workspace path.
 - Decide whether to keep `dialogue_text.py` as the single long-term text policy layer and move any remaining duplicated label logic into it.
 - Install and wire CodeRabbit CLI on the working machine if external review is expected to be part of the routine workflow.
-- Re-run a real LLM-connected acceptance pass after environment setup confirms `llm_ready=true`, because the visual verification in this pass focused on structure and layout, not final model prose quality.
+- Re-run a real LLM-connected acceptance pass after environment setup confirms `llm_ready=true`, focusing on multi-turn Chinese follow-ups, term explanation, compare, and sell-decision quality.
