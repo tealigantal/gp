@@ -2,9 +2,6 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
-from typing import Optional
-
-import pandas as pd
 
 from ..providers.base import DataProvider, ProviderError
 from ..providers.tushare_provider import TushareProvider
@@ -26,6 +23,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--provider", choices=["tushare", "akshare"], default="akshare")
     p.add_argument("--start", required=True)
     p.add_argument("--end", required=True)
+    p.add_argument("--calendar-only", action="store_true", help="Only refresh data/raw/trade_calendar.parquet")
     return p.parse_args()
 
 
@@ -39,11 +37,15 @@ def main() -> None:  # pragma: no cover - orchestration
         print(str(e))
         raise
 
+    cal = provider.get_trade_calendar(args.start, args.end)
+    cal_path = store.write_raw("trade_calendar", cal)
+    print(f"Wrote trade_calendar: {cal_path} rows={len(cal)}")
+
+    if args.calendar_only:
+        return
+
     basics = provider.get_stock_basic()
     store.write_raw("stock_basic", basics)
-
-    cal = provider.get_trade_calendar(args.start, args.end)
-    store.write_raw("trade_calendar", cal)
 
     namechg = provider.get_namechange()
     store.write_raw("namechange", namechg)

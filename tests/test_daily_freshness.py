@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -7,7 +8,8 @@ import pandas as pd
 
 from gp_assistant.evidence import daily_freshness
 from gp_assistant.evidence import market_service
-from gp_assistant.runtime.market_clock import PHASE_INTRADAY_PM, PHASE_POSTCLOSE_PENDING
+import gp_assistant.runtime.market_clock as market_clock
+from gp_assistant.runtime.market_clock import PHASE_INTRADAY_PM, PHASE_NON_TRADING, PHASE_POSTCLOSE_PENDING
 
 
 def test_resolve_daily_target_intraday_uses_previous_completed(monkeypatch):
@@ -68,6 +70,53 @@ def test_resolve_daily_target_postclose_ready_uses_current_day(monkeypatch):
     assert target["target_day"] == "2026-04-30"
     assert target["target_mode"] == "current_ready"
     assert target["pending_eod_day"] is None
+
+
+def test_resolve_daily_target_holiday_uses_previous_completed_day(monkeypatch):
+    cal = pd.DataFrame(
+        [
+            {"cal_date": "20260430", "is_open": 1},
+            {"cal_date": "20260501", "is_open": 0},
+            {"cal_date": "20260502", "is_open": 0},
+            {"cal_date": "20260503", "is_open": 0},
+            {"cal_date": "20260504", "is_open": 0},
+            {"cal_date": "20260505", "is_open": 0},
+            {"cal_date": "20260506", "is_open": 1},
+        ]
+    )
+    monkeypatch.setattr(market_clock, "_load_calendar_df", lambda: cal)
+
+    target = daily_freshness.resolve_daily_target(now=datetime(2026, 5, 4, 10, 0))
+
+    assert target["target_day"] == "2026-04-30"
+    assert target["target_mode"] == "previous_completed"
+    assert target["daybook_trading_day"] == "20260430"
+    assert target["next_trading_day"] == "20260506"
+
+
+def test_active_freshness_discards_stale_holiday_target_when_book_matches_current(monkeypatch):
+    state = SimpleNamespace(
+        market_phase=PHASE_NON_TRADING,
+        target_daybook_effective_day="20260430",
+        target_pulse_trade_day=None,
+        target_pulse_slot_at=None,
+        calendar_status="ok",
+        calendar_source="official",
+        calendar_range_start="20250101",
+        calendar_range_end="20261231",
+        next_trading_day="20260506",
+        calendar_error=None,
+    )
+    monkeypatch.setattr(daily_freshness, "compute_market_state", lambda now=None: state)
+    stale = {
+        "ready": False,
+        "target_day": "2026-05-04",
+        "blocking_reason": "日线数据未补齐到 2026-05-04，当前不发布正式推荐",
+    }
+
+    active = daily_freshness.active_freshness_for_current_target(stale, book_day="20260430")
+
+    assert active == {}
 
 
 def test_resolve_daily_target_reads_cached_eod_probe_without_network(monkeypatch):

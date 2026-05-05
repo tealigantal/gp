@@ -21,6 +21,7 @@ from ..runtime.market_clock import (
     compute_market_state,
     _last_open_day_on_or_before,
     _load_calendar_df,
+    resolve_trading_day_on_or_before,
 )
 from ..runtime.utils import now_iso
 from ..search.history_store import canonical_query_id, ensure_query, list_queries, query_meta
@@ -101,6 +102,21 @@ def _previous_open_day_ymd(ymd: str) -> str:
     return prev.strftime("%Y%m%d")
 
 
+def _calendar_blocking_reason(status: str | None, start: str | None, end: str | None) -> str | None:
+    normalized = str(status or "").strip().lower()
+    if normalized in {"", "ok", "unknown"}:
+        return None
+    if normalized == "missing":
+        return "交易日历缺失，请先刷新 data/raw/trade_calendar.parquet。"
+    if normalized == "invalid":
+        return "交易日历格式无效，请重新生成 data/raw/trade_calendar.parquet。"
+    if normalized == "out_of_range":
+        if start and end:
+            return f"交易日历未覆盖当前日期（当前覆盖 {start} 至 {end}），请先刷新 data/raw/trade_calendar.parquet。"
+        return "交易日历未覆盖当前日期，请先刷新 data/raw/trade_calendar.parquet。"
+    return f"交易日历不可用（{normalized}），请先刷新 data/raw/trade_calendar.parquet。"
+
+
 def _freshness_state(last_item_time: Any, target_iso: str) -> str:
     lit = _date_iso(last_item_time)
     if not lit:
@@ -109,6 +125,52 @@ def _freshness_state(last_item_time: Any, target_iso: str) -> str:
         return "current" if pd.to_datetime(lit).normalize() >= pd.to_datetime(target_iso).normalize() else "stale"
     except Exception:
         return "current" if lit >= target_iso else "stale"
+
+
+def active_freshness_for_current_target(freshness: dict[str, Any] | None, *, book_day: Any = None) -> dict[str, Any]:
+    """Return only freshness metadata that matches the current calendar target.
+
+    Older runtime books can carry a freshness block for a date that is no longer
+    the effective trading day after a calendar refresh. Do not let that stale
+    block leak back into newly published replies.
+    """
+    raw = dict(freshness or {})
+    try:
+        target_info = resolve_daily_target(allow_probe=False)
+    except Exception:
+        return raw
+
+    calendar_reason = target_info.get("calendar_blocking_reason")
+    target_day = _date_iso(target_info.get("target_day"))
+    if calendar_reason:
+        return {
+            "ready": False,
+            "target_day": target_day,
+            "target_mode": target_info.get("target_mode"),
+            "blocking_reason": str(calendar_reason),
+            "calendar_status": target_info.get("calendar_status"),
+            "calendar_source": target_info.get("calendar_source"),
+            "calendar_range": target_info.get("calendar_range"),
+            "calendar_error": target_info.get("calendar_error"),
+            "next_trading_day": target_info.get("next_trading_day"),
+        }
+
+    source_target = _date_iso(raw.get("target_day"))
+    if not source_target or not target_day or source_target == target_day:
+        return raw
+
+    book_day_iso = _date_iso(book_day)
+    if book_day_iso == target_day:
+        return {}
+
+    return {
+        "ready": False,
+        "target_day": target_day,
+        "target_mode": target_info.get("target_mode"),
+        "blocking_reason": f"当前运行时数据生效日 {book_day_iso or 'unknown'} 与目标交易日 {target_day} 不一致，请刷新运行时数据。",
+        "stale_symbols": list(raw.get("stale_symbols") or []),
+        "failed_symbols": list(raw.get("failed_symbols") or []),
+    }
 
 
 def _probe_ttl_sec() -> int:
@@ -199,7 +261,27 @@ def resolve_daily_target(
 ) -> dict[str, Any]:
     ms = compute_market_state(now)
     current_ymd = str(ms.target_daybook_effective_day)
-    requested_ymd = _date_ymd(as_of) or current_ymd
+    requested_raw_ymd = _date_ymd(as_of)
+    requested_ymd = (
+        resolve_trading_day_on_or_before(requested_raw_ymd)
+        if requested_raw_ymd and hasattr(ms, "calendar_status")
+        else (requested_raw_ymd or current_ymd)
+    )
+    calendar_status = str(getattr(ms, "calendar_status", "ok") or "ok")
+    calendar_source = str(getattr(ms, "calendar_source", "") or "")
+    calendar_range = {
+        "start": getattr(ms, "calendar_range_start", None),
+        "end": getattr(ms, "calendar_range_end", None),
+    }
+    calendar_reason = _calendar_blocking_reason(calendar_status, calendar_range["start"], calendar_range["end"])
+    common = {
+        "calendar_status": calendar_status,
+        "calendar_source": calendar_source,
+        "calendar_range": calendar_range,
+        "next_trading_day": getattr(ms, "next_trading_day", None),
+        "calendar_error": getattr(ms, "calendar_error", None),
+        "calendar_blocking_reason": calendar_reason,
+    }
 
     if requested_ymd != current_ymd:
         return {
@@ -210,6 +292,7 @@ def resolve_daily_target(
             "pending_eod_day": None,
             "eod_probe": None,
             "market_phase": ms.market_phase,
+            **common,
         }
 
     if ms.market_phase == PHASE_POSTCLOSE_PENDING:
@@ -233,6 +316,7 @@ def resolve_daily_target(
             "pending_eod_day": pending,
             "eod_probe": probe,
             "market_phase": ms.market_phase,
+            **common,
         }
 
     if ms.market_phase in _UNFINISHED_CURRENT_DAY_PHASES:
@@ -252,6 +336,7 @@ def resolve_daily_target(
         "pending_eod_day": None,
         "eod_probe": None,
         "market_phase": ms.market_phase,
+        **common,
     }
 
 
@@ -339,6 +424,35 @@ def reconcile_daily_freshness(
     target_info = resolve_daily_target(as_of)
     target_iso = str(target_info["target_day"])
     checked = normalize_symbols(symbols)
+    calendar_reason = target_info.get("calendar_blocking_reason")
+    if calendar_reason:
+        report = {
+            "target_day": target_iso,
+            "target_mode": target_info.get("target_mode"),
+            "daybook_trading_day": target_info.get("daybook_trading_day"),
+            "pending_eod_day": target_info.get("pending_eod_day"),
+            "eod_probe": target_info.get("eod_probe"),
+            "calendar_status": target_info.get("calendar_status"),
+            "calendar_source": target_info.get("calendar_source"),
+            "calendar_range": target_info.get("calendar_range"),
+            "calendar_error": target_info.get("calendar_error"),
+            "next_trading_day": target_info.get("next_trading_day"),
+            "checked_symbols": checked,
+            "fresh_symbols": [],
+            "stale_symbols": checked,
+            "failed_symbols": [],
+            "refreshed_symbols": [],
+            "ready": False,
+            "strict": strict,
+            "checked_count": len(checked),
+            "stale_count": len(checked),
+            "failed_count": 0,
+            "symbol_reports": [],
+            "last_reconcile_at": now_iso(),
+            "blocking_reason": str(calendar_reason),
+        }
+        save_daily_freshness_report(report)
+        return report
     hub = MarketDataHub()
     symbol_reports: list[dict[str, Any]] = []
     fresh_symbols: list[str] = []
@@ -401,6 +515,11 @@ def reconcile_daily_freshness(
         "daybook_trading_day": target_info.get("daybook_trading_day"),
         "pending_eod_day": target_info.get("pending_eod_day"),
         "eod_probe": target_info.get("eod_probe"),
+        "calendar_status": target_info.get("calendar_status"),
+        "calendar_source": target_info.get("calendar_source"),
+        "calendar_range": target_info.get("calendar_range"),
+        "calendar_error": target_info.get("calendar_error"),
+        "next_trading_day": target_info.get("next_trading_day"),
         "checked_symbols": checked,
         "fresh_symbols": fresh_symbols,
         "stale_symbols": stale_symbols,

@@ -34,6 +34,7 @@ The current product direction is:
 - Converted missing subject/rank follow-ups into explicit no-trade business replies instead of 500 errors.
 - Replaced deprecated `datetime.utcnow()` usage in paper-trade validation with timezone-aware UTC timestamps.
 - Fixed the current README and ops runbook UTF-8 Chinese text, and added `.gitattributes` to align repository text files with the LF line-ending policy already declared in `.editorconfig`.
+- Hardened trading-calendar handling so missing, stale, or out-of-range exchange calendars fail closed instead of falling back to weekday assumptions. AkShare calendar refresh now writes a full natural-day range with `is_open=0` for holidays, and `/api/health` exposes calendar status/range/next trading day.
 
 ### 2026-04-29
 

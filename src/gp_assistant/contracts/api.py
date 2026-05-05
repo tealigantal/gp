@@ -39,6 +39,11 @@ class RuntimeToolInfo(BaseModel):
 
 class RuntimeStatus(BaseModel):
     market_phase: str = "UNKNOWN"
+    calendar_source: Optional[str] = None
+    calendar_status: Optional[str] = None
+    calendar_range: Optional[Dict[str, Any]] = None
+    calendar_error: Optional[str] = None
+    next_trading_day: Optional[str] = None
     data_provider: str = "unknown"
     auto_update_service: str = "gp-worker"
     auto_update_expected: bool = False

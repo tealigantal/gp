@@ -40,6 +40,20 @@ class MarketState:
     target_pulse_trade_day: Optional[str]
     target_pulse_slot_at: Optional[str]
     data_status: str
+    calendar_status: str = "unknown"
+    calendar_range_start: Optional[str] = None
+    calendar_range_end: Optional[str] = None
+    next_trading_day: Optional[str] = None
+    calendar_error: Optional[str] = None
+
+
+@dataclass(frozen=True)
+class CalendarInfo:
+    source: str
+    status: str
+    range_start: Optional[str] = None
+    range_end: Optional[str] = None
+    error: Optional[str] = None
 
 
 def _tz_now(now: Optional[datetime]) -> datetime:
@@ -58,35 +72,119 @@ def _load_calendar_df():
         return None
 
 
+def _normalize_calendar_df(cal_df) -> pd.DataFrame | None:
+    if not isinstance(cal_df, pd.DataFrame) or cal_df.empty:
+        return None
+    if not {"cal_date", "is_open"} <= set(cal_df.columns):
+        return None
+    try:
+        df = cal_df[["cal_date", "is_open"]].copy()
+        df["cal_date"] = (
+            df["cal_date"]
+            .astype(str)
+            .str.strip()
+            .str.replace("-", "", regex=False)
+            .str.slice(0, 8)
+        )
+        df = df[df["cal_date"].str.fullmatch(r"\d{8}", na=False)]
+        df["is_open"] = pd.to_numeric(df["is_open"], errors="coerce").fillna(0).astype(int)
+        df["is_open"] = (df["is_open"] == 1).astype(int)
+        df = df.drop_duplicates(subset=["cal_date"], keep="last").sort_values("cal_date").reset_index(drop=True)
+        return df if not df.empty else None
+    except Exception:
+        return None
+
+
+def _calendar_info(cal_df) -> CalendarInfo:
+    df = _normalize_calendar_df(cal_df)
+    if cal_df is None:
+        return CalendarInfo(source="missing", status="missing", error="trade_calendar_missing")
+    if df is None:
+        return CalendarInfo(source="invalid", status="invalid", error="trade_calendar_invalid")
+    return CalendarInfo(
+        source="official",
+        status="ok",
+        range_start=str(df["cal_date"].min()),
+        range_end=str(df["cal_date"].max()),
+    )
+
+
+def _calendar_info_for_day(d: pd.Timestamp, cal_df) -> CalendarInfo:
+    info = _calendar_info(cal_df)
+    if info.status != "ok":
+        return info
+    ymd = d.strftime("%Y%m%d")
+    if info.range_start and ymd < info.range_start:
+        return CalendarInfo(
+            source=info.source,
+            status="out_of_range",
+            range_start=info.range_start,
+            range_end=info.range_end,
+            error=f"trade_calendar_not_covering_{ymd}",
+        )
+    if info.range_end and ymd > info.range_end:
+        return CalendarInfo(
+            source=info.source,
+            status="out_of_range",
+            range_start=info.range_start,
+            range_end=info.range_end,
+            error=f"trade_calendar_not_covering_{ymd}",
+        )
+    return info
+
+
 def _is_open_day(d: pd.Timestamp, cal_df) -> bool:
-    if isinstance(cal_df, pd.DataFrame) and not cal_df.empty and {"cal_date", "is_open"} <= set(cal_df.columns):
-        ymd = d.strftime("%Y%m%d")
-        row = cal_df[cal_df["cal_date"] == ymd]
-        if not row.empty:
-            try:
-                return int(row.iloc[0]["is_open"]) == 1
-            except Exception:
-                pass
-    return d.weekday() < 5
+    df = _normalize_calendar_df(cal_df)
+    if df is None:
+        return False
+    ymd = d.strftime("%Y%m%d")
+    row = df[df["cal_date"] == ymd]
+    if row.empty:
+        return False
+    try:
+        return int(row.iloc[0]["is_open"]) == 1
+    except Exception:
+        return False
 
 
 def _last_open_day_on_or_before(d: pd.Timestamp, cal_df) -> pd.Timestamp:
-    if isinstance(cal_df, pd.DataFrame) and not cal_df.empty and {"cal_date", "is_open"} <= set(cal_df.columns):
+    df = _normalize_calendar_df(cal_df)
+    if df is not None:
         ymd = d.strftime("%Y%m%d")
-        cal_dates = cal_df["cal_date"].astype(str)
-        if not cal_dates.empty and ymd <= str(cal_dates.max()):
-            sub = cal_df[(cal_dates <= ymd) & (cal_df["is_open"] == 1)]
-        else:
-            sub = pd.DataFrame()
+        sub = df[(df["cal_date"] <= ymd) & (df["is_open"] == 1)]
         if not sub.empty:
             try:
                 return pd.to_datetime(str(sub.iloc[-1]["cal_date"])).normalize()
             except Exception:
                 pass
-    dd = d
-    while dd.weekday() >= 5:
-        dd = dd - pd.Timedelta(days=1)
-    return dd.normalize()
+    return d.normalize()
+
+
+def _next_open_day_on_or_after(d: pd.Timestamp, cal_df) -> Optional[pd.Timestamp]:
+    df = _normalize_calendar_df(cal_df)
+    if df is None:
+        return None
+    ymd = d.strftime("%Y%m%d")
+    sub = df[(df["cal_date"] >= ymd) & (df["is_open"] == 1)]
+    if sub.empty:
+        return None
+    try:
+        return pd.to_datetime(str(sub.iloc[0]["cal_date"])).normalize()
+    except Exception:
+        return None
+
+
+def resolve_trading_day_on_or_before(value: str | datetime | date | pd.Timestamp, cal_df=None) -> str:
+    base = pd.to_datetime(value).normalize()
+    calendar = _load_calendar_df() if cal_df is None else cal_df
+    return _last_open_day_on_or_before(base, calendar).strftime("%Y%m%d")
+
+
+def next_trading_day_on_or_after(value: str | datetime | date | pd.Timestamp, cal_df=None) -> Optional[str]:
+    base = pd.to_datetime(value).normalize()
+    calendar = _load_calendar_df() if cal_df is None else cal_df
+    nxt = _next_open_day_on_or_after(base, calendar)
+    return nxt.strftime("%Y%m%d") if nxt is not None else None
 
 
 def _trade_day_for_now(tnow: datetime, cal_df) -> str:
@@ -148,7 +246,10 @@ def next_trade_slot(trade_day: str, slot_at: datetime | str | None) -> Optional[
 
 def last_closed_trade_slot(now: Optional[datetime] = None) -> Optional[datetime]:
     tnow = _tz_now(now)
-    trade_day = _trade_day_for_now(tnow, _load_calendar_df())
+    cal_df = _load_calendar_df()
+    if not _is_open_day(pd.Timestamp(tnow.date()), cal_df):
+        return None
+    trade_day = _trade_day_for_now(tnow, cal_df)
     tt = tnow.time()
     if tt < AM_SLOT_CLOSE_START:
         return None
@@ -172,14 +273,22 @@ def last_closed_trade_slot(now: Optional[datetime] = None) -> Optional[datetime]
 def compute_market_state(now: Optional[datetime] = None) -> MarketState:
     tnow = _tz_now(now)
     cal_df = _load_calendar_df()
-    cal_src = "official" if cal_df is not None else "weekday"
 
     today = pd.Timestamp(tnow.date())
-    is_open = _is_open_day(today, cal_df)
+    cal_info = _calendar_info_for_day(today, cal_df)
+    calendar_ready = cal_info.status == "ok"
+    is_open = _is_open_day(today, cal_df) if calendar_ready else False
     trade_day = _trade_day_for_now(tnow, cal_df)
+    next_open = _next_open_day_on_or_after(today, cal_df)
+    next_open_day = next_open.strftime("%Y%m%d") if next_open is not None else None
 
     tt = tnow.time()
-    if not is_open:
+    if not calendar_ready:
+        phase = PHASE_NON_TRADING
+        pulse_day = None
+        slot_str = None
+        data_status = f"calendar_{cal_info.status}"
+    elif not is_open:
         phase = PHASE_NON_TRADING
         pulse_day = None
         slot_str = None
@@ -227,10 +336,15 @@ def compute_market_state(now: Optional[datetime] = None) -> MarketState:
 
     return MarketState(
         market_phase=phase,
-        calendar_source=cal_src,
+        calendar_source=cal_info.source,
         is_trading_day=is_open,
         target_daybook_effective_day=trade_day,
         target_pulse_trade_day=pulse_day,
         target_pulse_slot_at=slot_str,
         data_status=data_status,
+        calendar_status=cal_info.status,
+        calendar_range_start=cal_info.range_start,
+        calendar_range_end=cal_info.range_end,
+        next_trading_day=next_open_day,
+        calendar_error=cal_info.error,
     )

@@ -211,6 +211,11 @@ def _runtime_status(book, *, lock_error: str | None = None) -> RuntimeStatus:
     }
     return RuntimeStatus(
         market_phase=str(snapshot.market_phase if snapshot else ms.market_phase),
+        calendar_source=ms.calendar_source,
+        calendar_status=ms.calendar_status,
+        calendar_range={"start": ms.calendar_range_start, "end": ms.calendar_range_end},
+        calendar_error=ms.calendar_error,
+        next_trading_day=ms.next_trading_day,
         data_provider=str(getattr(cfg.provider, "data_provider", "unknown") or "unknown"),
         auto_update_service="gp-worker",
         auto_update_expected=auto_update_expected,

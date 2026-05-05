@@ -1,8 +1,12 @@
 from datetime import datetime
 from types import SimpleNamespace
 
+import pandas as pd
+import pytest
+
 from gp_assistant.contracts.objects import DayBook, MarketBook, SessionState
 from gp_assistant.runtime import freshness_policy
+import gp_assistant.runtime.market_clock as market_clock
 from gp_assistant.runtime.freshness_policy import make_refresh_plan
 from gp_assistant.runtime.market_clock import (
     PHASE_NON_TRADING,
@@ -11,6 +15,22 @@ from gp_assistant.runtime.market_clock import (
     PHASE_PREOPEN,
     compute_market_state,
 )
+
+
+@pytest.fixture(autouse=True)
+def _calendar(monkeypatch):
+    cal = pd.DataFrame(
+        [
+            {"cal_date": "20240319", "is_open": 1},
+            {"cal_date": "20240320", "is_open": 1},
+            {"cal_date": "20240321", "is_open": 1},
+            {"cal_date": "20240322", "is_open": 1},
+            {"cal_date": "20240323", "is_open": 0},
+            {"cal_date": "20240324", "is_open": 0},
+            {"cal_date": "20240325", "is_open": 1},
+        ]
+    )
+    monkeypatch.setattr(market_clock, "_load_calendar_df", lambda: cal)
 
 
 def _mk_session() -> SessionState:

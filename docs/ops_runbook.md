@@ -136,6 +136,14 @@ These files are workspace artifacts. Treat them as generated state unless a spec
 
 `store/book/`, `store/runs/`, and most generated recommendation artifacts should stay out of version control.
 
+Refresh the local exchange calendar before running date-sensitive market flows:
+
+```bash
+python -m src.scripts.fetch_basics --provider akshare --start 20250101 --end 20261231 --calendar-only
+```
+
+The generated `data/raw/trade_calendar.parquet` is local runtime data and should stay untracked. If the calendar is missing, invalid, or does not cover the current date, market-facing publication should fail closed with a calendar refresh message instead of falling back to weekday assumptions.
+
 ## Operational Notes
 
 - The service is session-based. `session_id` is the stable handle for follow-up turns.

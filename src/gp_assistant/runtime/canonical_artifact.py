@@ -17,6 +17,7 @@ from ..contracts.objects import (
     SlotGate,
 )
 from ..core.config import load_config
+from ..evidence.daily_freshness import active_freshness_for_current_target
 from .dialogue_text import clean_user_reason, clean_user_reasons
 from ..runtime.market_clock import (
     PHASE_CLOSING_AUCTION,
@@ -303,7 +304,10 @@ def build_canonical_pick(entry: BoardEntry, book: MarketBook) -> CanonicalPick:
         data_provenance["daily_last_date"] = pick_meta.get("daily_last_date")
     if pick_meta.get("daily_freshness_state"):
         data_provenance["daily_freshness_state"] = pick_meta.get("daily_freshness_state")
-    daybook_freshness = dict(book.daybook.source_meta.get("daily_freshness") or {})
+    daybook_freshness = active_freshness_for_current_target(
+        dict(book.daybook.source_meta.get("daily_freshness") or {}),
+        book_day=book.daybook_effective_day or book.daybook.trading_day,
+    )
     if daybook_freshness.get("target_day"):
         data_provenance["daily_target_day"] = daybook_freshness.get("target_day")
 
@@ -356,7 +360,11 @@ def build_canonical_run(*, book: MarketBook, run: AdviceRun, picks: Iterable[Boa
         for pick in canonical_picks_all
         if str(pick.data_provenance.get("daily_freshness_state") or "").strip().lower() not in {"", "current"}
     ]
-    daybook_freshness = dict(book.daybook.source_meta.get("daily_freshness") or {})
+    raw_daybook_freshness = dict(book.daybook.source_meta.get("daily_freshness") or {})
+    daybook_freshness = active_freshness_for_current_target(
+        raw_daybook_freshness,
+        book_day=book.daybook_effective_day or book.daybook.trading_day,
+    )
     blocked_reason = _as_text(daybook_freshness.get("blocking_reason"))
     degraded = (
         not bool(book.data_quality.complete)
@@ -381,7 +389,13 @@ def build_canonical_run(*, book: MarketBook, run: AdviceRun, picks: Iterable[Boa
     if run_action == "NO_TRADE":
         if stale_daily_picks:
             no_trade_reasons.append(f"日线数据未补齐到目标交易日：{', '.join(stale_daily_picks[:6])}")
-        if book.daybook.reason:
+        freshness_blocking_reason = _as_text(daybook_freshness.get("blocking_reason"))
+        raw_target = _as_text(raw_daybook_freshness.get("target_day"))
+        active_target = _as_text(daybook_freshness.get("target_day"))
+        stale_freshness_reason = bool(raw_target and active_target and raw_target != active_target)
+        if freshness_blocking_reason:
+            no_trade_reasons.append(freshness_blocking_reason)
+        elif book.daybook.reason and not stale_freshness_reason:
             no_trade_reasons.append(book.daybook.reason)
         no_trade_reasons.extend(_friendly_gate_reasons(book.gate))
         if not no_trade_reasons:
@@ -398,7 +412,10 @@ def build_canonical_run(*, book: MarketBook, run: AdviceRun, picks: Iterable[Boa
     }
     if book.gate and book.gate.metrics:
         data_provenance["gate_metrics"] = dict(book.gate.metrics)
-    daybook_freshness = dict(book.daybook.source_meta.get("daily_freshness") or {})
+    daybook_freshness = active_freshness_for_current_target(
+        dict(book.daybook.source_meta.get("daily_freshness") or {}),
+        book_day=book.daybook_effective_day or book.daybook.trading_day,
+    )
     if daybook_freshness:
         data_provenance["daily_freshness"] = {
             "ready": bool(daybook_freshness.get("ready", False)),
