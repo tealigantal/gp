@@ -263,6 +263,32 @@ def test_invalid_json_rewrite_once_succeeds(monkeypatch):
     assert frame.ambiguity["notes"] == ["rewritten"]
 
 
+def test_semantically_inconsistent_chat_rewrites_once(monkeypatch):
+    bad = {
+        "subject": "market",
+        "request": "chat",
+        "freshness": "next_session_plan",
+        "references": {},
+        "constraints": {},
+        "ambiguity": {"confidence": 0.8, "notes": ["bad"], "needs_clarification": False},
+    }
+    fixed = {
+        "subject": "run",
+        "request": "recommend",
+        "freshness": "next_session_plan",
+        "references": {},
+        "constraints": {"topk": 3},
+        "ambiguity": {"confidence": 0.85, "notes": ["rewritten"], "needs_clarification": False},
+    }
+    _mock_llm_contents(monkeypatch, [json.dumps(bad, ensure_ascii=False), json.dumps(fixed, ensure_ascii=False)])
+
+    frame = parse_concern(_memory_ctx(), _dummy_book(), "今天给我 3 只")
+
+    assert frame.request == "recommend"
+    assert frame.constraints["topk"] == 3
+    assert frame.ambiguity["notes"] == ["rewritten"]
+
+
 def test_invalid_json_twice_raises_parse_failed(monkeypatch):
     _mock_llm_contents(monkeypatch, ["不是 JSON", "{still bad"])
 

@@ -350,7 +350,7 @@ npm run build
 ## 已知限制
 
 - 当前没有 cron / scheduler，`ops` 工具需要手工触发
-- `/api/chat` 的意图解析依赖外部 LLM；LLM 不可用时会明确返回 503，LLM 返回非法 JSON 且修复失败时返回 502
+- `/api/chat` 的意图解析依赖外部 LLM；LLM 不可用时会明确返回 503，LLM 返回无效 TurnFrame 且修复失败时返回 502
 - 默认依赖外部 LLM 和行情 provider；如果网络、代理或密钥异常，自然语言理解和实时数据会受影响
 - 前端运行状态卡能显示“应由 `gp-worker` 自动更新”，但不是 Docker 进程级探针
 

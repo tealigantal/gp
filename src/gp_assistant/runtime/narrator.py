@@ -67,8 +67,11 @@ def _no_trade_fallback_text(judgment: Judgment) -> str:
     no_trade = judgment.no_trade
     if no_trade is None:
         return "今天先不硬做，等更清晰的机会。"
-    lines = [no_trade.status_reason or "今天先不硬做。"]
+    status_reason = str(no_trade.status_reason or "今天先不硬做。").strip()
+    lines = [status_reason]
     for reason in clean_user_reasons(list(no_trade.no_trade_reasons or [])[:4]):
+        if str(reason or "").strip() == status_reason:
+            continue
         lines.append(f"- {reason}")
     if no_trade.recovery_conditions:
         lines.append("重新观察这些条件：")

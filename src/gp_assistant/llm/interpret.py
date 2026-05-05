@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from typing import Any, Dict
 
 from .client import LLMClient
@@ -11,6 +12,11 @@ from ..runtime.utils import gen_id
 
 
 LOGGER = logging.getLogger(__name__)
+
+_RECOMMEND_HINT_RE = re.compile(
+    r"(?:推荐|给我|看看|来个|机会|榜单|标的|选|选择).{0,12}(?:\d{1,2}|一|二|三|四|五|六|七|八|九|十|两)\s*(?:只|个|票|支|个股|标的)?"
+    r"|(?:\d{1,2})\s*(?:只|个|票|支|个股|标的)"
+)
 
 
 SYSTEM = """
@@ -98,18 +104,31 @@ def _extract_content(response: Dict[str, Any]) -> str:
         return ""
 
 
+def _semantic_issue(frame: TurnFrame, user_message: str) -> str | None:
+    text = str(user_message or "").strip()
+    if frame.request == "chat" and frame.freshness != "active_run":
+        return "chat intent must use freshness=active_run"
+    if frame.request == "chat" and _RECOMMEND_HINT_RE.search(text):
+        return "message asks for ranked picks/recommendations but request=chat"
+    return None
+
+
 def _decode_turn_frame(content: str, user_message: str) -> TurnFrame:
     if not content:
         raise ValueError("LLM returned empty content")
     obj = json.loads(content)
     if not isinstance(obj, dict):
         raise ValueError("LLM returned JSON that is not an object")
-    return _normalize_turn_obj(obj, user_message)
+    frame = _normalize_turn_obj(obj, user_message)
+    issue = _semantic_issue(frame, user_message)
+    if issue:
+        raise ValueError(f"LLM returned semantically inconsistent TurnFrame: {issue}")
+    return frame
 
 
 def _repair_prompt(error: Exception, raw_output: str) -> str:
     return (
-        "上一条输出不是合法的 TurnFrame JSON。"
+        "上一条输出不是合法或语义一致的 TurnFrame。"
         "请只重写为一个合法 JSON object，不要解释。"
         f"错误原因：{type(error).__name__}: {_short(error)}\n"
         f"上一条原始输出：{_short(raw_output)}"
@@ -191,7 +210,7 @@ def parse_turn_frame(context: Dict[str, Any], user_message: str) -> TurnFrame:
                 },
             )
             raise IntentParseFailed(
-                "LLM intent parser returned invalid JSON after retry",
+                "LLM intent parser returned invalid or inconsistent TurnFrame after retry",
                 reason=f"{type(second_error).__name__}: {second_error}",
                 raw_output=_short(raw_output),
                 attempts=2,

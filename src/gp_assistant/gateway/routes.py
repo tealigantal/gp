@@ -271,7 +271,7 @@ def chat(req: ChatRequest) -> ChatResponse:
     except IntentParseFailed as ex:
         raise APIError(
             status_code=502,
-            message="LLM 意图解析返回非法 JSON",
+            message="LLM 意图解析返回无效结果",
             detail=ex.detail(),
         ) from ex
     return ChatResponse(**sanitize_chat_payload(out))

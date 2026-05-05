@@ -72,5 +72,5 @@ def test_chat_endpoint_maps_intent_parse_failed(monkeypatch):
     response = client.post("/api/chat", json={"message": "测试一下"})
     assert response.status_code == 502, response.text
     payload = response.json()
-    assert payload["error"]["message"] == "LLM 意图解析返回非法 JSON"
+    assert payload["error"]["message"] == "LLM 意图解析返回无效结果"
     assert payload["error"]["detail"]["attempts"] == 2

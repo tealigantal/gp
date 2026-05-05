@@ -26,10 +26,13 @@ The current product direction is:
 - Hardened the intent path so `/api/chat` now depends on the LLM router for market-facing requests instead of silently falling back to local semantic heuristics.
 - Added explicit API error mapping for intent failures:
   - `503` when the intent LLM is unavailable
-  - `502` when the LLM returns invalid JSON after one repair attempt
+  - `502` when the LLM returns invalid or semantically inconsistent TurnFrame output after one repair attempt
 - Added `src/gp_assistant/kernel/` as the public service facade for recommendation v2 artifacts, compare, pick detail, validation summary, portfolio state, execution intent preview, paper execution, and workbench aggregation.
 - Added active API routes for `recommend_v2`, `compare`, `pick`, `validation/summary`, and `workbench`.
 - Improved follow-up explanation grounding so short user questions can explain recent structured business facts instead of repeating prior prose or fabricating prices.
+- Added semantic consistency validation for LLM intent frames so obvious mismatches are repaired by the LLM or surfaced as 502 instead of being silently accepted.
+- Converted missing subject/rank follow-ups into explicit no-trade business replies instead of 500 errors.
+- Replaced deprecated `datetime.utcnow()` usage in paper-trade validation with timezone-aware UTC timestamps.
 - Fixed the current README and ops runbook UTF-8 Chinese text, and added `.gitattributes` to align repository text files with the LF line-ending policy already declared in `.editorconfig`.
 
 ### 2026-04-29
@@ -89,9 +92,9 @@ The following backend checks passed locally during the 2026-05-05 cleanup pass:
 - `python -m compileall -q src`
 - `pytest -q`
 
-The default test suite passed with only existing `datetime.utcnow()` deprecation warnings in `validation/paper_trade.py`.
+The default test suite passed without the previous `datetime.utcnow()` deprecation warnings.
 
-Real LLM-connected acceptance was not run in this shell because `LLMClient().available()` returned `llm_ready=false` with `LLM_BASE_URL 未配置`.
+Real LLM-connected `/api/chat` acceptance was run from PowerShell after loading `.env`. The checked sequence covered recommendation, rank follow-up, term explanation, comparison, and sell-decision follow-up. All five turns returned HTTP 200; because local data freshness blocked publication, recommendation and subject-dependent follow-ups correctly returned user-facing `no_trade` replies.
 
 ## Current Documentation Anchors
 

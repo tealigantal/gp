@@ -57,7 +57,7 @@ def _session() -> SessionState:
     return SessionState(session_id="s1", created_at=now_iso(), updated_at=now_iso())
 
 
-def test_pick_detail_market_no_subject_raises():
+def test_pick_detail_market_no_subject_returns_no_trade():
     frame = TurnFrame(
         frame_id="f1",
         raw_message="这只为什么",
@@ -69,11 +69,47 @@ def test_pick_detail_market_no_subject_raises():
         ambiguity={"confidence": 0.9, "notes": []},
     )
     ev = EvidencePack(frame=frame, session=_session(), book=_book())
-    try:
-        make_judgment("s1", frame, ev)
-        assert False, "should raise"
-    except ValueError:
-        assert True
+    j = make_judgment("s1", frame, ev)
+    assert j.kind == "no_trade"
+    assert j.no_trade is not None
+    assert "没有明确可核对的标的" in j.summary
+
+
+def test_live_entry_rank_without_subject_returns_no_trade():
+    frame = TurnFrame(
+        frame_id="f1b",
+        raw_message="第二个还能冲吗",
+        subject="symbol",
+        request="live_entry_check",
+        freshness="active_run",
+        references={"rank": 2},
+        constraints={},
+        ambiguity={"confidence": 0.9, "notes": []},
+    )
+    ev = EvidencePack(frame=frame, session=_session(), book=_book())
+    j = make_judgment("s1", frame, ev)
+    assert j.kind == "no_trade"
+    assert j.no_trade is not None
+    assert "第 2 只标的" in j.summary
+
+
+def test_compare_without_entries_returns_no_trade():
+    empty_book = _book().model_copy(update={"board": []})
+    frame = TurnFrame(
+        frame_id="f1c",
+        raw_message="第一只和第二只比呢",
+        subject="compare_set",
+        request="compare",
+        freshness="active_run",
+        references={},
+        constraints={},
+        ambiguity={"confidence": 0.9, "notes": []},
+    )
+    ev = EvidencePack(frame=frame, session=_session(), book=empty_book)
+    j = make_judgment("s1", frame, ev)
+    assert j.kind == "no_trade"
+    assert j.no_trade is not None
+    assert "没有足够可比较的标的" in j.summary
 
 
 def test_live_entry_check_with_subject_entry():

@@ -159,7 +159,7 @@ def recommend_workflow(session_id: str, evidence: EvidencePack, *, topk: int) ->
 
 def pick_detail_workflow(evidence: EvidencePack) -> Judgment:
     if evidence.subject_entry is None:
-        raise ValueError("pick_detail requires subject_entry")
+        return _missing_subject_workflow(evidence)
     run = evidence.active_run
     if run is None:
         run = publish_run(session_id=evidence.session.session_id, book=evidence.book, topk=max(3, len(evidence.book.board)))
@@ -195,9 +195,48 @@ def no_trade_workflow(evidence: EvidencePack) -> Judgment:
     )
 
 
+def _missing_subject_message(evidence: EvidencePack) -> str:
+    frame = getattr(evidence, "frame", None)
+    if getattr(frame, "request", None) == "compare":
+        return "当前没有足够可比较的标的，先不做强弱排序。"
+    refs = getattr(frame, "references", {}) or {}
+    if refs.get("rank") is not None:
+        return f"当前没有可核对的第 {refs.get('rank')} 只标的，先不做单票执行判断。"
+    if refs.get("symbol"):
+        return f"当前计划里没有找到 {refs.get('symbol')}，先不做单票执行判断。"
+    return "当前没有明确可核对的标的，先不做单票执行判断。"
+
+
+def _missing_subject_workflow(evidence: EvidencePack) -> Judgment:
+    base = no_trade_workflow(evidence)
+    message = _missing_subject_message(evidence)
+    no_trade = base.no_trade
+    if no_trade is not None:
+        reasons: list[str] = []
+        for item in [message, *list(no_trade.no_trade_reasons or [])]:
+            text = str(item or "").strip()
+            if text and text not in reasons:
+                reasons.append(text)
+        no_trade = no_trade.model_copy(
+            update={
+                "market_summary": message,
+                "status_reason": message,
+                "no_trade_reasons": reasons[:5],
+            }
+        )
+    return base.model_copy(
+        update={
+            "kind": "no_trade",
+            "summary": message,
+            "subject_entry": None,
+            "no_trade": no_trade,
+        }
+    )
+
+
 def live_entry_workflow(evidence: EvidencePack) -> Judgment:
     if evidence.subject_entry is None:
-        raise ValueError("live_entry_check requires subject_entry")
+        return _missing_subject_workflow(evidence)
     run = evidence.active_run or publish_run(session_id=evidence.session.session_id, book=evidence.book, topk=max(3, len(evidence.book.board)))
     canonical_run = build_canonical_run(book=evidence.book, run=run, picks=run.picks)
     pick = next((item for item in canonical_run.picks if item.symbol == evidence.subject_entry.symbol), None)
@@ -222,9 +261,13 @@ def compare_workflow(evidence: EvidencePack) -> Judgment:
         entries = list(evidence.active_run.picks[:2])
     if not entries:
         entries = list(evidence.book.board[:2])
+    if not entries:
+        return _missing_subject_workflow(evidence)
     run = evidence.active_run or publish_run(session_id=evidence.session.session_id, book=evidence.book, topk=max(3, len(evidence.book.board)))
     canonical_run = build_canonical_run(book=evidence.book, run=run, picks=run.picks)
     picks = [next((item for item in canonical_run.picks if item.symbol == entry.symbol), build_canonical_pick(entry, evidence.book)) for entry in entries]
+    if not picks:
+        return _missing_subject_workflow(evidence)
     stale_points = [issue for issue in (_pick_freshness_issue(pick) for pick in picks) if issue]
     compare_view = _stale_compare(canonical_run, picks, stale_points) if stale_points else build_compare_view(canonical_run, picks)
     return Judgment(
@@ -240,7 +283,7 @@ def compare_workflow(evidence: EvidencePack) -> Judgment:
 
 def exit_workflow(evidence: EvidencePack) -> Judgment:
     if evidence.subject_entry is None:
-        raise ValueError("exit_decision requires subject_entry")
+        return _missing_subject_workflow(evidence)
     run = evidence.active_run or publish_run(session_id=evidence.session.session_id, book=evidence.book, topk=max(3, len(evidence.book.board)))
     canonical_run = build_canonical_run(book=evidence.book, run=run, picks=run.picks)
     pick = next((item for item in canonical_run.picks if item.symbol == evidence.subject_entry.symbol), None)

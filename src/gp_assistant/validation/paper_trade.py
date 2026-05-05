@@ -3,9 +3,13 @@ from __future__ import annotations
 from typing import Any, Dict, List, Optional
 import json
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timezone
 
 from ..core.paths import store_dir
+
+
+def _now_utc_iso() -> str:
+    return datetime.now(timezone.utc).isoformat()
 
 
 def paper_trade_path() -> Path:
@@ -45,7 +49,7 @@ def start_tracking(pick_id: str, symbol: str, strategy: Optional[str], as_of: st
             "mae": 0.0,
             "holding_days": 0,
             "final_state": None,
-            "updated_at": datetime.utcnow().isoformat(),
+            "updated_at": _now_utc_iso(),
         })
         _save_current(cur)
 
@@ -76,7 +80,7 @@ def update_with_bars(symbol: str, bars: List[Dict[str, Any]], entry_zone: Option
             if any(c >= float(max(takes)) for c in closes):
                 p["hit_take"] = True
                 p["final_state"] = p.get("final_state") or "target_hit"
-        p["updated_at"] = datetime.utcnow().isoformat()
+        p["updated_at"] = _now_utc_iso()
     _save_current(cur)
 
 

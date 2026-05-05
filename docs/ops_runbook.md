@@ -94,7 +94,7 @@ Core endpoints:
 Chat intent parsing is an explicit LLM dependency:
 
 - LLM unavailable returns HTTP 503 with `LLM 意图解析服务不可用`
-- invalid LLM JSON after one repair attempt returns HTTP 502 with `LLM 意图解析返回非法 JSON`
+- invalid or semantically inconsistent LLM TurnFrame after one repair attempt returns HTTP 502 with `LLM 意图解析返回无效结果`
 - the service should not silently fall back to a fake chat intent for market requests
 
 ## Recommended Local Validation
