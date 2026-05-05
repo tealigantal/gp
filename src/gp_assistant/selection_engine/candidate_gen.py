@@ -394,7 +394,7 @@ def generate_candidates(
             "close": close,
         }
 
-        # 观察/禁止标记
+        # 暂不入场/禁止标记
         observe_only = False
         reasons: List[str] = []
         if cand["liquidity"]["grade"] == "C":
@@ -464,6 +464,5 @@ def generate_candidates(
     if return_features:
         return pool[: max(1, topk) * 5], veto_reasons, stats, feats_by_symbol
     return pool[: max(1, topk) * 5], veto_reasons, stats
-
 
 

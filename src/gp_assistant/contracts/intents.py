@@ -33,7 +33,6 @@ SubjectType = Literal[
 
 FreshnessType = Literal[
     "active_run",
-    "latest_5m",
     "rebuild_run",
     "next_session_plan",
     # legacy aliases

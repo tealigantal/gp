@@ -384,7 +384,7 @@ def _term_explain_result(
     grounded_fields = _explain_grounded_fields(message, pick_fact) if pick_fact else {}
     source_kind = message.get("message_kind") or meta.get("kind")
     reply_text = "我会基于最近一条结构化业务结论解释，不重新计算新的市场判断。"
-    suggestions = ["这只现在还能买吗", "为什么仅观察", "今天给我 3 只"]
+    suggestions = ["这只现在还能买吗", "为什么暂不入场", "今天给我 3 只"]
 
     if grounded_fields:
         bits = []
@@ -403,7 +403,7 @@ def _term_explain_result(
         suggestions = ["这只现在还能买吗", "它的止盈止损点再说一遍", "为什么这样判断"]
     elif message.get("narrative_text"):
         reply_text = "我只找到了上一轮文本结论，缺少可核对的结构化计划字段；我会说明这一限制，不能补造计算公式。"
-        suggestions = ["今天给我 3 只", "这只票为什么能上榜", "当前该观察什么"]
+        suggestions = ["今天给我 3 只", "这只票为什么能上榜", "当前该看什么"]
 
     return AgentToolResult(
         tool_name="explain_followup",
@@ -461,7 +461,7 @@ def _assistant_context_result(book: MarketBook) -> AgentToolResult:
     reply_text = (
         "你好，我可以直接帮你看今天的候选、某只票还能不能买、止盈止损怎么设，或者解释上一条结论。"
         if intraday_enabled
-        else "你好，我可以直接帮你看今天的候选、解释某只票为什么入选，或者说明当前该观察什么。盘中 5 分钟执行数据现在是停用的。"
+        else "你好，我可以直接帮你看今天的候选、解释某只票为什么入选，或者说明当前该看什么。当前只使用日线计划模块。"
     )
     summary = GroundingSummary(
         market_phase=book.market_phase,
@@ -476,7 +476,7 @@ def _assistant_context_result(book: MarketBook) -> AgentToolResult:
         message={
             "message_kind": "chat",
             "narrative_text": reply_text,
-            "followup_suggestions": ["给我当前推荐的前三个标的", "这只票为什么能上榜", "今天适合空仓观察还是执行计划"],
+            "followup_suggestions": ["给我当前推荐的前三个标的", "这只票为什么能上榜", "今天适合空仓暂不入场还是执行计划"],
             "freshness_meta": {
                 "market_phase": book.market_phase,
                 "daybook_effective_day": book.daybook_effective_day,
@@ -685,7 +685,7 @@ def _market_phase_label(value: str | None) -> str:
 
 def _execution_state_label(value: str | None) -> str | None:
     label = execution_state_label(value)
-    return label if label != "继续观察" else None
+    return label if label != "继续检查" else None
 
 
 def _safe_risk_notes(notes: list[str] | None) -> list[str]:
@@ -701,7 +701,7 @@ def _explain_decision_text(reply: ReplyBundle, judgment: Judgment) -> str:
         pulse_slot_at = basis.pulse_slot_at or "最新可读快照"
         parts.append(f"这个结论是基于当前{market_phase}的快照得出的，日线使用的是 {daily_target_day}，盘中参考到 {pulse_slot_at}。")
     else:
-        parts.append(f"这个结论是基于当前{market_phase}的快照得出的，当前只使用日线计划和观察结论，生效日是 {daily_target_day}。")
+        parts.append(f"这个结论是基于当前{market_phase}的快照得出的，当前只使用日线计划和暂不入场结论，生效日是 {daily_target_day}。")
 
     detail = judgment.pick_detail
     if detail is not None:

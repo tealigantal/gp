@@ -71,8 +71,8 @@ def _runtime_services() -> list[RuntimeToolInfo]:
         RuntimeToolInfo(
             service="gp-worker",
             mode="always_on",
-            command="python -m gp_assistant.cli pulse-loop",
-            description="后台 worker，按市场时段自动修复日线、5 分钟线和 current artifact。",
+            command="python -m gp_assistant.cli daily-loop",
+            description="后台 worker，按市场时段自动刷新日线计划和 current artifact。",
         ),
         RuntimeToolInfo(
             service="gp-rebuild-daybook",
@@ -80,13 +80,6 @@ def _runtime_services() -> list[RuntimeToolInfo]:
             profile="ops",
             command="python -m gp_assistant.cli rebuild-daybook",
             description="立即启动一次有边界的运行时修复。",
-        ),
-        RuntimeToolInfo(
-            service="gp-replay-today",
-            mode="manual",
-            profile="ops",
-            command="python -m gp_assistant.cli replay-today",
-            description="重试当前市场时段对应的运行时修复计划。",
         ),
         RuntimeToolInfo(
             service="gp-postclose-archive",
@@ -104,10 +97,6 @@ def _ops_executor(operation: str) -> tuple[str, Callable[[], dict[str, Any]]] | 
             "已启动一次运行时修复。",
             lambda: reconcile_runtime_state(operation="rebuild_daybook"),
         ),
-        "gp-replay-today": (
-            "已重试当前运行时修复。",
-            lambda: reconcile_runtime_state(operation="replay_today"),
-        ),
         "gp-postclose-archive": (
             "已完成一次 daily freshness audit。",
             lambda: reconcile_runtime_state(operation="postclose_archive"),
@@ -124,18 +113,11 @@ def _book_freshness(book, market_phase: str, target_slot_at: str | None, *, intr
     slot_status = str(getattr(book, "slot_status", "") or "").upper()
     if slot_status and slot_status != "OK":
         return "degraded"
-    last_closed_5m = getattr(book, "last_closed_5m", None)
-    if market_phase in {PHASE_PREOPEN, PHASE_OPEN_NO_FIRST_BAR} and not last_closed_5m:
-        return "awaiting_first_slot"
-    if target_slot_at and last_closed_5m:
-        if str(last_closed_5m) >= str(target_slot_at):
-            return "postclose_ready" if market_phase == PHASE_POSTCLOSE_PENDING else "current"
-        return "lagging"
+    if market_phase == PHASE_POSTCLOSE_PENDING:
+        return "postclose_ready"
     if market_phase == PHASE_NON_TRADING:
         return "non_trading"
-    if last_closed_5m:
-        return "available"
-    return "unavailable"
+    return "daily_only"
 
 
 def _daily_freshness_fields(book) -> dict[str, Any]:
@@ -165,7 +147,7 @@ def _load_current_book_best_effort():
 
 def _runtime_status(book, *, lock_error: str | None = None) -> RuntimeStatus:
     cfg = load_config()
-    intraday_runtime_enabled = bool(getattr(cfg, "intraday_runtime_enabled", False))
+    intraday_runtime_enabled = False
     ms = compute_market_state()
     snapshot = load_repair_status_snapshot()
     auto_update_expected = ms.market_phase in {
@@ -248,7 +230,7 @@ def _runtime_status(book, *, lock_error: str | None = None) -> RuntimeStatus:
                 lock_error
                 if lock_error
                 else (
-                    "当前配置已关闭盘中 5 分钟接入，仅保留日级计划与观察状态。"
+                    "当前只使用日线计划模块。"
                     if not intraday_runtime_enabled
                     else None
                 )

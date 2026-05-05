@@ -1,4 +1,4 @@
-﻿x-gp-build: &gp-build
+x-gp-build: &gp-build
   context: .
   args:
     BASE_PY_IMAGE: ${BASE_PY_IMAGE:-docker.m.daocloud.io/library/python:3.11-slim-bookworm}
@@ -67,18 +67,12 @@ services:
 
   gp-worker:
     <<: *gp-service
-    command: ["python", "-m", "gp_assistant.cli", "pulse-loop"]
+    command: ["python", "-m", "gp_assistant.cli", "daily-loop"]
     restart: unless-stopped
 
   gp-rebuild-daybook:
     <<: *gp-service
     command: ["python", "-m", "gp_assistant.cli", "rebuild-daybook"]
-    profiles: ["ops"]
-    restart: "no"
-
-  gp-replay-today:
-    <<: *gp-service
-    command: ["python", "-m", "gp_assistant.cli", "replay-today"]
     profiles: ["ops"]
     restart: "no"
 

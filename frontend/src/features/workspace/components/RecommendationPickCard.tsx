@@ -1,6 +1,5 @@
 import { Button, Card, Descriptions, Space, Tag, Typography } from 'antd'
 import type { CanonicalPick } from '../../../shared/contracts'
-import { fmtPct } from '../../../shared/format'
 import { executionStateMeta, riskLabel } from '../presentation'
 
 interface RecommendationPickCardProps {
@@ -25,13 +24,13 @@ export function RecommendationPickCard({ entry, onPrompt }: RecommendationPickCa
               <Typography.Text strong>
                 {entry.code} {entry.name || ''}
               </Typography.Text>
-              <div className="micro-copy">{entry.action === 'BUY' ? '优先执行计划' : '优先观察计划'}</div>
+              <div className="micro-copy">{entry.action === 'BUY' ? '优先执行计划' : '暂不入场'}</div>
             </div>
           </Space>
           <Space wrap>
-            <Tag color={entry.can_execute_now ? 'green' : 'default'}>{entry.can_execute_now ? '现在可执行' : '先别追'}</Tag>
+            <Tag color={entry.can_execute_now ? 'green' : 'default'}>{entry.can_execute_now ? '计划区间内' : '先别追'}</Tag>
             <Tag color={state.color}>{state.label}</Tag>
-            {dailyLastDate ? <Tag color={dailyColor}>日线截止 {dailyLastDate}</Tag> : null}
+            {dailyLastDate ? <Tag color={dailyColor}>日线截至 {dailyLastDate}</Tag> : null}
           </Space>
         </div>
 
@@ -43,15 +42,8 @@ export function RecommendationPickCard({ entry, onPrompt }: RecommendationPickCa
           <Descriptions.Item label="止盈">{entry.take_text || '待确认'}</Descriptions.Item>
           <Descriptions.Item label="风险级别">{riskLabel(entry.risk_level)}</Descriptions.Item>
           <Descriptions.Item label="综合分">{typeof entry.final_score === 'number' ? entry.final_score.toFixed(2) : '--'}</Descriptions.Item>
-          <Descriptions.Item label="执行判断">{state.label}</Descriptions.Item>
+          <Descriptions.Item label="计划判断">{state.label}</Descriptions.Item>
         </Descriptions>
-
-        <div className="fact-strip">
-          <Tag>距买点 {fmtPct(entry.entry_distance_pct, 2)}</Tag>
-          <Tag>VWAP {entry.vwap?.toFixed(2) || '--'}</Tag>
-          <Tag>相对量能 {entry.slot_rel_vol?.toFixed(2) || '--'}x</Tag>
-          <Tag>RS {fmtPct(entry.rs_index, 2)}</Tag>
-        </div>
 
         <div>
           <Typography.Text strong>为什么它在这轮计划里</Typography.Text>
@@ -70,11 +62,11 @@ export function RecommendationPickCard({ entry, onPrompt }: RecommendationPickCa
           </Button>
           {entry.rank > 1 ? (
             <Button size="small" className="prompt-chip" onClick={() => onPrompt?.(`${entry.symbol} 和第一只比呢`)}>
-              和第一只比呢
+              和第一只比
             </Button>
           ) : (
             <Button size="small" className="prompt-chip" onClick={() => onPrompt?.('第一只和第二只比呢')}>
-              和第二只比呢
+              和第二只比
             </Button>
           )}
         </Space>

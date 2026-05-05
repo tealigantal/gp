@@ -26,11 +26,11 @@ def make_recommendation(session_id: str, book: MarketBook, topk: int = 3) -> Jud
         )
 
     if run.slot_status and run.slot_status != "OK":
-        summary = f"当前 slot 状态为 {run.slot_status}，执行数据降级，当前只保留观察级建议。"
+        summary = f"当前 slot 状态为 {run.slot_status}，数据受限，当前只保留日线级建议。"
     elif run.tradeable:
         summary = "已基于当前统一 artifact 生成本轮推荐。"
     else:
-        summary = f"当前更偏观察，原因：{run.reason or '当前闸门未放行'}"
+        summary = f"当前更偏暂不入场，原因：{run.reason or '当前闸门未放行'}"
 
     return Judgment(
         kind="recommend",

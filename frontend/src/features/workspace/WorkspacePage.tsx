@@ -86,7 +86,7 @@ export function WorkspacePage() {
                         用一条连续对话，把推荐、执行、风控和变化都问清楚
                       </Typography.Title>
                       <Typography.Text className="section-subtitle">
-                        直接追问今天的候选、为什么当前只观察、某只票还能不能买，或者上一轮为什么变了。
+                        直接追问今天的候选、为什么当前暂不入场、某只票还能不能买，或者上一轮为什么变了。
                       </Typography.Text>
                     </div>
                     <Typography.Text className="chat-card-caption">

@@ -1,6 +1,5 @@
 import { Alert, Button, Space, Tag, Typography } from 'antd'
 import type { OpsRunResponse, RuntimeStatus, RuntimeToolInfo } from '../../../shared/contracts'
-import { isIntradayEnabled } from '../presentation'
 import { dailyTargetModeMeta, fmtDateTime, runtimeFreshnessMeta } from '../runtimeLabels'
 
 interface OperationsStatusCardProps {
@@ -15,35 +14,25 @@ interface OperationsStatusCardProps {
 
 function toolActionLabel(service: string) {
   if (service === 'gp-rebuild-daybook') return '重建日线计划'
-  if (service === 'gp-replay-today') return '回放今日执行态'
   if (service === 'gp-postclose-archive') return '执行收盘归档'
   return '立即执行'
 }
 
 function toolPurpose(service: string) {
-  if (service === 'gp-rebuild-daybook') return '重做日线推荐底稿，不处理 5 分钟执行态。'
-  if (service === 'gp-replay-today') return '补齐盘中执行态，不重算日线候选。'
+  if (service === 'gp-rebuild-daybook') return '重做日线推荐底稿。'
   if (service === 'gp-postclose-archive') return '固化收盘后的最终状态。'
   return ''
 }
 
 function summarizeResult(result?: Record<string, unknown>) {
   if (!result) return ''
-  const current = result.current
   const bits: string[] = []
-
   if (typeof result.trade_day === 'string' && result.trade_day) bits.push(`交易日 ${result.trade_day}`)
-  if (typeof result.replayed_slots === 'number') bits.push(`已回放 ${result.replayed_slots} 个 slot`)
-  if (typeof result.slot_status === 'string' && result.slot_status) bits.push(`slot 状态 ${result.slot_status}`)
+  if (typeof result.slot_status === 'string' && result.slot_status) bits.push(`状态 ${result.slot_status}`)
   if (typeof result.artifact_id === 'string' && result.artifact_id) bits.push(`artifact ${result.artifact_id}`)
-  if (typeof result.noop === 'boolean' && result.noop) bits.push('这次没有新增产物')
+  if (typeof result.noop === 'boolean' && result.noop) bits.push('本次没有新增产物')
   if (typeof result.reason === 'string' && result.reason) bits.push(result.reason)
-  if (current && typeof current === 'object') {
-    const currentRecord = current as Record<string, unknown>
-    if (typeof currentRecord.slot_status === 'string' && currentRecord.slot_status) bits.push(`当前 slot ${currentRecord.slot_status}`)
-    if (typeof currentRecord.slot_at === 'string' && currentRecord.slot_at) bits.push(`定位到 ${currentRecord.slot_at}`)
-  }
-  return bits.join(' · ')
+  return bits.join(' / ')
 }
 
 function recommendedTools(runtime?: RuntimeStatus | null, manualTools: RuntimeToolInfo[] = []) {
@@ -54,14 +43,9 @@ function recommendedTools(runtime?: RuntimeStatus | null, manualTools: RuntimeTo
   if (runtime?.daily_freshness_ready === false && !eodPending && !previousCompleted && toolSet.has('gp-rebuild-daybook')) {
     out.push('gp-rebuild-daybook')
   }
-  if (
-    isIntradayEnabled(runtime) &&
-    (runtime?.slot_status || '').toUpperCase() !== 'OK' &&
-    toolSet.has('gp-replay-today')
-  ) {
-    out.push('gp-replay-today')
+  if (runtime?.market_phase === 'POSTCLOSE_PENDING' && !eodPending && toolSet.has('gp-postclose-archive')) {
+    out.push('gp-postclose-archive')
   }
-  if (runtime?.market_phase === 'POSTCLOSE_PENDING' && !eodPending && toolSet.has('gp-postclose-archive')) out.push('gp-postclose-archive')
   return [...new Set(out)]
 }
 
@@ -93,11 +77,11 @@ export function OperationsStatusCard({
       <Space direction="vertical" size={12} style={{ width: '100%' }}>
         <div className="ops-status-strip">
           <Tag color="green">{runtime?.auto_update_service || 'gp-worker'}</Tag>
-          {isIntradayEnabled(runtime) ? <Tag>盘中执行态开启</Tag> : <Tag>日线模式</Tag>}
+          <Tag>日线模式</Tag>
           {runtime?.data_provider ? <Tag>数据源 {runtime.data_provider}</Tag> : null}
           {dailyMode ? <Tag color={dailyMode.color}>{dailyMode.label}</Tag> : null}
           <Tag color={eodPending ? 'gold' : dailyBlocked ? 'volcano' : 'green'}>
-            {eodPending ? '等待收盘日线' : dailyBlocked ? '日线未就绪' : '日线已补齐'}
+            {eodPending ? '等待收盘日线' : dailyBlocked ? '日线未就绪' : '日线已就绪'}
           </Tag>
         </div>
 
@@ -113,10 +97,6 @@ export function OperationsStatusCard({
           <div>
             <span>日线目标</span>
             <strong>{runtime?.daily_target_day || '--'}</strong>
-          </div>
-          <div>
-            <span>目标 slot</span>
-            <strong>{runtime?.pulse_slot_at || '--'}</strong>
           </div>
           <div>
             <span>检查 / 过期</span>

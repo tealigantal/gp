@@ -9,7 +9,7 @@ interface ExitDecisionMessageProps {
 function actionLabel(action: ExitDecisionArtifact['action']) {
   const mapping = {
     HOLD: { color: 'blue', label: '继续持有' },
-    REDUCE: { color: 'volcano', label: '减仓观察' },
+    REDUCE: { color: 'volcano', label: '减仓暂不入场' },
     SELL: { color: 'red', label: '卖出离场' },
     WATCH: { color: 'default', label: '继续跟踪' },
   }

@@ -7,8 +7,8 @@ import type {
   MarketBook,
   OpsRunResponse,
 } from '../../../shared/contracts'
-import { isIntradayEnabled, runActionLabel, slotStatusLabel } from '../presentation'
-import { fmtDateTime, marketPhaseLabel } from '../runtimeLabels'
+import { executionStateMeta, runActionLabel, slotStatusLabel } from '../presentation'
+import { marketPhaseLabel } from '../runtimeLabels'
 import { OperationsStatusCard } from './OperationsStatusCard'
 
 interface DecisionSnapshotProps {
@@ -33,7 +33,7 @@ function resolveRun(latest?: ChatResponse | null): CanonicalRunArtifact | null {
 function dataQualityLabel(run: CanonicalRunArtifact | null) {
   const complete = run?.data_quality && typeof run.data_quality.complete === 'boolean' ? run.data_quality.complete : null
   if (complete === true) return '完整'
-  if (complete === false) return '降级'
+  if (complete === false) return '数据受限'
   return '--'
 }
 
@@ -49,10 +49,8 @@ export function DecisionSnapshot({
   opsError,
 }: DecisionSnapshotProps) {
   const run = resolveRun(latest)
-  const intradayEnabled = isIntradayEnabled(health?.runtime)
   const marketPhase = marketPhaseLabel(run?.market_phase || book?.market_phase || health?.runtime?.market_phase)
   const slotState = slotStatusLabel(run?.slot_status || book?.slot_status || health?.runtime?.slot_status)
-  const executionWindow = intradayEnabled ? fmtDateTime(run?.pulse_slot_at || book?.last_closed_5m || health?.runtime?.last_closed_5m) : '已停用'
   const symbolRows = (run?.picks || []).length
     ? (run?.picks || []).slice(0, 5).map((pick) => ({
         key: pick.symbol,
@@ -60,7 +58,7 @@ export function DecisionSnapshot({
         symbol: pick.symbol,
         name: pick.name || '--',
         summary: pick.thesis || pick.why_selected || '暂无摘要',
-        actionLabel: pick.action === 'BUY' ? '计划买入' : '观察计划',
+        actionLabel: pick.action === 'BUY' ? '计划买入' : '暂不入场',
         executionState: pick.execution_state,
         entryText: pick.entry_text || '',
       }))
@@ -71,7 +69,7 @@ export function DecisionSnapshot({
           symbol: pick.symbol,
           name: pick.name || '--',
           summary: pick.pick?.thesis || pick.summary || '暂无摘要',
-          actionLabel: pick.action === 'BUY' ? '计划买入' : '观察计划',
+          actionLabel: pick.action === 'BUY' ? '计划买入' : '暂不入场',
           executionState: pick.execution_state,
           entryText: '',
         }))
@@ -90,15 +88,15 @@ export function DecisionSnapshot({
             <strong>{marketPhase}</strong>
           </div>
           <div>
-            <span>{intradayEnabled ? '最新执行窗口' : '盘中执行态'}</span>
-            <strong>{executionWindow}</strong>
+            <span>运行链路</span>
+            <strong>日线计划</strong>
           </div>
           <div>
             <span>Daybook</span>
             <strong>{run?.daybook_effective_day || book?.daybook_effective_day || '--'}</strong>
           </div>
           <div>
-            <span>slot</span>
+            <span>状态</span>
             <strong>{slotState}</strong>
           </div>
         </div>
@@ -114,36 +112,39 @@ export function DecisionSnapshot({
         opsError={opsError}
       />
 
-      <section className="snapshot-section" aria-label="Top 关注标的">
+      <section className="snapshot-section" aria-label="Top 标的">
         <div className="snapshot-section-title">
-          <Typography.Text strong>Top 关注标的</Typography.Text>
+          <Typography.Text strong>Top 标的</Typography.Text>
           {run ? <Tag>{runActionLabel(run.run_action)}</Tag> : null}
         </div>
         <Space direction="vertical" size={12} style={{ width: '100%' }}>
           {symbolRows.length === 0 ? (
             <Typography.Text type="secondary" className="snapshot-empty-copy">
-              当前没有同源 pick。可以直接在聊天里请求新的推荐，或者追问今天为什么更适合观察。
+              当前没有同源 pick。可以直接在聊天里请求新的推荐，或者追问今天为什么暂不入场。
             </Typography.Text>
           ) : (
-            symbolRows.map((row) => (
-              <div key={row.key} className="snapshot-symbol-row">
-                <div className="snapshot-symbol-rank">#{row.rank}</div>
-                <div className="snapshot-symbol-main">
-                  <div className="snapshot-symbol-line">
-                    <Typography.Text strong>{row.symbol}</Typography.Text>
-                    <Typography.Text type="secondary">{row.name}</Typography.Text>
+            symbolRows.map((row) => {
+              const state = executionStateMeta(row.executionState)
+              return (
+                <div key={row.key} className="snapshot-symbol-row">
+                  <div className="snapshot-symbol-rank">#{row.rank}</div>
+                  <div className="snapshot-symbol-main">
+                    <div className="snapshot-symbol-line">
+                      <Typography.Text strong>{row.symbol}</Typography.Text>
+                      <Typography.Text type="secondary">{row.name}</Typography.Text>
+                    </div>
+                    <Typography.Paragraph className="snapshot-symbol-note" type="secondary">
+                      {row.summary}
+                    </Typography.Paragraph>
                   </div>
-                  <Typography.Paragraph className="snapshot-symbol-note" type="secondary">
-                    {row.summary}
-                  </Typography.Paragraph>
+                  <div className="snapshot-symbol-state">
+                    <Tag>{row.actionLabel}</Tag>
+                    <Tag color={state.color}>{state.label}</Tag>
+                    {row.entryText ? <Typography.Text type="secondary">{row.entryText}</Typography.Text> : null}
+                  </div>
                 </div>
-                <div className="snapshot-symbol-state">
-                  <Tag>{row.actionLabel}</Tag>
-                  <Typography.Text>{row.executionState}</Typography.Text>
-                  {row.entryText ? <Typography.Text type="secondary">{row.entryText}</Typography.Text> : null}
-                </div>
-              </div>
-            ))
+              )
+            })
           )}
         </Space>
       </section>

@@ -5,7 +5,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from gp_assistant import worker
-from gp_assistant.runtime.market_clock import PHASE_INTRADAY_PM, PHASE_POSTCLOSE_PENDING, PHASE_PREOPEN
+from gp_assistant.runtime.market_clock import PHASE_POSTCLOSE_PENDING, PHASE_PREOPEN
 
 
 def test_reconcile_runtime_state_uses_single_dispatch_path(monkeypatch):
@@ -30,59 +30,35 @@ def test_reconcile_runtime_state_uses_single_dispatch_path(monkeypatch):
     assert manual_result["operation"] == "rebuild_daybook"
 
 
-def test_postclose_archive_self_heals_before_archiving(monkeypatch):
-    monkeypatch.setattr(worker, "_intraday_runtime_enabled", lambda: True)
+def test_postclose_archive_builds_daily_plan_without_replay(monkeypatch):
     state = SimpleNamespace(
         market_phase=PHASE_POSTCLOSE_PENDING,
         target_daybook_effective_day="20240320",
         target_pulse_trade_day="20240320",
         target_pulse_slot_at="2024-03-20 14:55:00",
     )
-    stale = SimpleNamespace(
-        trade_day="20240320",
-        daybook_effective_day="20240320",
-        slot_at="2024-03-20 14:55:00",
-        market_phase=PHASE_INTRADAY_PM,
-        slot_status="UNAVAILABLE",
-        artifact_id="slot_old",
-        slot_id="20240320_1455",
-    )
-    healed = SimpleNamespace(
-        trade_day="20240320",
-        daybook_effective_day="20240320",
-        slot_at="2024-03-20 14:55:00",
-        market_phase=PHASE_POSTCLOSE_PENDING,
-        slot_status="DEGRADED",
-        artifact_id="slot_new",
-        slot_id="20240320_1455",
-    )
-    replay_calls: list[bool] = []
-    load_calls = {"count": 0}
-
-    def fake_load_current_slot_artifact():
-        load_calls["count"] += 1
-        return stale if load_calls["count"] == 1 else healed
-
-    def fake_replay(now=None, force=False):
-        replay_calls.append(force)
-        return {"current": {"artifact_id": "slot_new", "slot_status": "DEGRADED"}}
+    daybook = SimpleNamespace(source_meta={"daily_freshness": {"ready": True}})
+    build_calls: list[dict[str, object]] = []
 
     monkeypatch.setattr(worker, "compute_market_state", lambda now=None: state)
-    monkeypatch.setattr(worker, "_load_or_build_daybook", lambda trade_day: SimpleNamespace(source_meta={"daily_freshness": {"ready": True}}))
-    monkeypatch.setattr(worker, "load_current_slot_artifact", fake_load_current_slot_artifact)
-    monkeypatch.setattr(worker, "boot_replay_to_current_slot", fake_replay)
+    monkeypatch.setattr(worker, "_load_or_build_daybook", lambda trade_day, force=False: daybook)
+    monkeypatch.setattr(
+        worker,
+        "_build_and_save_daily_plan",
+        lambda **kwargs: build_calls.append(kwargs) or {"artifact_id": "daily_1", "slot_status": "OK"},
+    )
 
     result = worker.run_postclose_archive()
 
-    assert replay_calls == [True]
     assert result["archived"] is True
-    assert result["artifact_id"] == "slot_new"
-    assert result["reconciled"]["current"]["slot_status"] == "DEGRADED"
+    assert result["artifact_id"] == "daily_1"
+    assert build_calls[0]["daybook"] is daybook
+    assert build_calls[0]["market_phase"] == PHASE_POSTCLOSE_PENDING
 
 
 def test_replay_today_stops_when_daybook_daily_freshness_blocked(monkeypatch):
     state = SimpleNamespace(
-        market_phase=PHASE_INTRADAY_PM,
+        market_phase=PHASE_PREOPEN,
         target_daybook_effective_day="20240320",
         target_pulse_trade_day="20240320",
         target_pulse_slot_at="2024-03-20 10:05:00",
@@ -100,7 +76,7 @@ def test_replay_today_stops_when_daybook_daily_freshness_blocked(monkeypatch):
     )
 
     monkeypatch.setattr(worker, "compute_market_state", lambda now=None: state)
-    monkeypatch.setattr(worker, "_load_or_build_daybook", lambda trade_day: blocked_daybook)
+    monkeypatch.setattr(worker, "_load_or_build_daybook", lambda trade_day, force=False: blocked_daybook)
 
     result = worker.boot_replay_to_current_slot()
 
@@ -156,7 +132,7 @@ def test_postclose_archive_waits_when_eod_daily_pending(monkeypatch):
     )
 
     monkeypatch.setattr(worker, "compute_market_state", lambda now=None: state)
-    monkeypatch.setattr(worker, "_load_or_build_daybook", lambda trade_day: daybook)
+    monkeypatch.setattr(worker, "_load_or_build_daybook", lambda trade_day, force=False: daybook)
 
     result = worker.run_postclose_archive()
 

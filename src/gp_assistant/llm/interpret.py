@@ -28,7 +28,7 @@ SYSTEM = """
 {
   "subject": "run|market|pick|symbol|compare_set|holding",
   "request": "term_explain|recommend|pick_detail|live_entry_check|no_trade_explain|compare|exit_decision|run_change|chat",
-  "freshness": "active_run|latest_5m|rebuild_run|next_session_plan",
+  "freshness": "active_run|rebuild_run|next_session_plan",
   "references": {
     "symbol": "可选，6 位股票代码",
     "symbols": ["可选，多个 6 位股票代码"],
@@ -92,6 +92,8 @@ def _normalize_turn_obj(obj: Dict[str, Any], user_message: str) -> TurnFrame:
     obj["references"] = refs
     obj["constraints"] = constraints
     obj["ambiguity"] = ambiguity
+    if str(obj.get("freshness") or "") == "latest_5m":
+        obj["freshness"] = "active_run"
     obj["frame_id"] = gen_id("frame")
     obj["raw_message"] = user_message
     return TurnFrame.model_validate(obj)

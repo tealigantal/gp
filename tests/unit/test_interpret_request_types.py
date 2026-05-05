@@ -171,7 +171,7 @@ def test_llm_parsed_exit_request(monkeypatch):
         {
             "subject": "holding",
             "request": "exit_decision",
-            "freshness": "latest_5m",
+            "freshness": "active_run",
             "references": {"symbol": "600519"},
             "constraints": {},
             "ambiguity": {"confidence": 0.9, "notes": [], "needs_clarification": False},
@@ -188,7 +188,7 @@ def test_llm_parsed_live_request(monkeypatch):
         {
             "subject": "symbol",
             "request": "live_entry_check",
-            "freshness": "latest_5m",
+            "freshness": "active_run",
             "references": {"symbol": "600519"},
             "constraints": {},
             "ambiguity": {"confidence": 0.9, "notes": [], "needs_clarification": False},

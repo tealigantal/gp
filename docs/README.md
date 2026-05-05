@@ -8,11 +8,11 @@ This folder is split into:
 ## Current
 
 - [PROGRESS.md](./PROGRESS.md)
-  Latest project status, dialogue-assistant progress, 5-minute runtime status, and validation snapshot.
+  Latest project status, daily-plan runtime status, derived mainline behavior, and validation snapshot.
 - [ops_runbook.md](./ops_runbook.md)
   Operational notes and routine commands.
 - [data_freshness_policy.md](./data_freshness_policy.md)
-  Freshness rules for daybook, pulse, and session reuse.
+  Freshness rules for daybook and session reuse. Some historical pulse notes may remain as archived context, not production behavior.
 - [service_contract.md](./service_contract.md)
   Output contract notes for recommendation artifacts.
 

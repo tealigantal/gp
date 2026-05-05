@@ -5,12 +5,11 @@ from typing import Any, Dict
 from .context_engine import build_context
 from .reference_resolver import inject_entity_hints
 from ..contracts.objects import MarketBook, TurnFrame
-from ..core.config import load_config
 from ..llm.interpret import parse_turn_frame
 
 
 def _intraday_runtime_enabled() -> bool:
-    return bool(getattr(load_config(), "intraday_runtime_enabled", False))
+    return False
 
 
 def _clamp_topk(value: int) -> int:
@@ -41,10 +40,6 @@ def normalize_turn_frame(frame: TurnFrame, book: MarketBook | None = None) -> Tu
     frame.constraints.setdefault("allow_derived_data", True)
     if frame.request == "recommend":
         frame.constraints["topk"] = _coerce_topk(frame.constraints.get("topk") or 3)
-    if frame.request == "live_entry_check" and frame.freshness == "active_run" and _intraday_runtime_enabled():
-        frame.freshness = "latest_5m"
-    if not _intraday_runtime_enabled() and frame.freshness == "latest_5m":
-        frame.freshness = "active_run"
     if (
         frame.request == "recommend"
         and frame.freshness == "active_run"
@@ -97,7 +92,7 @@ def validate_turn_frame(frame: TurnFrame) -> TurnFrame:
         "run_change",
     }
     allowed_subjects = {"run", "pick", "symbol", "compare_set", "holding", "market"}
-    allowed_freshness = {"active_run", "latest_5m", "rebuild_run", "next_session_plan"}
+    allowed_freshness = {"active_run", "rebuild_run", "next_session_plan"}
     if frame.request not in allowed_requests:
         raise ValueError(f"Illegal request: {frame.request}")
     if frame.subject not in allowed_subjects:

@@ -6,15 +6,15 @@ GP 是一个面向 **A 股主板短线（1-3 个交易日）** 的 chat-first We
 
 - 左侧是连续对话，用户直接用自然语言提问
 - 右侧是同源 `DecisionSnapshot`
-- 后端统一从同一个 active run / canonical artifact 输出推荐、盘中判断、空仓解释、单票详情、比较、卖出建议和榜单变化
+- 后端统一从同一个 active run / canonical artifact 输出推荐、日线计划判断、空仓解释、单票详情、比较、卖出建议和榜单变化
 
 它不是自动交易系统，也不接券商。系统只输出交易级决策建议，用户自行下单。
 
 ## 核心能力
 
 - 今天给我 3 只：返回 Top N 推荐，或明确空仓
-- 盘中判断：回答“现在还能买吗”“第二个还能冲吗”
-- 收盘后 / 非交易时段：返回下一交易窗口计划，不会直接报“只读不可用”
+- 日线计划判断：回答“现在还能买吗”“第二个还能冲吗”
+- 收盘后 / 非交易时段：返回日线计划，不会直接报“只读不可用”
 - 单票详情：返回 `entry / stop / take / thesis / why_selected / execution_state`
 - 比较与榜单变化：支持“第一只和第二只比呢”“之前那只怎么没了”
 - 卖出建议：返回 `HOLD / REDUCE / SELL / WATCH`
@@ -24,16 +24,15 @@ GP 是一个面向 **A 股主板短线（1-3 个交易日）** 的 chat-first We
 推荐的容器拓扑如下：
 
 - `gp`：FastAPI API 服务
-- `gp-worker`：常驻 worker，负责 daybook 初始化、盘中 slot 更新和 post-close 状态刷新
+- `gp-worker`：常驻 worker，负责 daybook 初始化、日线计划 artifact 刷新和 post-close 状态刷新
 - `web`：前端单页 Workspace
 - `gp-rebuild-daybook`：按需手工重建 daybook
-- `gp-replay-today`：按需回放当天已收盘 slot
 - `gp-postclose-archive`：按需执行收盘后归档
 
 说明：
 
 - `gp` 和 `gp-worker` 是常驻服务
-- `gp-rebuild-daybook`、`gp-replay-today`、`gp-postclose-archive` 放在 Compose `ops` profile 下，按需手工运行
+- `gp-rebuild-daybook`、`gp-postclose-archive` 放在 Compose `ops` profile 下，按需手工运行
 - 当前仓库没有引入额外 scheduler / cron / 队列系统
 
 ## 环境要求
@@ -116,17 +115,6 @@ docker compose --profile ops run --rm gp-rebuild-daybook
 
 - 重新生成当天 daybook
 - 重建 preopen 初始 artifact
-
-### 回放今天已收盘的 slot
-
-```powershell
-docker compose --profile ops run --rm gp-replay-today
-```
-
-用途：
-
-- 把今天已经结束的 slot replay 到当前时点
-- 当你怀疑 `current book` 落后时可手工纠正
 
 ### 执行收盘后归档
 
@@ -250,7 +238,7 @@ Invoke-RestMethod http://127.0.0.1:8000/api/run/<run_id> | ConvertTo-Json -Depth
 1. `docker compose logs -f gp-worker`
 2. `GET /api/health` 看 `runtime.book_freshness`
 3. Workspace 右侧“运行与工具”卡
-4. 必要时手工执行 `gp-replay-today` 或 `gp-rebuild-daybook`
+4. 必要时手工执行 `gp-rebuild-daybook`
 
 ## 本地开发
 
@@ -275,7 +263,7 @@ python -m gp_assistant chat "今天给我 3 只"
 
 ```powershell
 $env:PYTHONPATH = "src"
-python -m gp_assistant pulse-loop
+python -m gp_assistant daily-loop
 ```
 
 ### 前端

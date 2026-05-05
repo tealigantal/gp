@@ -23,6 +23,20 @@ The current product direction is:
 
 ### 2026-05-05
 
+- Removed the 5-minute execution path from the production runtime:
+  - `pulse5m.py` is retained only as a commented historical archive
+  - `pulse-loop`, replay-today, slot replay, minute fetch, and 5-minute UI affordances are no longer production entrypoints
+  - canonical picks now use daily-plan states such as `PLAN_READY`, `WAIT_PULLBACK`, `RISK_HIGH`, `INVALIDATED`, and `WATCH_ONLY`
+- Removed theme/concept/industry ranking interfaces from the production recommendation path:
+  - `theme_concept.py`, `theme_pool.py`, and `theme_pool_impl.py` are retained as commented archives
+  - `agent.py` no longer imports or calls `build_themes` or `last_concept_status`
+  - output keeps `themes: []` only for API compatibility
+- Rebuilt mainline calculation to use only local market/candidate data:
+  - candidate industry aggregation uses `candidate_score`, `industry_strength_score`, and `peer_consensus_score`
+  - snapshot fallback derives full-market strong-line clues from leaders and turnover
+  - `mainline.source` is now `derived:daily_universe`, `derived:market_snapshot`, or `derived:unavailable`
+- Updated Workspace and ops UI copy to remove 5-minute, slot replay, execution degradation, and observation wording from normal user-facing paths.
+- Updated Docker/CLI operational entrypoints so the worker runs `daily-loop`; manual ops now expose rebuild-daybook and postclose-archive only.
 - Hardened the intent path so `/api/chat` now depends on the LLM router for market-facing requests instead of silently falling back to local semantic heuristics.
 - Added explicit API error mapping for intent failures:
   - `503` when the intent LLM is unavailable
@@ -64,7 +78,8 @@ The current product direction is:
 - Main flow remains aligned around `gateway -> runtime -> judgment -> reply -> workspace`.
 - Intent parsing is now a hard LLM dependency for `/api/chat`; unavailable or malformed intent responses are surfaced as explicit API errors instead of hidden fallback behavior.
 - `kernel.facade` is the current cross-cutting service boundary for recommendation artifacts, validation, portfolio, execution preview, and workbench aggregation.
-- The 5-minute runtime is currently treated as an optional capability. When disabled, the product now consistently falls back to day-level planning and observation wording.
+- The production recommendation path is daily-plan only. It does not run 5-minute pulse evaluation and does not call AkShare theme/concept/industry ranking APIs.
+- Mainline is derived from the full-market snapshot and daily candidate universe rather than external theme interfaces.
 - The Workspace page now presents:
   - a conversation-first left pane
   - a persistent decision snapshot on the right
@@ -95,6 +110,15 @@ The following backend checks passed locally during the 2026-05-05 cleanup pass:
 
 The default test suite passed without the previous `datetime.utcnow()` deprecation warnings.
 
+The following checks passed locally during the daily-mainline shutdown pass:
+
+- `pytest`
+- `frontend: npm run lint`
+- `frontend: npm run typecheck`
+- `frontend: npm test`
+- `frontend: npm run build`
+- static scans for production `pulse5m`, theme ranking calls, and retired user-visible 5-minute/observation wording
+
 Real LLM-connected `/api/chat` acceptance was run from PowerShell after loading `.env`. The checked sequence covered recommendation, rank follow-up, term explanation, comparison, and sell-decision follow-up. All five turns returned HTTP 200; because local data freshness blocked publication, recommendation and subject-dependent follow-ups correctly returned user-facing `no_trade` replies.
 
 ## Current Documentation Anchors
@@ -114,7 +138,9 @@ Use these files first when resuming work on this area:
 - `src/gp_assistant/kernel/facade.py`
   Public service facade for recommendation v2, compare, pick detail, validation, portfolio, execution preview, and workbench aggregation.
 - `src/gp_assistant/runtime/freshness_policy.py`
-  Freshness downgrades when intraday execution is disabled.
+  Daily-plan freshness and active-run reuse behavior.
+- `src/gp_assistant/selection_engine/mainline.py`
+  Derived mainline calculation from daily candidate universe and market snapshot.
 - `frontend/src/features/workspace/`
   Active Workspace UI surface.
 - `frontend/src/features/workspace/presentation.ts`

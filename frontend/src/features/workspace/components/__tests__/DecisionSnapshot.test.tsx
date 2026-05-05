@@ -7,8 +7,8 @@ function bookWithFallback(): MarketBook {
     trading_day: '20260101',
     book_version: 'book_fallback',
     artifact_id: 'artifact_fallback',
-    slot_status: 'DEGRADED',
-    publish_allowed: false,
+    slot_status: 'OK',
+    publish_allowed: true,
     updated_at: new Date().toISOString(),
     regime: {},
     daybook: {
@@ -49,9 +49,9 @@ const health: HealthResponse = {
     worker_poll_interval_sec: 15,
     book_freshness: 'postclose_ready',
     book_updated_at: new Date().toISOString(),
-    last_closed_5m: '2026-01-01 14:55:00',
-    slot_status: 'DEGRADED',
-    publish_allowed: false,
+    last_closed_5m: null,
+    slot_status: 'OK',
+    publish_allowed: true,
     daily_freshness_ready: true,
     daily_target_day: '2026-01-01',
     daily_checked_count: 3,
@@ -61,15 +61,15 @@ const health: HealthResponse = {
       {
         service: 'gp-worker',
         mode: 'always_on',
-        command: 'python -m gp_assistant.cli pulse-loop',
+        command: 'python -m gp_assistant.cli daily-loop',
         description: 'worker',
       },
       {
-        service: 'gp-replay-today',
+        service: 'gp-rebuild-daybook',
         mode: 'manual',
         profile: 'ops',
-        command: 'python -m gp_assistant.cli replay-today',
-        description: 'replay',
+        command: 'python -m gp_assistant.cli rebuild-daybook',
+        description: 'rebuild',
       },
     ],
   },
@@ -91,10 +91,10 @@ it('omits retired decision snapshot hero metadata', () => {
         book_version: 'book_123',
         as_of: new Date().toISOString(),
         trading_day: '20260101',
-        run_action: 'DEGRADED',
+        run_action: 'RECOMMEND',
         tradeable: true,
-        publish_allowed: false,
-        non_trading: true,
+        publish_allowed: true,
+        non_trading: false,
         no_trade_reasons: [],
         recovery_conditions: [],
         themes: [],
@@ -116,8 +116,8 @@ it('omits retired decision snapshot hero metadata', () => {
   expect(screen.queryByText(/artifact_123/)).not.toBeInTheDocument()
 })
 
-it('shows runtime tools from health status', () => {
+it('shows daily runtime tools from health status', () => {
   render(<DecisionSnapshot book={bookWithFallback()} latest={null} health={health} />)
   expect(screen.getByText('gp-worker')).toBeInTheDocument()
-  expect(screen.getByText('gp-replay-today')).toBeInTheDocument()
+  expect(screen.getByText('gp-rebuild-daybook')).toBeInTheDocument()
 })

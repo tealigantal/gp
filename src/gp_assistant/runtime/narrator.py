@@ -40,12 +40,12 @@ def _execution_phrase(pick: CanonicalPick) -> str:
         "BUY_NOW": "当前可以按计划执行",
         "WAIT_PULLBACK": "逻辑还在，但更适合等回踩确认",
         "WAIT_NEXT_SESSION": "先保留计划，下一交易窗口再确认",
-        "WATCH_ONLY": "当前先观察，不建议主动追价",
+        "WATCH_ONLY": "当前先暂不入场，不建议主动追价",
         "RISK_HIGH": "结构未坏，但位置和环境的风险偏高",
         "INVALIDATED": "已经触发失效条件",
-        "UNAVAILABLE": "执行数据暂不完整，只保留观察结论",
+        "UNAVAILABLE": "计划数据暂不完整，只保留暂不入场结论",
     }
-    return mapping.get(pick.execution_state, "继续观察")
+    return mapping.get(pick.execution_state, "继续检查")
 
 
 def _recommend_fallback_text(run: CanonicalRunArtifact) -> str:
@@ -59,7 +59,7 @@ def _recommend_fallback_text(run: CanonicalRunArtifact) -> str:
             f"买入区 {pick.entry_text or '待确认'}，止损 {pick.stop_text or '待确认'}，止盈 {pick.take_text or '待确认'}。"
         )
     if run.run_action == "DEGRADED":
-        lines.append("当前环境偏弱，执行上以观察和等待确认为主，不做强推。")
+        lines.append("当前环境偏弱，执行上以暂不入场和等待确认为主，不做强推。")
     return "\n".join(lines)
 
 
@@ -74,7 +74,7 @@ def _no_trade_fallback_text(judgment: Judgment) -> str:
             continue
         lines.append(f"- {reason}")
     if no_trade.recovery_conditions:
-        lines.append("重新观察这些条件：")
+        lines.append("重新检查这些条件：")
         for condition in list(no_trade.recovery_conditions or [])[:4]:
             lines.append(f"- {condition}")
     return "\n".join(lines)
@@ -172,7 +172,7 @@ def _run_change_fallback_text(judgment: Judgment) -> str:
 def _chat_fallback_text() -> str:
     if intraday_runtime_enabled():
         return "可以直接问我今天的机会、某只票现在能不能进、止盈止损怎么设，或者为什么名单变了。"
-    return "可以直接问我今天的候选、某只票为什么入选、风控怎么看，或者为什么当前只建议观察。"
+    return "可以直接问我今天的候选、某只票为什么入选、风控怎么看，或者为什么当前只建议暂不入场。"
 
 
 def _fallback_text(judgment: Judgment) -> str:
@@ -230,7 +230,7 @@ def _message_for_recommend(judgment: Judgment, text: str) -> Dict[str, Any]:
     intraday_enabled = intraday_runtime_enabled()
     execution_note = "盘中执行计划"
     if not intraday_enabled:
-        execution_note = "当前只保留日线计划与观察结论"
+        execution_note = "当前只保留日线计划与暂不入场结论"
     elif run.non_trading:
         execution_note = "下一交易窗口计划"
     return {
@@ -244,7 +244,7 @@ def _message_for_recommend(judgment: Judgment, text: str) -> Dict[str, Any]:
         "picks": [pick.model_dump() for pick in run.picks],
         "run": run.model_dump(),
         "followup_suggestions": [
-            (f"为什么推荐第 {run.picks[0].rank} 只" if run.picks else "为什么今天先观察"),
+            (f"为什么推荐第 {run.picks[0].rank} 只" if run.picks else "为什么今天先暂不入场"),
             (f"{top_symbol} 现在还能买吗" if top_symbol else "重新转强要看什么"),
             (f"{top_symbol} 的止盈止损点" if top_symbol else "明天开盘前看什么"),
             ("第一只和第二只比呢" if len(run.picks) >= 2 else "为什么这次和上次不一样"),
@@ -268,7 +268,7 @@ def _build_canonical_message(evidence: EvidencePack, judgment: Judgment, text: s
             "reason": (no_trade.status_reason if no_trade else judgment.summary),
             "no_trade_reasons": (no_trade.no_trade_reasons if no_trade else []),
             "recovery_conditions": (no_trade.recovery_conditions if no_trade else []),
-            "followup_suggestions": ["今天给我 3 只", "为什么先观察", "重新转强要看什么"],
+            "followup_suggestions": ["今天给我 3 只", "为什么先暂不入场", "重新转强要看什么"],
             "freshness_meta": _freshness_meta(evidence, run),
         }
     if judgment.kind == "pick_detail":
@@ -294,7 +294,7 @@ def _build_canonical_message(evidence: EvidencePack, judgment: Judgment, text: s
             "live_check": (live_entry.model_dump() if live_entry else {}),
             "run": (run.model_dump() if run else None),
             "symbol": symbol,
-            "followup_suggestions": ["要不要等回踩", "这只止盈止损怎么设", "为什么当前只观察"],
+            "followup_suggestions": ["要不要等回踩", "这只止盈止损怎么设", "为什么当前暂不入场"],
             "freshness_meta": _freshness_meta(evidence, run),
         }
     if judgment.kind == "compare":

@@ -41,8 +41,7 @@ def test_mainline_missing_is_not_a_hard_filter(monkeypatch):
 
     monkeypatch.setattr(agent, "generate_candidates", fake_gen)
     monkeypatch.setattr(agent, "score_regime", lambda hub, snapshot=None: {"grade": "B"})
-    monkeypatch.setattr(agent, "build_themes", lambda hub, snapshot=None: [])
-    monkeypatch.setattr(agent, "build_mainline", lambda indicator="today", topn=2, snapshot=None: {"indicator": indicator, "sectors": [], "errors": ["missing"]})
+    monkeypatch.setattr(agent, "build_mainline", lambda indicator="today", topn=2, snapshot=None, candidates=None: {"indicator": indicator, "sectors": [], "errors": ["missing"], "source": "derived:unavailable"})
     monkeypatch.setattr(agent, "choose_champion", lambda pool: {})
     monkeypatch.setattr(agent.strat_lib, "REGISTRY", {}, raising=False)
     monkeypatch.setenv("GP_RESTRICT_MAINLINE", "1")

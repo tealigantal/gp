@@ -84,7 +84,7 @@ def test_health_includes_runtime_tools(monkeypatch):
     assert response.status_code == 200, response.text
     runtime = response.json().get("runtime", {})
     assert runtime.get("auto_update_service") == "gp-worker"
-    assert runtime.get("book_freshness") == "degraded"
+    assert runtime.get("book_freshness") == "daily_only"
     assert runtime.get("daily_freshness_ready") is False
     assert runtime.get("daily_target_mode") == "current_pending"
     assert runtime.get("pending_eod_day") == "2026-01-01"
@@ -94,7 +94,8 @@ def test_health_includes_runtime_tools(monkeypatch):
     assert runtime.get("daily_failed_symbols") == ["002716"]
     services = runtime.get("services", [])
     service_names = {item.get("service") for item in services}
-    assert {"gp", "gp-worker", "gp-rebuild-daybook", "gp-replay-today", "gp-postclose-archive"} <= service_names
+    assert {"gp", "gp-worker", "gp-rebuild-daybook", "gp-postclose-archive"} <= service_names
+    assert "gp-replay-today" not in service_names
 
 
 def test_health_reports_intraday_runtime_disabled(monkeypatch):
@@ -105,7 +106,7 @@ def test_health_reports_intraday_runtime_disabled(monkeypatch):
     runtime = response.json().get("runtime", {})
     assert runtime.get("intraday_runtime_enabled") is False
     assert runtime.get("book_freshness") == "daily_only"
-    assert "5" in str(runtime.get("blocking_reason") or "")
+    assert "日线计划" in str(runtime.get("blocking_reason") or "")
 
 
 def test_ops_endpoint_runs_rebuild_daybook(monkeypatch):

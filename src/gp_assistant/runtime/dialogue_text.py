@@ -2,11 +2,9 @@ from __future__ import annotations
 
 from typing import Any, Iterable, List, Optional
 
-from ..core.config import load_config
-
 
 def intraday_runtime_enabled() -> bool:
-    return bool(getattr(load_config(), "intraday_runtime_enabled", False))
+    return False
 
 
 def _as_text(value: Any) -> Optional[str]:
@@ -37,9 +35,8 @@ def clean_user_reason(value: Any) -> Optional[str]:
     text = _as_text(value)
     if not text:
         return None
-    lowered = text.lower()
-    if lowered == "intraday_runtime_disabled":
-        return "盘中 5 分钟执行数据已停用，当前只保留日线计划和观察结论。"
+    if text.lower() == "intraday_runtime_disabled":
+        return "当前只使用日线计划模块。"
     if _looks_like_internal_marker(text):
         return None
     return text
@@ -58,22 +55,23 @@ def explain_observation_reasons(values: Iterable[Any]) -> str:
     cleaned = clean_user_reasons(values)
     if cleaned:
         return "主要原因是：" + "；".join(cleaned[:3])
-    return "主要原因是盘中闸门还没放行，或者价格位置还没有回到更合适的买点。"
+    return "主要原因是价格位置还没有回到更合适的买点。"
 
 
 def execution_state_label(state: str | None) -> str:
     mapping = {
-        "BUY_NOW": "可以按计划执行",
-        "BREAKOUT_BUY": "等待放量突破确认",
-        "RECLAIM_BUY": "等待回踩确认",
-        "AFTERNOON_RELAUNCH_BUY": "等待午后重新走强确认",
-        "WAIT_PULLBACK": "更适合等回踩确认",
-        "WAIT_NEXT_SESSION": "留到下一交易窗口再确认",
-        "WATCH_ONLY": "暂时只观察",
-        "OBSERVE": "暂时只观察",
+        "PLAN_READY": "计划区间内",
+        "BUY_NOW": "计划区间内",
+        "BREAKOUT_BUY": "计划区间内",
+        "RECLAIM_BUY": "计划区间内",
+        "AFTERNOON_RELAUNCH_BUY": "计划区间内",
+        "WAIT_PULLBACK": "更适合等回踩",
+        "WAIT_NEXT_SESSION": "更适合等回踩",
+        "WATCH_ONLY": "暂不入场",
+        "OBSERVE": "暂不入场",
         "RISK_HIGH": "风险偏高",
         "INVALIDATED": "已触发失效条件",
-        "UNAVAILABLE": "执行数据暂不完整",
+        "UNAVAILABLE": "暂不入场",
     }
     key = str(state or "").strip().upper()
-    return mapping.get(key, key or "继续观察")
+    return mapping.get(key, key or "暂不入场")

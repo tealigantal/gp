@@ -19,14 +19,14 @@ export function NoTradeMessageCard({
     <Card size="small" className="detail-card">
       <Space direction="vertical" size={12} style={{ width: '100%' }}>
         <Space wrap>
-          <Tag color="default">空仓 / 观察</Tag>
+          <Tag color="default">暂不入场</Tag>
           {marketSummary ? <Tag>{marketSummary}</Tag> : null}
         </Space>
 
         <div>
           <Typography.Text className="section-kicker">Why We Pause</Typography.Text>
           <Typography.Paragraph style={{ margin: '8px 0 0', whiteSpace: 'pre-wrap' }}>
-            {text || reason || '当前更适合先观察，不强行给票。'}
+            {text || reason || '当前条件不足以支持主动开仓。'}
           </Typography.Paragraph>
         </div>
 

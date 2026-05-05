@@ -30,7 +30,7 @@ function makeRun(): CanonicalRunArtifact {
         name: '平安银行',
         rank: 1,
         action: 'BUY',
-        execution_state: 'BUY_NOW',
+        execution_state: 'PLAN_READY',
         can_execute_now: true,
         thesis: '主线强势，价格仍在买点附近。',
         why_selected: '量价结构更完整。',
@@ -104,35 +104,35 @@ it('renders recommendation picks with entry stop take and execution state', () =
   expect(screen.getByText(/10.20 - 10.35/)).toBeInTheDocument()
   expect(screen.getByText(/9.98/)).toBeInTheDocument()
   expect(screen.getByText(/10.88/)).toBeInTheDocument()
-  expect(screen.getAllByText('现在可执行').length).toBeGreaterThan(0)
-  expect(screen.getAllByText(/日线截止 2026-01-01/).length).toBeGreaterThan(0)
+  expect(screen.getAllByText('计划区间内').length).toBeGreaterThan(0)
+  expect(screen.getAllByText(/日线截至 2026-01-01/).length).toBeGreaterThan(0)
 })
 
 it('postclose recommend still renders recommendation card', () => {
-  const run = { ...makeRun(), non_trading: true, publish_allowed: false, market_phase: 'POSTCLOSE_PENDING', run_action: 'DEGRADED' as const }
+  const run = { ...makeRun(), non_trading: true, publish_allowed: false, market_phase: 'POSTCLOSE_PENDING' }
   const message: CanonicalMessage = {
     message_kind: 'recommend',
-    narrative_text: '下一交易窗口计划。',
-    picks: run.picks.map((pick) => ({ ...pick, execution_state: 'WAIT_NEXT_SESSION', can_execute_now: false })),
+    narrative_text: '日线计划。',
+    picks: run.picks.map((pick) => ({ ...pick, execution_state: 'WAIT_PULLBACK', can_execute_now: false })),
     run: {
       ...run,
-      picks: run.picks.map((pick) => ({ ...pick, execution_state: 'WAIT_NEXT_SESSION', can_execute_now: false })),
+      picks: run.picks.map((pick) => ({ ...pick, execution_state: 'WAIT_PULLBACK', can_execute_now: false })),
     },
   }
   render(<ChatThread {...baseProps} turns={[assistantTurn(message)]} />)
-  expect(screen.getByText('下一交易窗口计划。')).toBeInTheDocument()
-  expect(screen.queryByText(/空仓 \/ 观察/)).toBeNull()
+  expect(screen.getByText('日线计划。')).toBeInTheDocument()
+  expect(screen.queryByText(/空仓 \/ 暂不入场/)).toBeNull()
 })
 
 it('renders live entry card', () => {
   const message: CanonicalMessage = {
     message_kind: 'live_entry_check',
-    narrative_text: '逻辑还在，但等回踩确认。',
+    narrative_text: '逻辑还在，但等回踩。',
     live_check: {
       symbol: '000001',
       execution_state: 'WAIT_PULLBACK',
       can_execute_now: false,
-      next_action: '等回踩买入区再确认。',
+      next_action: '等回踩买入区。',
       summary: '当前不适合追。',
       entry_text: '10.20 - 10.35',
       stop_text: '9.98',
@@ -144,8 +144,8 @@ it('renders live entry card', () => {
     run: makeRun(),
   }
   render(<ChatThread {...baseProps} turns={[assistantTurn(message)]} />)
-  expect(screen.getAllByText(/等回踩确认/).length).toBeGreaterThan(0)
-  expect(screen.getByText(/等回踩买入区再确认/)).toBeInTheDocument()
+  expect(screen.getAllByText(/等回踩/).length).toBeGreaterThan(0)
+  expect(screen.getByText(/等回踩买入区/)).toBeInTheDocument()
 })
 
 it('quick action click sends natural prompt', () => {

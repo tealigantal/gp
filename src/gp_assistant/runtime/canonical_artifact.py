@@ -16,14 +16,10 @@ from ..contracts.objects import (
     RunChangeArtifact,
     SlotGate,
 )
-from ..core.config import load_config
 from ..evidence.daily_freshness import active_freshness_for_current_target
 from .dialogue_text import clean_user_reason, clean_user_reasons
 from ..runtime.market_clock import (
     PHASE_CLOSING_AUCTION,
-    PHASE_INTRADAY_AM,
-    PHASE_INTRADAY_PM,
-    PHASE_LUNCH_BREAK,
     PHASE_OPEN_NO_FIRST_BAR,
     PHASE_POSTCLOSE_PENDING,
     PHASE_POSTCLOSE_READY,
@@ -32,10 +28,6 @@ from ..runtime.market_clock import (
 
 
 BUY_SIGNAL_STATES = {"breakout_buy", "reclaim_buy", "afternoon_relaunch_buy"}
-
-
-def _intraday_runtime_enabled() -> bool:
-    return bool(getattr(load_config(), "intraday_runtime_enabled", False))
 
 
 def _as_text(value: Any) -> Optional[str]:
@@ -155,21 +147,13 @@ def _market_phase_non_trading(market_phase: str | None) -> bool:
     }
 
 
-def _market_phase_live(market_phase: str | None) -> bool:
-    return str(market_phase or "").upper() in {
-        PHASE_INTRADAY_AM,
-        PHASE_INTRADAY_PM,
-        PHASE_LUNCH_BREAK,
-    }
-
-
 def _friendly_gate_reasons(gate: SlotGate | None) -> List[str]:
     if gate is None:
         return []
     mapping = {
-        "data_quality_incomplete": "盘中执行数据不完整",
+        "data_quality_incomplete": "日线计划数据不完整",
         "snapshot_columns_missing": "市场广度字段缺失",
-        "gate_unavailable": "盘中闸门暂不可用",
+        "gate_unavailable": "日线计划暂不可用",
     }
     out: List[str] = []
     for reason in gate.reasons:
@@ -184,54 +168,45 @@ def _recovery_conditions(book: MarketBook) -> List[str]:
     gate_state = str(book.gate.state or "").upper()
     if gate_state in {"BLOCKED", "KILLED"}:
         conditions.append("市场广度回到可交易区间")
-    if gate_state in {"DEGRADED", "BLOCKED", "UNAVAILABLE"}:
+    if gate_state in {"DEGRADED", "BLOCKED"}:
         conditions.append("至少 2 只候选重新回到买点附近")
     if not bool(book.publish_allowed):
-        conditions.append("下一交易窗口再用 5 分钟量价确认")
+        conditions.append("日线计划重新满足交易条件")
     if book.data_quality and not book.data_quality.complete:
-        conditions.append("最新 5 分钟快照恢复完整")
+        conditions.append("日线数据恢复完整")
     return list(dict.fromkeys(conditions))
 
 
 def _status_reason(book: MarketBook) -> str:
-    if _market_phase_non_trading(book.market_phase):
-        return "当前不在连续竞价执行时段，以下为下一交易窗口计划。"
     if book.gate.state == "BLOCKED":
-        return "市场闸门未放行，当前更适合观察而不是硬追。"
+        return "市场闸门未放行，当前不适合硬追。"
     if book.gate.state == "DEGRADED":
-        return "市场环境偏弱，保留计划但降低执行强度。"
+        return "市场环境偏弱，降低执行强度。"
     if book.slot_status and str(book.slot_status).upper() != "OK":
-        return "最新 5 分钟执行数据降级，计划保留但只给观察级判断。"
-    return _as_text(book.daybook.reason) or "当前有可跟踪计划。"
+        return "日线计划数据未完全就绪。"
+    return _as_text(book.daybook.reason) or "当前有日线计划。"
 
 
 def _pick_execution_state(entry: BoardEntry, book: MarketBook) -> str:
     signal = str((entry.pulse.execution_state if entry.pulse else entry.execution_state) or "").lower()
     gate_state = str(book.gate.state or "").upper()
-    non_trading = _market_phase_non_trading(book.market_phase)
-    if entry.invalidated or signal == "invalidated":
+    if entry.invalidated or signal in {"invalidated", "below_support", "breakdown_risk"}:
         return "INVALIDATED"
-    if signal in BUY_SIGNAL_STATES:
-        if non_trading:
-            return "WAIT_NEXT_SESSION"
-        if gate_state == "ALLOW" and bool(book.publish_allowed) and bool(entry.can_open):
-            return "BUY_NOW"
-        if gate_state == "DEGRADED":
-            return "RISK_HIGH"
-        if gate_state in {"BLOCKED", "KILLED"}:
-            return "WATCH_ONLY"
-        return "UNAVAILABLE" if str(book.slot_status or "").upper() != "OK" else "WATCH_ONLY"
-    if signal == "wait_pullback":
-        return "WAIT_PULLBACK" if not non_trading else "WAIT_NEXT_SESSION"
+    if signal in {"actionable", "plan_ready", "daily_ready", *BUY_SIGNAL_STATES}:
+        return "PLAN_READY"
+    if signal in {"waiting_pullback", "wait_pullback"}:
+        return "WAIT_PULLBACK"
     if signal == "extended":
         return "RISK_HIGH"
-    if signal == "unavailable":
-        return "WAIT_NEXT_SESSION" if non_trading else "UNAVAILABLE"
-    return "WATCH_ONLY" if not non_trading else "WAIT_NEXT_SESSION"
+    if gate_state in {"BLOCKED", "KILLED"}:
+        return "WATCH_ONLY"
+    if gate_state == "DEGRADED":
+        return "RISK_HIGH"
+    return "WATCH_ONLY"
 
 
 def _pick_action(entry: BoardEntry, execution_state: str) -> str:
-    if execution_state in {"BUY_NOW", "WAIT_PULLBACK", "WAIT_NEXT_SESSION"}:
+    if execution_state in {"PLAN_READY", "WAIT_PULLBACK"}:
         return "BUY"
     return "WATCH"
 
@@ -239,11 +214,11 @@ def _pick_action(entry: BoardEntry, execution_state: str) -> str:
 def _pick_risk_level(entry: BoardEntry, execution_state: str, book: MarketBook) -> str:
     if execution_state in {"INVALIDATED", "RISK_HIGH"}:
         return "high"
-    if str(book.gate.state or "").upper() == "DEGRADED":
-        return "medium_high"
-    if execution_state in {"WAIT_PULLBACK", "WATCH_ONLY"}:
+    if execution_state == "WAIT_PULLBACK":
         return "medium"
-    return "medium_low" if execution_state == "BUY_NOW" else "medium"
+    if execution_state == "PLAN_READY":
+        return "medium_low"
+    return "medium"
 
 
 def build_canonical_pick(entry: BoardEntry, book: MarketBook) -> CanonicalPick:
@@ -257,16 +232,6 @@ def build_canonical_pick(entry: BoardEntry, book: MarketBook) -> CanonicalPick:
     take_text = _take_text(entry)
 
     technical_basis: List[str] = []
-    if entry.vwap is not None:
-        technical_basis.append(f"VWAP {entry.vwap:.2f}")
-    if entry.orb30_high is not None and entry.orb30_low is not None:
-        technical_basis.append(f"ORB30 {entry.orb30_low:.2f}-{entry.orb30_high:.2f}")
-    if entry.slot_rel_vol is not None:
-        technical_basis.append(f"相对量能 {entry.slot_rel_vol:.2f}x")
-    if entry.rs_index is not None:
-        technical_basis.append(f"相对沪深300 {entry.rs_index * 100:.2f}%")
-    if entry.rs_industry is not None:
-        technical_basis.append(f"相对行业 {entry.rs_industry * 100:.2f}%")
 
     missing_fields: List[str] = []
     if not entry_text:
@@ -293,8 +258,6 @@ def build_canonical_pick(entry: BoardEntry, book: MarketBook) -> CanonicalPick:
     }
     if book.artifact_id:
         data_provenance["artifact_id"] = book.artifact_id
-    if book.pulse_slot_at:
-        data_provenance["pulse_slot_at"] = book.pulse_slot_at
     if book.gate and book.gate.metrics:
         data_provenance["gate_metrics"] = dict(book.gate.metrics)
     if entry.reason_codes:
@@ -318,7 +281,7 @@ def build_canonical_pick(entry: BoardEntry, book: MarketBook) -> CanonicalPick:
         rank=entry.rank,
         action=action,
         execution_state=execution_state,
-        can_execute_now=execution_state == "BUY_NOW",
+        can_execute_now=execution_state == "PLAN_READY",
         thesis=thesis,
         why_selected=why_selected,
         entry_zone=zone,
@@ -341,13 +304,13 @@ def build_canonical_pick(entry: BoardEntry, book: MarketBook) -> CanonicalPick:
         artifact_id=entry.artifact_id or book.artifact_id,
         slot_id=entry.slot_id or book.slot_id,
         data_provenance=data_provenance,
-        vwap=entry.vwap,
-        orb30_high=entry.orb30_high,
-        orb30_low=entry.orb30_low,
-        rs_index=entry.rs_index,
-        rs_industry=entry.rs_industry,
-        slot_rel_vol=entry.slot_rel_vol,
-        entry_distance_pct=(entry.pulse.entry_distance_pct if entry.pulse else None),
+        vwap=None,
+        orb30_high=None,
+        orb30_low=None,
+        rs_index=None,
+        rs_industry=None,
+        slot_rel_vol=None,
+        entry_distance_pct=None,
     )
 
 
@@ -366,13 +329,9 @@ def build_canonical_run(*, book: MarketBook, run: AdviceRun, picks: Iterable[Boa
         book_day=book.daybook_effective_day or book.daybook.trading_day,
     )
     blocked_reason = _as_text(daybook_freshness.get("blocking_reason"))
-    degraded = (
-        not bool(book.data_quality.complete)
-        or gate_state in {"DEGRADED", "UNAVAILABLE"}
-        or bool(_market_phase_non_trading(book.market_phase))
-    )
-    executable_count = sum(1 for pick in canonical_picks_all if pick.execution_state in {"BUY_NOW", "WAIT_PULLBACK", "WAIT_NEXT_SESSION"})
-    watch_only_count = sum(1 for pick in canonical_picks_all if pick.execution_state in {"WATCH_ONLY", "UNAVAILABLE"})
+    degraded = not bool(book.data_quality.complete) or gate_state == "DEGRADED"
+    executable_count = sum(1 for pick in canonical_picks_all if pick.execution_state in {"PLAN_READY", "WAIT_PULLBACK"})
+    watch_only_count = sum(1 for pick in canonical_picks_all if pick.execution_state == "WATCH_ONLY")
     if not has_plan:
         run_action = "NO_TRADE"
     elif stale_daily_picks:
@@ -408,7 +367,6 @@ def build_canonical_run(*, book: MarketBook, run: AdviceRun, picks: Iterable[Boa
         "artifact_id": book.artifact_id,
         "book_version": book.book_version,
         "slot_status": book.slot_status,
-        "pulse_slot_at": book.pulse_slot_at,
     }
     if book.gate and book.gate.metrics:
         data_provenance["gate_metrics"] = dict(book.gate.metrics)
@@ -431,10 +389,10 @@ def build_canonical_run(*, book: MarketBook, run: AdviceRun, picks: Iterable[Boa
         as_of=book.updated_at,
         trading_day=book.trading_day,
         daybook_effective_day=book.daybook_effective_day or book.daybook.trading_day,
-        pulse_trade_day=book.pulse_trade_day,
-        pulse_slot_at=book.pulse_slot_at,
+        pulse_trade_day=None,
+        pulse_slot_at=None,
         market_phase=book.market_phase,
-        slot_status=book.slot_status,
+        slot_status=("OK" if bool(book.data_quality.complete) else book.slot_status),
         run_action=run_action,
         tradeable=bool(book.daybook.tradeable),
         publish_allowed=bool(book.publish_allowed),
@@ -442,7 +400,7 @@ def build_canonical_run(*, book: MarketBook, run: AdviceRun, picks: Iterable[Boa
         status_reason=_status_reason(book),
         no_trade_reasons=no_trade_reasons,
         recovery_conditions=_recovery_conditions(book),
-        themes=list(book.daybook.themes or []),
+        themes=[],
         picks=canonical_picks,
         gate=book.gate.model_dump(),
         data_quality=book.data_quality.model_dump(),
@@ -456,29 +414,19 @@ def build_canonical_run(*, book: MarketBook, run: AdviceRun, picks: Iterable[Boa
 
 
 def build_no_trade_view(run: CanonicalRunArtifact, book: MarketBook) -> NoTradeArtifact:
-    intraday_enabled = _intraday_runtime_enabled()
     if run.run_action == "NO_TRADE":
-        reasons = run.no_trade_reasons
-        summary = "今天不硬给票，当前更适合空仓或等待。"
+        reasons = clean_user_reasons(run.no_trade_reasons)
+        summary = "今天不硬给票，当前没有足够清晰的日线计划。"
     else:
-        reasons = ["当前不是纯空仓，而是观察或等待下一交易窗口。"]
-        if run.non_trading:
-            reasons.append("现在不在连续竞价时段，计划需要等下一交易窗口确认。")
-        elif run.run_action == "DEGRADED":
-            reasons.append("市场环境或执行数据偏弱，先降级观察。")
+        reasons = ["当前不是纯空仓，而是日线计划暂不满足入场条件。"]
         summary = "当前不建议立刻动手，但计划并未失效。"
-    reasons = clean_user_reasons(reasons)
-    recovery_conditions = [] if not intraday_enabled else list(run.recovery_conditions or [])
     market_summary = clean_user_reason(book.daybook.reason) or summary
-    status_reason = run.status_reason or summary
-    if not intraday_enabled and "5 分钟" in status_reason:
-        status_reason = "当前只保留日线计划和观察结论，不提供 5 分钟级别的执行判断。"
     return NoTradeArtifact(
         run_action=run.run_action,
         market_summary=market_summary,
-        status_reason=status_reason,
+        status_reason=run.status_reason or summary,
         no_trade_reasons=reasons,
-        recovery_conditions=recovery_conditions,
+        recovery_conditions=list(run.recovery_conditions or []),
         data_provenance=run.data_provenance,
         source_run_id=run.run_id,
     )
@@ -504,28 +452,20 @@ def build_pick_detail_view(run: CanonicalRunArtifact, pick: CanonicalPick) -> Pi
 
 
 def build_live_entry_view(run: CanonicalRunArtifact, pick: CanonicalPick) -> LiveEntryDecisionArtifact:
-    intraday_enabled = _intraday_runtime_enabled()
     next_action = {
-        "BUY_NOW": "按计划分批执行，避免追高超过买入区。",
-        "WAIT_PULLBACK": "逻辑仍在，等回踩买入区或 VWAP 再确认。",
-        "WAIT_NEXT_SESSION": "保留计划，下一交易窗口再看 5 分钟确认。",
-        "WATCH_ONLY": "先观察，不做主动追价。",
-        "RISK_HIGH": "结构未坏，但追高或市场风险偏大，避免硬上。",
+        "PLAN_READY": "价格处在日线计划区间内，按买入区、失效位和仓位规则分批处理。",
+        "WAIT_PULLBACK": "逻辑仍在，等价格回到买入区再处理。",
+        "WATCH_ONLY": "日线计划暂不入场，不做主动追价。",
+        "RISK_HIGH": "结构未完全失效，但位置或风险收益比偏高。",
         "INVALIDATED": "已触发失效条件，这个计划先取消。",
-        "UNAVAILABLE": "当前执行数据不完整，只能保留观察判断。",
-    }.get(pick.execution_state, "继续观察。")
+    }.get(pick.execution_state, "日线计划暂不入场。")
     summary = {
-        "BUY_NOW": "当前 5 分钟结构满足计划内入场。",
-        "WAIT_PULLBACK": "逻辑还在，但位置偏高或确认不完整，等回踩。",
-        "WAIT_NEXT_SESSION": "现在不能判断立刻成交，保留下一交易窗口计划。",
-        "WATCH_ONLY": "当前只适合观察，不建议直接进。",
-        "RISK_HIGH": "结构未破坏，但风险收益比不够好。",
-        "INVALIDATED": "价格已经跌破失效条件，计划失效。",
-        "UNAVAILABLE": "必要的盘中执行数据暂不完整。",
-    }.get(pick.execution_state, "继续观察。")
-    if not intraday_enabled:
-        next_action = "当前不接入 5 分钟执行数据，先按日线计划观察，不做盘中追价。"
-        summary = "当前只保留日线计划和观察结论，不提供 5 分钟级别的即时入场判断。"
+        "PLAN_READY": "当前满足日线计划区间。",
+        "WAIT_PULLBACK": "逻辑还在，但位置不够合适。",
+        "WATCH_ONLY": "当前只保留日线计划，不主动入场。",
+        "RISK_HIGH": "当前风险偏高。",
+        "INVALIDATED": "计划已经失效。",
+    }.get(pick.execution_state, "当前按日线计划处理。")
     return LiveEntryDecisionArtifact(
         symbol=pick.symbol,
         name=pick.name,
@@ -535,16 +475,9 @@ def build_live_entry_view(run: CanonicalRunArtifact, pick: CanonicalPick) -> Liv
         summary=summary,
         gate_state=run.gate.get("state") if isinstance(run.gate, dict) else None,
         gate_reasons=list(run.gate.get("reasons") or []) if isinstance(run.gate, dict) else [],
-        vwap=pick.vwap,
-        orb30_high=pick.orb30_high,
-        orb30_low=pick.orb30_low,
         entry_text=pick.entry_text,
         stop_text=pick.stop_text,
         take_text=pick.take_text,
-        entry_distance_pct=pick.entry_distance_pct,
-        slot_rel_vol=pick.slot_rel_vol,
-        rs_index=pick.rs_index,
-        rs_industry=pick.rs_industry,
         reason_codes=pick.reason_codes,
         data_provenance=pick.data_provenance,
         source_run_id=run.run_id,
@@ -562,10 +495,10 @@ def build_exit_view(run: CanonicalRunArtifact, pick: CanonicalPick) -> ExitDecis
         reason = "结构未坏，但位置偏高，优先考虑减仓而不是追加。"
         trigger = "偏离买点 / 追高风险"
         confidence = 0.7
-    elif pick.execution_state == "BUY_NOW":
+    elif pick.execution_state == "PLAN_READY":
         action = "HOLD"
         reason = "计划仍然有效，持有逻辑未被破坏。"
-        trigger = "5 分钟结构仍保持有效"
+        trigger = "日线结构仍保持有效"
         confidence = 0.66
     else:
         action = "WATCH"
@@ -592,7 +525,7 @@ def build_compare_view(run: CanonicalRunArtifact, picks: List[CanonicalPick]) ->
         picks,
         key=lambda item: (
             0 if item.can_execute_now else 1,
-            0 if item.execution_state not in {"INVALIDATED", "UNAVAILABLE"} else 1,
+            0 if item.execution_state != "INVALIDATED" else 1,
             -float(item.final_score or 0.0),
             -float(item.live_score or 0.0),
         ),

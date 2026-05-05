@@ -118,7 +118,7 @@ def test_live_entry_check_with_subject_entry():
         raw_message="第二只现在还能买吗",
         subject="symbol",
         request="live_entry_check",
-        freshness="latest_5m",
+        freshness="active_run",
         references={"symbol": "600519"},
         constraints={},
         ambiguity={"confidence": 0.8, "notes": []},

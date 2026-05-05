@@ -76,7 +76,7 @@ def _stale_live_entry(run, pick: CanonicalPick, message: str) -> LiveEntryDecisi
         name=pick.name,
         execution_state="UNAVAILABLE",
         can_execute_now=False,
-        next_action="先补齐该标的日线，再重新检查 5 分钟入场结构。",
+        next_action="先补齐该标的日线，再重新检查日线入场结构。",
         summary=message,
         gate_state=(run.gate.get("state") if run and isinstance(run.gate, dict) else None),
         gate_reasons=list(run.gate.get("reasons") or []) if run and isinstance(run.gate, dict) else [],

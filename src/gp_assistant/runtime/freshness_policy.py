@@ -61,8 +61,8 @@ def _simple_preparse(user_message: str, *, session: SessionState, book: Optional
     history = any(k in m for k in ["上一轮", "上一次", "前一次", "历史"])
     # rebuild/recommend keywords
     want_rebuild = any(k in m for k in ["重算", "重跑", "重新给", "给我", "推荐", "今天给"])
-    # intraday/live keywords
-    want_live = any(k in m for k in ["现在", "还能", "能不能", "盘中", "5分钟", "5m", "实时", "live"])
+    # current-plan keywords
+    want_live = any(k in m for k in ["现在", "还能", "能不能", "盘中", "日线", "实时", "live"])
     # exit keywords
     want_exit = any(k in m for k in ["卖", "止损", "止盈", "减仓", "拿不拿", "退出"])
     # parse symbols (6-digit A-share code naive)
@@ -203,21 +203,17 @@ def make_refresh_plan(
 def make_dashboard_refresh_plan(now: Optional[datetime] = None) -> RefreshPlan:
     """Build a conservative refresh plan for dashboard/book endpoint.
 
-    - Intraday: L1 pulse_only on watchset to latest closed 5m.
-    - Non-intraday: L2 rebuild daybook to the target completed day.
+    - Daily mode: L2 rebuild daybook to the target completed day.
     """
     ms = compute_market_state(now)
-    intraday = ms.market_phase in {PHASE_OPEN_NO_FIRST_BAR, PHASE_INTRADAY_AM, PHASE_LUNCH_BREAK, PHASE_INTRADAY_PM}
-    if intraday and not _intraday_runtime_enabled():
-        intraday = False
-    level = 'L1' if intraday else 'L2'
-    scope = 'watchset' if intraday else 'watchset'
+    level = 'L2'
+    scope = 'watchset'
     return RefreshPlan(
         level=level,
         scope=scope,
         target_daybook_effective_day=ms.target_daybook_effective_day,
-        target_pulse_trade_day=ms.target_pulse_trade_day,
-        target_pulse_slot_at=ms.target_pulse_slot_at,
+        target_pulse_trade_day=None,
+        target_pulse_slot_at=None,
         market_phase=ms.market_phase,
         data_status=ms.data_status,
         invalidate_active_run=False,

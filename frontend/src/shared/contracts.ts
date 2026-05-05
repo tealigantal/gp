@@ -4,6 +4,7 @@ export interface ChatRequest {
 }
 
 export type ExecutionState =
+  | 'PLAN_READY'
   | 'BUY_NOW'
   | 'WAIT_PULLBACK'
   | 'WAIT_NEXT_SESSION'
