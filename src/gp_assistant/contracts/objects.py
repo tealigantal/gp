@@ -396,6 +396,20 @@ class PickDetailArtifact(GPModel):
     source_run_id: Optional[str] = None
 
 
+class SingleStockAnalysisArtifact(GPModel):
+    symbol: str
+    name: Optional[str] = None
+    as_of: Optional[str] = None
+    last_date: Optional[str] = None
+    data_status: Dict[str, Any] = Field(default_factory=dict)
+    kline_summary: Dict[str, Any] = Field(default_factory=dict)
+    champion: Dict[str, Any] = Field(default_factory=dict)
+    trade_plan: Dict[str, Any] = Field(default_factory=dict)
+    overall_state: str = "UNAVAILABLE"
+    reason_codes: List[str] = Field(default_factory=list)
+    data_provenance: Dict[str, Any] = Field(default_factory=dict)
+
+
 class NoTradeArtifact(GPModel):
     run_action: str = "NO_TRADE"
     market_summary: str = ""
@@ -494,6 +508,7 @@ class Judgment(GPModel):
     subject_entry: Optional[BoardEntry] = None
     compare_entries: List[BoardEntry] = Field(default_factory=list)
     pick_detail: Optional[PickDetailArtifact] = None
+    single_stock_analysis: Optional[SingleStockAnalysisArtifact] = None
     live_entry: Optional[LiveEntryDecisionArtifact] = None
     no_trade: Optional[NoTradeArtifact] = None
     exit_decision: Optional[ExitDecisionArtifact] = None

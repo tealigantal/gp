@@ -155,14 +155,48 @@ def test_llm_parsed_symbol_detail_request(monkeypatch):
             "subject": "symbol",
             "request": "pick_detail",
             "freshness": "active_run",
-            "references": {"symbol": "002371"},
+            "references": {"symbol": "600519"},
             "constraints": {},
             "ambiguity": {"confidence": 0.9, "notes": [], "needs_clarification": False},
         },
     )
-    frame = parse_concern(_memory_ctx(), _dummy_book(), "detail for 002371")
+    frame = parse_concern(_memory_ctx(), _dummy_book(), "detail for 600519")
     assert frame.request == "pick_detail"
-    assert frame.references.get("symbol") == "002371"
+    assert frame.references.get("symbol") == "600519"
+
+
+def test_llm_parsed_single_stock_query(monkeypatch):
+    _mock_llm(
+        monkeypatch,
+        {
+            "subject": "symbol",
+            "request": "single_stock_query",
+            "freshness": "active_run",
+            "references": {"symbol": "600519"},
+            "constraints": {},
+            "ambiguity": {"confidence": 0.9, "notes": [], "needs_clarification": False},
+        },
+    )
+    frame = parse_concern(_memory_ctx(), _dummy_book(), "600519 怎么样")
+    assert frame.request == "single_stock_query"
+    assert frame.references.get("symbol") == "600519"
+
+
+def test_external_symbol_detail_promotes_to_single_stock_query(monkeypatch):
+    _mock_llm(
+        monkeypatch,
+        {
+            "subject": "symbol",
+            "request": "pick_detail",
+            "freshness": "active_run",
+            "references": {"symbol": "000001"},
+            "constraints": {},
+            "ambiguity": {"confidence": 0.9, "notes": [], "needs_clarification": False},
+        },
+    )
+    frame = parse_concern(_memory_ctx(), _dummy_book(), "000001 怎么样")
+    assert frame.request == "single_stock_query"
+    assert frame.references.get("symbol") == "000001"
 
 
 def test_llm_parsed_exit_request(monkeypatch):

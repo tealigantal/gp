@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from gp_assistant.contracts.objects import AdvicePick, AdviceRun, BoardEntry, DayBook, EvidencePack, MarketBook, SessionState, TurnFrame
+from gp_assistant.contracts.objects import AdvicePick, AdviceRun, BoardEntry, DayBook, EvidencePack, MarketBook, SessionState, SingleStockAnalysisArtifact, TurnFrame
 from gp_assistant.judgment.engine import make_judgment
 from gp_assistant.runtime.utils import now_iso
 
@@ -127,6 +127,37 @@ def test_live_entry_check_with_subject_entry():
     j = make_judgment("s1", frame, ev)
     assert j.kind == "live_entry_check"
     assert j.live_entry is not None
+
+
+def test_single_stock_query_uses_analysis_workflow(monkeypatch):
+    from gp_assistant.judgment import workflow
+
+    artifact = SingleStockAnalysisArtifact(
+        symbol="000001",
+        as_of="2026-01-01",
+        last_date="2026-01-01",
+        data_status={"ok": True},
+        kline_summary={"last_close": 10.0},
+        champion={"strategy": "S1", "score": 0.8},
+        trade_plan={"diagnostics": {"execution_state": "actionable"}},
+        overall_state="PLAN_READY",
+    )
+    monkeypatch.setattr(workflow, "analyze_single_stock", lambda symbol, book=None: artifact)
+    frame = TurnFrame(
+        frame_id="f2b",
+        raw_message="000001 怎么样",
+        subject="symbol",
+        request="single_stock_query",
+        freshness="active_run",
+        references={"symbol": "000001"},
+        constraints={},
+        ambiguity={"confidence": 0.8, "notes": []},
+    )
+    ev = EvidencePack(frame=frame, session=_session(), book=_book())
+    j = make_judgment("s1", frame, ev)
+    assert j.kind == "single_stock_query"
+    assert j.single_stock_analysis is not None
+    assert j.single_stock_analysis.champion["strategy"] == "S1"
 
 
 def test_run_change_uses_runs_not_subject():

@@ -94,6 +94,45 @@ def _pick_detail_fallback_text(judgment: Judgment) -> str:
     )
 
 
+def _single_stock_fallback_text(judgment: Judgment) -> str:
+    analysis = judgment.single_stock_analysis
+    if analysis is None:
+        return judgment.summary
+    status = dict(analysis.data_status or {})
+    if status.get("error") == "invalid_symbol":
+        return "没有识别到有效的 6 位 A 股代码，暂不做单票分析。"
+    if not status.get("ok") and status.get("error"):
+        return f"{analysis.symbol} 的日线数据获取失败：{status.get('error')}。"
+    summary = dict(analysis.kline_summary or {})
+    champion = dict(analysis.champion or {})
+    trade_plan = dict(analysis.trade_plan or {})
+    diag = dict(trade_plan.get("diagnostics") or {})
+    lines = [f"{analysis.symbol}{f' {analysis.name}' if analysis.name else ''} 单票分析：{analysis.overall_state}。"]
+    if analysis.last_date:
+        lines.append(f"日线截止 {analysis.last_date}，最新收盘 {summary.get('last_close') or '待确认'}。")
+    perf_bits: list[str] = []
+    for label, key in (("1日", "return_1d_pct"), ("5日", "return_5d_pct"), ("20日", "return_20d_pct")):
+        value = summary.get(key)
+        if value is not None:
+            perf_bits.append(f"{label}{float(value):.2f}%")
+    if perf_bits:
+        lines.append("近期表现：" + "，".join(perf_bits) + "。")
+    if champion:
+        lines.append(
+            f"冠军策略 {champion.get('strategy') or 'NA'}，评分 {float(champion.get('score') or 0.0):.2f}，"
+            f"状态 {champion.get('freshness_state') or 'unknown'}。"
+        )
+    if diag:
+        rr = diag.get("reward_risk")
+        rr_text = f"{float(rr):.2f}" if rr is not None else "待确认"
+        lines.append(f"执行结构：{diag.get('execution_state') or 'observe_only'}，收益风险比 {rr_text}。")
+    if "daily_stale" in analysis.reason_codes:
+        lines.append("注意：日线没有补齐到目标交易日，只能作为结构观察，不作为正式交易结论。")
+    if "insufficient_history" in analysis.reason_codes:
+        lines.append("注意：历史 K 线长度不足，暂不输出冠军评分交易结论。")
+    return "\n".join(lines)
+
+
 def _live_entry_fallback_text(judgment: Judgment) -> str:
     live_entry = judgment.live_entry
     if live_entry is None:
@@ -182,6 +221,8 @@ def _fallback_text(judgment: Judgment) -> str:
         return _no_trade_fallback_text(judgment)
     if judgment.kind == "pick_detail":
         return _pick_detail_fallback_text(judgment)
+    if judgment.kind == "single_stock_query":
+        return _single_stock_fallback_text(judgment)
     if judgment.kind == "live_entry_check":
         return _live_entry_fallback_text(judgment)
     if judgment.kind == "compare":
@@ -201,9 +242,9 @@ def _text_has_min_signal(text: str, judgment: Judgment) -> bool:
     body = str(text or "").strip()
     if len(body) < 24:
         return False
-    if judgment.kind in {"recommend", "pick_detail", "live_entry_check"} and len(body) < 40:
+    if judgment.kind in {"recommend", "pick_detail", "single_stock_query", "live_entry_check"} and len(body) < 40:
         return False
-    if judgment.kind in {"recommend", "pick_detail", "live_entry_check"} and "\n" not in body:
+    if judgment.kind in {"recommend", "pick_detail", "single_stock_query", "live_entry_check"} and "\n" not in body:
         return False
     return True
 
@@ -283,6 +324,21 @@ def _build_canonical_message(evidence: EvidencePack, judgment: Judgment, text: s
             "symbol": symbol,
             "followup_suggestions": ["这只现在还能买吗", "和第一只比呢", "风控怎么设"],
             "freshness_meta": _freshness_meta(evidence, run),
+        }
+    if judgment.kind == "single_stock_query":
+        analysis = judgment.single_stock_analysis
+        symbol = analysis.symbol if analysis else None
+        return {
+            "message_kind": "single_stock_query",
+            "narrative_text": text,
+            "analysis": (analysis.model_dump() if analysis else {}),
+            "symbol": symbol,
+            "followup_suggestions": [
+                f"{symbol} 的风险点" if symbol else "这只的风险点",
+                f"{symbol} 和当前第一只比" if symbol else "和当前第一只比",
+                f"{symbol} 该不该卖" if symbol else "这只该不该卖",
+            ],
+            "freshness_meta": _freshness_meta(evidence, judgment.canonical_run),
         }
     if judgment.kind == "live_entry_check":
         run = judgment.canonical_run
@@ -393,6 +449,13 @@ def _decision_basis(evidence: EvidencePack, judgment: Judgment) -> DecisionBasis
         labels.extend(["单票逻辑", "执行计划"])
         selection_reason = judgment.pick_detail.why_selected or judgment.pick_detail.thesis or judgment.summary
         execution_reason = judgment.pick_detail.entry_text or judgment.pick_detail.stop_text or judgment.pick_detail.take_text
+    elif judgment.single_stock_analysis is not None:
+        labels.extend(["single_stock_daily", "champion_strategy"])
+        analysis = judgment.single_stock_analysis
+        selection_reason = analysis.overall_state or judgment.summary
+        diag = dict((analysis.trade_plan or {}).get("diagnostics") or {})
+        execution_reason = str(diag.get("execution_state") or analysis.overall_state)
+        risk_notes.extend(list(analysis.reason_codes or []))
     elif judgment.live_entry is not None:
         labels.extend(["执行判断", "风险边界"])
         selection_reason = judgment.live_entry.summary or judgment.summary
@@ -443,6 +506,8 @@ def build_structured_reply(
     symbols: List[str] = []
     if run is not None:
         symbols = [pick.symbol for pick in run.picks]
+    elif judgment.single_stock_analysis is not None and judgment.single_stock_analysis.symbol:
+        symbols = [judgment.single_stock_analysis.symbol]
     elif judgment.subject_entry is not None:
         symbols = [judgment.subject_entry.symbol]
     elif judgment.compare_entries:

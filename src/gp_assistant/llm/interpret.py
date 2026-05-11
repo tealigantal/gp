@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import logging
-import re
 from typing import Any, Dict
 
 from .client import LLMClient
@@ -13,11 +12,6 @@ from ..runtime.utils import gen_id
 
 LOGGER = logging.getLogger(__name__)
 
-_RECOMMEND_HINT_RE = re.compile(
-    r"(?:推荐|给我|看看|来个|机会|榜单|标的|选|选择).{0,12}(?:\d{1,2}|一|二|三|四|五|六|七|八|九|十|两)\s*(?:只|个|票|支|个股|标的)?"
-    r"|(?:\d{1,2})\s*(?:只|个|票|支|个股|标的)"
-)
-
 
 SYSTEM = """
 你是 GP 股票助手的语义路由器。
@@ -27,7 +21,7 @@ SYSTEM = """
 输出必须是一个 JSON object，且只能包含这些顶层字段：
 {
   "subject": "run|market|pick|symbol|compare_set|holding",
-  "request": "term_explain|recommend|pick_detail|live_entry_check|no_trade_explain|compare|exit_decision|run_change|chat",
+  "request": "term_explain|recommend|pick_detail|single_stock_query|live_entry_check|no_trade_explain|compare|exit_decision|run_change|chat",
   "freshness": "active_run|rebuild_run|next_session_plan",
   "references": {
     "symbol": "可选，6 位股票代码",
@@ -39,6 +33,9 @@ SYSTEM = """
   "constraints": {
     "topk": "可选，推荐数量，1 到 10",
     "require_refresh": "可选，是否要求刷新",
+    "history_mode": "可选，用户是否明确要求上一轮/历史/此前结果",
+    "term_text": "可选，term_explain 时要解释的术语或字段",
+    "refresh_intent": "可选，none|current|live|rebuild",
     "allow_derived_data": true
   },
   "ambiguity": {
@@ -62,6 +59,13 @@ SYSTEM = """
 11. 不确定 symbol 或 rank 时不要编造；可以使用 context.session.last_focus_symbol 或 recent_turns 中明确的 focus。
 12. 只输出 JSON，不要 Markdown，不要代码块，不要自然语言解释。
 """
+
+
+SYSTEM += (
+    '\nRule: if the user asks to analyze, check, or look at a concrete 6-digit A-share symbol, '
+    'and it is not explicitly an exit/sell question or a comparison, use request="single_stock_query", '
+    'subject="symbol", and put the 6-digit code in references.symbol.'
+)
 
 
 def _short(value: Any, limit: int = 1200) -> str:
@@ -106,15 +110,6 @@ def _extract_content(response: Dict[str, Any]) -> str:
         return ""
 
 
-def _semantic_issue(frame: TurnFrame, user_message: str) -> str | None:
-    text = str(user_message or "").strip()
-    if frame.request == "chat" and frame.freshness != "active_run":
-        return "chat intent must use freshness=active_run"
-    if frame.request == "chat" and _RECOMMEND_HINT_RE.search(text):
-        return "message asks for ranked picks/recommendations but request=chat"
-    return None
-
-
 def _decode_turn_frame(content: str, user_message: str) -> TurnFrame:
     if not content:
         raise ValueError("LLM returned empty content")
@@ -122,9 +117,8 @@ def _decode_turn_frame(content: str, user_message: str) -> TurnFrame:
     if not isinstance(obj, dict):
         raise ValueError("LLM returned JSON that is not an object")
     frame = _normalize_turn_obj(obj, user_message)
-    issue = _semantic_issue(frame, user_message)
-    if issue:
-        raise ValueError(f"LLM returned semantically inconsistent TurnFrame: {issue}")
+    if frame.request == "chat" and frame.freshness != "active_run":
+        raise ValueError("LLM returned semantically inconsistent TurnFrame: chat intent must use freshness=active_run")
     return frame
 
 

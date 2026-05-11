@@ -14,6 +14,7 @@ from ..contracts.objects import (
     PickDetailArtifact,
     RunChangeArtifact,
 )
+from ..evidence.single_stock_service import analyze_single_stock
 from ..runtime.canonical_artifact import (
     build_canonical_pick,
     build_canonical_run,
@@ -177,6 +178,26 @@ def pick_detail_workflow(evidence: EvidencePack) -> Judgment:
         subject_entry=evidence.subject_entry,
         pick_detail=detail,
         evidence_refs=[evidence.book.book_version, evidence.subject_entry.symbol],
+    )
+
+
+def single_stock_workflow(evidence: EvidencePack) -> Judgment:
+    refs = evidence.frame.references or {}
+    symbol = str(refs.get("symbol") or "").strip()
+    analysis = analyze_single_stock(symbol, book=evidence.book)
+    if analysis.data_status.get("error") == "invalid_symbol":
+        summary = "未识别到有效的 6 位 A 股代码，暂不做单票分析。"
+    elif analysis.overall_state == "UNAVAILABLE":
+        summary = f"{analysis.symbol} 的日线数据不足，暂不输出正式交易结论。"
+    elif analysis.overall_state == "STALE_OBSERVE":
+        summary = f"{analysis.symbol} 只能基于未补齐到目标交易日的日线做结构观察。"
+    else:
+        summary = f"{analysis.symbol} 已完成日线与冠军策略分析，当前状态为 {analysis.overall_state}。"
+    return Judgment(
+        kind="single_stock_query",
+        summary=summary,
+        single_stock_analysis=analysis,
+        evidence_refs=[evidence.book.book_version, analysis.symbol],
     )
 
 

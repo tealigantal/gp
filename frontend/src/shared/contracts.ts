@@ -116,6 +116,20 @@ export interface PickDetailArtifact {
   source_run_id?: string | null
 }
 
+export interface SingleStockAnalysisArtifact {
+  symbol: string
+  name?: string | null
+  as_of?: string | null
+  last_date?: string | null
+  data_status: Record<string, unknown>
+  kline_summary: Record<string, unknown>
+  champion: Record<string, unknown>
+  trade_plan: Record<string, unknown>
+  overall_state: string
+  reason_codes: string[]
+  data_provenance: Record<string, unknown>
+}
+
 export interface ExitDecisionArtifact {
   symbol: string
   action: 'HOLD' | 'REDUCE' | 'SELL' | 'WATCH'
@@ -185,6 +199,15 @@ export interface CanonicalPickDetailMessage {
   freshness_meta?: Record<string, unknown>
 }
 
+export interface CanonicalSingleStockQueryMessage {
+  message_kind: 'single_stock_query'
+  narrative_text: string
+  analysis: SingleStockAnalysisArtifact
+  symbol?: string | null
+  followup_suggestions?: string[]
+  freshness_meta?: Record<string, unknown>
+}
+
 export interface CanonicalLiveEntryMessage {
   message_kind: 'live_entry_check'
   narrative_text: string
@@ -243,6 +266,7 @@ export type CanonicalMessage =
   | CanonicalRecommendMessage
   | CanonicalNoTradeMessage
   | CanonicalPickDetailMessage
+  | CanonicalSingleStockQueryMessage
   | CanonicalLiveEntryMessage
   | CanonicalCompareMessage
   | CanonicalExitDecisionMessage

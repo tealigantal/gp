@@ -79,12 +79,29 @@ def _validate_intent(frame: TurnFrame, memory_ctx: Dict[str, Any]) -> TurnFrame:
     return frame
 
 
+def _explicit_symbol_not_in_book(frame: TurnFrame, book: MarketBook) -> bool:
+    refs = frame.references or {}
+    symbol = str(refs.get("symbol") or "").strip()
+    if not symbol or symbol not in str(frame.raw_message or ""):
+        return False
+    board_symbols = {str(getattr(entry, "symbol", "")).strip() for entry in list(book.board or [])}
+    return symbol not in board_symbols
+
+
+def _promote_external_symbol_query(frame: TurnFrame, book: MarketBook) -> TurnFrame:
+    if frame.request in {"pick_detail", "live_entry_check"} and _explicit_symbol_not_in_book(frame, book):
+        frame.request = "single_stock_query"
+        frame.subject = "symbol"
+    return frame
+
+
 def validate_turn_frame(frame: TurnFrame) -> TurnFrame:
     allowed_requests = {
         "chat",
         "term_explain",
         "recommend",
         "pick_detail",
+        "single_stock_query",
         "live_entry_check",
         "no_trade_explain",
         "compare",
@@ -108,5 +125,6 @@ def parse_concern(memory_ctx: Dict[str, Any], book: MarketBook, user_message: st
     frame = normalize_turn_frame(frame, book=book)
     frame = inject_entity_hints(frame, memory_ctx, book)
     frame = _validate_intent(frame, memory_ctx)
+    frame = _promote_external_symbol_query(frame, book)
     frame = normalize_turn_frame(frame, book=book)
     return validate_turn_frame(frame)

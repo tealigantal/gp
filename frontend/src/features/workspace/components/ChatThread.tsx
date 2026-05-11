@@ -79,6 +79,14 @@ function renderFromCanonical(
       </Space>
     )
   }
+  if (message.message_kind === 'single_stock_query') {
+    return (
+      <Space direction="vertical" size={10} style={{ width: '100%' }}>
+        <FollowupTextMessage content={message.narrative_text} label="单票分析" />
+        <SuggestedFollowups suggestions={message.followup_suggestions} onPick={(text) => onPrompt?.(text)} />
+      </Space>
+    )
+  }
   if (message.message_kind === 'live_entry_check') {
     return (
       <Space direction="vertical" size={10} style={{ width: '100%' }}>
