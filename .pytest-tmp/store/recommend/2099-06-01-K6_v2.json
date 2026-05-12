@@ -1,0 +1,49 @@
+{
+  "run_id": "2099-06-01-K6",
+  "as_of": "2099-06-01-K6",
+  "degraded": false,
+  "tradeable": true,
+  "symbols": [
+    "X"
+  ],
+  "themes": [],
+  "items": [
+    {
+      "pick_id": "2099-06-01-K6:X",
+      "symbol": "X",
+      "strategy": "TMP_K6",
+      "execution_state": "actionable",
+      "actionable": true,
+      "reward_risk": 0.8,
+      "liquidity_grade": "A",
+      "invalidated_now": false,
+      "invalidation": [],
+      "alpha_score": 0.0,
+      "execution_score": 0.9,
+      "reliability_score": 0.6,
+      "final_score": 0.525,
+      "confidence": 0.6,
+      "evidence": {
+        "available": true,
+        "event_stats": {
+          "available": false,
+          "sample_size": 0
+        },
+        "walk_forward": {
+          "available": false,
+          "windows": []
+        },
+        "strategy_health": {
+          "status": "killed",
+          "reason_codes": [],
+          "paper_trade_summary": {},
+          "event_summary": {},
+          "walkforward_summary": {},
+          "available": true
+        }
+      }
+    }
+  ],
+  "artifact_version": "v2",
+  "fallback_used": false
+}

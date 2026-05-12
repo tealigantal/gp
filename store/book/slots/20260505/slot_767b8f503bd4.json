@@ -1,0 +1,110 @@
+{
+  "artifact_id": "slot_767b8f503bd4",
+  "slot_id": null,
+  "trade_day": "20260505",
+  "slot_at": null,
+  "market_phase": "PREOPEN",
+  "slot_status": "UNAVAILABLE",
+  "publish_allowed": false,
+  "daybook_effective_day": "20260505",
+  "gate": {
+    "state": "UNAVAILABLE",
+    "score": 0.0,
+    "reasons": [
+      "preopen_init"
+    ],
+    "breadth_score": 0.0,
+    "benchmark_score": 0.0,
+    "liquidity_score": 0.0,
+    "buyable_count": 0,
+    "metrics": {}
+  },
+  "tracked_universe": {
+    "reco": [],
+    "reserve": [],
+    "portfolio": [],
+    "total": []
+  },
+  "board": [],
+  "symbol_states": {},
+  "data_quality": {
+    "snapshot_age_sec": null,
+    "symbols_expected": 0,
+    "symbols_received": 0,
+    "benchmark_received": false,
+    "provider": "akshare",
+    "complete": false,
+    "errors": [
+      "preopen_init"
+    ]
+  },
+  "portfolio_snapshot": {
+    "as_of": "2026-03-20T13:34:01.357738+00:00",
+    "cash": null,
+    "equity": null,
+    "positions": [],
+    "pending_intents": [
+      {
+        "intent_id": "intent-45605cb1676e",
+        "run_id": "2099-07-01-PE",
+        "as_of": "2099-07-01-PE",
+        "symbol": "Q",
+        "side": "buy",
+        "decision_source": "gated_recommendation",
+        "gating_decision": {
+          "decision": "allow",
+          "level": "item",
+          "reasons": [],
+          "triggered_rules": [],
+          "warnings": [],
+          "inputs_snapshot": {
+            "final_score": 0.605,
+            "reliability_score": 1.0,
+            "invalidated_now": false,
+            "actionable": true,
+            "strategy": "S_OK8"
+          },
+          "fallback_used": false
+        },
+        "priority": 1.0,
+        "thesis": "S_OK8",
+        "entry_hint": null,
+        "stop_hint": null,
+        "invalidation": [],
+        "confidence": 1.0,
+        "sizing_hint": 1.0,
+        "status": "admitted",
+        "warnings": [],
+        "metadata": {
+          "created_at": "2026-03-20T13:34:01.356738+00:00"
+        },
+        "provenance": {
+          "artifact_version": "v2",
+          "symbol": "Q",
+          "strategy": "S_OK8"
+        }
+      }
+    ],
+    "recent_events": [
+      {
+        "event_id": "evt-9631fedb1eca",
+        "intent_id": "intent-45605cb1676e",
+        "event_type": "admitted",
+        "timestamp": "2026-03-20T13:34:01.357738+00:00",
+        "symbol": "Q",
+        "notes": "paper_admit",
+        "source_run_id": "2099-07-01-PE"
+      }
+    ],
+    "realized_pnl": null,
+    "unrealized_pnl": null,
+    "exposure_summary": {},
+    "warnings": []
+  },
+  "provider_meta": {
+    "reason": "preopen_init"
+  },
+  "side_results": [],
+  "created_at": "2026-05-05T01:19:19.606156+00:00",
+  "updated_at": "2026-05-05T01:19:19.606167+00:00"
+}

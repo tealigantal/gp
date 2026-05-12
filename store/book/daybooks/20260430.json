@@ -1,0 +1,1521 @@
+{
+  "trading_day": "20260430",
+  "generated_at": "2026-05-05T02:49:26.474525+00:00",
+  "regime": {
+    "grade": "C",
+    "reasons": [
+      "全市场均值涨跌幅=0.47%",
+      "上涨占比=52.22%"
+    ],
+    "recovery_conditions": [],
+    "raw": {
+      "breadth": {
+        "mean_chg": 0.4698737071311921,
+        "up_ratio": 0.5222282707312648
+      }
+    }
+  },
+  "tradeable": true,
+  "reason": "generated 10 picks",
+  "themes": [
+    "行业-燃料电池",
+    "行业-集成电路制造",
+    "概念-先进封装",
+    "概念-2026—季报扭亏"
+  ],
+  "picks": [
+    {
+      "symbol": "600089",
+      "name": null,
+      "rank": 1,
+      "strategy_id": "S1",
+      "industry": "dynamic_pool",
+      "thesis": "接近计划买点，执行条件较充分，留意盘中确认。",
+      "entry_plan": {
+        "kind": "zone",
+        "low": 26.5,
+        "high": 28.56032786885246,
+        "price": 26.5
+      },
+      "stop_plan": {
+        "kind": "close_below_support",
+        "price": 26.5,
+        "invalidation": "收盘有效跌破支撑带",
+        "text": "收盘有效跌破支撑带"
+      },
+      "take_profit_plan": {
+        "kind": "targets",
+        "price": 31.86,
+        "targets": [
+          31.86,
+          32.4972
+        ]
+      },
+      "scores": {
+        "final": 3.349500665120326,
+        "candidate": -0.03722028618698894,
+        "champion": 0.36328032989940573,
+        "reward_risk": 15.749999999999984
+      },
+      "risk_flags": [],
+      "why_selected": "相对同组候选综合条件更优。",
+      "why_not_others": [],
+      "evidence_refs": [
+        "600089"
+      ],
+      "style_label": "balanced",
+      "meta": {
+        "candidate_score": -0.03722028618698894,
+        "theme_overlap_score": 0.0,
+        "mainline_overlap_score": 0.0,
+        "reason_codes": [
+          "rr_known",
+          "state=actionable"
+        ],
+        "daily_last_date": "2026-04-30",
+        "daily_freshness_state": "current"
+      }
+    },
+    {
+      "symbol": "603993",
+      "name": null,
+      "rank": 2,
+      "strategy_id": "S3",
+      "industry": "dynamic_pool",
+      "thesis": "接近计划买点，执行条件较充分，留意盘中确认。",
+      "entry_plan": {
+        "kind": "zone",
+        "low": 18.24,
+        "high": 20.653114754098354,
+        "price": 18.24
+      },
+      "stop_plan": {
+        "kind": "close_below_support",
+        "price": 18.24,
+        "invalidation": "收盘有效跌破支撑带",
+        "text": "收盘有效跌破支撑带"
+      },
+      "take_profit_plan": {
+        "kind": "targets",
+        "price": 23.03,
+        "targets": [
+          23.03,
+          23.7209
+        ]
+      },
+      "scores": {
+        "final": 2.5007147248982196,
+        "candidate": -0.09213667456828445,
+        "champion": 0.37106535354365483,
+        "reward_risk": 11.60526315789466
+      },
+      "risk_flags": [],
+      "why_selected": "相对同组候选综合条件更优。",
+      "why_not_others": [],
+      "evidence_refs": [
+        "603993"
+      ],
+      "style_label": "balanced",
+      "meta": {
+        "candidate_score": -0.09213667456828445,
+        "theme_overlap_score": 0.0,
+        "mainline_overlap_score": 0.0,
+        "reason_codes": [
+          "rr_known",
+          "state=actionable"
+        ],
+        "daily_last_date": "2026-04-30",
+        "daily_freshness_state": "current"
+      }
+    },
+    {
+      "symbol": "000426",
+      "name": null,
+      "rank": 3,
+      "strategy_id": "S5",
+      "industry": "dynamic_pool",
+      "thesis": "接近计划买点，执行条件较充分，留意盘中确认。",
+      "entry_plan": {
+        "kind": "zone",
+        "low": 42.218055,
+        "high": 42.6445,
+        "price": 42.218055
+      },
+      "stop_plan": {
+        "kind": "close_below_support",
+        "price": 42.218055,
+        "invalidation": "收盘有效跌破支撑带",
+        "text": "收盘有效跌破支撑带"
+      },
+      "take_profit_plan": {
+        "kind": "targets",
+        "price": 43.49739,
+        "targets": [
+          43.49739,
+          43.923835000000004
+        ]
+      },
+      "scores": {
+        "final": 1.5794505183603569,
+        "candidate": -0.06775101621773053,
+        "champion": 0.37955828327528596,
+        "reward_risk": 6.8998116644538605
+      },
+      "risk_flags": [],
+      "why_selected": "相对同组候选综合条件更优。",
+      "why_not_others": [],
+      "evidence_refs": [
+        "000426"
+      ],
+      "style_label": "balanced",
+      "meta": {
+        "candidate_score": -0.06775101621773053,
+        "theme_overlap_score": 0.0,
+        "mainline_overlap_score": 0.0,
+        "reason_codes": [
+          "rr_known",
+          "state=actionable"
+        ],
+        "daily_last_date": "2026-04-30",
+        "daily_freshness_state": "current"
+      }
+    },
+    {
+      "symbol": "600406",
+      "name": null,
+      "rank": 4,
+      "strategy_id": "S1",
+      "industry": "dynamic_pool",
+      "thesis": "接近计划买点，执行条件较充分，留意盘中确认。",
+      "entry_plan": {
+        "kind": "zone",
+        "low": 25.24,
+        "high": 26.988196721311475,
+        "price": 25.24
+      },
+      "stop_plan": {
+        "kind": "close_below_support",
+        "price": 25.24,
+        "invalidation": "收盘有效跌破支撑带",
+        "text": "收盘有效跌破支撑带"
+      },
+      "take_profit_plan": {
+        "kind": "targets",
+        "price": 30.22,
+        "targets": [
+          30.22,
+          30.8244
+        ]
+      },
+      "scores": {
+        "final": 1.3491646858414783,
+        "candidate": -0.1418866233214447,
+        "champion": 0.4166143010188661,
+        "reward_risk": 5.821917808219174
+      },
+      "risk_flags": [],
+      "why_selected": "相对同组候选综合条件更优。",
+      "why_not_others": [],
+      "evidence_refs": [
+        "600406"
+      ],
+      "style_label": "balanced",
+      "meta": {
+        "candidate_score": -0.1418866233214447,
+        "theme_overlap_score": 0.0,
+        "mainline_overlap_score": 0.0,
+        "reason_codes": [
+          "rr_known",
+          "state=actionable"
+        ],
+        "daily_last_date": "2026-04-30",
+        "daily_freshness_state": "current"
+      }
+    },
+    {
+      "symbol": "601899",
+      "name": null,
+      "rank": 5,
+      "strategy_id": "S1",
+      "industry": "dynamic_pool",
+      "thesis": "结构候选靠前，但当前执行条件一般，建议观察等待更优位置。",
+      "entry_plan": {
+        "kind": "zone",
+        "low": 32.2,
+        "high": 36.14524590163934,
+        "price": 32.2
+      },
+      "stop_plan": {
+        "kind": "close_below_support",
+        "price": 32.2,
+        "invalidation": "收盘有效跌破支撑带",
+        "text": "收盘有效跌破支撑带"
+      },
+      "take_profit_plan": {
+        "kind": "targets",
+        "price": 40.61,
+        "targets": [
+          40.61,
+          41.422200000000004
+        ]
+      },
+      "scores": {
+        "final": 1.2074739817089324,
+        "candidate": -0.07475243126290443,
+        "champion": 0.3636565917218125,
+        "reward_risk": 6.645454545454582
+      },
+      "risk_flags": [],
+      "why_selected": "相对同组候选综合条件更优。",
+      "why_not_others": [],
+      "evidence_refs": [
+        "601899"
+      ],
+      "style_label": "balanced",
+      "meta": {
+        "candidate_score": -0.07475243126290443,
+        "theme_overlap_score": 0.0,
+        "mainline_overlap_score": 0.0,
+        "reason_codes": [
+          "rr_known",
+          "state=waiting_pullback"
+        ],
+        "daily_last_date": "2026-04-30",
+        "daily_freshness_state": "current"
+      }
+    },
+    {
+      "symbol": "601288",
+      "name": null,
+      "rank": 6,
+      "strategy_id": "S5",
+      "industry": "dynamic_pool",
+      "thesis": "接近计划买点，执行条件较充分，留意盘中确认。",
+      "entry_plan": {
+        "kind": "zone",
+        "low": 6.828525000000001,
+        "high": 6.897500000000001,
+        "price": 6.828525000000001
+      },
+      "stop_plan": {
+        "kind": "close_below_support",
+        "price": 6.828525000000001,
+        "invalidation": "收盘有效跌破支撑带",
+        "text": "收盘有效跌破支撑带"
+      },
+      "take_profit_plan": {
+        "kind": "targets",
+        "price": 7.035450000000001,
+        "targets": [
+          7.035450000000001,
+          7.104425000000001
+        ]
+      },
+      "scores": {
+        "final": 0.42129244520865605,
+        "candidate": -0.13634281085210898,
+        "champion": 0.37896092518017754,
+        "reward_risk": 1.2620934681607225
+      },
+      "risk_flags": [],
+      "why_selected": "相对同组候选综合条件更优。",
+      "why_not_others": [],
+      "evidence_refs": [
+        "601288"
+      ],
+      "style_label": "stable",
+      "meta": {
+        "candidate_score": -0.13634281085210898,
+        "theme_overlap_score": 0.0,
+        "mainline_overlap_score": 0.0,
+        "reason_codes": [
+          "rr_known",
+          "state=actionable"
+        ],
+        "daily_last_date": "2026-04-30",
+        "daily_freshness_state": "current"
+      }
+    },
+    {
+      "symbol": "002594",
+      "name": null,
+      "rank": 7,
+      "strategy_id": "S8",
+      "industry": "dynamic_pool",
+      "thesis": "接近计划买点，执行条件较充分，留意盘中确认。",
+      "entry_plan": {
+        "kind": "zone",
+        "low": 101.48,
+        "high": 101.67,
+        "price": 101.48
+      },
+      "stop_plan": {
+        "kind": "close_below_support",
+        "price": 101.48,
+        "invalidation": "收盘有效跌破支撑带",
+        "text": "收盘有效跌破支撑带"
+      },
+      "take_profit_plan": {
+        "kind": "targets",
+        "price": 103.82,
+        "targets": [
+          103.82,
+          105.25
+        ]
+      },
+      "scores": {
+        "final": 0.31004162289968107,
+        "candidate": -0.07829093209933606,
+        "champion": 0.3895462937988793,
+        "reward_risk": 0.5599999999999928
+      },
+      "risk_flags": [],
+      "why_selected": "相对同组候选综合条件更优。",
+      "why_not_others": [],
+      "evidence_refs": [
+        "002594"
+      ],
+      "style_label": "stable",
+      "meta": {
+        "candidate_score": -0.07829093209933606,
+        "theme_overlap_score": 0.0,
+        "mainline_overlap_score": 0.0,
+        "reason_codes": [
+          "rr_known",
+          "state=actionable"
+        ],
+        "daily_last_date": "2026-04-30",
+        "daily_freshness_state": "current"
+      }
+    },
+    {
+      "symbol": "600031",
+      "name": null,
+      "rank": 8,
+      "strategy_id": "S5",
+      "industry": "dynamic_pool",
+      "thesis": "接近计划买点，执行条件较充分，留意盘中确认。",
+      "entry_plan": {
+        "kind": "zone",
+        "low": 19.96434,
+        "high": 20.166,
+        "price": 19.96434
+      },
+      "stop_plan": {
+        "kind": "close_below_support",
+        "price": 19.96434,
+        "invalidation": "收盘有效跌破支撑带",
+        "text": "收盘有效跌破支撑带"
+      },
+      "take_profit_plan": {
+        "kind": "targets",
+        "price": 20.56932,
+        "targets": [
+          20.56932,
+          20.77098
+        ]
+      },
+      "scores": {
+        "final": 0.29100656638126887,
+        "candidate": -0.15802726345174645,
+        "champion": 0.4102756469790715,
+        "reward_risk": 0.5686874448996497
+      },
+      "risk_flags": [],
+      "why_selected": "相对同组候选综合条件更优。",
+      "why_not_others": [],
+      "evidence_refs": [
+        "600031"
+      ],
+      "style_label": "stable",
+      "meta": {
+        "candidate_score": -0.15802726345174645,
+        "theme_overlap_score": 0.0,
+        "mainline_overlap_score": 0.0,
+        "reason_codes": [
+          "rr_known",
+          "state=actionable"
+        ],
+        "daily_last_date": "2026-04-30",
+        "daily_freshness_state": "current"
+      }
+    },
+    {
+      "symbol": "600900",
+      "name": null,
+      "rank": 9,
+      "strategy_id": "S7",
+      "industry": "dynamic_pool",
+      "thesis": "结构候选靠前，但当前执行条件一般，建议观察等待更优位置。",
+      "entry_plan": {
+        "kind": "zone",
+        "low": 26.24,
+        "high": 26.710476190476193,
+        "price": 26.24
+      },
+      "stop_plan": {
+        "kind": "close_below_support",
+        "price": 26.24,
+        "invalidation": "收盘有效跌破支撑带",
+        "text": "收盘有效跌破支撑带"
+      },
+      "take_profit_plan": {
+        "kind": "targets",
+        "price": 27.33,
+        "targets": [
+          27.33,
+          27.8766
+        ]
+      },
+      "scores": {
+        "final": -0.08906324248031244,
+        "candidate": -0.04109638759876358,
+        "champion": 0.3956381738973017,
+        "reward_risk": 0.0092592592592574
+      },
+      "risk_flags": [],
+      "why_selected": "相对同组候选综合条件更优。",
+      "why_not_others": [],
+      "evidence_refs": [
+        "600900"
+      ],
+      "style_label": "stable",
+      "meta": {
+        "candidate_score": -0.04109638759876358,
+        "theme_overlap_score": 0.0,
+        "mainline_overlap_score": 0.0,
+        "reason_codes": [
+          "rr_known",
+          "state=waiting_pullback"
+        ],
+        "daily_last_date": "2026-04-30",
+        "daily_freshness_state": "current"
+      }
+    },
+    {
+      "symbol": "601318",
+      "name": null,
+      "rank": 10,
+      "strategy_id": "S7",
+      "industry": "dynamic_pool",
+      "thesis": "结构候选靠前，但当前执行条件一般，建议观察等待更优位置。",
+      "entry_plan": {
+        "kind": "zone",
+        "low": 55.84,
+        "high": 57.94285714285715,
+        "price": 55.84
+      },
+      "stop_plan": {
+        "kind": "close_below_support",
+        "price": 55.84,
+        "invalidation": "收盘有效跌破支撑带",
+        "text": "收盘有效跌破支撑带"
+      },
+      "take_profit_plan": {
+        "kind": "targets",
+        "price": 59.84,
+        "targets": [
+          59.84,
+          61.03680000000001
+        ]
+      },
+      "scores": {
+        "final": -0.1027632965458333,
+        "candidate": -0.08329602920982189,
+        "champion": 0.36960585252558953,
+        "reward_risk": 0.1331444759206818
+      },
+      "risk_flags": [],
+      "why_selected": "相对同组候选综合条件更优。",
+      "why_not_others": [],
+      "evidence_refs": [
+        "601318"
+      ],
+      "style_label": "stable",
+      "meta": {
+        "candidate_score": -0.08329602920982189,
+        "theme_overlap_score": 0.0,
+        "mainline_overlap_score": 0.0,
+        "reason_codes": [
+          "rr_known",
+          "state=waiting_pullback"
+        ],
+        "daily_last_date": "2026-04-30",
+        "daily_freshness_state": "current"
+      }
+    }
+  ],
+  "reserve_picks": [
+    {
+      "symbol": "601138",
+      "name": "工业富联",
+      "rank": 11,
+      "strategy_id": "",
+      "industry": null,
+      "thesis": "",
+      "entry_plan": {},
+      "stop_plan": {},
+      "take_profit_plan": {},
+      "scores": {
+        "final": 0.0,
+        "candidate": -0.029331534754963917,
+        "champion": 0.0,
+        "reward_risk": 0.0
+      },
+      "risk_flags": [],
+      "why_selected": "",
+      "why_not_others": [],
+      "evidence_refs": [
+        "601138"
+      ],
+      "style_label": "stable",
+      "meta": {
+        "candidate_score": -0.029331534754963917,
+        "theme_overlap_score": 0.0,
+        "mainline_overlap_score": 0.0,
+        "reason_codes": [],
+        "daily_last_date": "2026-04-30",
+        "daily_freshness_state": "current"
+      }
+    },
+    {
+      "symbol": "000333",
+      "name": "美的集团",
+      "rank": 12,
+      "strategy_id": "",
+      "industry": null,
+      "thesis": "",
+      "entry_plan": {},
+      "stop_plan": {},
+      "take_profit_plan": {},
+      "scores": {
+        "final": 0.0,
+        "candidate": -0.03917889168407224,
+        "champion": 0.0,
+        "reward_risk": 0.0
+      },
+      "risk_flags": [],
+      "why_selected": "",
+      "why_not_others": [],
+      "evidence_refs": [
+        "000333"
+      ],
+      "style_label": "stable",
+      "meta": {
+        "candidate_score": -0.03917889168407224,
+        "theme_overlap_score": 0.0,
+        "mainline_overlap_score": 0.0,
+        "reason_codes": [],
+        "daily_last_date": "2026-04-30",
+        "daily_freshness_state": "current"
+      }
+    }
+  ],
+  "reserve_symbols": [
+    "601138",
+    "000333"
+  ],
+  "source_meta": {
+    "raw_keys": [
+      "as_of",
+      "candidate_pool",
+      "daily_freshness",
+      "data_status",
+      "debug",
+      "disclaimer",
+      "env",
+      "execution_checklist",
+      "mainline",
+      "message",
+      "mover_hints",
+      "picks",
+      "themes",
+      "timezone",
+      "tradeable"
+    ],
+    "topk": 10,
+    "reserve_count": 2,
+    "risk_profile": "normal",
+    "daily_freshness": {
+      "target_day": "2026-04-30",
+      "target_mode": "previous_completed",
+      "daybook_trading_day": "20260430",
+      "pending_eod_day": null,
+      "eod_probe": null,
+      "calendar_status": "ok",
+      "calendar_source": "official",
+      "calendar_range": {
+        "start": "20250101",
+        "end": "20261231"
+      },
+      "calendar_error": null,
+      "next_trading_day": "20260506",
+      "checked_symbols": [
+        "600089",
+        "603993",
+        "000426",
+        "600406",
+        "601899",
+        "601288",
+        "002594",
+        "600031",
+        "600900",
+        "601318",
+        "601138",
+        "000333",
+        "000725",
+        "600030",
+        "600519",
+        "600584",
+        "600036",
+        "603799",
+        "000063",
+        "603019",
+        "002050",
+        "000977",
+        "002261",
+        "000651",
+        "600549",
+        "603228",
+        "002837",
+        "600276",
+        "002049",
+        "002340",
+        "600887",
+        "600111",
+        "002156",
+        "600879",
+        "002015",
+        "002602",
+        "600392",
+        "603259",
+        "600183",
+        "002415",
+        "002202",
+        "002759",
+        "002436",
+        "603501",
+        "002371",
+        "002475",
+        "002185",
+        "600498",
+        "000831",
+        "000938"
+      ],
+      "fresh_symbols": [
+        "600089",
+        "603993",
+        "000426",
+        "600406",
+        "601899",
+        "601288",
+        "002594",
+        "600031",
+        "600900",
+        "601318",
+        "601138",
+        "000333",
+        "000725",
+        "600030",
+        "600519",
+        "600584",
+        "600036",
+        "603799",
+        "000063",
+        "603019",
+        "002050",
+        "000977",
+        "002261",
+        "000651",
+        "600549",
+        "603228",
+        "002837",
+        "600276",
+        "002049",
+        "002340",
+        "600887",
+        "600111",
+        "002156",
+        "600879",
+        "002015",
+        "002602",
+        "600392",
+        "603259",
+        "600183",
+        "002415",
+        "002202",
+        "002759",
+        "002436",
+        "603501",
+        "002371",
+        "002475",
+        "002185",
+        "600498",
+        "000831",
+        "000938"
+      ],
+      "stale_symbols": [],
+      "failed_symbols": [],
+      "refreshed_symbols": [],
+      "ready": true,
+      "strict": true,
+      "checked_count": 50,
+      "stale_count": 0,
+      "failed_count": 0,
+      "symbol_reports": [
+        {
+          "symbol": "600089",
+          "query_id": "c92dbe6a49b9350e",
+          "target_trading_day": "2026-04-30",
+          "last_fetch_at": "2026-05-05T10:49:11.132161+08:00",
+          "last_item_time": "2026-04-30",
+          "freshness_state": "current",
+          "source": "store+network_merge",
+          "refresh_attempted": true,
+          "refresh_succeeded": true,
+          "strict_blocked": false,
+          "len": 6810,
+          "insufficient_history": false,
+          "target_mode": "previous_completed"
+        },
+        {
+          "symbol": "603993",
+          "query_id": "634ac5a8af6d27ca",
+          "target_trading_day": "2026-04-30",
+          "last_fetch_at": "2026-05-05T10:49:11.594395+08:00",
+          "last_item_time": "2026-04-30",
+          "freshness_state": "current",
+          "source": "store+network_merge",
+          "refresh_attempted": true,
+          "refresh_succeeded": true,
+          "strict_blocked": false,
+          "len": 3272,
+          "insufficient_history": false,
+          "target_mode": "previous_completed"
+        },
+        {
+          "symbol": "000426",
+          "query_id": "624080707eadb2bb",
+          "target_trading_day": "2026-04-30",
+          "last_fetch_at": "2026-05-05T10:49:11.969168+08:00",
+          "last_item_time": "2026-04-30",
+          "freshness_state": "current",
+          "source": "store+network_merge",
+          "refresh_attempted": true,
+          "refresh_succeeded": true,
+          "strict_blocked": false,
+          "len": 6756,
+          "insufficient_history": false,
+          "target_mode": "previous_completed"
+        },
+        {
+          "symbol": "600406",
+          "query_id": "be3ad8b2fe734b12",
+          "target_trading_day": "2026-04-30",
+          "last_fetch_at": "2026-05-05T10:49:12.547171+08:00",
+          "last_item_time": "2026-04-30",
+          "freshness_state": "current",
+          "source": "store+network_merge",
+          "refresh_attempted": true,
+          "refresh_succeeded": true,
+          "strict_blocked": false,
+          "len": 5267,
+          "insufficient_history": false,
+          "target_mode": "previous_completed"
+        },
+        {
+          "symbol": "601899",
+          "query_id": "892dbaf0ab26ea8c",
+          "target_trading_day": "2026-04-30",
+          "last_fetch_at": "2026-05-05T10:49:12.936509+08:00",
+          "last_item_time": "2026-04-30",
+          "freshness_state": "current",
+          "source": "store+network_merge",
+          "refresh_attempted": true,
+          "refresh_succeeded": true,
+          "strict_blocked": false,
+          "len": 4333,
+          "insufficient_history": false,
+          "target_mode": "previous_completed"
+        },
+        {
+          "symbol": "601288",
+          "query_id": "b6fa7cf3d5ee5491",
+          "target_trading_day": "2026-04-30",
+          "last_fetch_at": "2026-05-05T10:49:13.354062+08:00",
+          "last_item_time": "2026-04-30",
+          "freshness_state": "current",
+          "source": "store+network_merge",
+          "refresh_attempted": true,
+          "refresh_succeeded": true,
+          "strict_blocked": false,
+          "len": 3831,
+          "insufficient_history": false,
+          "target_mode": "previous_completed"
+        },
+        {
+          "symbol": "002594",
+          "query_id": "17ead05cd90ca968",
+          "target_trading_day": "2026-04-30",
+          "last_fetch_at": "2026-05-05T10:49:13.801920+08:00",
+          "last_item_time": "2026-04-30",
+          "freshness_state": "current",
+          "source": "store+network_merge",
+          "refresh_attempted": true,
+          "refresh_succeeded": true,
+          "strict_blocked": false,
+          "len": 3591,
+          "insufficient_history": false,
+          "target_mode": "previous_completed"
+        },
+        {
+          "symbol": "600031",
+          "query_id": "1bce39cbd7f3df61",
+          "target_trading_day": "2026-04-30",
+          "last_fetch_at": "2026-05-05T10:49:14.307494+08:00",
+          "last_item_time": "2026-04-30",
+          "freshness_state": "current",
+          "source": "store+network_merge",
+          "refresh_attempted": true,
+          "refresh_succeeded": true,
+          "strict_blocked": false,
+          "len": 5495,
+          "insufficient_history": false,
+          "target_mode": "previous_completed"
+        },
+        {
+          "symbol": "600900",
+          "query_id": "c5a928c9b37661fa",
+          "target_trading_day": "2026-04-30",
+          "last_fetch_at": "2026-05-05T10:49:14.779052+08:00",
+          "last_item_time": "2026-04-30",
+          "freshness_state": "current",
+          "source": "store+network_merge",
+          "refresh_attempted": true,
+          "refresh_succeeded": true,
+          "strict_blocked": false,
+          "len": 5028,
+          "insufficient_history": false,
+          "target_mode": "previous_completed"
+        },
+        {
+          "symbol": "601318",
+          "query_id": "0a56d7e7f79da5a2",
+          "target_trading_day": "2026-04-30",
+          "last_fetch_at": "2026-05-05T10:49:15.221306+08:00",
+          "last_item_time": "2026-04-30",
+          "freshness_state": "current",
+          "source": "store+network_merge",
+          "refresh_attempted": true,
+          "refresh_succeeded": true,
+          "strict_blocked": false,
+          "len": 4593,
+          "insufficient_history": false,
+          "target_mode": "previous_completed"
+        },
+        {
+          "symbol": "601138",
+          "query_id": "ce3c7fe95659f517",
+          "target_trading_day": "2026-04-30",
+          "last_fetch_at": "2026-05-05T10:49:15.658034+08:00",
+          "last_item_time": "2026-04-30",
+          "freshness_state": "current",
+          "source": "store+network_merge",
+          "refresh_attempted": true,
+          "refresh_succeeded": true,
+          "strict_blocked": false,
+          "len": 1915,
+          "insufficient_history": false,
+          "target_mode": "previous_completed"
+        },
+        {
+          "symbol": "000333",
+          "query_id": "4471232b8d225239",
+          "target_trading_day": "2026-04-30",
+          "last_fetch_at": "2026-05-05T10:49:16.066137+08:00",
+          "last_item_time": "2026-04-30",
+          "freshness_state": "current",
+          "source": "store+network_merge",
+          "refresh_attempted": true,
+          "refresh_succeeded": true,
+          "strict_blocked": false,
+          "len": 3002,
+          "insufficient_history": false,
+          "target_mode": "previous_completed"
+        },
+        {
+          "symbol": "000725",
+          "query_id": "594d3d447934aeaa",
+          "target_trading_day": "2026-04-30",
+          "last_fetch_at": "2026-05-05T10:49:16.496965+08:00",
+          "last_item_time": "2026-04-30",
+          "freshness_state": "current",
+          "source": "store+network_merge",
+          "refresh_attempted": true,
+          "refresh_succeeded": true,
+          "strict_blocked": false,
+          "len": 6005,
+          "insufficient_history": false,
+          "target_mode": "previous_completed"
+        },
+        {
+          "symbol": "600030",
+          "query_id": "c6234745aa524af9",
+          "target_trading_day": "2026-04-30",
+          "last_fetch_at": "2026-05-05T10:49:16.948801+08:00",
+          "last_item_time": "2026-04-30",
+          "freshness_state": "current",
+          "source": "store+network_merge",
+          "refresh_attempted": true,
+          "refresh_succeeded": true,
+          "strict_blocked": false,
+          "len": 5562,
+          "insufficient_history": false,
+          "target_mode": "previous_completed"
+        },
+        {
+          "symbol": "600519",
+          "query_id": "8966f3a45e13f657",
+          "target_trading_day": "2026-04-30",
+          "last_fetch_at": "2026-05-05T10:49:17.400330+08:00",
+          "last_item_time": "2026-04-30",
+          "freshness_state": "current",
+          "source": "store+network_merge",
+          "refresh_attempted": true,
+          "refresh_succeeded": true,
+          "strict_blocked": false,
+          "len": 5911,
+          "insufficient_history": false,
+          "target_mode": "previous_completed"
+        },
+        {
+          "symbol": "600584",
+          "query_id": "504ec37791be2a4d",
+          "target_trading_day": "2026-04-30",
+          "last_fetch_at": "2026-05-05T10:49:17.844828+08:00",
+          "last_item_time": "2026-04-30",
+          "freshness_state": "current",
+          "source": "store+network_merge",
+          "refresh_attempted": true,
+          "refresh_succeeded": true,
+          "strict_blocked": false,
+          "len": 5256,
+          "insufficient_history": false,
+          "target_mode": "previous_completed"
+        },
+        {
+          "symbol": "600036",
+          "query_id": "e169e12803c7324c",
+          "target_trading_day": "2026-04-30",
+          "last_fetch_at": "2026-05-05T10:49:18.176982+08:00",
+          "last_item_time": "2026-04-30",
+          "freshness_state": "current",
+          "source": "store+network_merge",
+          "refresh_attempted": true,
+          "refresh_succeeded": true,
+          "strict_blocked": false,
+          "len": 5768,
+          "insufficient_history": false,
+          "target_mode": "previous_completed"
+        },
+        {
+          "symbol": "603799",
+          "query_id": "2b57e0d3ebef79dc",
+          "target_trading_day": "2026-04-30",
+          "last_fetch_at": "2026-05-05T10:49:18.641319+08:00",
+          "last_item_time": "2026-04-30",
+          "freshness_state": "current",
+          "source": "store+network_merge",
+          "refresh_attempted": true,
+          "refresh_succeeded": true,
+          "strict_blocked": false,
+          "len": 2699,
+          "insufficient_history": false,
+          "target_mode": "previous_completed"
+        },
+        {
+          "symbol": "000063",
+          "query_id": "3d2c46f3ab0cf5e8",
+          "target_trading_day": "2026-04-30",
+          "last_fetch_at": "2026-05-05T10:49:19.209931+08:00",
+          "last_item_time": "2026-04-30",
+          "freshness_state": "current",
+          "source": "store+network_merge",
+          "refresh_attempted": true,
+          "refresh_succeeded": true,
+          "strict_blocked": false,
+          "len": 6739,
+          "insufficient_history": false,
+          "target_mode": "previous_completed"
+        },
+        {
+          "symbol": "603019",
+          "query_id": "650bb41779db7aad",
+          "target_trading_day": "2026-04-30",
+          "last_fetch_at": "2026-05-05T10:49:19.648885+08:00",
+          "last_item_time": "2026-04-30",
+          "freshness_state": "current",
+          "source": "store+network_merge",
+          "refresh_attempted": true,
+          "refresh_succeeded": true,
+          "strict_blocked": false,
+          "len": 2764,
+          "insufficient_history": false,
+          "target_mode": "previous_completed"
+        },
+        {
+          "symbol": "002050",
+          "query_id": "209e2b6dde2afe0a",
+          "target_trading_day": "2026-04-30",
+          "last_fetch_at": "2026-05-05T10:49:20.009332+08:00",
+          "last_item_time": "2026-04-30",
+          "freshness_state": "current",
+          "source": "store+network_merge",
+          "refresh_attempted": true,
+          "refresh_succeeded": true,
+          "strict_blocked": false,
+          "len": 4852,
+          "insufficient_history": false,
+          "target_mode": "previous_completed"
+        },
+        {
+          "symbol": "000977",
+          "query_id": "d686aa306e52a00c",
+          "target_trading_day": "2026-04-30",
+          "last_fetch_at": "2026-05-05T10:49:20.423448+08:00",
+          "last_item_time": "2026-04-30",
+          "freshness_state": "current",
+          "source": "store+network_merge",
+          "refresh_attempted": true,
+          "refresh_succeeded": true,
+          "strict_blocked": false,
+          "len": 6156,
+          "insufficient_history": false,
+          "target_mode": "previous_completed"
+        },
+        {
+          "symbol": "002261",
+          "query_id": "a244d004aa2e33fd",
+          "target_trading_day": "2026-04-30",
+          "last_fetch_at": "2026-05-05T10:49:20.932886+08:00",
+          "last_item_time": "2026-04-30",
+          "freshness_state": "current",
+          "source": "store+network_merge",
+          "refresh_attempted": true,
+          "refresh_succeeded": true,
+          "strict_blocked": false,
+          "len": 4140,
+          "insufficient_history": false,
+          "target_mode": "previous_completed"
+        },
+        {
+          "symbol": "000651",
+          "query_id": "53f4403f7ab96ba4",
+          "target_trading_day": "2026-04-30",
+          "last_fetch_at": "2026-05-05T10:49:21.446013+08:00",
+          "last_item_time": "2026-04-30",
+          "freshness_state": "current",
+          "source": "store+network_merge",
+          "refresh_attempted": true,
+          "refresh_succeeded": true,
+          "strict_blocked": false,
+          "len": 6917,
+          "insufficient_history": false,
+          "target_mode": "previous_completed"
+        },
+        {
+          "symbol": "600549",
+          "query_id": "dd81245327019124",
+          "target_trading_day": "2026-04-30",
+          "last_fetch_at": "2026-05-05T10:49:21.963492+08:00",
+          "last_item_time": "2026-04-30",
+          "freshness_state": "current",
+          "source": "store+network_merge",
+          "refresh_attempted": true,
+          "refresh_succeeded": true,
+          "strict_blocked": false,
+          "len": 5637,
+          "insufficient_history": false,
+          "target_mode": "previous_completed"
+        },
+        {
+          "symbol": "603228",
+          "query_id": "0e85310347899ca8",
+          "target_trading_day": "2026-04-30",
+          "last_fetch_at": "2026-05-05T10:49:22.563057+08:00",
+          "last_item_time": "2026-04-30",
+          "freshness_state": "current",
+          "source": "store+network_merge",
+          "refresh_attempted": true,
+          "refresh_succeeded": true,
+          "strict_blocked": false,
+          "len": 2260,
+          "insufficient_history": false,
+          "target_mode": "previous_completed"
+        },
+        {
+          "symbol": "002837",
+          "query_id": "5839b3645a8d1344",
+          "target_trading_day": "2026-04-30",
+          "last_fetch_at": "2026-05-05T10:49:22.956067+08:00",
+          "last_item_time": "2026-04-30",
+          "freshness_state": "current",
+          "source": "store+network_merge",
+          "refresh_attempted": true,
+          "refresh_succeeded": true,
+          "strict_blocked": false,
+          "len": 2189,
+          "insufficient_history": false,
+          "target_mode": "previous_completed"
+        },
+        {
+          "symbol": "600276",
+          "query_id": "436dd143a70d8571",
+          "target_trading_day": "2026-04-30",
+          "last_fetch_at": "2026-05-05T10:49:23.384299+08:00",
+          "last_item_time": "2026-04-30",
+          "freshness_state": "current",
+          "source": "store+network_merge",
+          "refresh_attempted": true,
+          "refresh_succeeded": true,
+          "strict_blocked": false,
+          "len": 6146,
+          "insufficient_history": false,
+          "target_mode": "previous_completed"
+        },
+        {
+          "symbol": "002049",
+          "query_id": "f1d4e0b928ad6d97",
+          "target_trading_day": "2026-04-30",
+          "last_fetch_at": "2026-05-05T10:49:24.039791+08:00",
+          "last_item_time": "2026-04-30",
+          "freshness_state": "current",
+          "source": "store+network_merge",
+          "refresh_attempted": true,
+          "refresh_succeeded": true,
+          "strict_blocked": false,
+          "len": 4739,
+          "insufficient_history": false,
+          "target_mode": "previous_completed"
+        },
+        {
+          "symbol": "002340",
+          "query_id": "1338dff36c5f14b8",
+          "target_trading_day": "2026-04-30",
+          "last_fetch_at": "2026-05-05T10:49:24.465905+08:00",
+          "last_item_time": "2026-04-30",
+          "freshness_state": "current",
+          "source": "store+network_merge",
+          "refresh_attempted": true,
+          "refresh_succeeded": true,
+          "strict_blocked": false,
+          "len": 3861,
+          "insufficient_history": false,
+          "target_mode": "previous_completed"
+        },
+        {
+          "symbol": "600887",
+          "query_id": "eb004ab97f50e485",
+          "target_trading_day": "2026-04-30",
+          "last_fetch_at": "2026-05-05T10:49:24.936956+08:00",
+          "last_item_time": "2026-04-30",
+          "freshness_state": "current",
+          "source": "store+network_merge",
+          "refresh_attempted": true,
+          "refresh_succeeded": true,
+          "strict_blocked": false,
+          "len": 7204,
+          "insufficient_history": false,
+          "target_mode": "previous_completed"
+        },
+        {
+          "symbol": "600111",
+          "query_id": "72a3926f98547a92",
+          "target_trading_day": "2026-04-30",
+          "last_fetch_at": "2026-05-05T10:44:25.182103+08:00",
+          "last_item_time": "2026-04-30",
+          "freshness_state": "current",
+          "source": "store:daily:akshare",
+          "refresh_attempted": false,
+          "refresh_succeeded": true,
+          "strict_blocked": false,
+          "len": 6875,
+          "insufficient_history": false,
+          "target_mode": "previous_completed"
+        },
+        {
+          "symbol": "002156",
+          "query_id": "b27e348e8037a8b0",
+          "target_trading_day": "2026-04-30",
+          "last_fetch_at": "2026-05-05T10:44:26.848969+08:00",
+          "last_item_time": "2026-04-30",
+          "freshness_state": "current",
+          "source": "store:daily:akshare",
+          "refresh_attempted": false,
+          "refresh_succeeded": true,
+          "strict_blocked": false,
+          "len": 4433,
+          "insufficient_history": false,
+          "target_mode": "previous_completed"
+        },
+        {
+          "symbol": "600879",
+          "query_id": "7f750ceed35a901d",
+          "target_trading_day": "2026-04-30",
+          "last_fetch_at": "2026-05-05T10:44:29.054912+08:00",
+          "last_item_time": "2026-04-30",
+          "freshness_state": "current",
+          "source": "store:daily:akshare",
+          "refresh_attempted": false,
+          "refresh_succeeded": true,
+          "strict_blocked": false,
+          "len": 7223,
+          "insufficient_history": false,
+          "target_mode": "previous_completed"
+        },
+        {
+          "symbol": "002015",
+          "query_id": "8c93ebc0e2ed31a2",
+          "target_trading_day": "2026-04-30",
+          "last_fetch_at": "2026-05-05T10:44:30.531743+08:00",
+          "last_item_time": "2026-04-30",
+          "freshness_state": "current",
+          "source": "store:daily:akshare",
+          "refresh_attempted": false,
+          "refresh_succeeded": true,
+          "strict_blocked": false,
+          "len": 4706,
+          "insufficient_history": false,
+          "target_mode": "previous_completed"
+        },
+        {
+          "symbol": "002602",
+          "query_id": "94d5c021b1858794",
+          "target_trading_day": "2026-04-30",
+          "last_fetch_at": "2026-05-05T10:44:31.678286+08:00",
+          "last_item_time": "2026-04-30",
+          "freshness_state": "current",
+          "source": "store:daily:akshare",
+          "refresh_attempted": false,
+          "refresh_succeeded": true,
+          "strict_blocked": false,
+          "len": 3112,
+          "insufficient_history": false,
+          "target_mode": "previous_completed"
+        },
+        {
+          "symbol": "600392",
+          "query_id": "a4dd8ba669f50f5e",
+          "target_trading_day": "2026-04-30",
+          "last_fetch_at": "2026-05-05T10:44:33.465658+08:00",
+          "last_item_time": "2026-04-30",
+          "freshness_state": "current",
+          "source": "store:daily:akshare",
+          "refresh_attempted": false,
+          "refresh_succeeded": true,
+          "strict_blocked": false,
+          "len": 5220,
+          "insufficient_history": false,
+          "target_mode": "previous_completed"
+        },
+        {
+          "symbol": "603259",
+          "query_id": "5274c2aa3b40bd26",
+          "target_trading_day": "2026-04-30",
+          "last_fetch_at": "2026-05-05T10:44:34.567800+08:00",
+          "last_item_time": "2026-04-30",
+          "freshness_state": "current",
+          "source": "store:daily:akshare",
+          "refresh_attempted": false,
+          "refresh_succeeded": true,
+          "strict_blocked": false,
+          "len": 1938,
+          "insufficient_history": false,
+          "target_mode": "previous_completed"
+        },
+        {
+          "symbol": "600183",
+          "query_id": "27e4c8387c6038e9",
+          "target_trading_day": "2026-04-30",
+          "last_fetch_at": "2026-05-05T10:44:36.353632+08:00",
+          "last_item_time": "2026-04-30",
+          "freshness_state": "current",
+          "source": "store:daily:akshare",
+          "refresh_attempted": false,
+          "refresh_succeeded": true,
+          "strict_blocked": false,
+          "len": 6580,
+          "insufficient_history": false,
+          "target_mode": "previous_completed"
+        },
+        {
+          "symbol": "002415",
+          "query_id": "78b0b263198c77bb",
+          "target_trading_day": "2026-04-30",
+          "last_fetch_at": "2026-05-05T10:44:38.036400+08:00",
+          "last_item_time": "2026-04-30",
+          "freshness_state": "current",
+          "source": "store:daily:akshare",
+          "refresh_attempted": false,
+          "refresh_succeeded": true,
+          "strict_blocked": false,
+          "len": 3812,
+          "insufficient_history": false,
+          "target_mode": "previous_completed"
+        },
+        {
+          "symbol": "002202",
+          "query_id": "82df7d6368798338",
+          "target_trading_day": "2026-04-30",
+          "last_fetch_at": "2026-05-05T10:44:39.644893+08:00",
+          "last_item_time": "2026-04-30",
+          "freshness_state": "current",
+          "source": "store:daily:akshare",
+          "refresh_attempted": false,
+          "refresh_succeeded": true,
+          "strict_blocked": false,
+          "len": 4425,
+          "insufficient_history": false,
+          "target_mode": "previous_completed"
+        },
+        {
+          "symbol": "002759",
+          "query_id": "115a13a724c3553c",
+          "target_trading_day": "2026-04-30",
+          "last_fetch_at": "2026-05-05T10:44:41.011740+08:00",
+          "last_item_time": "2026-04-30",
+          "freshness_state": "current",
+          "source": "store:daily:akshare",
+          "refresh_attempted": false,
+          "refresh_succeeded": true,
+          "strict_blocked": false,
+          "len": 2576,
+          "insufficient_history": false,
+          "target_mode": "previous_completed"
+        },
+        {
+          "symbol": "002436",
+          "query_id": "92169c2717b474ac",
+          "target_trading_day": "2026-04-30",
+          "last_fetch_at": "2026-05-05T10:44:42.452914+08:00",
+          "last_item_time": "2026-04-30",
+          "freshness_state": "current",
+          "source": "store:daily:akshare",
+          "refresh_attempted": false,
+          "refresh_succeeded": true,
+          "strict_blocked": false,
+          "len": 3692,
+          "insufficient_history": false,
+          "target_mode": "previous_completed"
+        },
+        {
+          "symbol": "603501",
+          "query_id": "9605d7171be5a9bd",
+          "target_trading_day": "2026-04-30",
+          "last_fetch_at": "2026-05-05T10:44:43.533142+08:00",
+          "last_item_time": "2026-04-30",
+          "freshness_state": "current",
+          "source": "store:daily:akshare",
+          "refresh_attempted": false,
+          "refresh_succeeded": true,
+          "strict_blocked": false,
+          "len": 2013,
+          "insufficient_history": false,
+          "target_mode": "previous_completed"
+        },
+        {
+          "symbol": "002371",
+          "query_id": "113daae068f4090c",
+          "target_trading_day": "2026-04-30",
+          "last_fetch_at": "2026-05-05T10:44:45.044538+08:00",
+          "last_item_time": "2026-04-30",
+          "freshness_state": "current",
+          "source": "store:daily:akshare",
+          "refresh_attempted": false,
+          "refresh_succeeded": true,
+          "strict_blocked": false,
+          "len": 3835,
+          "insufficient_history": false,
+          "target_mode": "previous_completed"
+        },
+        {
+          "symbol": "002475",
+          "query_id": "a0d5b253db6ea7ae",
+          "target_trading_day": "2026-04-30",
+          "last_fetch_at": "2026-05-05T10:44:46.396134+08:00",
+          "last_item_time": "2026-04-30",
+          "freshness_state": "current",
+          "source": "store:daily:akshare",
+          "refresh_attempted": false,
+          "refresh_succeeded": true,
+          "strict_blocked": false,
+          "len": 3763,
+          "insufficient_history": false,
+          "target_mode": "previous_completed"
+        },
+        {
+          "symbol": "002185",
+          "query_id": "0246e659bab902f9",
+          "target_trading_day": "2026-04-30",
+          "last_fetch_at": "2026-05-05T10:44:47.773867+08:00",
+          "last_item_time": "2026-04-30",
+          "freshness_state": "current",
+          "source": "store:daily:akshare",
+          "refresh_attempted": false,
+          "refresh_succeeded": true,
+          "strict_blocked": false,
+          "len": 4445,
+          "insufficient_history": false,
+          "target_mode": "previous_completed"
+        },
+        {
+          "symbol": "600498",
+          "query_id": "55d7bd2b2eab3057",
+          "target_trading_day": "2026-04-30",
+          "last_fetch_at": "2026-05-05T10:44:49.331138+08:00",
+          "last_item_time": "2026-04-30",
+          "freshness_state": "current",
+          "source": "store:daily:akshare",
+          "refresh_attempted": false,
+          "refresh_succeeded": true,
+          "strict_blocked": false,
+          "len": 5890,
+          "insufficient_history": false,
+          "target_mode": "previous_completed"
+        },
+        {
+          "symbol": "000831",
+          "query_id": "de628a158f48d18d",
+          "target_trading_day": "2026-04-30",
+          "last_fetch_at": "2026-05-05T10:44:51.247262+08:00",
+          "last_item_time": "2026-04-30",
+          "freshness_state": "current",
+          "source": "store:daily:akshare",
+          "refresh_attempted": false,
+          "refresh_succeeded": true,
+          "strict_blocked": false,
+          "len": 6159,
+          "insufficient_history": false,
+          "target_mode": "previous_completed"
+        },
+        {
+          "symbol": "000938",
+          "query_id": "1b03049c246a5617",
+          "target_trading_day": "2026-04-30",
+          "last_fetch_at": "2026-05-05T10:44:53.493726+08:00",
+          "last_item_time": "2026-04-30",
+          "freshness_state": "current",
+          "source": "store:daily:akshare",
+          "refresh_attempted": false,
+          "refresh_succeeded": true,
+          "strict_blocked": false,
+          "len": 6174,
+          "insufficient_history": false,
+          "target_mode": "previous_completed"
+        }
+      ],
+      "last_reconcile_at": "2026-05-05T02:49:26.472013+00:00",
+      "blocking_reason": null
+    }
+  }
+}

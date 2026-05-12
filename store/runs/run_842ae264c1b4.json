@@ -1,0 +1,447 @@
+{
+  "run_id": "run_842ae264c1b4",
+  "session_id": "session_pbog8nq0",
+  "book_version": "slot_90a66cd95400",
+  "created_at": "2026-04-29T14:22:06.958699+00:00",
+  "trading_day": "20260429",
+  "regime": {
+    "grade": "A",
+    "reasons": [
+      "全市场均值涨跌幅=1.31%",
+      "上涨占比=72.09%"
+    ],
+    "recovery_conditions": [],
+    "raw": {
+      "breadth": {
+        "mean_chg": 1.307967332123412,
+        "up_ratio": 0.7208711433756806
+      }
+    }
+  },
+  "tradeable": true,
+  "reason": "generated 10 picks",
+  "picks": [
+    {
+      "symbol": "601601",
+      "name": null,
+      "rank": 1,
+      "final_score": 42.03036992653111,
+      "live_score": 62.0,
+      "daily_rank_score": 1.0,
+      "exec_score": 0.0,
+      "action": "WATCH",
+      "execution_state": "unavailable",
+      "can_open": false,
+      "stretched": false,
+      "extended": false,
+      "invalidated": false,
+      "signal_type": "unavailable",
+      "entry_zone": {},
+      "stop": null,
+      "take": [],
+      "vwap": null,
+      "orb30_high": null,
+      "orb30_low": null,
+      "rs_index": null,
+      "rs_industry": null,
+      "slot_rel_vol": null,
+      "summary": "盘中执行数据暂不完整，先保留观察计划。",
+      "reason_codes": [
+        "intraday_runtime_disabled"
+      ],
+      "artifact_id": "slot_90a66cd95400",
+      "slot_id": "20260429_1455",
+      "style_label": "balanced",
+      "pick": {
+        "symbol": "601601",
+        "name": null,
+        "rank": 1,
+        "strategy_id": "S3",
+        "industry": "dynamic_pool",
+        "thesis": "接近计划买点，执行条件较充分，留意盘中确认。",
+        "entry_plan": {
+          "kind": "zone",
+          "low": 37.59,
+          "high": 40.32393442622951,
+          "price": 37.59
+        },
+        "stop_plan": {
+          "kind": "close_below_support",
+          "price": 37.59,
+          "invalidation": "收盘有效跌破支撑带",
+          "text": "收盘有效跌破支撑带"
+        },
+        "take_profit_plan": {
+          "kind": "targets",
+          "price": 43.9,
+          "targets": [
+            43.9,
+            45.217
+          ]
+        },
+        "scores": {
+          "final": 42.03036992653111,
+          "candidate": -0.18510728838847884,
+          "champion": 0.39664234943542903,
+          "reward_risk": 209.333333333375
+        },
+        "risk_flags": [],
+        "why_selected": "相对同组候选综合条件更优。",
+        "why_not_others": [],
+        "evidence_refs": [
+          "601601"
+        ],
+        "style_label": "balanced",
+        "meta": {
+          "candidate_score": -0.18510728838847884,
+          "theme_overlap_score": 0.0,
+          "mainline_overlap_score": 0.0,
+          "reason_codes": [
+            "rr_known",
+            "state=actionable"
+          ],
+          "daily_last_date": "2026-04-29",
+          "daily_freshness_state": "stale"
+        }
+      },
+      "pulse": {
+        "symbol": "601601",
+        "last_bar_at": null,
+        "pulse_score": 0.0,
+        "momentum_state": "unknown",
+        "stretch_state": "unknown",
+        "liquidity_state": "unknown",
+        "execution_state": "unavailable",
+        "invalidated": false,
+        "entry_distance_pct": null,
+        "flags": [],
+        "evidence_refs": [],
+        "live_score": 62.0,
+        "daily_rank_score": 1.0,
+        "exec_score": 0.0,
+        "action": "WATCH",
+        "can_open": false,
+        "signal_type": "unavailable",
+        "entry_zone": {},
+        "stop": null,
+        "take": [],
+        "vwap": null,
+        "orb30_high": null,
+        "orb30_low": null,
+        "rs_index": null,
+        "rs_industry": null,
+        "slot_rel_vol": null,
+        "extended": false,
+        "reason_codes": [
+          "intraday_runtime_disabled"
+        ],
+        "provider": null,
+        "volume_baseline": null,
+        "trade_day": "20260429",
+        "slot_at": "2026-04-29 14:55:00",
+        "is_stale": false,
+        "stale_reason": null
+      }
+    },
+    {
+      "symbol": "600089",
+      "name": null,
+      "rank": 2,
+      "final_score": 1.425504601953268,
+      "live_score": 56.36363636363636,
+      "daily_rank_score": 0.9090909090909091,
+      "exec_score": 0.0,
+      "action": "WATCH",
+      "execution_state": "unavailable",
+      "can_open": false,
+      "stretched": false,
+      "extended": false,
+      "invalidated": false,
+      "signal_type": "unavailable",
+      "entry_zone": {},
+      "stop": null,
+      "take": [],
+      "vwap": null,
+      "orb30_high": null,
+      "orb30_low": null,
+      "rs_index": null,
+      "rs_industry": null,
+      "slot_rel_vol": null,
+      "summary": "盘中执行数据暂不完整，先保留观察计划。",
+      "reason_codes": [
+        "intraday_runtime_disabled"
+      ],
+      "artifact_id": "slot_90a66cd95400",
+      "slot_id": "20260429_1455",
+      "style_label": "balanced",
+      "pick": {
+        "symbol": "600089",
+        "name": null,
+        "rank": 2,
+        "strategy_id": "S1",
+        "industry": "dynamic_pool",
+        "thesis": "接近计划买点，执行条件较充分，留意盘中确认。",
+        "entry_plan": {
+          "kind": "zone",
+          "low": 26.5,
+          "high": 28.56032786885246,
+          "price": 26.5
+        },
+        "stop_plan": {
+          "kind": "close_below_support",
+          "price": 26.5,
+          "invalidation": "收盘有效跌破支撑带",
+          "text": "收盘有效跌破支撑带"
+        },
+        "take_profit_plan": {
+          "kind": "targets",
+          "price": 31.86,
+          "targets": [
+            31.86,
+            32.4972
+          ]
+        },
+        "scores": {
+          "final": 1.425504601953268,
+          "candidate": -0.03378573497130497,
+          "champion": 0.3632374055706696,
+          "reward_risk": 6.146666666666666
+        },
+        "risk_flags": [],
+        "why_selected": "相对同组候选综合条件更优。",
+        "why_not_others": [],
+        "evidence_refs": [
+          "600089"
+        ],
+        "style_label": "balanced",
+        "meta": {
+          "candidate_score": -0.03378573497130497,
+          "theme_overlap_score": 0.0,
+          "mainline_overlap_score": 0.0,
+          "reason_codes": [
+            "rr_known",
+            "state=actionable"
+          ],
+          "daily_last_date": "2026-04-29",
+          "daily_freshness_state": "stale"
+        }
+      },
+      "pulse": {
+        "symbol": "600089",
+        "last_bar_at": null,
+        "pulse_score": 0.0,
+        "momentum_state": "unknown",
+        "stretch_state": "unknown",
+        "liquidity_state": "unknown",
+        "execution_state": "unavailable",
+        "invalidated": false,
+        "entry_distance_pct": null,
+        "flags": [],
+        "evidence_refs": [],
+        "live_score": 56.36363636363636,
+        "daily_rank_score": 0.9090909090909091,
+        "exec_score": 0.0,
+        "action": "WATCH",
+        "can_open": false,
+        "signal_type": "unavailable",
+        "entry_zone": {},
+        "stop": null,
+        "take": [],
+        "vwap": null,
+        "orb30_high": null,
+        "orb30_low": null,
+        "rs_index": null,
+        "rs_industry": null,
+        "slot_rel_vol": null,
+        "extended": false,
+        "reason_codes": [
+          "intraday_runtime_disabled"
+        ],
+        "provider": null,
+        "volume_baseline": null,
+        "trade_day": "20260429",
+        "slot_at": "2026-04-29 14:55:00",
+        "is_stale": false,
+        "stale_reason": null
+      }
+    },
+    {
+      "symbol": "600010",
+      "name": null,
+      "rank": 3,
+      "final_score": 1.2932292179675686,
+      "live_score": 50.72727272727273,
+      "daily_rank_score": 0.8181818181818181,
+      "exec_score": 0.0,
+      "action": "WATCH",
+      "execution_state": "unavailable",
+      "can_open": false,
+      "stretched": false,
+      "extended": false,
+      "invalidated": false,
+      "signal_type": "unavailable",
+      "entry_zone": {},
+      "stop": null,
+      "take": [],
+      "vwap": null,
+      "orb30_high": null,
+      "orb30_low": null,
+      "rs_index": null,
+      "rs_industry": null,
+      "slot_rel_vol": null,
+      "summary": "盘中执行数据暂不完整，先保留观察计划。",
+      "reason_codes": [
+        "intraday_runtime_disabled"
+      ],
+      "artifact_id": "slot_90a66cd95400",
+      "slot_id": "20260429_1455",
+      "style_label": "balanced",
+      "pick": {
+        "symbol": "600010",
+        "name": null,
+        "rank": 3,
+        "strategy_id": "S8",
+        "industry": "dynamic_pool",
+        "thesis": "接近计划买点，执行条件较充分，留意盘中确认。",
+        "entry_plan": {
+          "kind": "zone",
+          "low": 2.74,
+          "high": 2.82,
+          "price": 2.74
+        },
+        "stop_plan": {
+          "kind": "close_below_support",
+          "price": 2.74,
+          "invalidation": "收盘有效跌破支撑带",
+          "text": "收盘有效跌破支撑带"
+        },
+        "take_profit_plan": {
+          "kind": "targets",
+          "price": 2.87,
+          "targets": [
+            2.87,
+            2.88
+          ]
+        },
+        "scores": {
+          "final": 1.2932292179675686,
+          "candidate": -0.031848927733975366,
+          "champion": 0.34690450350768376,
+          "reward_risk": 5.500000000000133
+        },
+        "risk_flags": [],
+        "why_selected": "相对同组候选综合条件更优。",
+        "why_not_others": [],
+        "evidence_refs": [
+          "600010"
+        ],
+        "style_label": "balanced",
+        "meta": {
+          "candidate_score": -0.031848927733975366,
+          "theme_overlap_score": 0.0,
+          "mainline_overlap_score": 0.0,
+          "reason_codes": [
+            "rr_known",
+            "state=actionable"
+          ],
+          "daily_last_date": "2026-04-29",
+          "daily_freshness_state": "stale"
+        }
+      },
+      "pulse": {
+        "symbol": "600010",
+        "last_bar_at": null,
+        "pulse_score": 0.0,
+        "momentum_state": "unknown",
+        "stretch_state": "unknown",
+        "liquidity_state": "unknown",
+        "execution_state": "unavailable",
+        "invalidated": false,
+        "entry_distance_pct": null,
+        "flags": [],
+        "evidence_refs": [],
+        "live_score": 50.72727272727273,
+        "daily_rank_score": 0.8181818181818181,
+        "exec_score": 0.0,
+        "action": "WATCH",
+        "can_open": false,
+        "signal_type": "unavailable",
+        "entry_zone": {},
+        "stop": null,
+        "take": [],
+        "vwap": null,
+        "orb30_high": null,
+        "orb30_low": null,
+        "rs_index": null,
+        "rs_industry": null,
+        "slot_rel_vol": null,
+        "extended": false,
+        "reason_codes": [
+          "intraday_runtime_disabled"
+        ],
+        "provider": null,
+        "volume_baseline": null,
+        "trade_day": "20260429",
+        "slot_at": "2026-04-29 14:55:00",
+        "is_stale": false,
+        "stale_reason": null
+      }
+    }
+  ],
+  "evidence_refs": [
+    "slot_90a66cd95400",
+    "slot_90a66cd95400"
+  ],
+  "artifact_id": "slot_90a66cd95400",
+  "slot_id": "20260429_1455",
+  "slot_status": "UNAVAILABLE",
+  "publish_allowed": false,
+  "daybook_effective_day": "20260429",
+  "pulse_trade_day": "20260429",
+  "pulse_slot_at": "2026-04-29 14:55:00",
+  "market_phase": "POSTCLOSE_PENDING",
+  "data_status": "unavailable",
+  "run_action": "NO_TRADE",
+  "non_trading": true,
+  "status_reason": "当前不在连续竞价执行时段，以下为下一交易窗口计划。",
+  "no_trade_reasons": [
+    "日线数据未补齐到目标交易日：601601, 600089, 600010",
+    "generated 10 picks",
+    "intraday_runtime_disabled"
+  ],
+  "recovery_conditions": [
+    "至少 2 只候选重新回到买点附近",
+    "下一交易窗口再用 5 分钟量价确认",
+    "最新 5 分钟快照恢复完整"
+  ],
+  "data_quality": {
+    "snapshot_age_sec": null,
+    "symbols_expected": 12,
+    "symbols_received": 0,
+    "benchmark_received": false,
+    "provider": "akshare",
+    "complete": false,
+    "errors": [
+      "intraday_runtime_disabled"
+    ]
+  },
+  "data_provenance": {
+    "provider": "akshare",
+    "breadth_source": "akshare",
+    "calendar_source": null,
+    "artifact_id": "slot_90a66cd95400",
+    "book_version": "slot_90a66cd95400",
+    "slot_status": "UNAVAILABLE",
+    "pulse_slot_at": "2026-04-29 14:55:00",
+    "daily_freshness": {
+      "ready": true,
+      "target_day": "2026-04-29",
+      "stale_symbols": [],
+      "failed_symbols": []
+    }
+  },
+  "gate_state": "UNAVAILABLE",
+  "gate_reasons": [
+    "intraday_runtime_disabled"
+  ]
+}

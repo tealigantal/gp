@@ -1,0 +1,502 @@
+{
+  "run_id": "run_6b9c9d9d3da8",
+  "session_id": "session_5bgiyczl",
+  "book_version": "daily_946d0adf5d66",
+  "created_at": "2026-05-09T15:59:15.405478+00:00",
+  "trading_day": "20260508",
+  "regime": {
+    "grade": "B",
+    "reasons": [
+      "全市场均值涨跌幅=0.99%",
+      "上涨占比=65.97%"
+    ],
+    "recovery_conditions": [],
+    "raw": {
+      "breadth": {
+        "mean_chg": 0.9883031567489114,
+        "up_ratio": 0.6596516690856313
+      }
+    }
+  },
+  "tradeable": true,
+  "reason": "generated 10 picks",
+  "picks": [
+    {
+      "symbol": "600036",
+      "name": null,
+      "rank": 1,
+      "final_score": 3.5886815366286093,
+      "live_score": 3.5886815366286093,
+      "daily_rank_score": 1.0,
+      "exec_score": 1.0,
+      "action": "BUY",
+      "execution_state": "actionable",
+      "can_open": true,
+      "stretched": false,
+      "extended": false,
+      "invalidated": false,
+      "signal_type": "daily_plan",
+      "entry_zone": {
+        "kind": "zone",
+        "low": 37.82,
+        "high": 39.25190476190477,
+        "price": 37.82
+      },
+      "stop": 37.82,
+      "take": [
+        40.15,
+        40.952999999999996
+      ],
+      "vwap": null,
+      "orb30_high": null,
+      "orb30_low": null,
+      "rs_index": null,
+      "rs_industry": null,
+      "slot_rel_vol": null,
+      "summary": "价格处在日线计划区间内，按买入区和失效位分批处理。",
+      "reason_codes": [
+        "rr_known",
+        "state=actionable",
+        "daily_plan"
+      ],
+      "artifact_id": "daily_946d0adf5d66",
+      "slot_id": null,
+      "style_label": "balanced",
+      "pick": {
+        "symbol": "600036",
+        "name": null,
+        "rank": 1,
+        "strategy_id": "S7",
+        "industry": "dynamic_pool",
+        "thesis": "接近计划买点，日线计划条件较充分。",
+        "entry_plan": {
+          "kind": "zone",
+          "low": 37.82,
+          "high": 39.25190476190477,
+          "price": 37.82
+        },
+        "stop_plan": {
+          "kind": "close_below_support",
+          "price": 37.82,
+          "invalidation": "收盘有效跌破支撑带",
+          "text": "收盘有效跌破支撑带"
+        },
+        "take_profit_plan": {
+          "kind": "targets",
+          "price": 40.15,
+          "targets": [
+            40.15,
+            40.952999999999996
+          ]
+        },
+        "scores": {
+          "final": 3.5886815366286093,
+          "candidate": -0.06534004066511939,
+          "champion": 0.38538306043922516,
+          "reward_risk": 16.923076923076557
+        },
+        "risk_flags": [],
+        "why_selected": "相对同组候选综合条件更优。",
+        "why_not_others": [],
+        "evidence_refs": [
+          "600036"
+        ],
+        "style_label": "balanced",
+        "meta": {
+          "candidate_score": -0.06534004066511939,
+          "theme_overlap_score": 0.0,
+          "mainline_overlap_score": 0.0,
+          "execution_state": "actionable",
+          "actionable": true,
+          "reason_codes": [
+            "rr_known",
+            "state=actionable"
+          ],
+          "daily_last_date": "2026-05-07",
+          "daily_freshness_state": "current"
+        }
+      },
+      "pulse": {
+        "symbol": "600036",
+        "last_bar_at": null,
+        "pulse_score": 0.0,
+        "momentum_state": "unknown",
+        "stretch_state": "unknown",
+        "liquidity_state": "unknown",
+        "execution_state": "actionable",
+        "invalidated": false,
+        "entry_distance_pct": null,
+        "flags": [],
+        "evidence_refs": [],
+        "live_score": 3.5886815366286093,
+        "daily_rank_score": 1.0,
+        "exec_score": 1.0,
+        "action": "BUY",
+        "can_open": true,
+        "signal_type": "daily_plan",
+        "entry_zone": {
+          "kind": "zone",
+          "low": 37.82,
+          "high": 39.25190476190477,
+          "price": 37.82
+        },
+        "stop": 37.82,
+        "take": [
+          40.15,
+          40.952999999999996
+        ],
+        "vwap": null,
+        "orb30_high": null,
+        "orb30_low": null,
+        "rs_index": null,
+        "rs_industry": null,
+        "slot_rel_vol": null,
+        "extended": false,
+        "reason_codes": [
+          "rr_known",
+          "state=actionable",
+          "daily_plan"
+        ],
+        "provider": null,
+        "volume_baseline": null,
+        "trade_day": null,
+        "slot_at": null,
+        "is_stale": false,
+        "stale_reason": null
+      }
+    },
+    {
+      "symbol": "600884",
+      "name": null,
+      "rank": 2,
+      "final_score": 0.701541742530198,
+      "live_score": 0.701541742530198,
+      "daily_rank_score": 0.8888888888888888,
+      "exec_score": 1.0,
+      "action": "BUY",
+      "execution_state": "actionable",
+      "can_open": true,
+      "stretched": false,
+      "extended": false,
+      "invalidated": false,
+      "signal_type": "daily_plan",
+      "entry_zone": {
+        "kind": "zone",
+        "low": 16.852997746141106,
+        "high": 17.02323004660718,
+        "price": 16.852997746141106
+      },
+      "stop": 16.852997746141106,
+      "take": [
+        17.363694647539322,
+        17.533926948005394
+      ],
+      "vwap": null,
+      "orb30_high": null,
+      "orb30_low": null,
+      "rs_index": null,
+      "rs_industry": null,
+      "slot_rel_vol": null,
+      "summary": "价格处在日线计划区间内，按买入区和失效位分批处理。",
+      "reason_codes": [
+        "rr_known",
+        "state=actionable",
+        "daily_plan"
+      ],
+      "artifact_id": "daily_946d0adf5d66",
+      "slot_id": null,
+      "style_label": "balanced",
+      "pick": {
+        "symbol": "600884",
+        "name": null,
+        "rank": 2,
+        "strategy_id": "S12",
+        "industry": "dynamic_pool",
+        "thesis": "接近计划买点，日线计划条件较充分。",
+        "entry_plan": {
+          "kind": "zone",
+          "low": 16.852997746141106,
+          "high": 17.02323004660718,
+          "price": 16.852997746141106
+        },
+        "stop_plan": {
+          "kind": "close_below_support",
+          "price": 16.852997746141106,
+          "invalidation": "收盘有效跌破支撑带",
+          "text": "收盘有效跌破支撑带"
+        },
+        "take_profit_plan": {
+          "kind": "targets",
+          "price": 17.363694647539322,
+          "targets": [
+            17.363694647539322,
+            17.533926948005394
+          ]
+        },
+        "scores": {
+          "final": 0.701541742530198,
+          "candidate": -0.18369633713240094,
+          "champion": 0.3865145509809761,
+          "reward_risk": 2.7276532831658207
+        },
+        "risk_flags": [],
+        "why_selected": "相对同组候选综合条件更优。",
+        "why_not_others": [],
+        "evidence_refs": [
+          "600884"
+        ],
+        "style_label": "balanced",
+        "meta": {
+          "candidate_score": -0.18369633713240094,
+          "theme_overlap_score": 0.0,
+          "mainline_overlap_score": 0.0,
+          "execution_state": "actionable",
+          "actionable": true,
+          "reason_codes": [
+            "rr_known",
+            "state=actionable"
+          ],
+          "daily_last_date": "2026-05-07",
+          "daily_freshness_state": "current"
+        }
+      },
+      "pulse": {
+        "symbol": "600884",
+        "last_bar_at": null,
+        "pulse_score": 0.0,
+        "momentum_state": "unknown",
+        "stretch_state": "unknown",
+        "liquidity_state": "unknown",
+        "execution_state": "actionable",
+        "invalidated": false,
+        "entry_distance_pct": null,
+        "flags": [],
+        "evidence_refs": [],
+        "live_score": 0.701541742530198,
+        "daily_rank_score": 0.8888888888888888,
+        "exec_score": 1.0,
+        "action": "BUY",
+        "can_open": true,
+        "signal_type": "daily_plan",
+        "entry_zone": {
+          "kind": "zone",
+          "low": 16.852997746141106,
+          "high": 17.02323004660718,
+          "price": 16.852997746141106
+        },
+        "stop": 16.852997746141106,
+        "take": [
+          17.363694647539322,
+          17.533926948005394
+        ],
+        "vwap": null,
+        "orb30_high": null,
+        "orb30_low": null,
+        "rs_index": null,
+        "rs_industry": null,
+        "slot_rel_vol": null,
+        "extended": false,
+        "reason_codes": [
+          "rr_known",
+          "state=actionable",
+          "daily_plan"
+        ],
+        "provider": null,
+        "volume_baseline": null,
+        "trade_day": null,
+        "slot_at": null,
+        "is_stale": false,
+        "stale_reason": null
+      }
+    },
+    {
+      "symbol": "600406",
+      "name": null,
+      "rank": 3,
+      "final_score": 0.5572222134579974,
+      "live_score": 0.5572222134579974,
+      "daily_rank_score": 0.7777777777777778,
+      "exec_score": 0.5,
+      "action": "BUY",
+      "execution_state": "waiting_pullback",
+      "can_open": false,
+      "stretched": false,
+      "extended": false,
+      "invalidated": false,
+      "signal_type": "daily_plan",
+      "entry_zone": {
+        "kind": "zone",
+        "low": 25.24,
+        "high": 26.988196721311475,
+        "price": 25.24
+      },
+      "stop": 25.24,
+      "take": [
+        30.22,
+        30.8244
+      ],
+      "vwap": null,
+      "orb30_high": null,
+      "orb30_low": null,
+      "rs_index": null,
+      "rs_industry": null,
+      "slot_rel_vol": null,
+      "summary": "逻辑仍在，但更适合等回踩买入区再处理。",
+      "reason_codes": [
+        "rr_known",
+        "state=waiting_pullback",
+        "daily_plan"
+      ],
+      "artifact_id": "daily_946d0adf5d66",
+      "slot_id": null,
+      "style_label": "stable",
+      "pick": {
+        "symbol": "600406",
+        "name": null,
+        "rank": 3,
+        "strategy_id": "S1",
+        "industry": "dynamic_pool",
+        "thesis": "结构候选靠前，但当前位置一般，建议等待更优位置。",
+        "entry_plan": {
+          "kind": "zone",
+          "low": 25.24,
+          "high": 26.988196721311475,
+          "price": 25.24
+        },
+        "stop_plan": {
+          "kind": "close_below_support",
+          "price": 25.24,
+          "invalidation": "收盘有效跌破支撑带",
+          "text": "收盘有效跌破支撑带"
+        },
+        "take_profit_plan": {
+          "kind": "targets",
+          "price": 30.22,
+          "targets": [
+            30.22,
+            30.8244
+          ]
+        },
+        "scores": {
+          "final": 0.5572222134579974,
+          "candidate": -0.022826583541394763,
+          "champion": 0.4166143010188661,
+          "reward_risk": 3.1499999999999906
+        },
+        "risk_flags": [],
+        "why_selected": "相对同组候选综合条件更优。",
+        "why_not_others": [],
+        "evidence_refs": [
+          "600406"
+        ],
+        "style_label": "stable",
+        "meta": {
+          "candidate_score": -0.022826583541394763,
+          "theme_overlap_score": 0.0,
+          "mainline_overlap_score": 0.0,
+          "execution_state": "waiting_pullback",
+          "actionable": false,
+          "reason_codes": [
+            "rr_known",
+            "state=waiting_pullback"
+          ],
+          "daily_last_date": "2026-05-07",
+          "daily_freshness_state": "current"
+        }
+      },
+      "pulse": {
+        "symbol": "600406",
+        "last_bar_at": null,
+        "pulse_score": 0.0,
+        "momentum_state": "unknown",
+        "stretch_state": "unknown",
+        "liquidity_state": "unknown",
+        "execution_state": "waiting_pullback",
+        "invalidated": false,
+        "entry_distance_pct": null,
+        "flags": [],
+        "evidence_refs": [],
+        "live_score": 0.5572222134579974,
+        "daily_rank_score": 0.7777777777777778,
+        "exec_score": 0.5,
+        "action": "BUY",
+        "can_open": false,
+        "signal_type": "daily_plan",
+        "entry_zone": {
+          "kind": "zone",
+          "low": 25.24,
+          "high": 26.988196721311475,
+          "price": 25.24
+        },
+        "stop": 25.24,
+        "take": [
+          30.22,
+          30.8244
+        ],
+        "vwap": null,
+        "orb30_high": null,
+        "orb30_low": null,
+        "rs_index": null,
+        "rs_industry": null,
+        "slot_rel_vol": null,
+        "extended": false,
+        "reason_codes": [
+          "rr_known",
+          "state=waiting_pullback",
+          "daily_plan"
+        ],
+        "provider": null,
+        "volume_baseline": null,
+        "trade_day": null,
+        "slot_at": null,
+        "is_stale": false,
+        "stale_reason": null
+      }
+    }
+  ],
+  "evidence_refs": [
+    "daily_946d0adf5d66",
+    "daily_946d0adf5d66"
+  ],
+  "artifact_id": "daily_946d0adf5d66",
+  "slot_id": null,
+  "slot_status": "OK",
+  "publish_allowed": true,
+  "daybook_effective_day": "20260508",
+  "pulse_trade_day": null,
+  "pulse_slot_at": null,
+  "market_phase": "PREOPEN",
+  "data_status": "daily_plan",
+  "run_action": "RECOMMEND",
+  "non_trading": true,
+  "status_reason": "generated 10 picks",
+  "no_trade_reasons": [],
+  "recovery_conditions": [],
+  "data_quality": {
+    "snapshot_age_sec": null,
+    "symbols_expected": 12,
+    "symbols_received": 12,
+    "benchmark_received": true,
+    "provider": "daily",
+    "complete": true,
+    "errors": []
+  },
+  "data_provenance": {
+    "provider": "daily",
+    "breadth_source": "daily",
+    "calendar_source": null,
+    "artifact_id": "daily_946d0adf5d66",
+    "book_version": "daily_946d0adf5d66",
+    "slot_status": "OK",
+    "daily_freshness": {
+      "ready": true,
+      "target_day": "2026-05-08",
+      "stale_symbols": [],
+      "failed_symbols": []
+    }
+  },
+  "gate_state": "ALLOW",
+  "gate_reasons": [
+    "daily_plan"
+  ]
+}

@@ -1,0 +1,3639 @@
+{
+  "run_id": "run_586a19934fe1",
+  "session_id": "session_bmhcz077",
+  "book_version": "daily_e592dae64fb0",
+  "created_at": "2026-05-12T02:45:49.006634+00:00",
+  "trading_day": "20260512",
+  "regime": {
+    "grade": "D",
+    "reasons": [
+      "全市场均值涨跌幅=-0.70%",
+      "上涨占比=27.31%"
+    ],
+    "recovery_conditions": [
+      "上涨家数占比>55%",
+      "全市场均值涨跌幅>+0.3%"
+    ],
+    "raw": {
+      "breadth": {
+        "mean_chg": -0.6958628944504897,
+        "up_ratio": 0.2731229597388466
+      }
+    }
+  },
+  "tradeable": true,
+  "reason": "generated 10 picks",
+  "picks": [
+    {
+      "symbol": "601766",
+      "name": null,
+      "rank": 1,
+      "final_score": 90.47324598710115,
+      "live_score": 90.47324598710115,
+      "daily_rank_score": 0.7777777777777778,
+      "exec_score": 45.0,
+      "action": "WATCH",
+      "execution_state": "next_session_plan",
+      "can_open": false,
+      "stretched": false,
+      "extended": false,
+      "invalidated": false,
+      "signal_type": "daily_plan",
+      "entry_zone": {
+        "kind": "zone",
+        "low": 5.86,
+        "high": 6.136666666666667,
+        "price": 5.86
+      },
+      "stop": 5.86,
+      "take": [
+        6.45,
+        6.579000000000001
+      ],
+      "vwap": null,
+      "orb30_high": null,
+      "orb30_low": null,
+      "rs_index": null,
+      "rs_industry": null,
+      "slot_rel_vol": null,
+      "summary": "Next trading-window plan from S7.",
+      "reason_codes": [
+        "rr_known",
+        "state=actionable",
+        "daily_plan"
+      ],
+      "artifact_id": "daily_e592dae64fb0",
+      "slot_id": null,
+      "style_label": "balanced",
+      "pick": {
+        "symbol": "601766",
+        "name": null,
+        "rank": 1,
+        "strategy_id": "S7",
+        "industry": "dynamic_pool",
+        "thesis": "接近计划买点，日线计划条件较充分。",
+        "entry_plan": {
+          "kind": "zone",
+          "low": 5.86,
+          "high": 6.136666666666667,
+          "price": 5.86
+        },
+        "stop_plan": {
+          "kind": "close_below_support",
+          "price": 5.86,
+          "invalidation": "收盘有效跌破支撑带",
+          "text": "收盘有效跌破支撑带"
+        },
+        "take_profit_plan": {
+          "kind": "targets",
+          "price": 6.45,
+          "targets": [
+            6.45,
+            6.579000000000001
+          ]
+        },
+        "scores": {
+          "final": 0.9047324598710115,
+          "candidate": -0.20447851150724075,
+          "champion": 0.348684330050346,
+          "reward_risk": 3.916666666666661
+        },
+        "risk_flags": [],
+        "why_selected": "相对同组候选综合条件更优。",
+        "why_not_others": [],
+        "evidence_refs": [
+          "601766"
+        ],
+        "style_label": "balanced",
+        "explain_context": {
+          "symbol": "601766",
+          "name": null,
+          "rank": 1,
+          "recommendation_state": "NEXT_SESSION_PLAN",
+          "action": "WATCH",
+          "can_open": false,
+          "execution_state": "next_session_plan",
+          "artifact_id": "daily_e592dae64fb0",
+          "slot_id": null,
+          "as_of": null,
+          "runtime_market_phase": null,
+          "artifact_market_phase": null,
+          "trigger_price": 6.136666666666667,
+          "entry_low": 5.86,
+          "entry_high": 6.136666666666667,
+          "entry_type": "next_session_daily_plan",
+          "stop_price": 5.86,
+          "invalidation_reason": "收盘有效跌破支撑带",
+          "take1": 6.45,
+          "take2": 6.579000000000001,
+          "rr_to_take1": 589999.9999999999,
+          "rr_to_take2": 719000.0000000003,
+          "signal_valid_until_slot": null,
+          "champion_strategy": "S7",
+          "champion_strategy_score": 90.47324598710115,
+          "strategy_reason_codes": [
+            "rr_known",
+            "state=actionable",
+            "daily_plan"
+          ],
+          "strategy_reject_reasons": [],
+          "competing_strategies": [
+            {
+              "strategy_name": "S7",
+              "eligible": true,
+              "score": 90.47324598710115,
+              "reason_codes": [
+                "rr_known",
+                "state=actionable",
+                "daily_plan"
+              ],
+              "reject_reasons": []
+            }
+          ],
+          "day_level_alpha_score": 90.47324598710115,
+          "intraday_exec_score": 45.0,
+          "live_score": 90.47324598710115,
+          "strategy_score": 90.47324598710115,
+          "execution_quality_score": 45.0,
+          "relative_strength_score": 50.0,
+          "volume_confirmation_score": 0.0,
+          "location_score": 50.0,
+          "rr_score": 100.0,
+          "risk_penalty": 0.0,
+          "data_quality_score": 65.0,
+          "last_price": null,
+          "vwap": null,
+          "price_vs_vwap": null,
+          "ema5": null,
+          "ema13": null,
+          "ema34": null,
+          "trend_stack_score": null,
+          "atr5m": null,
+          "realized_vol_recent": null,
+          "compression_score": null,
+          "range_breakout_score": null,
+          "slot_rel_vol": null,
+          "cumulative_volume_run_rate": null,
+          "volume_zscore_by_slot": null,
+          "rs_index": null,
+          "rs_industry": null,
+          "rs_candidate_pool": null,
+          "industry_strength_score": null,
+          "peer_consensus_score": null,
+          "distance_to_entry": null,
+          "distance_to_stop": null,
+          "distance_to_take1": null,
+          "extended_flag": null,
+          "invalidated_flag": null,
+          "main_risks": [],
+          "do_not_chase_reason": "This is a next-session plan; wait for intraday trigger confirmation.",
+          "what_would_improve": [
+            "intraday_VWAP_RS_volume_confirm_after_open"
+          ],
+          "what_would_cancel": [
+            "daily_stop_breached",
+            "daily_setup_freshness_lost"
+          ],
+          "data_quality_warnings": [
+            "intraday_features_not_available_in_daily_plan"
+          ],
+          "market_gate_risks": [],
+          "late_session_risk": false,
+          "stop_too_far_risk": false,
+          "rr_not_enough_risk": false,
+          "why_ranked_here": "rank=1, live_score=90.47, champion=S7",
+          "why_above_next": "601766 live_score 90.47 vs 601899 59.97; strategy S7 vs S3.",
+          "why_below_previous": null,
+          "rank_change_reason": null,
+          "previous_rank": null,
+          "current_rank": 1,
+          "raw_bar_summary": [],
+          "score_breakdown": {
+            "day_level_alpha_score": 90.47324598710115,
+            "champion_strategy_score": 90.47324598710115,
+            "intraday_exec_score": 45.0,
+            "live_score": 90.47324598710115,
+            "strategy_score": 90.47324598710115,
+            "execution_quality_score": 45.0,
+            "relative_strength_score": 50.0,
+            "volume_confirmation_score": 0.0,
+            "location_score": 50.0,
+            "rr_score": 100.0,
+            "risk_penalty": 0.0,
+            "data_quality_score": 65.0,
+            "market_regime_fit_score": 50.0
+          },
+          "feature_snapshot": {
+            "symbol": "601766",
+            "slot_status": "DAILY_PLAN",
+            "data_quality_score": 65.0,
+            "bars_complete": false,
+            "provider": "daily"
+          },
+          "risk_pack": {
+            "main_risks": [],
+            "do_not_chase_reason": "This is a next-session plan; wait for intraday trigger confirmation.",
+            "what_would_improve": [
+              "intraday_VWAP_RS_volume_confirm_after_open"
+            ],
+            "what_would_cancel": [
+              "daily_stop_breached",
+              "daily_setup_freshness_lost"
+            ],
+            "data_quality_warnings": [
+              "intraday_features_not_available_in_daily_plan"
+            ],
+            "market_gate_risks": [],
+            "late_session_risk": false,
+            "stop_too_far_risk": false,
+            "rr_not_enough_risk": false
+          }
+        },
+        "meta": {
+          "candidate_score": -0.20447851150724075,
+          "theme_overlap_score": 0.0,
+          "mainline_overlap_score": 0.0,
+          "execution_state": "actionable",
+          "actionable": true,
+          "reason_codes": [
+            "rr_known",
+            "state=actionable"
+          ],
+          "daily_last_date": "2026-05-11",
+          "daily_freshness_state": "current",
+          "explain_context": {
+            "symbol": "601766",
+            "name": null,
+            "rank": 1,
+            "recommendation_state": "NEXT_SESSION_PLAN",
+            "action": "WATCH",
+            "can_open": false,
+            "execution_state": "next_session_plan",
+            "artifact_id": "daily_e592dae64fb0",
+            "slot_id": null,
+            "as_of": null,
+            "runtime_market_phase": null,
+            "artifact_market_phase": null,
+            "trigger_price": 6.136666666666667,
+            "entry_low": 5.86,
+            "entry_high": 6.136666666666667,
+            "entry_type": "next_session_daily_plan",
+            "stop_price": 5.86,
+            "invalidation_reason": "收盘有效跌破支撑带",
+            "take1": 6.45,
+            "take2": 6.579000000000001,
+            "rr_to_take1": 589999.9999999999,
+            "rr_to_take2": 719000.0000000003,
+            "signal_valid_until_slot": null,
+            "champion_strategy": "S7",
+            "champion_strategy_score": 90.47324598710115,
+            "strategy_reason_codes": [
+              "rr_known",
+              "state=actionable",
+              "daily_plan"
+            ],
+            "strategy_reject_reasons": [],
+            "competing_strategies": [
+              {
+                "strategy_name": "S7",
+                "eligible": true,
+                "score": 90.47324598710115,
+                "reason_codes": [
+                  "rr_known",
+                  "state=actionable",
+                  "daily_plan"
+                ],
+                "reject_reasons": []
+              }
+            ],
+            "day_level_alpha_score": 90.47324598710115,
+            "intraday_exec_score": 45.0,
+            "live_score": 90.47324598710115,
+            "strategy_score": 90.47324598710115,
+            "execution_quality_score": 45.0,
+            "relative_strength_score": 50.0,
+            "volume_confirmation_score": 0.0,
+            "location_score": 50.0,
+            "rr_score": 100.0,
+            "risk_penalty": 0.0,
+            "data_quality_score": 65.0,
+            "last_price": null,
+            "vwap": null,
+            "price_vs_vwap": null,
+            "ema5": null,
+            "ema13": null,
+            "ema34": null,
+            "trend_stack_score": null,
+            "atr5m": null,
+            "realized_vol_recent": null,
+            "compression_score": null,
+            "range_breakout_score": null,
+            "slot_rel_vol": null,
+            "cumulative_volume_run_rate": null,
+            "volume_zscore_by_slot": null,
+            "rs_index": null,
+            "rs_industry": null,
+            "rs_candidate_pool": null,
+            "industry_strength_score": null,
+            "peer_consensus_score": null,
+            "distance_to_entry": null,
+            "distance_to_stop": null,
+            "distance_to_take1": null,
+            "extended_flag": null,
+            "invalidated_flag": null,
+            "main_risks": [],
+            "do_not_chase_reason": "This is a next-session plan; wait for intraday trigger confirmation.",
+            "what_would_improve": [
+              "intraday_VWAP_RS_volume_confirm_after_open"
+            ],
+            "what_would_cancel": [
+              "daily_stop_breached",
+              "daily_setup_freshness_lost"
+            ],
+            "data_quality_warnings": [
+              "intraday_features_not_available_in_daily_plan"
+            ],
+            "market_gate_risks": [],
+            "late_session_risk": false,
+            "stop_too_far_risk": false,
+            "rr_not_enough_risk": false,
+            "why_ranked_here": "rank=1, live_score=90.47, champion=S7",
+            "why_above_next": "601766 live_score 90.47 vs 601899 59.97; strategy S7 vs S3.",
+            "why_below_previous": null,
+            "rank_change_reason": null,
+            "previous_rank": null,
+            "current_rank": 1,
+            "raw_bar_summary": [],
+            "score_breakdown": {
+              "day_level_alpha_score": 90.47324598710115,
+              "champion_strategy_score": 90.47324598710115,
+              "intraday_exec_score": 45.0,
+              "live_score": 90.47324598710115,
+              "strategy_score": 90.47324598710115,
+              "execution_quality_score": 45.0,
+              "relative_strength_score": 50.0,
+              "volume_confirmation_score": 0.0,
+              "location_score": 50.0,
+              "rr_score": 100.0,
+              "risk_penalty": 0.0,
+              "data_quality_score": 65.0,
+              "market_regime_fit_score": 50.0
+            },
+            "feature_snapshot": {
+              "symbol": "601766",
+              "slot_status": "DAILY_PLAN",
+              "data_quality_score": 65.0,
+              "bars_complete": false,
+              "provider": "daily"
+            },
+            "risk_pack": {
+              "main_risks": [],
+              "do_not_chase_reason": "This is a next-session plan; wait for intraday trigger confirmation.",
+              "what_would_improve": [
+                "intraday_VWAP_RS_volume_confirm_after_open"
+              ],
+              "what_would_cancel": [
+                "daily_stop_breached",
+                "daily_setup_freshness_lost"
+              ],
+              "data_quality_warnings": [
+                "intraday_features_not_available_in_daily_plan"
+              ],
+              "market_gate_risks": [],
+              "late_session_risk": false,
+              "stop_too_far_risk": false,
+              "rr_not_enough_risk": false
+            }
+          }
+        }
+      },
+      "pulse": {
+        "symbol": "601766",
+        "last_bar_at": null,
+        "pulse_score": 0.0,
+        "momentum_state": "unknown",
+        "stretch_state": "unknown",
+        "liquidity_state": "unknown",
+        "execution_state": "next_session_plan",
+        "invalidated": false,
+        "entry_distance_pct": null,
+        "flags": [],
+        "evidence_refs": [],
+        "live_score": 90.47324598710115,
+        "daily_rank_score": 0.7777777777777778,
+        "exec_score": 45.0,
+        "action": "WATCH",
+        "can_open": false,
+        "signal_type": "daily_plan",
+        "entry_zone": {
+          "kind": "zone",
+          "low": 5.86,
+          "high": 6.136666666666667,
+          "price": 5.86
+        },
+        "stop": 5.86,
+        "take": [
+          6.45,
+          6.579000000000001
+        ],
+        "vwap": null,
+        "orb30_high": null,
+        "orb30_low": null,
+        "rs_index": null,
+        "rs_industry": null,
+        "slot_rel_vol": null,
+        "extended": false,
+        "reason_codes": [
+          "rr_known",
+          "state=actionable",
+          "daily_plan"
+        ],
+        "provider": null,
+        "volume_baseline": null,
+        "trade_day": null,
+        "slot_at": null,
+        "is_stale": false,
+        "stale_reason": null,
+        "recommendation_state": "NEXT_SESSION_PLAN",
+        "feature_snapshot": {
+          "symbol": "601766",
+          "slot_status": "DAILY_PLAN",
+          "data_quality_score": 65.0,
+          "bars_complete": false,
+          "provider": "daily"
+        },
+        "raw_bar_summary": [],
+        "strategy_candidates": [
+          {
+            "strategy_name": "S7",
+            "eligible": true,
+            "raw_score": 90.47324598710115,
+            "confidence": 0.9047324598710115,
+            "expected_edge_score": 90.47324598710115,
+            "execution_quality_score": 45.0,
+            "relative_strength_score": 50.0,
+            "volume_confirmation_score": 0.0,
+            "location_score": 50.0,
+            "rr_score": 100.0,
+            "regime_fit_score": 50.0,
+            "risk_penalty": 0.0,
+            "data_quality_penalty": 12.0,
+            "reason_codes": [
+              "rr_known",
+              "state=actionable",
+              "daily_plan"
+            ],
+            "reject_reasons": [],
+            "invalidation_rules": [
+              "daily_stop_breached",
+              "daily_setup_freshness_lost"
+            ],
+            "plan": {
+              "trigger_price": 6.136666666666667,
+              "entry_low": 5.86,
+              "entry_high": 6.136666666666667,
+              "entry_mid": 5.86,
+              "entry_type": "next_session_daily_plan",
+              "stop_price": 5.86,
+              "invalidation_reason": "收盘有效跌破支撑带",
+              "take1": 6.45,
+              "take2": 6.579000000000001,
+              "rr_to_take1": 589999.9999999999,
+              "rr_to_take2": 719000.0000000003,
+              "signal_valid_until_slot": null,
+              "triggered": false,
+              "invalidation_rules": [
+                "daily_stop_breached",
+                "daily_setup_freshness_lost"
+              ],
+              "trigger_conditions": [
+                "next_session_price_reaches_trigger",
+                "intraday_feature_engine_confirms"
+              ],
+              "confirmation_conditions": [
+                "market_gate_not_blocked",
+                "VWAP/volume/RS confirm after open"
+              ]
+            }
+          }
+        ],
+        "champion_strategy": "S7",
+        "champion_strategy_score": 90.47324598710115,
+        "execution_plan": {
+          "trigger_price": 6.136666666666667,
+          "entry_low": 5.86,
+          "entry_high": 6.136666666666667,
+          "entry_mid": 5.86,
+          "entry_type": "next_session_daily_plan",
+          "stop_price": 5.86,
+          "invalidation_reason": "收盘有效跌破支撑带",
+          "take1": 6.45,
+          "take2": 6.579000000000001,
+          "rr_to_take1": 589999.9999999999,
+          "rr_to_take2": 719000.0000000003,
+          "signal_valid_until_slot": null,
+          "triggered": false,
+          "invalidation_rules": [
+            "daily_stop_breached",
+            "daily_setup_freshness_lost"
+          ],
+          "trigger_conditions": [
+            "next_session_price_reaches_trigger",
+            "intraday_feature_engine_confirms"
+          ],
+          "confirmation_conditions": [
+            "market_gate_not_blocked",
+            "VWAP/volume/RS confirm after open"
+          ]
+        },
+        "score_breakdown": {
+          "day_level_alpha_score": 90.47324598710115,
+          "champion_strategy_score": 90.47324598710115,
+          "intraday_exec_score": 45.0,
+          "live_score": 90.47324598710115,
+          "strategy_score": 90.47324598710115,
+          "execution_quality_score": 45.0,
+          "relative_strength_score": 50.0,
+          "volume_confirmation_score": 0.0,
+          "location_score": 50.0,
+          "rr_score": 100.0,
+          "risk_penalty": 0.0,
+          "data_quality_score": 65.0,
+          "market_regime_fit_score": 50.0
+        },
+        "strategy_context": {
+          "champion_strategy": "S7",
+          "champion_strategy_score": 90.47324598710115,
+          "strategy_reason_codes": [
+            "rr_known",
+            "state=actionable",
+            "daily_plan"
+          ],
+          "strategy_reject_reasons": [],
+          "competing_strategies": [
+            {
+              "strategy_name": "S7",
+              "eligible": true,
+              "score": 90.47324598710115,
+              "reason_codes": [
+                "rr_known",
+                "state=actionable",
+                "daily_plan"
+              ],
+              "reject_reasons": []
+            }
+          ]
+        },
+        "risk_pack": {
+          "main_risks": [],
+          "do_not_chase_reason": "This is a next-session plan; wait for intraday trigger confirmation.",
+          "what_would_improve": [
+            "intraday_VWAP_RS_volume_confirm_after_open"
+          ],
+          "what_would_cancel": [
+            "daily_stop_breached",
+            "daily_setup_freshness_lost"
+          ],
+          "data_quality_warnings": [
+            "intraday_features_not_available_in_daily_plan"
+          ],
+          "market_gate_risks": [],
+          "late_session_risk": false,
+          "stop_too_far_risk": false,
+          "rr_not_enough_risk": false
+        },
+        "explain_context": {
+          "symbol": "601766",
+          "name": null,
+          "rank": 1,
+          "recommendation_state": "NEXT_SESSION_PLAN",
+          "action": "WATCH",
+          "can_open": false,
+          "execution_state": "next_session_plan",
+          "artifact_id": "daily_e592dae64fb0",
+          "slot_id": null,
+          "as_of": null,
+          "runtime_market_phase": null,
+          "artifact_market_phase": null,
+          "trigger_price": 6.136666666666667,
+          "entry_low": 5.86,
+          "entry_high": 6.136666666666667,
+          "entry_type": "next_session_daily_plan",
+          "stop_price": 5.86,
+          "invalidation_reason": "收盘有效跌破支撑带",
+          "take1": 6.45,
+          "take2": 6.579000000000001,
+          "rr_to_take1": 589999.9999999999,
+          "rr_to_take2": 719000.0000000003,
+          "signal_valid_until_slot": null,
+          "champion_strategy": "S7",
+          "champion_strategy_score": 90.47324598710115,
+          "strategy_reason_codes": [
+            "rr_known",
+            "state=actionable",
+            "daily_plan"
+          ],
+          "strategy_reject_reasons": [],
+          "competing_strategies": [
+            {
+              "strategy_name": "S7",
+              "eligible": true,
+              "score": 90.47324598710115,
+              "reason_codes": [
+                "rr_known",
+                "state=actionable",
+                "daily_plan"
+              ],
+              "reject_reasons": []
+            }
+          ],
+          "day_level_alpha_score": 90.47324598710115,
+          "intraday_exec_score": 45.0,
+          "live_score": 90.47324598710115,
+          "strategy_score": 90.47324598710115,
+          "execution_quality_score": 45.0,
+          "relative_strength_score": 50.0,
+          "volume_confirmation_score": 0.0,
+          "location_score": 50.0,
+          "rr_score": 100.0,
+          "risk_penalty": 0.0,
+          "data_quality_score": 65.0,
+          "last_price": null,
+          "vwap": null,
+          "price_vs_vwap": null,
+          "ema5": null,
+          "ema13": null,
+          "ema34": null,
+          "trend_stack_score": null,
+          "atr5m": null,
+          "realized_vol_recent": null,
+          "compression_score": null,
+          "range_breakout_score": null,
+          "slot_rel_vol": null,
+          "cumulative_volume_run_rate": null,
+          "volume_zscore_by_slot": null,
+          "rs_index": null,
+          "rs_industry": null,
+          "rs_candidate_pool": null,
+          "industry_strength_score": null,
+          "peer_consensus_score": null,
+          "distance_to_entry": null,
+          "distance_to_stop": null,
+          "distance_to_take1": null,
+          "extended_flag": null,
+          "invalidated_flag": null,
+          "main_risks": [],
+          "do_not_chase_reason": "This is a next-session plan; wait for intraday trigger confirmation.",
+          "what_would_improve": [
+            "intraday_VWAP_RS_volume_confirm_after_open"
+          ],
+          "what_would_cancel": [
+            "daily_stop_breached",
+            "daily_setup_freshness_lost"
+          ],
+          "data_quality_warnings": [
+            "intraday_features_not_available_in_daily_plan"
+          ],
+          "market_gate_risks": [],
+          "late_session_risk": false,
+          "stop_too_far_risk": false,
+          "rr_not_enough_risk": false,
+          "why_ranked_here": "rank=1, live_score=90.47, champion=S7",
+          "why_above_next": "601766 live_score 90.47 vs 601899 59.97; strategy S7 vs S3.",
+          "why_below_previous": null,
+          "rank_change_reason": null,
+          "previous_rank": null,
+          "current_rank": 1,
+          "raw_bar_summary": [],
+          "score_breakdown": {
+            "day_level_alpha_score": 90.47324598710115,
+            "champion_strategy_score": 90.47324598710115,
+            "intraday_exec_score": 45.0,
+            "live_score": 90.47324598710115,
+            "strategy_score": 90.47324598710115,
+            "execution_quality_score": 45.0,
+            "relative_strength_score": 50.0,
+            "volume_confirmation_score": 0.0,
+            "location_score": 50.0,
+            "rr_score": 100.0,
+            "risk_penalty": 0.0,
+            "data_quality_score": 65.0,
+            "market_regime_fit_score": 50.0
+          },
+          "feature_snapshot": {
+            "symbol": "601766",
+            "slot_status": "DAILY_PLAN",
+            "data_quality_score": 65.0,
+            "bars_complete": false,
+            "provider": "daily"
+          },
+          "risk_pack": {
+            "main_risks": [],
+            "do_not_chase_reason": "This is a next-session plan; wait for intraday trigger confirmation.",
+            "what_would_improve": [
+              "intraday_VWAP_RS_volume_confirm_after_open"
+            ],
+            "what_would_cancel": [
+              "daily_stop_breached",
+              "daily_setup_freshness_lost"
+            ],
+            "data_quality_warnings": [
+              "intraday_features_not_available_in_daily_plan"
+            ],
+            "market_gate_risks": [],
+            "late_session_risk": false,
+            "stop_too_far_risk": false,
+            "rr_not_enough_risk": false
+          }
+        }
+      },
+      "recommendation_state": "NEXT_SESSION_PLAN",
+      "feature_snapshot": {
+        "symbol": "601766",
+        "slot_status": "DAILY_PLAN",
+        "data_quality_score": 65.0,
+        "bars_complete": false,
+        "provider": "daily"
+      },
+      "raw_bar_summary": [],
+      "strategy_candidates": [
+        {
+          "strategy_name": "S7",
+          "eligible": true,
+          "raw_score": 90.47324598710115,
+          "confidence": 0.9047324598710115,
+          "expected_edge_score": 90.47324598710115,
+          "execution_quality_score": 45.0,
+          "relative_strength_score": 50.0,
+          "volume_confirmation_score": 0.0,
+          "location_score": 50.0,
+          "rr_score": 100.0,
+          "regime_fit_score": 50.0,
+          "risk_penalty": 0.0,
+          "data_quality_penalty": 12.0,
+          "reason_codes": [
+            "rr_known",
+            "state=actionable",
+            "daily_plan"
+          ],
+          "reject_reasons": [],
+          "invalidation_rules": [
+            "daily_stop_breached",
+            "daily_setup_freshness_lost"
+          ],
+          "plan": {
+            "trigger_price": 6.136666666666667,
+            "entry_low": 5.86,
+            "entry_high": 6.136666666666667,
+            "entry_mid": 5.86,
+            "entry_type": "next_session_daily_plan",
+            "stop_price": 5.86,
+            "invalidation_reason": "收盘有效跌破支撑带",
+            "take1": 6.45,
+            "take2": 6.579000000000001,
+            "rr_to_take1": 589999.9999999999,
+            "rr_to_take2": 719000.0000000003,
+            "signal_valid_until_slot": null,
+            "triggered": false,
+            "invalidation_rules": [
+              "daily_stop_breached",
+              "daily_setup_freshness_lost"
+            ],
+            "trigger_conditions": [
+              "next_session_price_reaches_trigger",
+              "intraday_feature_engine_confirms"
+            ],
+            "confirmation_conditions": [
+              "market_gate_not_blocked",
+              "VWAP/volume/RS confirm after open"
+            ]
+          }
+        }
+      ],
+      "champion_strategy": "S7",
+      "champion_strategy_score": 90.47324598710115,
+      "execution_plan": {
+        "trigger_price": 6.136666666666667,
+        "entry_low": 5.86,
+        "entry_high": 6.136666666666667,
+        "entry_mid": 5.86,
+        "entry_type": "next_session_daily_plan",
+        "stop_price": 5.86,
+        "invalidation_reason": "收盘有效跌破支撑带",
+        "take1": 6.45,
+        "take2": 6.579000000000001,
+        "rr_to_take1": 589999.9999999999,
+        "rr_to_take2": 719000.0000000003,
+        "signal_valid_until_slot": null,
+        "triggered": false,
+        "invalidation_rules": [
+          "daily_stop_breached",
+          "daily_setup_freshness_lost"
+        ],
+        "trigger_conditions": [
+          "next_session_price_reaches_trigger",
+          "intraday_feature_engine_confirms"
+        ],
+        "confirmation_conditions": [
+          "market_gate_not_blocked",
+          "VWAP/volume/RS confirm after open"
+        ]
+      },
+      "score_breakdown": {
+        "day_level_alpha_score": 90.47324598710115,
+        "champion_strategy_score": 90.47324598710115,
+        "intraday_exec_score": 45.0,
+        "live_score": 90.47324598710115,
+        "strategy_score": 90.47324598710115,
+        "execution_quality_score": 45.0,
+        "relative_strength_score": 50.0,
+        "volume_confirmation_score": 0.0,
+        "location_score": 50.0,
+        "rr_score": 100.0,
+        "risk_penalty": 0.0,
+        "data_quality_score": 65.0,
+        "market_regime_fit_score": 50.0
+      },
+      "strategy_context": {
+        "champion_strategy": "S7",
+        "champion_strategy_score": 90.47324598710115,
+        "strategy_reason_codes": [
+          "rr_known",
+          "state=actionable",
+          "daily_plan"
+        ],
+        "strategy_reject_reasons": [],
+        "competing_strategies": [
+          {
+            "strategy_name": "S7",
+            "eligible": true,
+            "score": 90.47324598710115,
+            "reason_codes": [
+              "rr_known",
+              "state=actionable",
+              "daily_plan"
+            ],
+            "reject_reasons": []
+          }
+        ]
+      },
+      "risk_pack": {
+        "main_risks": [],
+        "do_not_chase_reason": "This is a next-session plan; wait for intraday trigger confirmation.",
+        "what_would_improve": [
+          "intraday_VWAP_RS_volume_confirm_after_open"
+        ],
+        "what_would_cancel": [
+          "daily_stop_breached",
+          "daily_setup_freshness_lost"
+        ],
+        "data_quality_warnings": [
+          "intraday_features_not_available_in_daily_plan"
+        ],
+        "market_gate_risks": [],
+        "late_session_risk": false,
+        "stop_too_far_risk": false,
+        "rr_not_enough_risk": false
+      },
+      "explain_context": {
+        "symbol": "601766",
+        "name": null,
+        "rank": 1,
+        "recommendation_state": "NEXT_SESSION_PLAN",
+        "action": "WATCH",
+        "can_open": false,
+        "execution_state": "next_session_plan",
+        "artifact_id": "daily_e592dae64fb0",
+        "slot_id": null,
+        "as_of": null,
+        "runtime_market_phase": null,
+        "artifact_market_phase": null,
+        "trigger_price": 6.136666666666667,
+        "entry_low": 5.86,
+        "entry_high": 6.136666666666667,
+        "entry_type": "next_session_daily_plan",
+        "stop_price": 5.86,
+        "invalidation_reason": "收盘有效跌破支撑带",
+        "take1": 6.45,
+        "take2": 6.579000000000001,
+        "rr_to_take1": 589999.9999999999,
+        "rr_to_take2": 719000.0000000003,
+        "signal_valid_until_slot": null,
+        "champion_strategy": "S7",
+        "champion_strategy_score": 90.47324598710115,
+        "strategy_reason_codes": [
+          "rr_known",
+          "state=actionable",
+          "daily_plan"
+        ],
+        "strategy_reject_reasons": [],
+        "competing_strategies": [
+          {
+            "strategy_name": "S7",
+            "eligible": true,
+            "score": 90.47324598710115,
+            "reason_codes": [
+              "rr_known",
+              "state=actionable",
+              "daily_plan"
+            ],
+            "reject_reasons": []
+          }
+        ],
+        "day_level_alpha_score": 90.47324598710115,
+        "intraday_exec_score": 45.0,
+        "live_score": 90.47324598710115,
+        "strategy_score": 90.47324598710115,
+        "execution_quality_score": 45.0,
+        "relative_strength_score": 50.0,
+        "volume_confirmation_score": 0.0,
+        "location_score": 50.0,
+        "rr_score": 100.0,
+        "risk_penalty": 0.0,
+        "data_quality_score": 65.0,
+        "last_price": null,
+        "vwap": null,
+        "price_vs_vwap": null,
+        "ema5": null,
+        "ema13": null,
+        "ema34": null,
+        "trend_stack_score": null,
+        "atr5m": null,
+        "realized_vol_recent": null,
+        "compression_score": null,
+        "range_breakout_score": null,
+        "slot_rel_vol": null,
+        "cumulative_volume_run_rate": null,
+        "volume_zscore_by_slot": null,
+        "rs_index": null,
+        "rs_industry": null,
+        "rs_candidate_pool": null,
+        "industry_strength_score": null,
+        "peer_consensus_score": null,
+        "distance_to_entry": null,
+        "distance_to_stop": null,
+        "distance_to_take1": null,
+        "extended_flag": null,
+        "invalidated_flag": null,
+        "main_risks": [],
+        "do_not_chase_reason": "This is a next-session plan; wait for intraday trigger confirmation.",
+        "what_would_improve": [
+          "intraday_VWAP_RS_volume_confirm_after_open"
+        ],
+        "what_would_cancel": [
+          "daily_stop_breached",
+          "daily_setup_freshness_lost"
+        ],
+        "data_quality_warnings": [
+          "intraday_features_not_available_in_daily_plan"
+        ],
+        "market_gate_risks": [],
+        "late_session_risk": false,
+        "stop_too_far_risk": false,
+        "rr_not_enough_risk": false,
+        "why_ranked_here": "rank=1, live_score=90.47, champion=S7",
+        "why_above_next": "601766 live_score 90.47 vs 601899 59.97; strategy S7 vs S3.",
+        "why_below_previous": null,
+        "rank_change_reason": null,
+        "previous_rank": null,
+        "current_rank": 1,
+        "raw_bar_summary": [],
+        "score_breakdown": {
+          "day_level_alpha_score": 90.47324598710115,
+          "champion_strategy_score": 90.47324598710115,
+          "intraday_exec_score": 45.0,
+          "live_score": 90.47324598710115,
+          "strategy_score": 90.47324598710115,
+          "execution_quality_score": 45.0,
+          "relative_strength_score": 50.0,
+          "volume_confirmation_score": 0.0,
+          "location_score": 50.0,
+          "rr_score": 100.0,
+          "risk_penalty": 0.0,
+          "data_quality_score": 65.0,
+          "market_regime_fit_score": 50.0
+        },
+        "feature_snapshot": {
+          "symbol": "601766",
+          "slot_status": "DAILY_PLAN",
+          "data_quality_score": 65.0,
+          "bars_complete": false,
+          "provider": "daily"
+        },
+        "risk_pack": {
+          "main_risks": [],
+          "do_not_chase_reason": "This is a next-session plan; wait for intraday trigger confirmation.",
+          "what_would_improve": [
+            "intraday_VWAP_RS_volume_confirm_after_open"
+          ],
+          "what_would_cancel": [
+            "daily_stop_breached",
+            "daily_setup_freshness_lost"
+          ],
+          "data_quality_warnings": [
+            "intraday_features_not_available_in_daily_plan"
+          ],
+          "market_gate_risks": [],
+          "late_session_risk": false,
+          "stop_too_far_risk": false,
+          "rr_not_enough_risk": false
+        }
+      }
+    },
+    {
+      "symbol": "601899",
+      "name": null,
+      "rank": 2,
+      "final_score": 59.96902055831428,
+      "live_score": 59.96902055831428,
+      "daily_rank_score": 0.6666666666666667,
+      "exec_score": 45.0,
+      "action": "WATCH",
+      "execution_state": "next_session_plan",
+      "can_open": false,
+      "stretched": false,
+      "extended": false,
+      "invalidated": false,
+      "signal_type": "daily_plan",
+      "entry_zone": {
+        "kind": "zone",
+        "low": 33.24,
+        "high": 35.51606557377049,
+        "price": 33.24
+      },
+      "stop": 33.24,
+      "take": [
+        37.96,
+        39.098800000000004
+      ],
+      "vwap": null,
+      "orb30_high": null,
+      "orb30_low": null,
+      "rs_index": null,
+      "rs_industry": null,
+      "slot_rel_vol": null,
+      "summary": "Next trading-window plan from S3.",
+      "reason_codes": [
+        "rr_known",
+        "state=waiting_pullback",
+        "daily_plan"
+      ],
+      "artifact_id": "daily_e592dae64fb0",
+      "slot_id": null,
+      "style_label": "stable",
+      "pick": {
+        "symbol": "601899",
+        "name": null,
+        "rank": 2,
+        "strategy_id": "S3",
+        "industry": "dynamic_pool",
+        "thesis": "结构候选靠前，但当前位置一般，建议等待更优位置。",
+        "entry_plan": {
+          "kind": "zone",
+          "low": 33.24,
+          "high": 35.51606557377049,
+          "price": 33.24
+        },
+        "stop_plan": {
+          "kind": "close_below_support",
+          "price": 33.24,
+          "invalidation": "收盘有效跌破支撑带",
+          "text": "收盘有效跌破支撑带"
+        },
+        "take_profit_plan": {
+          "kind": "targets",
+          "price": 37.96,
+          "targets": [
+            37.96,
+            39.098800000000004
+          ]
+        },
+        "scores": {
+          "final": 0.5996902055831428,
+          "candidate": -0.05234232192054672,
+          "champion": 0.3552315210095272,
+          "reward_risk": 3.582524271844654
+        },
+        "risk_flags": [],
+        "why_selected": "相对同组候选综合条件更优。",
+        "why_not_others": [],
+        "evidence_refs": [
+          "601899"
+        ],
+        "style_label": "stable",
+        "explain_context": {
+          "symbol": "601899",
+          "name": null,
+          "rank": 2,
+          "recommendation_state": "NEXT_SESSION_PLAN",
+          "action": "WATCH",
+          "can_open": false,
+          "execution_state": "next_session_plan",
+          "artifact_id": "daily_e592dae64fb0",
+          "slot_id": null,
+          "as_of": null,
+          "runtime_market_phase": null,
+          "artifact_market_phase": null,
+          "trigger_price": 35.51606557377049,
+          "entry_low": 33.24,
+          "entry_high": 35.51606557377049,
+          "entry_type": "next_session_daily_plan",
+          "stop_price": 33.24,
+          "invalidation_reason": "收盘有效跌破支撑带",
+          "take1": 37.96,
+          "take2": 39.098800000000004,
+          "rr_to_take1": 4719999.999999999,
+          "rr_to_take2": 5858800.000000003,
+          "signal_valid_until_slot": null,
+          "champion_strategy": "S3",
+          "champion_strategy_score": 59.96902055831428,
+          "strategy_reason_codes": [
+            "rr_known",
+            "state=waiting_pullback",
+            "daily_plan"
+          ],
+          "strategy_reject_reasons": [],
+          "competing_strategies": [
+            {
+              "strategy_name": "S3",
+              "eligible": true,
+              "score": 59.96902055831428,
+              "reason_codes": [
+                "rr_known",
+                "state=waiting_pullback",
+                "daily_plan"
+              ],
+              "reject_reasons": []
+            }
+          ],
+          "day_level_alpha_score": 59.96902055831428,
+          "intraday_exec_score": 45.0,
+          "live_score": 59.96902055831428,
+          "strategy_score": 59.96902055831428,
+          "execution_quality_score": 45.0,
+          "relative_strength_score": 50.0,
+          "volume_confirmation_score": 0.0,
+          "location_score": 50.0,
+          "rr_score": 100.0,
+          "risk_penalty": 0.0,
+          "data_quality_score": 65.0,
+          "last_price": null,
+          "vwap": null,
+          "price_vs_vwap": null,
+          "ema5": null,
+          "ema13": null,
+          "ema34": null,
+          "trend_stack_score": null,
+          "atr5m": null,
+          "realized_vol_recent": null,
+          "compression_score": null,
+          "range_breakout_score": null,
+          "slot_rel_vol": null,
+          "cumulative_volume_run_rate": null,
+          "volume_zscore_by_slot": null,
+          "rs_index": null,
+          "rs_industry": null,
+          "rs_candidate_pool": null,
+          "industry_strength_score": null,
+          "peer_consensus_score": null,
+          "distance_to_entry": null,
+          "distance_to_stop": null,
+          "distance_to_take1": null,
+          "extended_flag": null,
+          "invalidated_flag": null,
+          "main_risks": [],
+          "do_not_chase_reason": "This is a next-session plan; wait for intraday trigger confirmation.",
+          "what_would_improve": [
+            "intraday_VWAP_RS_volume_confirm_after_open"
+          ],
+          "what_would_cancel": [
+            "daily_stop_breached",
+            "daily_setup_freshness_lost"
+          ],
+          "data_quality_warnings": [
+            "intraday_features_not_available_in_daily_plan"
+          ],
+          "market_gate_risks": [],
+          "late_session_risk": false,
+          "stop_too_far_risk": false,
+          "rr_not_enough_risk": false,
+          "why_ranked_here": "rank=2, live_score=59.97, champion=S3",
+          "why_above_next": "601899 live_score 59.97 vs 000792 52.90; strategy S3 vs S8.",
+          "why_below_previous": "601899 live_score 59.97 trails 601766 90.47; compare execution quality, RR and risk penalty.",
+          "rank_change_reason": null,
+          "previous_rank": 1,
+          "current_rank": 2,
+          "raw_bar_summary": [],
+          "score_breakdown": {
+            "day_level_alpha_score": 59.96902055831428,
+            "champion_strategy_score": 59.96902055831428,
+            "intraday_exec_score": 45.0,
+            "live_score": 59.96902055831428,
+            "strategy_score": 59.96902055831428,
+            "execution_quality_score": 45.0,
+            "relative_strength_score": 50.0,
+            "volume_confirmation_score": 0.0,
+            "location_score": 50.0,
+            "rr_score": 100.0,
+            "risk_penalty": 0.0,
+            "data_quality_score": 65.0,
+            "market_regime_fit_score": 50.0
+          },
+          "feature_snapshot": {
+            "symbol": "601899",
+            "slot_status": "DAILY_PLAN",
+            "data_quality_score": 65.0,
+            "bars_complete": false,
+            "provider": "daily"
+          },
+          "risk_pack": {
+            "main_risks": [],
+            "do_not_chase_reason": "This is a next-session plan; wait for intraday trigger confirmation.",
+            "what_would_improve": [
+              "intraday_VWAP_RS_volume_confirm_after_open"
+            ],
+            "what_would_cancel": [
+              "daily_stop_breached",
+              "daily_setup_freshness_lost"
+            ],
+            "data_quality_warnings": [
+              "intraday_features_not_available_in_daily_plan"
+            ],
+            "market_gate_risks": [],
+            "late_session_risk": false,
+            "stop_too_far_risk": false,
+            "rr_not_enough_risk": false
+          }
+        },
+        "meta": {
+          "candidate_score": -0.05234232192054672,
+          "theme_overlap_score": 0.0,
+          "mainline_overlap_score": 0.0,
+          "execution_state": "waiting_pullback",
+          "actionable": false,
+          "reason_codes": [
+            "rr_known",
+            "state=waiting_pullback"
+          ],
+          "daily_last_date": "2026-05-11",
+          "daily_freshness_state": "current",
+          "explain_context": {
+            "symbol": "601899",
+            "name": null,
+            "rank": 2,
+            "recommendation_state": "NEXT_SESSION_PLAN",
+            "action": "WATCH",
+            "can_open": false,
+            "execution_state": "next_session_plan",
+            "artifact_id": "daily_e592dae64fb0",
+            "slot_id": null,
+            "as_of": null,
+            "runtime_market_phase": null,
+            "artifact_market_phase": null,
+            "trigger_price": 35.51606557377049,
+            "entry_low": 33.24,
+            "entry_high": 35.51606557377049,
+            "entry_type": "next_session_daily_plan",
+            "stop_price": 33.24,
+            "invalidation_reason": "收盘有效跌破支撑带",
+            "take1": 37.96,
+            "take2": 39.098800000000004,
+            "rr_to_take1": 4719999.999999999,
+            "rr_to_take2": 5858800.000000003,
+            "signal_valid_until_slot": null,
+            "champion_strategy": "S3",
+            "champion_strategy_score": 59.96902055831428,
+            "strategy_reason_codes": [
+              "rr_known",
+              "state=waiting_pullback",
+              "daily_plan"
+            ],
+            "strategy_reject_reasons": [],
+            "competing_strategies": [
+              {
+                "strategy_name": "S3",
+                "eligible": true,
+                "score": 59.96902055831428,
+                "reason_codes": [
+                  "rr_known",
+                  "state=waiting_pullback",
+                  "daily_plan"
+                ],
+                "reject_reasons": []
+              }
+            ],
+            "day_level_alpha_score": 59.96902055831428,
+            "intraday_exec_score": 45.0,
+            "live_score": 59.96902055831428,
+            "strategy_score": 59.96902055831428,
+            "execution_quality_score": 45.0,
+            "relative_strength_score": 50.0,
+            "volume_confirmation_score": 0.0,
+            "location_score": 50.0,
+            "rr_score": 100.0,
+            "risk_penalty": 0.0,
+            "data_quality_score": 65.0,
+            "last_price": null,
+            "vwap": null,
+            "price_vs_vwap": null,
+            "ema5": null,
+            "ema13": null,
+            "ema34": null,
+            "trend_stack_score": null,
+            "atr5m": null,
+            "realized_vol_recent": null,
+            "compression_score": null,
+            "range_breakout_score": null,
+            "slot_rel_vol": null,
+            "cumulative_volume_run_rate": null,
+            "volume_zscore_by_slot": null,
+            "rs_index": null,
+            "rs_industry": null,
+            "rs_candidate_pool": null,
+            "industry_strength_score": null,
+            "peer_consensus_score": null,
+            "distance_to_entry": null,
+            "distance_to_stop": null,
+            "distance_to_take1": null,
+            "extended_flag": null,
+            "invalidated_flag": null,
+            "main_risks": [],
+            "do_not_chase_reason": "This is a next-session plan; wait for intraday trigger confirmation.",
+            "what_would_improve": [
+              "intraday_VWAP_RS_volume_confirm_after_open"
+            ],
+            "what_would_cancel": [
+              "daily_stop_breached",
+              "daily_setup_freshness_lost"
+            ],
+            "data_quality_warnings": [
+              "intraday_features_not_available_in_daily_plan"
+            ],
+            "market_gate_risks": [],
+            "late_session_risk": false,
+            "stop_too_far_risk": false,
+            "rr_not_enough_risk": false,
+            "why_ranked_here": "rank=2, live_score=59.97, champion=S3",
+            "why_above_next": "601899 live_score 59.97 vs 000792 52.90; strategy S3 vs S8.",
+            "why_below_previous": "601899 live_score 59.97 trails 601766 90.47; compare execution quality, RR and risk penalty.",
+            "rank_change_reason": null,
+            "previous_rank": 1,
+            "current_rank": 2,
+            "raw_bar_summary": [],
+            "score_breakdown": {
+              "day_level_alpha_score": 59.96902055831428,
+              "champion_strategy_score": 59.96902055831428,
+              "intraday_exec_score": 45.0,
+              "live_score": 59.96902055831428,
+              "strategy_score": 59.96902055831428,
+              "execution_quality_score": 45.0,
+              "relative_strength_score": 50.0,
+              "volume_confirmation_score": 0.0,
+              "location_score": 50.0,
+              "rr_score": 100.0,
+              "risk_penalty": 0.0,
+              "data_quality_score": 65.0,
+              "market_regime_fit_score": 50.0
+            },
+            "feature_snapshot": {
+              "symbol": "601899",
+              "slot_status": "DAILY_PLAN",
+              "data_quality_score": 65.0,
+              "bars_complete": false,
+              "provider": "daily"
+            },
+            "risk_pack": {
+              "main_risks": [],
+              "do_not_chase_reason": "This is a next-session plan; wait for intraday trigger confirmation.",
+              "what_would_improve": [
+                "intraday_VWAP_RS_volume_confirm_after_open"
+              ],
+              "what_would_cancel": [
+                "daily_stop_breached",
+                "daily_setup_freshness_lost"
+              ],
+              "data_quality_warnings": [
+                "intraday_features_not_available_in_daily_plan"
+              ],
+              "market_gate_risks": [],
+              "late_session_risk": false,
+              "stop_too_far_risk": false,
+              "rr_not_enough_risk": false
+            }
+          }
+        }
+      },
+      "pulse": {
+        "symbol": "601899",
+        "last_bar_at": null,
+        "pulse_score": 0.0,
+        "momentum_state": "unknown",
+        "stretch_state": "unknown",
+        "liquidity_state": "unknown",
+        "execution_state": "next_session_plan",
+        "invalidated": false,
+        "entry_distance_pct": null,
+        "flags": [],
+        "evidence_refs": [],
+        "live_score": 59.96902055831428,
+        "daily_rank_score": 0.6666666666666667,
+        "exec_score": 45.0,
+        "action": "WATCH",
+        "can_open": false,
+        "signal_type": "daily_plan",
+        "entry_zone": {
+          "kind": "zone",
+          "low": 33.24,
+          "high": 35.51606557377049,
+          "price": 33.24
+        },
+        "stop": 33.24,
+        "take": [
+          37.96,
+          39.098800000000004
+        ],
+        "vwap": null,
+        "orb30_high": null,
+        "orb30_low": null,
+        "rs_index": null,
+        "rs_industry": null,
+        "slot_rel_vol": null,
+        "extended": false,
+        "reason_codes": [
+          "rr_known",
+          "state=waiting_pullback",
+          "daily_plan"
+        ],
+        "provider": null,
+        "volume_baseline": null,
+        "trade_day": null,
+        "slot_at": null,
+        "is_stale": false,
+        "stale_reason": null,
+        "recommendation_state": "NEXT_SESSION_PLAN",
+        "feature_snapshot": {
+          "symbol": "601899",
+          "slot_status": "DAILY_PLAN",
+          "data_quality_score": 65.0,
+          "bars_complete": false,
+          "provider": "daily"
+        },
+        "raw_bar_summary": [],
+        "strategy_candidates": [
+          {
+            "strategy_name": "S3",
+            "eligible": true,
+            "raw_score": 59.96902055831428,
+            "confidence": 0.5996902055831428,
+            "expected_edge_score": 59.96902055831428,
+            "execution_quality_score": 45.0,
+            "relative_strength_score": 50.0,
+            "volume_confirmation_score": 0.0,
+            "location_score": 50.0,
+            "rr_score": 100.0,
+            "regime_fit_score": 50.0,
+            "risk_penalty": 0.0,
+            "data_quality_penalty": 12.0,
+            "reason_codes": [
+              "rr_known",
+              "state=waiting_pullback",
+              "daily_plan"
+            ],
+            "reject_reasons": [],
+            "invalidation_rules": [
+              "daily_stop_breached",
+              "daily_setup_freshness_lost"
+            ],
+            "plan": {
+              "trigger_price": 35.51606557377049,
+              "entry_low": 33.24,
+              "entry_high": 35.51606557377049,
+              "entry_mid": 33.24,
+              "entry_type": "next_session_daily_plan",
+              "stop_price": 33.24,
+              "invalidation_reason": "收盘有效跌破支撑带",
+              "take1": 37.96,
+              "take2": 39.098800000000004,
+              "rr_to_take1": 4719999.999999999,
+              "rr_to_take2": 5858800.000000003,
+              "signal_valid_until_slot": null,
+              "triggered": false,
+              "invalidation_rules": [
+                "daily_stop_breached",
+                "daily_setup_freshness_lost"
+              ],
+              "trigger_conditions": [
+                "next_session_price_reaches_trigger",
+                "intraday_feature_engine_confirms"
+              ],
+              "confirmation_conditions": [
+                "market_gate_not_blocked",
+                "VWAP/volume/RS confirm after open"
+              ]
+            }
+          }
+        ],
+        "champion_strategy": "S3",
+        "champion_strategy_score": 59.96902055831428,
+        "execution_plan": {
+          "trigger_price": 35.51606557377049,
+          "entry_low": 33.24,
+          "entry_high": 35.51606557377049,
+          "entry_mid": 33.24,
+          "entry_type": "next_session_daily_plan",
+          "stop_price": 33.24,
+          "invalidation_reason": "收盘有效跌破支撑带",
+          "take1": 37.96,
+          "take2": 39.098800000000004,
+          "rr_to_take1": 4719999.999999999,
+          "rr_to_take2": 5858800.000000003,
+          "signal_valid_until_slot": null,
+          "triggered": false,
+          "invalidation_rules": [
+            "daily_stop_breached",
+            "daily_setup_freshness_lost"
+          ],
+          "trigger_conditions": [
+            "next_session_price_reaches_trigger",
+            "intraday_feature_engine_confirms"
+          ],
+          "confirmation_conditions": [
+            "market_gate_not_blocked",
+            "VWAP/volume/RS confirm after open"
+          ]
+        },
+        "score_breakdown": {
+          "day_level_alpha_score": 59.96902055831428,
+          "champion_strategy_score": 59.96902055831428,
+          "intraday_exec_score": 45.0,
+          "live_score": 59.96902055831428,
+          "strategy_score": 59.96902055831428,
+          "execution_quality_score": 45.0,
+          "relative_strength_score": 50.0,
+          "volume_confirmation_score": 0.0,
+          "location_score": 50.0,
+          "rr_score": 100.0,
+          "risk_penalty": 0.0,
+          "data_quality_score": 65.0,
+          "market_regime_fit_score": 50.0
+        },
+        "strategy_context": {
+          "champion_strategy": "S3",
+          "champion_strategy_score": 59.96902055831428,
+          "strategy_reason_codes": [
+            "rr_known",
+            "state=waiting_pullback",
+            "daily_plan"
+          ],
+          "strategy_reject_reasons": [],
+          "competing_strategies": [
+            {
+              "strategy_name": "S3",
+              "eligible": true,
+              "score": 59.96902055831428,
+              "reason_codes": [
+                "rr_known",
+                "state=waiting_pullback",
+                "daily_plan"
+              ],
+              "reject_reasons": []
+            }
+          ]
+        },
+        "risk_pack": {
+          "main_risks": [],
+          "do_not_chase_reason": "This is a next-session plan; wait for intraday trigger confirmation.",
+          "what_would_improve": [
+            "intraday_VWAP_RS_volume_confirm_after_open"
+          ],
+          "what_would_cancel": [
+            "daily_stop_breached",
+            "daily_setup_freshness_lost"
+          ],
+          "data_quality_warnings": [
+            "intraday_features_not_available_in_daily_plan"
+          ],
+          "market_gate_risks": [],
+          "late_session_risk": false,
+          "stop_too_far_risk": false,
+          "rr_not_enough_risk": false
+        },
+        "explain_context": {
+          "symbol": "601899",
+          "name": null,
+          "rank": 2,
+          "recommendation_state": "NEXT_SESSION_PLAN",
+          "action": "WATCH",
+          "can_open": false,
+          "execution_state": "next_session_plan",
+          "artifact_id": "daily_e592dae64fb0",
+          "slot_id": null,
+          "as_of": null,
+          "runtime_market_phase": null,
+          "artifact_market_phase": null,
+          "trigger_price": 35.51606557377049,
+          "entry_low": 33.24,
+          "entry_high": 35.51606557377049,
+          "entry_type": "next_session_daily_plan",
+          "stop_price": 33.24,
+          "invalidation_reason": "收盘有效跌破支撑带",
+          "take1": 37.96,
+          "take2": 39.098800000000004,
+          "rr_to_take1": 4719999.999999999,
+          "rr_to_take2": 5858800.000000003,
+          "signal_valid_until_slot": null,
+          "champion_strategy": "S3",
+          "champion_strategy_score": 59.96902055831428,
+          "strategy_reason_codes": [
+            "rr_known",
+            "state=waiting_pullback",
+            "daily_plan"
+          ],
+          "strategy_reject_reasons": [],
+          "competing_strategies": [
+            {
+              "strategy_name": "S3",
+              "eligible": true,
+              "score": 59.96902055831428,
+              "reason_codes": [
+                "rr_known",
+                "state=waiting_pullback",
+                "daily_plan"
+              ],
+              "reject_reasons": []
+            }
+          ],
+          "day_level_alpha_score": 59.96902055831428,
+          "intraday_exec_score": 45.0,
+          "live_score": 59.96902055831428,
+          "strategy_score": 59.96902055831428,
+          "execution_quality_score": 45.0,
+          "relative_strength_score": 50.0,
+          "volume_confirmation_score": 0.0,
+          "location_score": 50.0,
+          "rr_score": 100.0,
+          "risk_penalty": 0.0,
+          "data_quality_score": 65.0,
+          "last_price": null,
+          "vwap": null,
+          "price_vs_vwap": null,
+          "ema5": null,
+          "ema13": null,
+          "ema34": null,
+          "trend_stack_score": null,
+          "atr5m": null,
+          "realized_vol_recent": null,
+          "compression_score": null,
+          "range_breakout_score": null,
+          "slot_rel_vol": null,
+          "cumulative_volume_run_rate": null,
+          "volume_zscore_by_slot": null,
+          "rs_index": null,
+          "rs_industry": null,
+          "rs_candidate_pool": null,
+          "industry_strength_score": null,
+          "peer_consensus_score": null,
+          "distance_to_entry": null,
+          "distance_to_stop": null,
+          "distance_to_take1": null,
+          "extended_flag": null,
+          "invalidated_flag": null,
+          "main_risks": [],
+          "do_not_chase_reason": "This is a next-session plan; wait for intraday trigger confirmation.",
+          "what_would_improve": [
+            "intraday_VWAP_RS_volume_confirm_after_open"
+          ],
+          "what_would_cancel": [
+            "daily_stop_breached",
+            "daily_setup_freshness_lost"
+          ],
+          "data_quality_warnings": [
+            "intraday_features_not_available_in_daily_plan"
+          ],
+          "market_gate_risks": [],
+          "late_session_risk": false,
+          "stop_too_far_risk": false,
+          "rr_not_enough_risk": false,
+          "why_ranked_here": "rank=2, live_score=59.97, champion=S3",
+          "why_above_next": "601899 live_score 59.97 vs 000792 52.90; strategy S3 vs S8.",
+          "why_below_previous": "601899 live_score 59.97 trails 601766 90.47; compare execution quality, RR and risk penalty.",
+          "rank_change_reason": null,
+          "previous_rank": 1,
+          "current_rank": 2,
+          "raw_bar_summary": [],
+          "score_breakdown": {
+            "day_level_alpha_score": 59.96902055831428,
+            "champion_strategy_score": 59.96902055831428,
+            "intraday_exec_score": 45.0,
+            "live_score": 59.96902055831428,
+            "strategy_score": 59.96902055831428,
+            "execution_quality_score": 45.0,
+            "relative_strength_score": 50.0,
+            "volume_confirmation_score": 0.0,
+            "location_score": 50.0,
+            "rr_score": 100.0,
+            "risk_penalty": 0.0,
+            "data_quality_score": 65.0,
+            "market_regime_fit_score": 50.0
+          },
+          "feature_snapshot": {
+            "symbol": "601899",
+            "slot_status": "DAILY_PLAN",
+            "data_quality_score": 65.0,
+            "bars_complete": false,
+            "provider": "daily"
+          },
+          "risk_pack": {
+            "main_risks": [],
+            "do_not_chase_reason": "This is a next-session plan; wait for intraday trigger confirmation.",
+            "what_would_improve": [
+              "intraday_VWAP_RS_volume_confirm_after_open"
+            ],
+            "what_would_cancel": [
+              "daily_stop_breached",
+              "daily_setup_freshness_lost"
+            ],
+            "data_quality_warnings": [
+              "intraday_features_not_available_in_daily_plan"
+            ],
+            "market_gate_risks": [],
+            "late_session_risk": false,
+            "stop_too_far_risk": false,
+            "rr_not_enough_risk": false
+          }
+        }
+      },
+      "recommendation_state": "NEXT_SESSION_PLAN",
+      "feature_snapshot": {
+        "symbol": "601899",
+        "slot_status": "DAILY_PLAN",
+        "data_quality_score": 65.0,
+        "bars_complete": false,
+        "provider": "daily"
+      },
+      "raw_bar_summary": [],
+      "strategy_candidates": [
+        {
+          "strategy_name": "S3",
+          "eligible": true,
+          "raw_score": 59.96902055831428,
+          "confidence": 0.5996902055831428,
+          "expected_edge_score": 59.96902055831428,
+          "execution_quality_score": 45.0,
+          "relative_strength_score": 50.0,
+          "volume_confirmation_score": 0.0,
+          "location_score": 50.0,
+          "rr_score": 100.0,
+          "regime_fit_score": 50.0,
+          "risk_penalty": 0.0,
+          "data_quality_penalty": 12.0,
+          "reason_codes": [
+            "rr_known",
+            "state=waiting_pullback",
+            "daily_plan"
+          ],
+          "reject_reasons": [],
+          "invalidation_rules": [
+            "daily_stop_breached",
+            "daily_setup_freshness_lost"
+          ],
+          "plan": {
+            "trigger_price": 35.51606557377049,
+            "entry_low": 33.24,
+            "entry_high": 35.51606557377049,
+            "entry_mid": 33.24,
+            "entry_type": "next_session_daily_plan",
+            "stop_price": 33.24,
+            "invalidation_reason": "收盘有效跌破支撑带",
+            "take1": 37.96,
+            "take2": 39.098800000000004,
+            "rr_to_take1": 4719999.999999999,
+            "rr_to_take2": 5858800.000000003,
+            "signal_valid_until_slot": null,
+            "triggered": false,
+            "invalidation_rules": [
+              "daily_stop_breached",
+              "daily_setup_freshness_lost"
+            ],
+            "trigger_conditions": [
+              "next_session_price_reaches_trigger",
+              "intraday_feature_engine_confirms"
+            ],
+            "confirmation_conditions": [
+              "market_gate_not_blocked",
+              "VWAP/volume/RS confirm after open"
+            ]
+          }
+        }
+      ],
+      "champion_strategy": "S3",
+      "champion_strategy_score": 59.96902055831428,
+      "execution_plan": {
+        "trigger_price": 35.51606557377049,
+        "entry_low": 33.24,
+        "entry_high": 35.51606557377049,
+        "entry_mid": 33.24,
+        "entry_type": "next_session_daily_plan",
+        "stop_price": 33.24,
+        "invalidation_reason": "收盘有效跌破支撑带",
+        "take1": 37.96,
+        "take2": 39.098800000000004,
+        "rr_to_take1": 4719999.999999999,
+        "rr_to_take2": 5858800.000000003,
+        "signal_valid_until_slot": null,
+        "triggered": false,
+        "invalidation_rules": [
+          "daily_stop_breached",
+          "daily_setup_freshness_lost"
+        ],
+        "trigger_conditions": [
+          "next_session_price_reaches_trigger",
+          "intraday_feature_engine_confirms"
+        ],
+        "confirmation_conditions": [
+          "market_gate_not_blocked",
+          "VWAP/volume/RS confirm after open"
+        ]
+      },
+      "score_breakdown": {
+        "day_level_alpha_score": 59.96902055831428,
+        "champion_strategy_score": 59.96902055831428,
+        "intraday_exec_score": 45.0,
+        "live_score": 59.96902055831428,
+        "strategy_score": 59.96902055831428,
+        "execution_quality_score": 45.0,
+        "relative_strength_score": 50.0,
+        "volume_confirmation_score": 0.0,
+        "location_score": 50.0,
+        "rr_score": 100.0,
+        "risk_penalty": 0.0,
+        "data_quality_score": 65.0,
+        "market_regime_fit_score": 50.0
+      },
+      "strategy_context": {
+        "champion_strategy": "S3",
+        "champion_strategy_score": 59.96902055831428,
+        "strategy_reason_codes": [
+          "rr_known",
+          "state=waiting_pullback",
+          "daily_plan"
+        ],
+        "strategy_reject_reasons": [],
+        "competing_strategies": [
+          {
+            "strategy_name": "S3",
+            "eligible": true,
+            "score": 59.96902055831428,
+            "reason_codes": [
+              "rr_known",
+              "state=waiting_pullback",
+              "daily_plan"
+            ],
+            "reject_reasons": []
+          }
+        ]
+      },
+      "risk_pack": {
+        "main_risks": [],
+        "do_not_chase_reason": "This is a next-session plan; wait for intraday trigger confirmation.",
+        "what_would_improve": [
+          "intraday_VWAP_RS_volume_confirm_after_open"
+        ],
+        "what_would_cancel": [
+          "daily_stop_breached",
+          "daily_setup_freshness_lost"
+        ],
+        "data_quality_warnings": [
+          "intraday_features_not_available_in_daily_plan"
+        ],
+        "market_gate_risks": [],
+        "late_session_risk": false,
+        "stop_too_far_risk": false,
+        "rr_not_enough_risk": false
+      },
+      "explain_context": {
+        "symbol": "601899",
+        "name": null,
+        "rank": 2,
+        "recommendation_state": "NEXT_SESSION_PLAN",
+        "action": "WATCH",
+        "can_open": false,
+        "execution_state": "next_session_plan",
+        "artifact_id": "daily_e592dae64fb0",
+        "slot_id": null,
+        "as_of": null,
+        "runtime_market_phase": null,
+        "artifact_market_phase": null,
+        "trigger_price": 35.51606557377049,
+        "entry_low": 33.24,
+        "entry_high": 35.51606557377049,
+        "entry_type": "next_session_daily_plan",
+        "stop_price": 33.24,
+        "invalidation_reason": "收盘有效跌破支撑带",
+        "take1": 37.96,
+        "take2": 39.098800000000004,
+        "rr_to_take1": 4719999.999999999,
+        "rr_to_take2": 5858800.000000003,
+        "signal_valid_until_slot": null,
+        "champion_strategy": "S3",
+        "champion_strategy_score": 59.96902055831428,
+        "strategy_reason_codes": [
+          "rr_known",
+          "state=waiting_pullback",
+          "daily_plan"
+        ],
+        "strategy_reject_reasons": [],
+        "competing_strategies": [
+          {
+            "strategy_name": "S3",
+            "eligible": true,
+            "score": 59.96902055831428,
+            "reason_codes": [
+              "rr_known",
+              "state=waiting_pullback",
+              "daily_plan"
+            ],
+            "reject_reasons": []
+          }
+        ],
+        "day_level_alpha_score": 59.96902055831428,
+        "intraday_exec_score": 45.0,
+        "live_score": 59.96902055831428,
+        "strategy_score": 59.96902055831428,
+        "execution_quality_score": 45.0,
+        "relative_strength_score": 50.0,
+        "volume_confirmation_score": 0.0,
+        "location_score": 50.0,
+        "rr_score": 100.0,
+        "risk_penalty": 0.0,
+        "data_quality_score": 65.0,
+        "last_price": null,
+        "vwap": null,
+        "price_vs_vwap": null,
+        "ema5": null,
+        "ema13": null,
+        "ema34": null,
+        "trend_stack_score": null,
+        "atr5m": null,
+        "realized_vol_recent": null,
+        "compression_score": null,
+        "range_breakout_score": null,
+        "slot_rel_vol": null,
+        "cumulative_volume_run_rate": null,
+        "volume_zscore_by_slot": null,
+        "rs_index": null,
+        "rs_industry": null,
+        "rs_candidate_pool": null,
+        "industry_strength_score": null,
+        "peer_consensus_score": null,
+        "distance_to_entry": null,
+        "distance_to_stop": null,
+        "distance_to_take1": null,
+        "extended_flag": null,
+        "invalidated_flag": null,
+        "main_risks": [],
+        "do_not_chase_reason": "This is a next-session plan; wait for intraday trigger confirmation.",
+        "what_would_improve": [
+          "intraday_VWAP_RS_volume_confirm_after_open"
+        ],
+        "what_would_cancel": [
+          "daily_stop_breached",
+          "daily_setup_freshness_lost"
+        ],
+        "data_quality_warnings": [
+          "intraday_features_not_available_in_daily_plan"
+        ],
+        "market_gate_risks": [],
+        "late_session_risk": false,
+        "stop_too_far_risk": false,
+        "rr_not_enough_risk": false,
+        "why_ranked_here": "rank=2, live_score=59.97, champion=S3",
+        "why_above_next": "601899 live_score 59.97 vs 000792 52.90; strategy S3 vs S8.",
+        "why_below_previous": "601899 live_score 59.97 trails 601766 90.47; compare execution quality, RR and risk penalty.",
+        "rank_change_reason": null,
+        "previous_rank": 1,
+        "current_rank": 2,
+        "raw_bar_summary": [],
+        "score_breakdown": {
+          "day_level_alpha_score": 59.96902055831428,
+          "champion_strategy_score": 59.96902055831428,
+          "intraday_exec_score": 45.0,
+          "live_score": 59.96902055831428,
+          "strategy_score": 59.96902055831428,
+          "execution_quality_score": 45.0,
+          "relative_strength_score": 50.0,
+          "volume_confirmation_score": 0.0,
+          "location_score": 50.0,
+          "rr_score": 100.0,
+          "risk_penalty": 0.0,
+          "data_quality_score": 65.0,
+          "market_regime_fit_score": 50.0
+        },
+        "feature_snapshot": {
+          "symbol": "601899",
+          "slot_status": "DAILY_PLAN",
+          "data_quality_score": 65.0,
+          "bars_complete": false,
+          "provider": "daily"
+        },
+        "risk_pack": {
+          "main_risks": [],
+          "do_not_chase_reason": "This is a next-session plan; wait for intraday trigger confirmation.",
+          "what_would_improve": [
+            "intraday_VWAP_RS_volume_confirm_after_open"
+          ],
+          "what_would_cancel": [
+            "daily_stop_breached",
+            "daily_setup_freshness_lost"
+          ],
+          "data_quality_warnings": [
+            "intraday_features_not_available_in_daily_plan"
+          ],
+          "market_gate_risks": [],
+          "late_session_risk": false,
+          "stop_too_far_risk": false,
+          "rr_not_enough_risk": false
+        }
+      }
+    },
+    {
+      "symbol": "000792",
+      "name": null,
+      "rank": 3,
+      "final_score": 52.89836188608458,
+      "live_score": 52.89836188608458,
+      "daily_rank_score": 0.5555555555555556,
+      "exec_score": 45.0,
+      "action": "WATCH",
+      "execution_state": "next_session_plan",
+      "can_open": false,
+      "stretched": false,
+      "extended": false,
+      "invalidated": false,
+      "signal_type": "daily_plan",
+      "entry_zone": {
+        "kind": "zone",
+        "low": 37.01,
+        "high": 37.41,
+        "price": 37.01
+      },
+      "stop": 37.01,
+      "take": [
+        38.51,
+        38.86
+      ],
+      "vwap": null,
+      "orb30_high": null,
+      "orb30_low": null,
+      "rs_index": null,
+      "rs_industry": null,
+      "slot_rel_vol": null,
+      "summary": "Next trading-window plan from S8.",
+      "reason_codes": [
+        "rr_known",
+        "state=actionable",
+        "daily_plan"
+      ],
+      "artifact_id": "daily_e592dae64fb0",
+      "slot_id": null,
+      "style_label": "stable",
+      "pick": {
+        "symbol": "000792",
+        "name": null,
+        "rank": 3,
+        "strategy_id": "S8",
+        "industry": "dynamic_pool",
+        "thesis": "接近计划买点，日线计划条件较充分。",
+        "entry_plan": {
+          "kind": "zone",
+          "low": 37.01,
+          "high": 37.41,
+          "price": 37.01
+        },
+        "stop_plan": {
+          "kind": "close_below_support",
+          "price": 37.01,
+          "invalidation": "收盘有效跌破支撑带",
+          "text": "收盘有效跌破支撑带"
+        },
+        "take_profit_plan": {
+          "kind": "targets",
+          "price": 38.51,
+          "targets": [
+            38.51,
+            38.86
+          ]
+        },
+        "scores": {
+          "final": 0.5289836188608458,
+          "candidate": -0.1470521590589879,
+          "champion": 0.3766703813129272,
+          "reward_risk": 1.8301886792452768
+        },
+        "risk_flags": [],
+        "why_selected": "相对同组候选综合条件更优。",
+        "why_not_others": [],
+        "evidence_refs": [
+          "000792"
+        ],
+        "style_label": "stable",
+        "explain_context": {
+          "symbol": "000792",
+          "name": null,
+          "rank": 3,
+          "recommendation_state": "NEXT_SESSION_PLAN",
+          "action": "WATCH",
+          "can_open": false,
+          "execution_state": "next_session_plan",
+          "artifact_id": "daily_e592dae64fb0",
+          "slot_id": null,
+          "as_of": null,
+          "runtime_market_phase": null,
+          "artifact_market_phase": null,
+          "trigger_price": 37.41,
+          "entry_low": 37.01,
+          "entry_high": 37.41,
+          "entry_type": "next_session_daily_plan",
+          "stop_price": 37.01,
+          "invalidation_reason": "收盘有效跌破支撑带",
+          "take1": 38.51,
+          "take2": 38.86,
+          "rr_to_take1": 1500000.0,
+          "rr_to_take2": 1850000.0000000014,
+          "signal_valid_until_slot": null,
+          "champion_strategy": "S8",
+          "champion_strategy_score": 52.89836188608458,
+          "strategy_reason_codes": [
+            "rr_known",
+            "state=actionable",
+            "daily_plan"
+          ],
+          "strategy_reject_reasons": [],
+          "competing_strategies": [
+            {
+              "strategy_name": "S8",
+              "eligible": true,
+              "score": 52.89836188608458,
+              "reason_codes": [
+                "rr_known",
+                "state=actionable",
+                "daily_plan"
+              ],
+              "reject_reasons": []
+            }
+          ],
+          "day_level_alpha_score": 52.89836188608458,
+          "intraday_exec_score": 45.0,
+          "live_score": 52.89836188608458,
+          "strategy_score": 52.89836188608458,
+          "execution_quality_score": 45.0,
+          "relative_strength_score": 50.0,
+          "volume_confirmation_score": 0.0,
+          "location_score": 50.0,
+          "rr_score": 100.0,
+          "risk_penalty": 0.0,
+          "data_quality_score": 65.0,
+          "last_price": null,
+          "vwap": null,
+          "price_vs_vwap": null,
+          "ema5": null,
+          "ema13": null,
+          "ema34": null,
+          "trend_stack_score": null,
+          "atr5m": null,
+          "realized_vol_recent": null,
+          "compression_score": null,
+          "range_breakout_score": null,
+          "slot_rel_vol": null,
+          "cumulative_volume_run_rate": null,
+          "volume_zscore_by_slot": null,
+          "rs_index": null,
+          "rs_industry": null,
+          "rs_candidate_pool": null,
+          "industry_strength_score": null,
+          "peer_consensus_score": null,
+          "distance_to_entry": null,
+          "distance_to_stop": null,
+          "distance_to_take1": null,
+          "extended_flag": null,
+          "invalidated_flag": null,
+          "main_risks": [],
+          "do_not_chase_reason": "This is a next-session plan; wait for intraday trigger confirmation.",
+          "what_would_improve": [
+            "intraday_VWAP_RS_volume_confirm_after_open"
+          ],
+          "what_would_cancel": [
+            "daily_stop_breached",
+            "daily_setup_freshness_lost"
+          ],
+          "data_quality_warnings": [
+            "intraday_features_not_available_in_daily_plan"
+          ],
+          "market_gate_risks": [],
+          "late_session_risk": false,
+          "stop_too_far_risk": false,
+          "rr_not_enough_risk": false,
+          "why_ranked_here": "rank=3, live_score=52.90, champion=S8",
+          "why_above_next": "000792 live_score 52.90 vs 601318 20.19; strategy S8 vs S3.",
+          "why_below_previous": "000792 live_score 52.90 trails 601899 59.97; compare execution quality, RR and risk penalty.",
+          "rank_change_reason": null,
+          "previous_rank": 2,
+          "current_rank": 3,
+          "raw_bar_summary": [],
+          "score_breakdown": {
+            "day_level_alpha_score": 52.89836188608458,
+            "champion_strategy_score": 52.89836188608458,
+            "intraday_exec_score": 45.0,
+            "live_score": 52.89836188608458,
+            "strategy_score": 52.89836188608458,
+            "execution_quality_score": 45.0,
+            "relative_strength_score": 50.0,
+            "volume_confirmation_score": 0.0,
+            "location_score": 50.0,
+            "rr_score": 100.0,
+            "risk_penalty": 0.0,
+            "data_quality_score": 65.0,
+            "market_regime_fit_score": 50.0
+          },
+          "feature_snapshot": {
+            "symbol": "000792",
+            "slot_status": "DAILY_PLAN",
+            "data_quality_score": 65.0,
+            "bars_complete": false,
+            "provider": "daily"
+          },
+          "risk_pack": {
+            "main_risks": [],
+            "do_not_chase_reason": "This is a next-session plan; wait for intraday trigger confirmation.",
+            "what_would_improve": [
+              "intraday_VWAP_RS_volume_confirm_after_open"
+            ],
+            "what_would_cancel": [
+              "daily_stop_breached",
+              "daily_setup_freshness_lost"
+            ],
+            "data_quality_warnings": [
+              "intraday_features_not_available_in_daily_plan"
+            ],
+            "market_gate_risks": [],
+            "late_session_risk": false,
+            "stop_too_far_risk": false,
+            "rr_not_enough_risk": false
+          }
+        },
+        "meta": {
+          "candidate_score": -0.1470521590589879,
+          "theme_overlap_score": 0.0,
+          "mainline_overlap_score": 0.0,
+          "execution_state": "actionable",
+          "actionable": true,
+          "reason_codes": [
+            "rr_known",
+            "state=actionable"
+          ],
+          "daily_last_date": "2026-05-11",
+          "daily_freshness_state": "current",
+          "explain_context": {
+            "symbol": "000792",
+            "name": null,
+            "rank": 3,
+            "recommendation_state": "NEXT_SESSION_PLAN",
+            "action": "WATCH",
+            "can_open": false,
+            "execution_state": "next_session_plan",
+            "artifact_id": "daily_e592dae64fb0",
+            "slot_id": null,
+            "as_of": null,
+            "runtime_market_phase": null,
+            "artifact_market_phase": null,
+            "trigger_price": 37.41,
+            "entry_low": 37.01,
+            "entry_high": 37.41,
+            "entry_type": "next_session_daily_plan",
+            "stop_price": 37.01,
+            "invalidation_reason": "收盘有效跌破支撑带",
+            "take1": 38.51,
+            "take2": 38.86,
+            "rr_to_take1": 1500000.0,
+            "rr_to_take2": 1850000.0000000014,
+            "signal_valid_until_slot": null,
+            "champion_strategy": "S8",
+            "champion_strategy_score": 52.89836188608458,
+            "strategy_reason_codes": [
+              "rr_known",
+              "state=actionable",
+              "daily_plan"
+            ],
+            "strategy_reject_reasons": [],
+            "competing_strategies": [
+              {
+                "strategy_name": "S8",
+                "eligible": true,
+                "score": 52.89836188608458,
+                "reason_codes": [
+                  "rr_known",
+                  "state=actionable",
+                  "daily_plan"
+                ],
+                "reject_reasons": []
+              }
+            ],
+            "day_level_alpha_score": 52.89836188608458,
+            "intraday_exec_score": 45.0,
+            "live_score": 52.89836188608458,
+            "strategy_score": 52.89836188608458,
+            "execution_quality_score": 45.0,
+            "relative_strength_score": 50.0,
+            "volume_confirmation_score": 0.0,
+            "location_score": 50.0,
+            "rr_score": 100.0,
+            "risk_penalty": 0.0,
+            "data_quality_score": 65.0,
+            "last_price": null,
+            "vwap": null,
+            "price_vs_vwap": null,
+            "ema5": null,
+            "ema13": null,
+            "ema34": null,
+            "trend_stack_score": null,
+            "atr5m": null,
+            "realized_vol_recent": null,
+            "compression_score": null,
+            "range_breakout_score": null,
+            "slot_rel_vol": null,
+            "cumulative_volume_run_rate": null,
+            "volume_zscore_by_slot": null,
+            "rs_index": null,
+            "rs_industry": null,
+            "rs_candidate_pool": null,
+            "industry_strength_score": null,
+            "peer_consensus_score": null,
+            "distance_to_entry": null,
+            "distance_to_stop": null,
+            "distance_to_take1": null,
+            "extended_flag": null,
+            "invalidated_flag": null,
+            "main_risks": [],
+            "do_not_chase_reason": "This is a next-session plan; wait for intraday trigger confirmation.",
+            "what_would_improve": [
+              "intraday_VWAP_RS_volume_confirm_after_open"
+            ],
+            "what_would_cancel": [
+              "daily_stop_breached",
+              "daily_setup_freshness_lost"
+            ],
+            "data_quality_warnings": [
+              "intraday_features_not_available_in_daily_plan"
+            ],
+            "market_gate_risks": [],
+            "late_session_risk": false,
+            "stop_too_far_risk": false,
+            "rr_not_enough_risk": false,
+            "why_ranked_here": "rank=3, live_score=52.90, champion=S8",
+            "why_above_next": "000792 live_score 52.90 vs 601318 20.19; strategy S8 vs S3.",
+            "why_below_previous": "000792 live_score 52.90 trails 601899 59.97; compare execution quality, RR and risk penalty.",
+            "rank_change_reason": null,
+            "previous_rank": 2,
+            "current_rank": 3,
+            "raw_bar_summary": [],
+            "score_breakdown": {
+              "day_level_alpha_score": 52.89836188608458,
+              "champion_strategy_score": 52.89836188608458,
+              "intraday_exec_score": 45.0,
+              "live_score": 52.89836188608458,
+              "strategy_score": 52.89836188608458,
+              "execution_quality_score": 45.0,
+              "relative_strength_score": 50.0,
+              "volume_confirmation_score": 0.0,
+              "location_score": 50.0,
+              "rr_score": 100.0,
+              "risk_penalty": 0.0,
+              "data_quality_score": 65.0,
+              "market_regime_fit_score": 50.0
+            },
+            "feature_snapshot": {
+              "symbol": "000792",
+              "slot_status": "DAILY_PLAN",
+              "data_quality_score": 65.0,
+              "bars_complete": false,
+              "provider": "daily"
+            },
+            "risk_pack": {
+              "main_risks": [],
+              "do_not_chase_reason": "This is a next-session plan; wait for intraday trigger confirmation.",
+              "what_would_improve": [
+                "intraday_VWAP_RS_volume_confirm_after_open"
+              ],
+              "what_would_cancel": [
+                "daily_stop_breached",
+                "daily_setup_freshness_lost"
+              ],
+              "data_quality_warnings": [
+                "intraday_features_not_available_in_daily_plan"
+              ],
+              "market_gate_risks": [],
+              "late_session_risk": false,
+              "stop_too_far_risk": false,
+              "rr_not_enough_risk": false
+            }
+          }
+        }
+      },
+      "pulse": {
+        "symbol": "000792",
+        "last_bar_at": null,
+        "pulse_score": 0.0,
+        "momentum_state": "unknown",
+        "stretch_state": "unknown",
+        "liquidity_state": "unknown",
+        "execution_state": "next_session_plan",
+        "invalidated": false,
+        "entry_distance_pct": null,
+        "flags": [],
+        "evidence_refs": [],
+        "live_score": 52.89836188608458,
+        "daily_rank_score": 0.5555555555555556,
+        "exec_score": 45.0,
+        "action": "WATCH",
+        "can_open": false,
+        "signal_type": "daily_plan",
+        "entry_zone": {
+          "kind": "zone",
+          "low": 37.01,
+          "high": 37.41,
+          "price": 37.01
+        },
+        "stop": 37.01,
+        "take": [
+          38.51,
+          38.86
+        ],
+        "vwap": null,
+        "orb30_high": null,
+        "orb30_low": null,
+        "rs_index": null,
+        "rs_industry": null,
+        "slot_rel_vol": null,
+        "extended": false,
+        "reason_codes": [
+          "rr_known",
+          "state=actionable",
+          "daily_plan"
+        ],
+        "provider": null,
+        "volume_baseline": null,
+        "trade_day": null,
+        "slot_at": null,
+        "is_stale": false,
+        "stale_reason": null,
+        "recommendation_state": "NEXT_SESSION_PLAN",
+        "feature_snapshot": {
+          "symbol": "000792",
+          "slot_status": "DAILY_PLAN",
+          "data_quality_score": 65.0,
+          "bars_complete": false,
+          "provider": "daily"
+        },
+        "raw_bar_summary": [],
+        "strategy_candidates": [
+          {
+            "strategy_name": "S8",
+            "eligible": true,
+            "raw_score": 52.89836188608458,
+            "confidence": 0.5289836188608458,
+            "expected_edge_score": 52.89836188608458,
+            "execution_quality_score": 45.0,
+            "relative_strength_score": 50.0,
+            "volume_confirmation_score": 0.0,
+            "location_score": 50.0,
+            "rr_score": 100.0,
+            "regime_fit_score": 50.0,
+            "risk_penalty": 0.0,
+            "data_quality_penalty": 12.0,
+            "reason_codes": [
+              "rr_known",
+              "state=actionable",
+              "daily_plan"
+            ],
+            "reject_reasons": [],
+            "invalidation_rules": [
+              "daily_stop_breached",
+              "daily_setup_freshness_lost"
+            ],
+            "plan": {
+              "trigger_price": 37.41,
+              "entry_low": 37.01,
+              "entry_high": 37.41,
+              "entry_mid": 37.01,
+              "entry_type": "next_session_daily_plan",
+              "stop_price": 37.01,
+              "invalidation_reason": "收盘有效跌破支撑带",
+              "take1": 38.51,
+              "take2": 38.86,
+              "rr_to_take1": 1500000.0,
+              "rr_to_take2": 1850000.0000000014,
+              "signal_valid_until_slot": null,
+              "triggered": false,
+              "invalidation_rules": [
+                "daily_stop_breached",
+                "daily_setup_freshness_lost"
+              ],
+              "trigger_conditions": [
+                "next_session_price_reaches_trigger",
+                "intraday_feature_engine_confirms"
+              ],
+              "confirmation_conditions": [
+                "market_gate_not_blocked",
+                "VWAP/volume/RS confirm after open"
+              ]
+            }
+          }
+        ],
+        "champion_strategy": "S8",
+        "champion_strategy_score": 52.89836188608458,
+        "execution_plan": {
+          "trigger_price": 37.41,
+          "entry_low": 37.01,
+          "entry_high": 37.41,
+          "entry_mid": 37.01,
+          "entry_type": "next_session_daily_plan",
+          "stop_price": 37.01,
+          "invalidation_reason": "收盘有效跌破支撑带",
+          "take1": 38.51,
+          "take2": 38.86,
+          "rr_to_take1": 1500000.0,
+          "rr_to_take2": 1850000.0000000014,
+          "signal_valid_until_slot": null,
+          "triggered": false,
+          "invalidation_rules": [
+            "daily_stop_breached",
+            "daily_setup_freshness_lost"
+          ],
+          "trigger_conditions": [
+            "next_session_price_reaches_trigger",
+            "intraday_feature_engine_confirms"
+          ],
+          "confirmation_conditions": [
+            "market_gate_not_blocked",
+            "VWAP/volume/RS confirm after open"
+          ]
+        },
+        "score_breakdown": {
+          "day_level_alpha_score": 52.89836188608458,
+          "champion_strategy_score": 52.89836188608458,
+          "intraday_exec_score": 45.0,
+          "live_score": 52.89836188608458,
+          "strategy_score": 52.89836188608458,
+          "execution_quality_score": 45.0,
+          "relative_strength_score": 50.0,
+          "volume_confirmation_score": 0.0,
+          "location_score": 50.0,
+          "rr_score": 100.0,
+          "risk_penalty": 0.0,
+          "data_quality_score": 65.0,
+          "market_regime_fit_score": 50.0
+        },
+        "strategy_context": {
+          "champion_strategy": "S8",
+          "champion_strategy_score": 52.89836188608458,
+          "strategy_reason_codes": [
+            "rr_known",
+            "state=actionable",
+            "daily_plan"
+          ],
+          "strategy_reject_reasons": [],
+          "competing_strategies": [
+            {
+              "strategy_name": "S8",
+              "eligible": true,
+              "score": 52.89836188608458,
+              "reason_codes": [
+                "rr_known",
+                "state=actionable",
+                "daily_plan"
+              ],
+              "reject_reasons": []
+            }
+          ]
+        },
+        "risk_pack": {
+          "main_risks": [],
+          "do_not_chase_reason": "This is a next-session plan; wait for intraday trigger confirmation.",
+          "what_would_improve": [
+            "intraday_VWAP_RS_volume_confirm_after_open"
+          ],
+          "what_would_cancel": [
+            "daily_stop_breached",
+            "daily_setup_freshness_lost"
+          ],
+          "data_quality_warnings": [
+            "intraday_features_not_available_in_daily_plan"
+          ],
+          "market_gate_risks": [],
+          "late_session_risk": false,
+          "stop_too_far_risk": false,
+          "rr_not_enough_risk": false
+        },
+        "explain_context": {
+          "symbol": "000792",
+          "name": null,
+          "rank": 3,
+          "recommendation_state": "NEXT_SESSION_PLAN",
+          "action": "WATCH",
+          "can_open": false,
+          "execution_state": "next_session_plan",
+          "artifact_id": "daily_e592dae64fb0",
+          "slot_id": null,
+          "as_of": null,
+          "runtime_market_phase": null,
+          "artifact_market_phase": null,
+          "trigger_price": 37.41,
+          "entry_low": 37.01,
+          "entry_high": 37.41,
+          "entry_type": "next_session_daily_plan",
+          "stop_price": 37.01,
+          "invalidation_reason": "收盘有效跌破支撑带",
+          "take1": 38.51,
+          "take2": 38.86,
+          "rr_to_take1": 1500000.0,
+          "rr_to_take2": 1850000.0000000014,
+          "signal_valid_until_slot": null,
+          "champion_strategy": "S8",
+          "champion_strategy_score": 52.89836188608458,
+          "strategy_reason_codes": [
+            "rr_known",
+            "state=actionable",
+            "daily_plan"
+          ],
+          "strategy_reject_reasons": [],
+          "competing_strategies": [
+            {
+              "strategy_name": "S8",
+              "eligible": true,
+              "score": 52.89836188608458,
+              "reason_codes": [
+                "rr_known",
+                "state=actionable",
+                "daily_plan"
+              ],
+              "reject_reasons": []
+            }
+          ],
+          "day_level_alpha_score": 52.89836188608458,
+          "intraday_exec_score": 45.0,
+          "live_score": 52.89836188608458,
+          "strategy_score": 52.89836188608458,
+          "execution_quality_score": 45.0,
+          "relative_strength_score": 50.0,
+          "volume_confirmation_score": 0.0,
+          "location_score": 50.0,
+          "rr_score": 100.0,
+          "risk_penalty": 0.0,
+          "data_quality_score": 65.0,
+          "last_price": null,
+          "vwap": null,
+          "price_vs_vwap": null,
+          "ema5": null,
+          "ema13": null,
+          "ema34": null,
+          "trend_stack_score": null,
+          "atr5m": null,
+          "realized_vol_recent": null,
+          "compression_score": null,
+          "range_breakout_score": null,
+          "slot_rel_vol": null,
+          "cumulative_volume_run_rate": null,
+          "volume_zscore_by_slot": null,
+          "rs_index": null,
+          "rs_industry": null,
+          "rs_candidate_pool": null,
+          "industry_strength_score": null,
+          "peer_consensus_score": null,
+          "distance_to_entry": null,
+          "distance_to_stop": null,
+          "distance_to_take1": null,
+          "extended_flag": null,
+          "invalidated_flag": null,
+          "main_risks": [],
+          "do_not_chase_reason": "This is a next-session plan; wait for intraday trigger confirmation.",
+          "what_would_improve": [
+            "intraday_VWAP_RS_volume_confirm_after_open"
+          ],
+          "what_would_cancel": [
+            "daily_stop_breached",
+            "daily_setup_freshness_lost"
+          ],
+          "data_quality_warnings": [
+            "intraday_features_not_available_in_daily_plan"
+          ],
+          "market_gate_risks": [],
+          "late_session_risk": false,
+          "stop_too_far_risk": false,
+          "rr_not_enough_risk": false,
+          "why_ranked_here": "rank=3, live_score=52.90, champion=S8",
+          "why_above_next": "000792 live_score 52.90 vs 601318 20.19; strategy S8 vs S3.",
+          "why_below_previous": "000792 live_score 52.90 trails 601899 59.97; compare execution quality, RR and risk penalty.",
+          "rank_change_reason": null,
+          "previous_rank": 2,
+          "current_rank": 3,
+          "raw_bar_summary": [],
+          "score_breakdown": {
+            "day_level_alpha_score": 52.89836188608458,
+            "champion_strategy_score": 52.89836188608458,
+            "intraday_exec_score": 45.0,
+            "live_score": 52.89836188608458,
+            "strategy_score": 52.89836188608458,
+            "execution_quality_score": 45.0,
+            "relative_strength_score": 50.0,
+            "volume_confirmation_score": 0.0,
+            "location_score": 50.0,
+            "rr_score": 100.0,
+            "risk_penalty": 0.0,
+            "data_quality_score": 65.0,
+            "market_regime_fit_score": 50.0
+          },
+          "feature_snapshot": {
+            "symbol": "000792",
+            "slot_status": "DAILY_PLAN",
+            "data_quality_score": 65.0,
+            "bars_complete": false,
+            "provider": "daily"
+          },
+          "risk_pack": {
+            "main_risks": [],
+            "do_not_chase_reason": "This is a next-session plan; wait for intraday trigger confirmation.",
+            "what_would_improve": [
+              "intraday_VWAP_RS_volume_confirm_after_open"
+            ],
+            "what_would_cancel": [
+              "daily_stop_breached",
+              "daily_setup_freshness_lost"
+            ],
+            "data_quality_warnings": [
+              "intraday_features_not_available_in_daily_plan"
+            ],
+            "market_gate_risks": [],
+            "late_session_risk": false,
+            "stop_too_far_risk": false,
+            "rr_not_enough_risk": false
+          }
+        }
+      },
+      "recommendation_state": "NEXT_SESSION_PLAN",
+      "feature_snapshot": {
+        "symbol": "000792",
+        "slot_status": "DAILY_PLAN",
+        "data_quality_score": 65.0,
+        "bars_complete": false,
+        "provider": "daily"
+      },
+      "raw_bar_summary": [],
+      "strategy_candidates": [
+        {
+          "strategy_name": "S8",
+          "eligible": true,
+          "raw_score": 52.89836188608458,
+          "confidence": 0.5289836188608458,
+          "expected_edge_score": 52.89836188608458,
+          "execution_quality_score": 45.0,
+          "relative_strength_score": 50.0,
+          "volume_confirmation_score": 0.0,
+          "location_score": 50.0,
+          "rr_score": 100.0,
+          "regime_fit_score": 50.0,
+          "risk_penalty": 0.0,
+          "data_quality_penalty": 12.0,
+          "reason_codes": [
+            "rr_known",
+            "state=actionable",
+            "daily_plan"
+          ],
+          "reject_reasons": [],
+          "invalidation_rules": [
+            "daily_stop_breached",
+            "daily_setup_freshness_lost"
+          ],
+          "plan": {
+            "trigger_price": 37.41,
+            "entry_low": 37.01,
+            "entry_high": 37.41,
+            "entry_mid": 37.01,
+            "entry_type": "next_session_daily_plan",
+            "stop_price": 37.01,
+            "invalidation_reason": "收盘有效跌破支撑带",
+            "take1": 38.51,
+            "take2": 38.86,
+            "rr_to_take1": 1500000.0,
+            "rr_to_take2": 1850000.0000000014,
+            "signal_valid_until_slot": null,
+            "triggered": false,
+            "invalidation_rules": [
+              "daily_stop_breached",
+              "daily_setup_freshness_lost"
+            ],
+            "trigger_conditions": [
+              "next_session_price_reaches_trigger",
+              "intraday_feature_engine_confirms"
+            ],
+            "confirmation_conditions": [
+              "market_gate_not_blocked",
+              "VWAP/volume/RS confirm after open"
+            ]
+          }
+        }
+      ],
+      "champion_strategy": "S8",
+      "champion_strategy_score": 52.89836188608458,
+      "execution_plan": {
+        "trigger_price": 37.41,
+        "entry_low": 37.01,
+        "entry_high": 37.41,
+        "entry_mid": 37.01,
+        "entry_type": "next_session_daily_plan",
+        "stop_price": 37.01,
+        "invalidation_reason": "收盘有效跌破支撑带",
+        "take1": 38.51,
+        "take2": 38.86,
+        "rr_to_take1": 1500000.0,
+        "rr_to_take2": 1850000.0000000014,
+        "signal_valid_until_slot": null,
+        "triggered": false,
+        "invalidation_rules": [
+          "daily_stop_breached",
+          "daily_setup_freshness_lost"
+        ],
+        "trigger_conditions": [
+          "next_session_price_reaches_trigger",
+          "intraday_feature_engine_confirms"
+        ],
+        "confirmation_conditions": [
+          "market_gate_not_blocked",
+          "VWAP/volume/RS confirm after open"
+        ]
+      },
+      "score_breakdown": {
+        "day_level_alpha_score": 52.89836188608458,
+        "champion_strategy_score": 52.89836188608458,
+        "intraday_exec_score": 45.0,
+        "live_score": 52.89836188608458,
+        "strategy_score": 52.89836188608458,
+        "execution_quality_score": 45.0,
+        "relative_strength_score": 50.0,
+        "volume_confirmation_score": 0.0,
+        "location_score": 50.0,
+        "rr_score": 100.0,
+        "risk_penalty": 0.0,
+        "data_quality_score": 65.0,
+        "market_regime_fit_score": 50.0
+      },
+      "strategy_context": {
+        "champion_strategy": "S8",
+        "champion_strategy_score": 52.89836188608458,
+        "strategy_reason_codes": [
+          "rr_known",
+          "state=actionable",
+          "daily_plan"
+        ],
+        "strategy_reject_reasons": [],
+        "competing_strategies": [
+          {
+            "strategy_name": "S8",
+            "eligible": true,
+            "score": 52.89836188608458,
+            "reason_codes": [
+              "rr_known",
+              "state=actionable",
+              "daily_plan"
+            ],
+            "reject_reasons": []
+          }
+        ]
+      },
+      "risk_pack": {
+        "main_risks": [],
+        "do_not_chase_reason": "This is a next-session plan; wait for intraday trigger confirmation.",
+        "what_would_improve": [
+          "intraday_VWAP_RS_volume_confirm_after_open"
+        ],
+        "what_would_cancel": [
+          "daily_stop_breached",
+          "daily_setup_freshness_lost"
+        ],
+        "data_quality_warnings": [
+          "intraday_features_not_available_in_daily_plan"
+        ],
+        "market_gate_risks": [],
+        "late_session_risk": false,
+        "stop_too_far_risk": false,
+        "rr_not_enough_risk": false
+      },
+      "explain_context": {
+        "symbol": "000792",
+        "name": null,
+        "rank": 3,
+        "recommendation_state": "NEXT_SESSION_PLAN",
+        "action": "WATCH",
+        "can_open": false,
+        "execution_state": "next_session_plan",
+        "artifact_id": "daily_e592dae64fb0",
+        "slot_id": null,
+        "as_of": null,
+        "runtime_market_phase": null,
+        "artifact_market_phase": null,
+        "trigger_price": 37.41,
+        "entry_low": 37.01,
+        "entry_high": 37.41,
+        "entry_type": "next_session_daily_plan",
+        "stop_price": 37.01,
+        "invalidation_reason": "收盘有效跌破支撑带",
+        "take1": 38.51,
+        "take2": 38.86,
+        "rr_to_take1": 1500000.0,
+        "rr_to_take2": 1850000.0000000014,
+        "signal_valid_until_slot": null,
+        "champion_strategy": "S8",
+        "champion_strategy_score": 52.89836188608458,
+        "strategy_reason_codes": [
+          "rr_known",
+          "state=actionable",
+          "daily_plan"
+        ],
+        "strategy_reject_reasons": [],
+        "competing_strategies": [
+          {
+            "strategy_name": "S8",
+            "eligible": true,
+            "score": 52.89836188608458,
+            "reason_codes": [
+              "rr_known",
+              "state=actionable",
+              "daily_plan"
+            ],
+            "reject_reasons": []
+          }
+        ],
+        "day_level_alpha_score": 52.89836188608458,
+        "intraday_exec_score": 45.0,
+        "live_score": 52.89836188608458,
+        "strategy_score": 52.89836188608458,
+        "execution_quality_score": 45.0,
+        "relative_strength_score": 50.0,
+        "volume_confirmation_score": 0.0,
+        "location_score": 50.0,
+        "rr_score": 100.0,
+        "risk_penalty": 0.0,
+        "data_quality_score": 65.0,
+        "last_price": null,
+        "vwap": null,
+        "price_vs_vwap": null,
+        "ema5": null,
+        "ema13": null,
+        "ema34": null,
+        "trend_stack_score": null,
+        "atr5m": null,
+        "realized_vol_recent": null,
+        "compression_score": null,
+        "range_breakout_score": null,
+        "slot_rel_vol": null,
+        "cumulative_volume_run_rate": null,
+        "volume_zscore_by_slot": null,
+        "rs_index": null,
+        "rs_industry": null,
+        "rs_candidate_pool": null,
+        "industry_strength_score": null,
+        "peer_consensus_score": null,
+        "distance_to_entry": null,
+        "distance_to_stop": null,
+        "distance_to_take1": null,
+        "extended_flag": null,
+        "invalidated_flag": null,
+        "main_risks": [],
+        "do_not_chase_reason": "This is a next-session plan; wait for intraday trigger confirmation.",
+        "what_would_improve": [
+          "intraday_VWAP_RS_volume_confirm_after_open"
+        ],
+        "what_would_cancel": [
+          "daily_stop_breached",
+          "daily_setup_freshness_lost"
+        ],
+        "data_quality_warnings": [
+          "intraday_features_not_available_in_daily_plan"
+        ],
+        "market_gate_risks": [],
+        "late_session_risk": false,
+        "stop_too_far_risk": false,
+        "rr_not_enough_risk": false,
+        "why_ranked_here": "rank=3, live_score=52.90, champion=S8",
+        "why_above_next": "000792 live_score 52.90 vs 601318 20.19; strategy S8 vs S3.",
+        "why_below_previous": "000792 live_score 52.90 trails 601899 59.97; compare execution quality, RR and risk penalty.",
+        "rank_change_reason": null,
+        "previous_rank": 2,
+        "current_rank": 3,
+        "raw_bar_summary": [],
+        "score_breakdown": {
+          "day_level_alpha_score": 52.89836188608458,
+          "champion_strategy_score": 52.89836188608458,
+          "intraday_exec_score": 45.0,
+          "live_score": 52.89836188608458,
+          "strategy_score": 52.89836188608458,
+          "execution_quality_score": 45.0,
+          "relative_strength_score": 50.0,
+          "volume_confirmation_score": 0.0,
+          "location_score": 50.0,
+          "rr_score": 100.0,
+          "risk_penalty": 0.0,
+          "data_quality_score": 65.0,
+          "market_regime_fit_score": 50.0
+        },
+        "feature_snapshot": {
+          "symbol": "000792",
+          "slot_status": "DAILY_PLAN",
+          "data_quality_score": 65.0,
+          "bars_complete": false,
+          "provider": "daily"
+        },
+        "risk_pack": {
+          "main_risks": [],
+          "do_not_chase_reason": "This is a next-session plan; wait for intraday trigger confirmation.",
+          "what_would_improve": [
+            "intraday_VWAP_RS_volume_confirm_after_open"
+          ],
+          "what_would_cancel": [
+            "daily_stop_breached",
+            "daily_setup_freshness_lost"
+          ],
+          "data_quality_warnings": [
+            "intraday_features_not_available_in_daily_plan"
+          ],
+          "market_gate_risks": [],
+          "late_session_risk": false,
+          "stop_too_far_risk": false,
+          "rr_not_enough_risk": false
+        }
+      }
+    }
+  ],
+  "evidence_refs": [
+    "daily_e592dae64fb0",
+    "daily_e592dae64fb0"
+  ],
+  "artifact_id": "daily_e592dae64fb0",
+  "slot_id": null,
+  "slot_status": "OK",
+  "publish_allowed": true,
+  "daybook_effective_day": "20260512",
+  "pulse_trade_day": null,
+  "pulse_slot_at": null,
+  "market_phase": "INTRADAY_AM",
+  "data_status": "daily_plan",
+  "run_action": "RECOMMEND",
+  "non_trading": false,
+  "status_reason": "generated 10 picks",
+  "no_trade_reasons": [],
+  "recovery_conditions": [],
+  "data_quality": {
+    "snapshot_age_sec": null,
+    "symbols_expected": 12,
+    "symbols_received": 12,
+    "benchmark_received": true,
+    "provider": "daily",
+    "complete": true,
+    "errors": []
+  },
+  "data_provenance": {
+    "provider": "daily",
+    "breadth_source": "daily",
+    "calendar_source": null,
+    "artifact_id": "daily_e592dae64fb0",
+    "book_version": "daily_e592dae64fb0",
+    "slot_status": "OK",
+    "daily_freshness": {
+      "ready": true,
+      "target_day": "2026-05-11",
+      "stale_symbols": [],
+      "failed_symbols": []
+    }
+  },
+  "gate_state": "ALLOW",
+  "gate_reasons": [
+    "daily_plan"
+  ],
+  "recommendation_state": "NEXT_SESSION_PLAN",
+  "explain_context": {
+    "recommendation_state": "NEXT_SESSION_PLAN",
+    "top_symbols": [
+      "601766",
+      "601899",
+      "000792"
+    ],
+    "artifact_id": "daily_e592dae64fb0",
+    "slot_id": null,
+    "as_of": "2026-05-12T02:42:54.974349+00:00",
+    "market_phase": "INTRADAY_AM"
+  },
+  "decision_evidence_pack": {
+    "top_picks_full_context": [
+      {
+        "symbol": "601766",
+        "name": null,
+        "rank": 1,
+        "recommendation_state": "NEXT_SESSION_PLAN",
+        "action": "WATCH",
+        "can_open": false,
+        "execution_state": "next_session_plan",
+        "artifact_id": "daily_e592dae64fb0",
+        "slot_id": null,
+        "as_of": null,
+        "runtime_market_phase": null,
+        "artifact_market_phase": null,
+        "trigger_price": 6.136666666666667,
+        "entry_low": 5.86,
+        "entry_high": 6.136666666666667,
+        "entry_type": "next_session_daily_plan",
+        "stop_price": 5.86,
+        "invalidation_reason": "收盘有效跌破支撑带",
+        "take1": 6.45,
+        "take2": 6.579000000000001,
+        "rr_to_take1": 589999.9999999999,
+        "rr_to_take2": 719000.0000000003,
+        "signal_valid_until_slot": null,
+        "champion_strategy": "S7",
+        "champion_strategy_score": 90.47324598710115,
+        "strategy_reason_codes": [
+          "rr_known",
+          "state=actionable",
+          "daily_plan"
+        ],
+        "strategy_reject_reasons": [],
+        "competing_strategies": [
+          {
+            "strategy_name": "S7",
+            "eligible": true,
+            "score": 90.47324598710115,
+            "reason_codes": [
+              "rr_known",
+              "state=actionable",
+              "daily_plan"
+            ],
+            "reject_reasons": []
+          }
+        ],
+        "day_level_alpha_score": 90.47324598710115,
+        "intraday_exec_score": 45.0,
+        "live_score": 90.47324598710115,
+        "strategy_score": 90.47324598710115,
+        "execution_quality_score": 45.0,
+        "relative_strength_score": 50.0,
+        "volume_confirmation_score": 0.0,
+        "location_score": 50.0,
+        "rr_score": 100.0,
+        "risk_penalty": 0.0,
+        "data_quality_score": 65.0,
+        "last_price": null,
+        "vwap": null,
+        "price_vs_vwap": null,
+        "ema5": null,
+        "ema13": null,
+        "ema34": null,
+        "trend_stack_score": null,
+        "atr5m": null,
+        "realized_vol_recent": null,
+        "compression_score": null,
+        "range_breakout_score": null,
+        "slot_rel_vol": null,
+        "cumulative_volume_run_rate": null,
+        "volume_zscore_by_slot": null,
+        "rs_index": null,
+        "rs_industry": null,
+        "rs_candidate_pool": null,
+        "industry_strength_score": null,
+        "peer_consensus_score": null,
+        "distance_to_entry": null,
+        "distance_to_stop": null,
+        "distance_to_take1": null,
+        "extended_flag": null,
+        "invalidated_flag": null,
+        "main_risks": [],
+        "do_not_chase_reason": "This is a next-session plan; wait for intraday trigger confirmation.",
+        "what_would_improve": [
+          "intraday_VWAP_RS_volume_confirm_after_open"
+        ],
+        "what_would_cancel": [
+          "daily_stop_breached",
+          "daily_setup_freshness_lost"
+        ],
+        "data_quality_warnings": [
+          "intraday_features_not_available_in_daily_plan"
+        ],
+        "market_gate_risks": [],
+        "late_session_risk": false,
+        "stop_too_far_risk": false,
+        "rr_not_enough_risk": false,
+        "why_ranked_here": "rank=1, live_score=90.47, champion=S7",
+        "why_above_next": "601766 live_score 90.47 vs 601899 59.97; strategy S7 vs S3.",
+        "why_below_previous": null,
+        "rank_change_reason": null,
+        "previous_rank": null,
+        "current_rank": 1,
+        "raw_bar_summary": [],
+        "score_breakdown": {
+          "day_level_alpha_score": 90.47324598710115,
+          "champion_strategy_score": 90.47324598710115,
+          "intraday_exec_score": 45.0,
+          "live_score": 90.47324598710115,
+          "strategy_score": 90.47324598710115,
+          "execution_quality_score": 45.0,
+          "relative_strength_score": 50.0,
+          "volume_confirmation_score": 0.0,
+          "location_score": 50.0,
+          "rr_score": 100.0,
+          "risk_penalty": 0.0,
+          "data_quality_score": 65.0,
+          "market_regime_fit_score": 50.0
+        },
+        "feature_snapshot": {
+          "symbol": "601766",
+          "slot_status": "DAILY_PLAN",
+          "data_quality_score": 65.0,
+          "bars_complete": false,
+          "provider": "daily"
+        },
+        "risk_pack": {
+          "main_risks": [],
+          "do_not_chase_reason": "This is a next-session plan; wait for intraday trigger confirmation.",
+          "what_would_improve": [
+            "intraday_VWAP_RS_volume_confirm_after_open"
+          ],
+          "what_would_cancel": [
+            "daily_stop_breached",
+            "daily_setup_freshness_lost"
+          ],
+          "data_quality_warnings": [
+            "intraday_features_not_available_in_daily_plan"
+          ],
+          "market_gate_risks": [],
+          "late_session_risk": false,
+          "stop_too_far_risk": false,
+          "rr_not_enough_risk": false
+        }
+      },
+      {
+        "symbol": "601899",
+        "name": null,
+        "rank": 2,
+        "recommendation_state": "NEXT_SESSION_PLAN",
+        "action": "WATCH",
+        "can_open": false,
+        "execution_state": "next_session_plan",
+        "artifact_id": "daily_e592dae64fb0",
+        "slot_id": null,
+        "as_of": null,
+        "runtime_market_phase": null,
+        "artifact_market_phase": null,
+        "trigger_price": 35.51606557377049,
+        "entry_low": 33.24,
+        "entry_high": 35.51606557377049,
+        "entry_type": "next_session_daily_plan",
+        "stop_price": 33.24,
+        "invalidation_reason": "收盘有效跌破支撑带",
+        "take1": 37.96,
+        "take2": 39.098800000000004,
+        "rr_to_take1": 4719999.999999999,
+        "rr_to_take2": 5858800.000000003,
+        "signal_valid_until_slot": null,
+        "champion_strategy": "S3",
+        "champion_strategy_score": 59.96902055831428,
+        "strategy_reason_codes": [
+          "rr_known",
+          "state=waiting_pullback",
+          "daily_plan"
+        ],
+        "strategy_reject_reasons": [],
+        "competing_strategies": [
+          {
+            "strategy_name": "S3",
+            "eligible": true,
+            "score": 59.96902055831428,
+            "reason_codes": [
+              "rr_known",
+              "state=waiting_pullback",
+              "daily_plan"
+            ],
+            "reject_reasons": []
+          }
+        ],
+        "day_level_alpha_score": 59.96902055831428,
+        "intraday_exec_score": 45.0,
+        "live_score": 59.96902055831428,
+        "strategy_score": 59.96902055831428,
+        "execution_quality_score": 45.0,
+        "relative_strength_score": 50.0,
+        "volume_confirmation_score": 0.0,
+        "location_score": 50.0,
+        "rr_score": 100.0,
+        "risk_penalty": 0.0,
+        "data_quality_score": 65.0,
+        "last_price": null,
+        "vwap": null,
+        "price_vs_vwap": null,
+        "ema5": null,
+        "ema13": null,
+        "ema34": null,
+        "trend_stack_score": null,
+        "atr5m": null,
+        "realized_vol_recent": null,
+        "compression_score": null,
+        "range_breakout_score": null,
+        "slot_rel_vol": null,
+        "cumulative_volume_run_rate": null,
+        "volume_zscore_by_slot": null,
+        "rs_index": null,
+        "rs_industry": null,
+        "rs_candidate_pool": null,
+        "industry_strength_score": null,
+        "peer_consensus_score": null,
+        "distance_to_entry": null,
+        "distance_to_stop": null,
+        "distance_to_take1": null,
+        "extended_flag": null,
+        "invalidated_flag": null,
+        "main_risks": [],
+        "do_not_chase_reason": "This is a next-session plan; wait for intraday trigger confirmation.",
+        "what_would_improve": [
+          "intraday_VWAP_RS_volume_confirm_after_open"
+        ],
+        "what_would_cancel": [
+          "daily_stop_breached",
+          "daily_setup_freshness_lost"
+        ],
+        "data_quality_warnings": [
+          "intraday_features_not_available_in_daily_plan"
+        ],
+        "market_gate_risks": [],
+        "late_session_risk": false,
+        "stop_too_far_risk": false,
+        "rr_not_enough_risk": false,
+        "why_ranked_here": "rank=2, live_score=59.97, champion=S3",
+        "why_above_next": "601899 live_score 59.97 vs 000792 52.90; strategy S3 vs S8.",
+        "why_below_previous": "601899 live_score 59.97 trails 601766 90.47; compare execution quality, RR and risk penalty.",
+        "rank_change_reason": null,
+        "previous_rank": 1,
+        "current_rank": 2,
+        "raw_bar_summary": [],
+        "score_breakdown": {
+          "day_level_alpha_score": 59.96902055831428,
+          "champion_strategy_score": 59.96902055831428,
+          "intraday_exec_score": 45.0,
+          "live_score": 59.96902055831428,
+          "strategy_score": 59.96902055831428,
+          "execution_quality_score": 45.0,
+          "relative_strength_score": 50.0,
+          "volume_confirmation_score": 0.0,
+          "location_score": 50.0,
+          "rr_score": 100.0,
+          "risk_penalty": 0.0,
+          "data_quality_score": 65.0,
+          "market_regime_fit_score": 50.0
+        },
+        "feature_snapshot": {
+          "symbol": "601899",
+          "slot_status": "DAILY_PLAN",
+          "data_quality_score": 65.0,
+          "bars_complete": false,
+          "provider": "daily"
+        },
+        "risk_pack": {
+          "main_risks": [],
+          "do_not_chase_reason": "This is a next-session plan; wait for intraday trigger confirmation.",
+          "what_would_improve": [
+            "intraday_VWAP_RS_volume_confirm_after_open"
+          ],
+          "what_would_cancel": [
+            "daily_stop_breached",
+            "daily_setup_freshness_lost"
+          ],
+          "data_quality_warnings": [
+            "intraday_features_not_available_in_daily_plan"
+          ],
+          "market_gate_risks": [],
+          "late_session_risk": false,
+          "stop_too_far_risk": false,
+          "rr_not_enough_risk": false
+        }
+      },
+      {
+        "symbol": "000792",
+        "name": null,
+        "rank": 3,
+        "recommendation_state": "NEXT_SESSION_PLAN",
+        "action": "WATCH",
+        "can_open": false,
+        "execution_state": "next_session_plan",
+        "artifact_id": "daily_e592dae64fb0",
+        "slot_id": null,
+        "as_of": null,
+        "runtime_market_phase": null,
+        "artifact_market_phase": null,
+        "trigger_price": 37.41,
+        "entry_low": 37.01,
+        "entry_high": 37.41,
+        "entry_type": "next_session_daily_plan",
+        "stop_price": 37.01,
+        "invalidation_reason": "收盘有效跌破支撑带",
+        "take1": 38.51,
+        "take2": 38.86,
+        "rr_to_take1": 1500000.0,
+        "rr_to_take2": 1850000.0000000014,
+        "signal_valid_until_slot": null,
+        "champion_strategy": "S8",
+        "champion_strategy_score": 52.89836188608458,
+        "strategy_reason_codes": [
+          "rr_known",
+          "state=actionable",
+          "daily_plan"
+        ],
+        "strategy_reject_reasons": [],
+        "competing_strategies": [
+          {
+            "strategy_name": "S8",
+            "eligible": true,
+            "score": 52.89836188608458,
+            "reason_codes": [
+              "rr_known",
+              "state=actionable",
+              "daily_plan"
+            ],
+            "reject_reasons": []
+          }
+        ],
+        "day_level_alpha_score": 52.89836188608458,
+        "intraday_exec_score": 45.0,
+        "live_score": 52.89836188608458,
+        "strategy_score": 52.89836188608458,
+        "execution_quality_score": 45.0,
+        "relative_strength_score": 50.0,
+        "volume_confirmation_score": 0.0,
+        "location_score": 50.0,
+        "rr_score": 100.0,
+        "risk_penalty": 0.0,
+        "data_quality_score": 65.0,
+        "last_price": null,
+        "vwap": null,
+        "price_vs_vwap": null,
+        "ema5": null,
+        "ema13": null,
+        "ema34": null,
+        "trend_stack_score": null,
+        "atr5m": null,
+        "realized_vol_recent": null,
+        "compression_score": null,
+        "range_breakout_score": null,
+        "slot_rel_vol": null,
+        "cumulative_volume_run_rate": null,
+        "volume_zscore_by_slot": null,
+        "rs_index": null,
+        "rs_industry": null,
+        "rs_candidate_pool": null,
+        "industry_strength_score": null,
+        "peer_consensus_score": null,
+        "distance_to_entry": null,
+        "distance_to_stop": null,
+        "distance_to_take1": null,
+        "extended_flag": null,
+        "invalidated_flag": null,
+        "main_risks": [],
+        "do_not_chase_reason": "This is a next-session plan; wait for intraday trigger confirmation.",
+        "what_would_improve": [
+          "intraday_VWAP_RS_volume_confirm_after_open"
+        ],
+        "what_would_cancel": [
+          "daily_stop_breached",
+          "daily_setup_freshness_lost"
+        ],
+        "data_quality_warnings": [
+          "intraday_features_not_available_in_daily_plan"
+        ],
+        "market_gate_risks": [],
+        "late_session_risk": false,
+        "stop_too_far_risk": false,
+        "rr_not_enough_risk": false,
+        "why_ranked_here": "rank=3, live_score=52.90, champion=S8",
+        "why_above_next": "000792 live_score 52.90 vs 601318 20.19; strategy S8 vs S3.",
+        "why_below_previous": "000792 live_score 52.90 trails 601899 59.97; compare execution quality, RR and risk penalty.",
+        "rank_change_reason": null,
+        "previous_rank": 2,
+        "current_rank": 3,
+        "raw_bar_summary": [],
+        "score_breakdown": {
+          "day_level_alpha_score": 52.89836188608458,
+          "champion_strategy_score": 52.89836188608458,
+          "intraday_exec_score": 45.0,
+          "live_score": 52.89836188608458,
+          "strategy_score": 52.89836188608458,
+          "execution_quality_score": 45.0,
+          "relative_strength_score": 50.0,
+          "volume_confirmation_score": 0.0,
+          "location_score": 50.0,
+          "rr_score": 100.0,
+          "risk_penalty": 0.0,
+          "data_quality_score": 65.0,
+          "market_regime_fit_score": 50.0
+        },
+        "feature_snapshot": {
+          "symbol": "000792",
+          "slot_status": "DAILY_PLAN",
+          "data_quality_score": 65.0,
+          "bars_complete": false,
+          "provider": "daily"
+        },
+        "risk_pack": {
+          "main_risks": [],
+          "do_not_chase_reason": "This is a next-session plan; wait for intraday trigger confirmation.",
+          "what_would_improve": [
+            "intraday_VWAP_RS_volume_confirm_after_open"
+          ],
+          "what_would_cancel": [
+            "daily_stop_breached",
+            "daily_setup_freshness_lost"
+          ],
+          "data_quality_warnings": [
+            "intraday_features_not_available_in_daily_plan"
+          ],
+          "market_gate_risks": [],
+          "late_session_risk": false,
+          "stop_too_far_risk": false,
+          "rr_not_enough_risk": false
+        }
+      }
+    ],
+    "nearby_rivals_compact_context": [
+      {
+        "symbol": "601318",
+        "name": null,
+        "rank": 4,
+        "recommendation_state": "NEXT_SESSION_PLAN",
+        "champion_strategy": "S3",
+        "live_score": 20.188658104138042,
+        "champion_strategy_score": 20.188658104138042,
+        "execution_quality_score": 45.0,
+        "rr_score": 100.0,
+        "relative_strength_score": 50.0,
+        "risk_penalty": 0.0,
+        "data_quality_score": 65.0
+      },
+      {
+        "symbol": "603799",
+        "name": null,
+        "rank": 5,
+        "recommendation_state": "NEXT_SESSION_PLAN",
+        "champion_strategy": "S13",
+        "live_score": 3.90630863706658,
+        "champion_strategy_score": 3.90630863706658,
+        "execution_quality_score": 45.0,
+        "rr_score": 100.0,
+        "relative_strength_score": 50.0,
+        "risk_penalty": 0.0,
+        "data_quality_score": 65.0
+      },
+      {
+        "symbol": "600036",
+        "name": null,
+        "rank": 6,
+        "recommendation_state": "NEXT_SESSION_PLAN",
+        "champion_strategy": "S7",
+        "live_score": 3.1102880377415096,
+        "champion_strategy_score": 3.1102880377415096,
+        "execution_quality_score": 45.0,
+        "rr_score": 100.0,
+        "relative_strength_score": 50.0,
+        "risk_penalty": 0.0,
+        "data_quality_score": 65.0
+      }
+    ],
+    "raw_bar_summary": {},
+    "context_policy": {
+      "top_picks": "full explain_context",
+      "nearby_rivals": "compact score and strategy fields",
+      "bars": "last 6-12 five-minute summary bars only"
+    },
+    "gate": {
+      "state": "ALLOW",
+      "score": 100.0,
+      "reasons": [
+        "daily_plan"
+      ],
+      "breadth_score": 0.0,
+      "benchmark_score": 0.0,
+      "liquidity_score": 0.0,
+      "buyable_count": 0,
+      "metrics": {}
+    },
+    "artifact": {
+      "artifact_id": "daily_e592dae64fb0",
+      "slot_id": null,
+      "as_of": "2026-05-12T02:42:54.974349+00:00",
+      "market_phase": "INTRADAY_AM",
+      "slot_status": "OK"
+    }
+  }
+}

@@ -1,0 +1,130 @@
+{
+  "run_id": "run_a38cf73eccf5",
+  "session_id": "llm_acceptance_20260505_c",
+  "book_version": "slot_66097658bbb9",
+  "created_at": "2026-05-05T01:52:52.736344+00:00",
+  "trading_day": "20260505",
+  "regime": {
+    "grade": "C",
+    "reasons": [
+      "全市场均值涨跌幅=0.47%",
+      "上涨占比=52.22%"
+    ],
+    "recovery_conditions": [],
+    "raw": {
+      "breadth": {
+        "mean_chg": 0.4698737071311921,
+        "up_ratio": 0.5222282707312648
+      }
+    }
+  },
+  "tradeable": false,
+  "reason": "日线数据未补齐到 2026-05-04，当前不发布正式推荐",
+  "picks": [],
+  "evidence_refs": [
+    "slot_66097658bbb9",
+    "slot_66097658bbb9"
+  ],
+  "artifact_id": "slot_66097658bbb9",
+  "slot_id": null,
+  "slot_status": "UNAVAILABLE",
+  "publish_allowed": false,
+  "daybook_effective_day": "20260505",
+  "pulse_trade_day": "20260505",
+  "pulse_slot_at": null,
+  "market_phase": "OPEN_NO_FIRST_BAR",
+  "data_status": "unavailable",
+  "run_action": "NO_TRADE",
+  "non_trading": true,
+  "status_reason": "当前不在连续竞价执行时段，以下为下一交易窗口计划。",
+  "no_trade_reasons": [
+    "日线数据未补齐到 2026-05-04，当前不发布正式推荐",
+    "preopen_init"
+  ],
+  "recovery_conditions": [
+    "至少 2 只候选重新回到买点附近",
+    "下一交易窗口再用 5 分钟量价确认",
+    "最新 5 分钟快照恢复完整"
+  ],
+  "data_quality": {
+    "snapshot_age_sec": null,
+    "symbols_expected": 0,
+    "symbols_received": 0,
+    "benchmark_received": false,
+    "provider": "akshare",
+    "complete": false,
+    "errors": [
+      "preopen_init"
+    ]
+  },
+  "data_provenance": {
+    "provider": "akshare",
+    "breadth_source": "akshare",
+    "calendar_source": null,
+    "artifact_id": "slot_66097658bbb9",
+    "book_version": "slot_66097658bbb9",
+    "slot_status": "UNAVAILABLE",
+    "pulse_slot_at": null,
+    "daily_freshness": {
+      "ready": false,
+      "target_day": "2026-05-04",
+      "stale_symbols": [
+        "600089",
+        "603993",
+        "000426",
+        "600406",
+        "601899",
+        "601288",
+        "002594",
+        "600031",
+        "600900",
+        "601318",
+        "601138",
+        "000333",
+        "000725",
+        "600030",
+        "600519",
+        "600584",
+        "600036",
+        "603799",
+        "000063",
+        "603019",
+        "002050",
+        "000977",
+        "002261",
+        "000651",
+        "600549",
+        "603228",
+        "002837",
+        "600276",
+        "002049",
+        "002340",
+        "600887",
+        "600111",
+        "002156",
+        "600879",
+        "002015",
+        "002602",
+        "600392",
+        "603259",
+        "600183",
+        "002415",
+        "002202",
+        "002759",
+        "002436",
+        "603501",
+        "002371",
+        "002475",
+        "002185",
+        "600498",
+        "000831",
+        "000938"
+      ],
+      "failed_symbols": []
+    }
+  },
+  "gate_state": "UNAVAILABLE",
+  "gate_reasons": [
+    "preopen_init"
+  ]
+}

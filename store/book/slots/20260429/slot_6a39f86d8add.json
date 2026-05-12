@@ -1,0 +1,2141 @@
+{
+  "artifact_id": "slot_6a39f86d8add",
+  "slot_id": "20260429_1040",
+  "trade_day": "20260429",
+  "slot_at": "2026-04-29 10:40:00",
+  "market_phase": "POSTCLOSE_PENDING",
+  "slot_status": "DEGRADED",
+  "publish_allowed": false,
+  "daybook_effective_day": "20260429",
+  "gate": {
+    "state": "UNAVAILABLE",
+    "score": 0.0,
+    "reasons": [
+      "data_quality_incomplete"
+    ],
+    "breadth_score": 0.0,
+    "benchmark_score": 0.0,
+    "liquidity_score": 0.0,
+    "buyable_count": 0,
+    "metrics": {}
+  },
+  "tracked_universe": {
+    "reco": [
+      "601601",
+      "600089",
+      "600010",
+      "603993",
+      "002202",
+      "002050",
+      "601899",
+      "600276",
+      "002714",
+      "600549"
+    ],
+    "reserve": [
+      "600584",
+      "603019"
+    ],
+    "portfolio": [],
+    "total": [
+      "601601",
+      "600089",
+      "600010",
+      "603993",
+      "002202",
+      "002050",
+      "601899",
+      "600276",
+      "002714",
+      "600549",
+      "600584",
+      "603019"
+    ]
+  },
+  "board": [
+    {
+      "symbol": "600089",
+      "name": null,
+      "rank": 1,
+      "final_score": 1.425504601953268,
+      "live_score": 65.16794385031865,
+      "daily_rank_score": 0.9090909090909091,
+      "exec_score": 23.169230228111314,
+      "action": "WATCH",
+      "execution_state": "observe",
+      "can_open": false,
+      "stretched": false,
+      "extended": false,
+      "invalidated": false,
+      "signal_type": "observe",
+      "entry_zone": {
+        "low": 26.5,
+        "high": 28.56032786885246,
+        "mid": 26.5
+      },
+      "stop": 26.5,
+      "take": [
+        31.86,
+        32.4972
+      ],
+      "vwap": 2682.065032893085,
+      "orb30_high": 26.93,
+      "orb30_low": 26.48,
+      "rs_index": 0.004841713221601429,
+      "rs_industry": -0.012330164782089335,
+      "slot_rel_vol": 0.7895754861040415,
+      "summary": "逻辑保留，继续等待更清晰的执行信号。",
+      "reason_codes": [
+        "slot_degraded"
+      ],
+      "artifact_id": "slot_6a39f86d8add",
+      "slot_id": "20260429_1040",
+      "style_label": "balanced",
+      "pick": {
+        "symbol": "600089",
+        "name": null,
+        "rank": 1,
+        "strategy_id": "S1",
+        "industry": "dynamic_pool",
+        "thesis": "接近计划买点，执行条件较充分，留意盘中确认。",
+        "entry_plan": {
+          "kind": "zone",
+          "low": 26.5,
+          "high": 28.56032786885246,
+          "price": 26.5
+        },
+        "stop_plan": {
+          "kind": "close_below_support",
+          "price": 26.5,
+          "invalidation": "收盘有效跌破支撑带",
+          "text": "收盘有效跌破支撑带"
+        },
+        "take_profit_plan": {
+          "kind": "targets",
+          "price": 31.86,
+          "targets": [
+            31.86,
+            32.4972
+          ]
+        },
+        "scores": {
+          "final": 1.425504601953268,
+          "candidate": -0.03378573497130497,
+          "champion": 0.3632374055706696,
+          "reward_risk": 6.146666666666666
+        },
+        "risk_flags": [],
+        "why_selected": "相对同组候选综合条件更优。",
+        "why_not_others": [],
+        "evidence_refs": [
+          "600089"
+        ],
+        "style_label": "balanced",
+        "meta": {
+          "candidate_score": -0.03378573497130497,
+          "theme_overlap_score": 0.0,
+          "mainline_overlap_score": 0.0,
+          "reason_codes": [
+            "rr_known",
+            "state=actionable"
+          ],
+          "daily_last_date": "2026-04-29",
+          "daily_freshness_state": "stale"
+        }
+      },
+      "pulse": {
+        "symbol": "600089",
+        "last_bar_at": "2026-04-29T10:40:00",
+        "pulse_score": 0.0,
+        "momentum_state": "up",
+        "stretch_state": "normal",
+        "liquidity_state": "thin",
+        "execution_state": "observe",
+        "invalidated": false,
+        "entry_distance_pct": 0.01811320754716972,
+        "flags": [
+          "slot_rel_vol=0.79"
+        ],
+        "evidence_refs": [
+          "600089"
+        ],
+        "live_score": 65.16794385031865,
+        "daily_rank_score": 0.9090909090909091,
+        "exec_score": 23.169230228111314,
+        "action": "WATCH",
+        "can_open": false,
+        "signal_type": "observe",
+        "entry_zone": {
+          "low": 26.5,
+          "high": 28.56032786885246,
+          "mid": 26.5
+        },
+        "stop": 26.5,
+        "take": [
+          31.86,
+          32.4972
+        ],
+        "vwap": 2682.065032893085,
+        "orb30_high": 26.93,
+        "orb30_low": 26.48,
+        "rs_index": 0.004841713221601429,
+        "rs_industry": -0.012330164782089335,
+        "slot_rel_vol": 0.7895754861040415,
+        "extended": false,
+        "reason_codes": [
+          "slot_degraded"
+        ],
+        "provider": "akshare",
+        "volume_baseline": 19646.0,
+        "trade_day": "20260429",
+        "slot_at": "2026-04-29 10:40:00",
+        "is_stale": false,
+        "stale_reason": null
+      }
+    },
+    {
+      "symbol": "603993",
+      "name": null,
+      "rank": 2,
+      "final_score": 0.7115741332559309,
+      "live_score": 59.28546024481744,
+      "daily_rank_score": 0.7272727272727273,
+      "exec_score": 37.35408198396934,
+      "action": "WATCH",
+      "execution_state": "observe",
+      "can_open": false,
+      "stretched": false,
+      "extended": false,
+      "invalidated": false,
+      "signal_type": "observe",
+      "entry_zone": {
+        "low": 18.24,
+        "high": 20.752131147540982,
+        "mid": 18.24
+      },
+      "stop": 18.24,
+      "take": [
+        23.13,
+        23.8239
+      ],
+      "vwap": 1855.4653977372993,
+      "orb30_high": 18.65,
+      "orb30_low": 18.17,
+      "rs_index": 0.029654036243822013,
+      "rs_industry": 0.012482158240131248,
+      "slot_rel_vol": 0.5977282585122533,
+      "summary": "逻辑保留，继续等待更清晰的执行信号。",
+      "reason_codes": [
+        "slot_degraded"
+      ],
+      "artifact_id": "slot_6a39f86d8add",
+      "slot_id": "20260429_1040",
+      "style_label": "balanced",
+      "pick": {
+        "symbol": "603993",
+        "name": null,
+        "rank": 2,
+        "strategy_id": "S3",
+        "industry": "dynamic_pool",
+        "thesis": "结构候选靠前，但当前执行条件一般，建议观察等待更优位置。",
+        "entry_plan": {
+          "kind": "zone",
+          "low": 18.24,
+          "high": 20.752131147540982,
+          "price": 18.24
+        },
+        "stop_plan": {
+          "kind": "close_below_support",
+          "price": 18.24,
+          "invalidation": "收盘有效跌破支撑带",
+          "text": "收盘有效跌破支撑带"
+        },
+        "take_profit_plan": {
+          "kind": "targets",
+          "price": 23.13,
+          "targets": [
+            23.13,
+            23.8239
+          ]
+        },
+        "scores": {
+          "final": 0.7115741332559309,
+          "candidate": -0.0642167445267824,
+          "champion": 0.37106438667439207,
+          "reward_risk": 4.147368421052617
+        },
+        "risk_flags": [],
+        "why_selected": "相对同组候选综合条件更优。",
+        "why_not_others": [],
+        "evidence_refs": [
+          "603993"
+        ],
+        "style_label": "balanced",
+        "meta": {
+          "candidate_score": -0.0642167445267824,
+          "theme_overlap_score": 0.0,
+          "mainline_overlap_score": 0.0,
+          "reason_codes": [
+            "rr_known",
+            "state=waiting_pullback"
+          ],
+          "daily_last_date": "2026-04-29",
+          "daily_freshness_state": "stale"
+        }
+      },
+      "pulse": {
+        "symbol": "603993",
+        "last_bar_at": "2026-04-29T10:40:00",
+        "pulse_score": 0.0,
+        "momentum_state": "up",
+        "stretch_state": "normal",
+        "liquidity_state": "thin",
+        "execution_state": "observe",
+        "invalidated": false,
+        "entry_distance_pct": 0.027960526315789602,
+        "flags": [
+          "slot_rel_vol=0.60"
+        ],
+        "evidence_refs": [
+          "603993"
+        ],
+        "live_score": 59.28546024481744,
+        "daily_rank_score": 0.7272727272727273,
+        "exec_score": 37.35408198396934,
+        "action": "WATCH",
+        "can_open": false,
+        "signal_type": "observe",
+        "entry_zone": {
+          "low": 18.24,
+          "high": 20.752131147540982,
+          "mid": 18.24
+        },
+        "stop": 18.24,
+        "take": [
+          23.13,
+          23.8239
+        ],
+        "vwap": 1855.4653977372993,
+        "orb30_high": 18.65,
+        "orb30_low": 18.17,
+        "rs_index": 0.029654036243822013,
+        "rs_industry": 0.012482158240131248,
+        "slot_rel_vol": 0.5977282585122533,
+        "extended": false,
+        "reason_codes": [
+          "slot_degraded"
+        ],
+        "provider": "akshare",
+        "volume_baseline": 36888.0,
+        "trade_day": "20260429",
+        "slot_at": "2026-04-29 10:40:00",
+        "is_stale": false,
+        "stale_reason": null
+      }
+    },
+    {
+      "symbol": "601601",
+      "name": null,
+      "rank": 3,
+      "final_score": 42.03036992653111,
+      "live_score": 50.24002288571355,
+      "daily_rank_score": 1.0,
+      "exec_score": -30.947308195490642,
+      "action": "INVALID",
+      "execution_state": "invalidated",
+      "can_open": false,
+      "stretched": false,
+      "extended": false,
+      "invalidated": true,
+      "signal_type": "invalidated",
+      "entry_zone": {
+        "low": 37.59,
+        "high": 40.32393442622951,
+        "mid": 37.59
+      },
+      "stop": 37.59,
+      "take": [
+        43.9,
+        45.217
+      ],
+      "vwap": 3722.187300107295,
+      "orb30_high": 37.68,
+      "orb30_low": 36.5,
+      "rs_index": 0.012328767123287676,
+      "rs_industry": -0.004843110880403088,
+      "slot_rel_vol": 1.8140048154093098,
+      "summary": "价格已经跌破失效条件，这个计划先取消。",
+      "reason_codes": [
+        "slot_degraded"
+      ],
+      "artifact_id": "slot_6a39f86d8add",
+      "slot_id": "20260429_1040",
+      "style_label": "balanced",
+      "pick": {
+        "symbol": "601601",
+        "name": null,
+        "rank": 3,
+        "strategy_id": "S3",
+        "industry": "dynamic_pool",
+        "thesis": "接近计划买点，执行条件较充分，留意盘中确认。",
+        "entry_plan": {
+          "kind": "zone",
+          "low": 37.59,
+          "high": 40.32393442622951,
+          "price": 37.59
+        },
+        "stop_plan": {
+          "kind": "close_below_support",
+          "price": 37.59,
+          "invalidation": "收盘有效跌破支撑带",
+          "text": "收盘有效跌破支撑带"
+        },
+        "take_profit_plan": {
+          "kind": "targets",
+          "price": 43.9,
+          "targets": [
+            43.9,
+            45.217
+          ]
+        },
+        "scores": {
+          "final": 42.03036992653111,
+          "candidate": -0.18510728838847884,
+          "champion": 0.39664234943542903,
+          "reward_risk": 209.333333333375
+        },
+        "risk_flags": [],
+        "why_selected": "相对同组候选综合条件更优。",
+        "why_not_others": [],
+        "evidence_refs": [
+          "601601"
+        ],
+        "style_label": "balanced",
+        "meta": {
+          "candidate_score": -0.18510728838847884,
+          "theme_overlap_score": 0.0,
+          "mainline_overlap_score": 0.0,
+          "reason_codes": [
+            "rr_known",
+            "state=actionable"
+          ],
+          "daily_last_date": "2026-04-29",
+          "daily_freshness_state": "stale"
+        }
+      },
+      "pulse": {
+        "symbol": "601601",
+        "last_bar_at": "2026-04-29T10:40:00",
+        "pulse_score": 0.0,
+        "momentum_state": "up",
+        "stretch_state": "normal",
+        "liquidity_state": "good",
+        "execution_state": "invalidated",
+        "invalidated": true,
+        "entry_distance_pct": -0.017025804735301908,
+        "flags": [
+          "slot_rel_vol=1.81"
+        ],
+        "evidence_refs": [
+          "601601"
+        ],
+        "live_score": 50.24002288571355,
+        "daily_rank_score": 1.0,
+        "exec_score": -30.947308195490642,
+        "action": "INVALID",
+        "can_open": false,
+        "signal_type": "invalidated",
+        "entry_zone": {
+          "low": 37.59,
+          "high": 40.32393442622951,
+          "mid": 37.59
+        },
+        "stop": 37.59,
+        "take": [
+          43.9,
+          45.217
+        ],
+        "vwap": 3722.187300107295,
+        "orb30_high": 37.68,
+        "orb30_low": 36.5,
+        "rs_index": 0.012328767123287676,
+        "rs_industry": -0.004843110880403088,
+        "slot_rel_vol": 1.8140048154093098,
+        "extended": false,
+        "reason_codes": [
+          "slot_degraded"
+        ],
+        "provider": "akshare",
+        "volume_baseline": 4984.0,
+        "trade_day": "20260429",
+        "slot_at": "2026-04-29 10:40:00",
+        "is_stale": false,
+        "stale_reason": null
+      }
+    },
+    {
+      "symbol": "002202",
+      "name": null,
+      "rank": 4,
+      "final_score": 0.6964579323549941,
+      "live_score": 50.158744287423254,
+      "daily_rank_score": 0.6363636363636364,
+      "exec_score": 28.168944297046842,
+      "action": "WATCH",
+      "execution_state": "observe",
+      "can_open": false,
+      "stretched": false,
+      "extended": false,
+      "invalidated": false,
+      "signal_type": "observe",
+      "entry_zone": {
+        "low": 25.02,
+        "high": 25.39,
+        "mid": 25.02
+      },
+      "stop": 25.02,
+      "take": [
+        27.58,
+        27.72
+      ],
+      "vwap": 2552.06120766895,
+      "orb30_high": 25.62,
+      "orb30_low": 25.07,
+      "rs_index": 0.014665081252477341,
+      "rs_industry": -0.0025067967512134234,
+      "slot_rel_vol": 0.6826450152236708,
+      "summary": "逻辑保留，继续等待更清晰的执行信号。",
+      "reason_codes": [
+        "slot_degraded"
+      ],
+      "artifact_id": "slot_6a39f86d8add",
+      "slot_id": "20260429_1040",
+      "style_label": "balanced",
+      "pick": {
+        "symbol": "002202",
+        "name": null,
+        "rank": 4,
+        "strategy_id": "S13",
+        "industry": "dynamic_pool",
+        "thesis": "接近计划买点，执行条件较充分，留意盘中确认。",
+        "entry_plan": {
+          "kind": "zone",
+          "low": 25.02,
+          "high": 25.39,
+          "price": 25.02
+        },
+        "stop_plan": {
+          "kind": "close_below_support",
+          "price": 25.02,
+          "invalidation": "收盘有效跌破支撑带",
+          "text": "收盘有效跌破支撑带"
+        },
+        "take_profit_plan": {
+          "kind": "targets",
+          "price": 27.58,
+          "targets": [
+            27.58,
+            27.72
+          ]
+        },
+        "scores": {
+          "final": 0.6964579323549941,
+          "candidate": -0.07011721496668925,
+          "champion": 0.3527605536102747,
+          "reward_risk": 2.6056338028168953
+        },
+        "risk_flags": [],
+        "why_selected": "相对同组候选综合条件更优。",
+        "why_not_others": [],
+        "evidence_refs": [
+          "002202"
+        ],
+        "style_label": "balanced",
+        "meta": {
+          "candidate_score": -0.07011721496668925,
+          "theme_overlap_score": 0.0,
+          "mainline_overlap_score": 0.0,
+          "reason_codes": [
+            "rr_known",
+            "state=actionable"
+          ],
+          "daily_last_date": "2026-04-29",
+          "daily_freshness_state": "stale"
+        }
+      },
+      "pulse": {
+        "symbol": "002202",
+        "last_bar_at": "2026-04-29T10:40:00",
+        "pulse_score": 0.0,
+        "momentum_state": "up",
+        "stretch_state": "normal",
+        "liquidity_state": "thin",
+        "execution_state": "observe",
+        "invalidated": false,
+        "entry_distance_pct": 0.0231814548361311,
+        "flags": [
+          "slot_rel_vol=0.68"
+        ],
+        "evidence_refs": [
+          "002202"
+        ],
+        "live_score": 50.158744287423254,
+        "daily_rank_score": 0.6363636363636364,
+        "exec_score": 28.168944297046842,
+        "action": "WATCH",
+        "can_open": false,
+        "signal_type": "observe",
+        "entry_zone": {
+          "low": 25.02,
+          "high": 25.39,
+          "mid": 25.02
+        },
+        "stop": 25.02,
+        "take": [
+          27.58,
+          27.72
+        ],
+        "vwap": 2552.06120766895,
+        "orb30_high": 25.62,
+        "orb30_low": 25.07,
+        "rs_index": 0.014665081252477341,
+        "rs_industry": -0.0025067967512134234,
+        "slot_rel_vol": 0.6826450152236708,
+        "extended": false,
+        "reason_codes": [
+          "slot_degraded"
+        ],
+        "provider": "akshare",
+        "volume_baseline": 25618.0,
+        "trade_day": "20260429",
+        "slot_at": "2026-04-29 10:40:00",
+        "is_stale": false,
+        "stale_reason": null
+      }
+    },
+    {
+      "symbol": "600010",
+      "name": null,
+      "rank": 5,
+      "final_score": 1.2932292179675686,
+      "live_score": 44.39281499085183,
+      "daily_rank_score": 0.8181818181818181,
+      "exec_score": -16.66962562216024,
+      "action": "INVALID",
+      "execution_state": "invalidated",
+      "can_open": false,
+      "stretched": false,
+      "extended": false,
+      "invalidated": true,
+      "signal_type": "invalidated",
+      "entry_zone": {
+        "low": 2.74,
+        "high": 2.82,
+        "mid": 2.74
+      },
+      "stop": 2.74,
+      "take": [
+        2.87,
+        2.88
+      ],
+      "vwap": 266.9442819262248,
+      "orb30_high": 2.73,
+      "orb30_low": 2.56,
+      "rs_index": 0.050000000000000044,
+      "rs_industry": 0.03282812199630928,
+      "slot_rel_vol": 0.6158865075992148,
+      "summary": "价格已经跌破失效条件，这个计划先取消。",
+      "reason_codes": [
+        "slot_degraded"
+      ],
+      "artifact_id": "slot_6a39f86d8add",
+      "slot_id": "20260429_1040",
+      "style_label": "balanced",
+      "pick": {
+        "symbol": "600010",
+        "name": null,
+        "rank": 5,
+        "strategy_id": "S8",
+        "industry": "dynamic_pool",
+        "thesis": "接近计划买点，执行条件较充分，留意盘中确认。",
+        "entry_plan": {
+          "kind": "zone",
+          "low": 2.74,
+          "high": 2.82,
+          "price": 2.74
+        },
+        "stop_plan": {
+          "kind": "close_below_support",
+          "price": 2.74,
+          "invalidation": "收盘有效跌破支撑带",
+          "text": "收盘有效跌破支撑带"
+        },
+        "take_profit_plan": {
+          "kind": "targets",
+          "price": 2.87,
+          "targets": [
+            2.87,
+            2.88
+          ]
+        },
+        "scores": {
+          "final": 1.2932292179675686,
+          "candidate": -0.031848927733975366,
+          "champion": 0.34690450350768376,
+          "reward_risk": 5.500000000000133
+        },
+        "risk_flags": [],
+        "why_selected": "相对同组候选综合条件更优。",
+        "why_not_others": [],
+        "evidence_refs": [
+          "600010"
+        ],
+        "style_label": "balanced",
+        "meta": {
+          "candidate_score": -0.031848927733975366,
+          "theme_overlap_score": 0.0,
+          "mainline_overlap_score": 0.0,
+          "reason_codes": [
+            "rr_known",
+            "state=actionable"
+          ],
+          "daily_last_date": "2026-04-29",
+          "daily_freshness_state": "stale"
+        }
+      },
+      "pulse": {
+        "symbol": "600010",
+        "last_bar_at": "2026-04-29T10:40:00",
+        "pulse_score": 0.0,
+        "momentum_state": "up",
+        "stretch_state": "normal",
+        "liquidity_state": "thin",
+        "execution_state": "invalidated",
+        "invalidated": true,
+        "entry_distance_pct": -0.0036496350364964014,
+        "flags": [
+          "slot_rel_vol=0.62"
+        ],
+        "evidence_refs": [
+          "600010"
+        ],
+        "live_score": 44.39281499085183,
+        "daily_rank_score": 0.8181818181818181,
+        "exec_score": -16.66962562216024,
+        "action": "INVALID",
+        "can_open": false,
+        "signal_type": "invalidated",
+        "entry_zone": {
+          "low": 2.74,
+          "high": 2.82,
+          "mid": 2.74
+        },
+        "stop": 2.74,
+        "take": [
+          2.87,
+          2.88
+        ],
+        "vwap": 266.9442819262248,
+        "orb30_high": 2.73,
+        "orb30_low": 2.56,
+        "rs_index": 0.050000000000000044,
+        "rs_industry": 0.03282812199630928,
+        "slot_rel_vol": 0.6158865075992148,
+        "extended": false,
+        "reason_codes": [
+          "slot_degraded"
+        ],
+        "provider": "akshare",
+        "volume_baseline": 123532.5,
+        "trade_day": "20260429",
+        "slot_at": "2026-04-29 10:40:00",
+        "is_stale": false,
+        "stale_reason": null
+      }
+    },
+    {
+      "symbol": "002050",
+      "name": null,
+      "rank": 6,
+      "final_score": 0.5806641647460613,
+      "live_score": 41.3930878981887,
+      "daily_rank_score": 0.5454545454545454,
+      "exec_score": 19.933963368439176,
+      "action": "WATCH",
+      "execution_state": "observe",
+      "can_open": false,
+      "stretched": false,
+      "extended": false,
+      "invalidated": false,
+      "signal_type": "observe",
+      "entry_zone": {
+        "low": 42.57,
+        "high": 47.292786885245896,
+        "mid": 42.57
+      },
+      "stop": 42.57,
+      "take": [
+        52.67,
+        53.723400000000005
+      ],
+      "vwap": 4423.301217172861,
+      "orb30_high": 44.55,
+      "orb30_low": 43.78,
+      "rs_index": 0.008656036446469395,
+      "rs_industry": -0.00851584155722137,
+      "slot_rel_vol": 0.5926029700196134,
+      "summary": "逻辑保留，继续等待更清晰的执行信号。",
+      "reason_codes": [
+        "slot_degraded"
+      ],
+      "artifact_id": "slot_6a39f86d8add",
+      "slot_id": "20260429_1040",
+      "style_label": "stable",
+      "pick": {
+        "symbol": "002050",
+        "name": null,
+        "rank": 6,
+        "strategy_id": "S1",
+        "industry": "dynamic_pool",
+        "thesis": "结构候选靠前，但当前执行条件一般，建议观察等待更优位置。",
+        "entry_plan": {
+          "kind": "zone",
+          "low": 42.57,
+          "high": 47.292786885245896,
+          "price": 42.57
+        },
+        "stop_plan": {
+          "kind": "close_below_support",
+          "price": 42.57,
+          "invalidation": "收盘有效跌破支撑带",
+          "text": "收盘有效跌破支撑带"
+        },
+        "take_profit_plan": {
+          "kind": "targets",
+          "price": 52.67,
+          "targets": [
+            52.67,
+            53.723400000000005
+          ]
+        },
+        "scores": {
+          "final": 0.5806641647460613,
+          "candidate": -0.09845643988394148,
+          "champion": 0.3955486731428588,
+          "reward_risk": 3.4888888888888894
+        },
+        "risk_flags": [],
+        "why_selected": "相对同组候选综合条件更优。",
+        "why_not_others": [],
+        "evidence_refs": [
+          "002050"
+        ],
+        "style_label": "stable",
+        "meta": {
+          "candidate_score": -0.09845643988394148,
+          "theme_overlap_score": 0.0,
+          "mainline_overlap_score": 0.0,
+          "reason_codes": [
+            "rr_known",
+            "state=waiting_pullback"
+          ],
+          "daily_last_date": "2026-04-29",
+          "daily_freshness_state": "stale"
+        }
+      },
+      "pulse": {
+        "symbol": "002050",
+        "last_bar_at": "2026-04-29T10:40:00",
+        "pulse_score": 0.0,
+        "momentum_state": "up",
+        "stretch_state": "normal",
+        "liquidity_state": "thin",
+        "execution_state": "observe",
+        "invalidated": false,
+        "entry_distance_pct": 0.04016913319238902,
+        "flags": [
+          "slot_rel_vol=0.59"
+        ],
+        "evidence_refs": [
+          "002050"
+        ],
+        "live_score": 41.3930878981887,
+        "daily_rank_score": 0.5454545454545454,
+        "exec_score": 19.933963368439176,
+        "action": "WATCH",
+        "can_open": false,
+        "signal_type": "observe",
+        "entry_zone": {
+          "low": 42.57,
+          "high": 47.292786885245896,
+          "mid": 42.57
+        },
+        "stop": 42.57,
+        "take": [
+          52.67,
+          53.723400000000005
+        ],
+        "vwap": 4423.301217172861,
+        "orb30_high": 44.55,
+        "orb30_low": 43.78,
+        "rs_index": 0.008656036446469395,
+        "rs_industry": -0.00851584155722137,
+        "slot_rel_vol": 0.5926029700196134,
+        "extended": false,
+        "reason_codes": [
+          "slot_degraded"
+        ],
+        "provider": "akshare",
+        "volume_baseline": 10707.0,
+        "trade_day": "20260429",
+        "slot_at": "2026-04-29 10:40:00",
+        "is_stale": false,
+        "stale_reason": null
+      }
+    },
+    {
+      "symbol": "601899",
+      "name": null,
+      "rank": 7,
+      "final_score": 0.5488237801774773,
+      "live_score": 38.73686054404789,
+      "daily_rank_score": 0.4545454545454546,
+      "exec_score": 27.776427269025536,
+      "action": "WATCH",
+      "execution_state": "observe",
+      "can_open": false,
+      "stretched": false,
+      "extended": false,
+      "invalidated": false,
+      "signal_type": "observe",
+      "entry_zone": {
+        "low": 32.2,
+        "high": 36.14524590163934,
+        "mid": 32.2
+      },
+      "stop": 32.2,
+      "take": [
+        40.61,
+        41.422200000000004
+      ],
+      "vwap": 3285.4875679073216,
+      "orb30_high": 32.95,
+      "orb30_low": 32.51,
+      "rs_index": 0.017204301075268935,
+      "rs_industry": 0.00003242307157817065,
+      "slot_rel_vol": 0.6297274789650519,
+      "summary": "逻辑保留，继续等待更清晰的执行信号。",
+      "reason_codes": [
+        "slot_degraded"
+      ],
+      "artifact_id": "slot_6a39f86d8add",
+      "slot_id": "20260429_1040",
+      "style_label": "stable",
+      "pick": {
+        "symbol": "601899",
+        "name": null,
+        "rank": 7,
+        "strategy_id": "S1",
+        "industry": "dynamic_pool",
+        "thesis": "结构候选靠前，但当前执行条件一般，建议观察等待更优位置。",
+        "entry_plan": {
+          "kind": "zone",
+          "low": 32.2,
+          "high": 36.14524590163934,
+          "price": 32.2
+        },
+        "stop_plan": {
+          "kind": "close_below_support",
+          "price": 32.2,
+          "invalidation": "收盘有效跌破支撑带",
+          "text": "收盘有效跌破支撑带"
+        },
+        "take_profit_plan": {
+          "kind": "targets",
+          "price": 40.61,
+          "targets": [
+            40.61,
+            41.422200000000004
+          ]
+        },
+        "scores": {
+          "final": 0.5488237801774773,
+          "candidate": -0.04833258116091416,
+          "champion": 0.3636565917218125,
+          "reward_risk": 3.335051546391756
+        },
+        "risk_flags": [],
+        "why_selected": "相对同组候选综合条件更优。",
+        "why_not_others": [],
+        "evidence_refs": [
+          "601899"
+        ],
+        "style_label": "stable",
+        "meta": {
+          "candidate_score": -0.04833258116091416,
+          "theme_overlap_score": 0.0,
+          "mainline_overlap_score": 0.0,
+          "reason_codes": [
+            "rr_known",
+            "state=waiting_pullback"
+          ],
+          "daily_last_date": "2026-04-29",
+          "daily_freshness_state": "stale"
+        }
+      },
+      "pulse": {
+        "symbol": "601899",
+        "last_bar_at": "2026-04-29T10:40:00",
+        "pulse_score": 0.0,
+        "momentum_state": "up",
+        "stretch_state": "normal",
+        "liquidity_state": "thin",
+        "execution_state": "observe",
+        "invalidated": false,
+        "entry_distance_pct": 0.02826086956521734,
+        "flags": [
+          "slot_rel_vol=0.63"
+        ],
+        "evidence_refs": [
+          "601899"
+        ],
+        "live_score": 38.73686054404789,
+        "daily_rank_score": 0.4545454545454546,
+        "exec_score": 27.776427269025536,
+        "action": "WATCH",
+        "can_open": false,
+        "signal_type": "observe",
+        "entry_zone": {
+          "low": 32.2,
+          "high": 36.14524590163934,
+          "mid": 32.2
+        },
+        "stop": 32.2,
+        "take": [
+          40.61,
+          41.422200000000004
+        ],
+        "vwap": 3285.4875679073216,
+        "orb30_high": 32.95,
+        "orb30_low": 32.51,
+        "rs_index": 0.017204301075268935,
+        "rs_industry": 0.00003242307157817065,
+        "slot_rel_vol": 0.6297274789650519,
+        "extended": false,
+        "reason_codes": [
+          "slot_degraded"
+        ],
+        "provider": "akshare",
+        "volume_baseline": 34823.0,
+        "trade_day": "20260429",
+        "slot_at": "2026-04-29 10:40:00",
+        "is_stale": false,
+        "stale_reason": null
+      }
+    },
+    {
+      "symbol": "002714",
+      "name": null,
+      "rank": 8,
+      "final_score": 0.31543181467396114,
+      "live_score": 31.27710374518955,
+      "daily_rank_score": 0.2727272727272727,
+      "exec_score": 37.81056009499642,
+      "action": "WATCH",
+      "execution_state": "observe",
+      "can_open": false,
+      "stretched": false,
+      "extended": false,
+      "invalidated": false,
+      "signal_type": "observe",
+      "entry_zone": {
+        "low": 43.3,
+        "high": 43.8,
+        "mid": 43.3
+      },
+      "stop": 43.3,
+      "take": [
+        45.48,
+        45.78
+      ],
+      "vwap": 4442.622815450279,
+      "orb30_high": 45.39,
+      "orb30_low": 43.39,
+      "rs_index": 0.015883977900552626,
+      "rs_industry": -0.0012879001031381385,
+      "slot_rel_vol": 1.590533262535083,
+      "summary": "逻辑保留，继续等待更清晰的执行信号。",
+      "reason_codes": [
+        "slot_degraded"
+      ],
+      "artifact_id": "slot_6a39f86d8add",
+      "slot_id": "20260429_1040",
+      "style_label": "stable",
+      "pick": {
+        "symbol": "002714",
+        "name": null,
+        "rank": 8,
+        "strategy_id": "S8",
+        "industry": "dynamic_pool",
+        "thesis": "接近计划买点，执行条件较充分，留意盘中确认。",
+        "entry_plan": {
+          "kind": "zone",
+          "low": 43.3,
+          "high": 43.8,
+          "price": 43.3
+        },
+        "stop_plan": {
+          "kind": "close_below_support",
+          "price": 43.3,
+          "invalidation": "收盘有效跌破支撑带",
+          "text": "收盘有效跌破支撑带"
+        },
+        "take_profit_plan": {
+          "kind": "targets",
+          "price": 45.48,
+          "targets": [
+            45.48,
+            45.78
+          ]
+        },
+        "scores": {
+          "final": 0.31543181467396114,
+          "candidate": -0.07433416063263587,
+          "champion": 0.37289565432549776,
+          "reward_risk": 0.6515151515151509
+        },
+        "risk_flags": [],
+        "why_selected": "相对同组候选综合条件更优。",
+        "why_not_others": [],
+        "evidence_refs": [
+          "002714"
+        ],
+        "style_label": "stable",
+        "meta": {
+          "candidate_score": -0.07433416063263587,
+          "theme_overlap_score": 0.0,
+          "mainline_overlap_score": 0.0,
+          "reason_codes": [
+            "rr_known",
+            "state=actionable"
+          ],
+          "daily_last_date": "2026-04-29",
+          "daily_freshness_state": "stale"
+        }
+      },
+      "pulse": {
+        "symbol": "002714",
+        "last_bar_at": "2026-04-29T10:40:00",
+        "pulse_score": 0.0,
+        "momentum_state": "up",
+        "stretch_state": "normal",
+        "liquidity_state": "good",
+        "execution_state": "observe",
+        "invalidated": false,
+        "entry_distance_pct": 0.019168591224018705,
+        "flags": [
+          "slot_rel_vol=1.59"
+        ],
+        "evidence_refs": [
+          "002714"
+        ],
+        "live_score": 31.27710374518955,
+        "daily_rank_score": 0.2727272727272727,
+        "exec_score": 37.81056009499642,
+        "action": "WATCH",
+        "can_open": false,
+        "signal_type": "observe",
+        "entry_zone": {
+          "low": 43.3,
+          "high": 43.8,
+          "mid": 43.3
+        },
+        "stop": 43.3,
+        "take": [
+          45.48,
+          45.78
+        ],
+        "vwap": 4442.622815450279,
+        "orb30_high": 45.39,
+        "orb30_low": 43.39,
+        "rs_index": 0.015883977900552626,
+        "rs_industry": -0.0012879001031381385,
+        "slot_rel_vol": 1.590533262535083,
+        "extended": false,
+        "reason_codes": [
+          "slot_degraded"
+        ],
+        "provider": "akshare",
+        "volume_baseline": 6591.5,
+        "trade_day": "20260429",
+        "slot_at": "2026-04-29 10:40:00",
+        "is_stale": false,
+        "stale_reason": null
+      }
+    },
+    {
+      "symbol": "600276",
+      "name": null,
+      "rank": 9,
+      "final_score": 0.5294383797291968,
+      "live_score": 8.42578825201436,
+      "daily_rank_score": 0.36363636363636365,
+      "exec_score": -37.1570165616847,
+      "action": "INVALID",
+      "execution_state": "invalidated",
+      "can_open": false,
+      "stretched": false,
+      "extended": false,
+      "invalidated": true,
+      "signal_type": "invalidated",
+      "entry_zone": {
+        "low": 54.329973306177386,
+        "high": 54.878760915330695,
+        "mid": 54.329973306177386
+      },
+      "stop": 54.329973306177386,
+      "take": [
+        55.97633613363731,
+        56.52512374279062
+      ],
+      "vwap": 5448.219720439749,
+      "orb30_high": 54.98,
+      "orb30_low": 54.2,
+      "rs_index": -0.009666241108882034,
+      "rs_industry": -0.0268381191125728,
+      "slot_rel_vol": 1.422470502244962,
+      "summary": "价格已经跌破失效条件，这个计划先取消。",
+      "reason_codes": [
+        "slot_degraded"
+      ],
+      "artifact_id": "slot_6a39f86d8add",
+      "slot_id": "20260429_1040",
+      "style_label": "stable",
+      "pick": {
+        "symbol": "600276",
+        "name": null,
+        "rank": 9,
+        "strategy_id": "S12",
+        "industry": "dynamic_pool",
+        "thesis": "接近计划买点，执行条件较充分，留意盘中确认。",
+        "entry_plan": {
+          "kind": "zone",
+          "low": 54.329973306177386,
+          "high": 54.878760915330695,
+          "price": 54.329973306177386
+        },
+        "stop_plan": {
+          "kind": "close_below_support",
+          "price": 54.329973306177386,
+          "invalidation": "收盘有效跌破支撑带",
+          "text": "收盘有效跌破支撑带"
+        },
+        "take_profit_plan": {
+          "kind": "targets",
+          "price": 55.97633613363731,
+          "targets": [
+            55.97633613363731,
+            56.52512374279062
+          ]
+        },
+        "scores": {
+          "final": 0.5294383797291968,
+          "candidate": -0.07017126933611041,
+          "champion": 0.4370500640891218,
+          "reward_risk": 1.4943882465189962
+        },
+        "risk_flags": [],
+        "why_selected": "相对同组候选综合条件更优。",
+        "why_not_others": [],
+        "evidence_refs": [
+          "600276"
+        ],
+        "style_label": "stable",
+        "meta": {
+          "candidate_score": -0.07017126933611041,
+          "theme_overlap_score": 0.0,
+          "mainline_overlap_score": 0.0,
+          "reason_codes": [
+            "rr_known",
+            "state=actionable"
+          ],
+          "daily_last_date": "2026-04-29",
+          "daily_freshness_state": "stale"
+        }
+      },
+      "pulse": {
+        "symbol": "600276",
+        "last_bar_at": "2026-04-29T10:40:00",
+        "pulse_score": 0.0,
+        "momentum_state": "down",
+        "stretch_state": "normal",
+        "liquidity_state": "good",
+        "execution_state": "invalidated",
+        "invalidated": true,
+        "entry_distance_pct": -0.0005516900589749296,
+        "flags": [
+          "slot_rel_vol=1.42"
+        ],
+        "evidence_refs": [
+          "600276"
+        ],
+        "live_score": 8.42578825201436,
+        "daily_rank_score": 0.36363636363636365,
+        "exec_score": -37.1570165616847,
+        "action": "INVALID",
+        "can_open": false,
+        "signal_type": "invalidated",
+        "entry_zone": {
+          "low": 54.329973306177386,
+          "high": 54.878760915330695,
+          "mid": 54.329973306177386
+        },
+        "stop": 54.329973306177386,
+        "take": [
+          55.97633613363731,
+          56.52512374279062
+        ],
+        "vwap": 5448.219720439749,
+        "orb30_high": 54.98,
+        "orb30_low": 54.2,
+        "rs_index": -0.009666241108882034,
+        "rs_industry": -0.0268381191125728,
+        "slot_rel_vol": 1.422470502244962,
+        "extended": false,
+        "reason_codes": [
+          "slot_degraded"
+        ],
+        "provider": "akshare",
+        "volume_baseline": 9577.0,
+        "trade_day": "20260429",
+        "slot_at": "2026-04-29 10:40:00",
+        "is_stale": false,
+        "stale_reason": null
+      }
+    },
+    {
+      "symbol": "600549",
+      "name": null,
+      "rank": 10,
+      "final_score": 0.296757230653117,
+      "live_score": -0.6196941209305793,
+      "daily_rank_score": 0.18181818181818177,
+      "exec_score": -31.295845772783807,
+      "action": "INVALID",
+      "execution_state": "invalidated",
+      "can_open": false,
+      "stretched": false,
+      "extended": false,
+      "invalidated": true,
+      "signal_type": "invalidated",
+      "entry_zone": {
+        "low": 58.370895000000004,
+        "high": 58.9605,
+        "mid": 58.370895000000004
+      },
+      "stop": 58.370895000000004,
+      "take": [
+        60.13971,
+        60.72931500000001
+      ],
+      "vwap": 5596.242829695205,
+      "orb30_high": 56.0,
+      "orb30_low": 54.9,
+      "rs_index": 0.028151107882310233,
+      "rs_industry": 0.010979229878619469,
+      "slot_rel_vol": 0.7864220957200084,
+      "summary": "价格已经跌破失效条件，这个计划先取消。",
+      "reason_codes": [
+        "slot_degraded"
+      ],
+      "artifact_id": "slot_6a39f86d8add",
+      "slot_id": "20260429_1040",
+      "style_label": "stable",
+      "pick": {
+        "symbol": "600549",
+        "name": null,
+        "rank": 10,
+        "strategy_id": "S5",
+        "industry": "dynamic_pool",
+        "thesis": "接近计划买点，执行条件较充分，留意盘中确认。",
+        "entry_plan": {
+          "kind": "zone",
+          "low": 58.370895000000004,
+          "high": 58.9605,
+          "price": 58.370895000000004
+        },
+        "stop_plan": {
+          "kind": "close_below_support",
+          "price": 58.370895000000004,
+          "invalidation": "收盘有效跌破支撑带",
+          "text": "收盘有效跌破支撑带"
+        },
+        "take_profit_plan": {
+          "kind": "targets",
+          "price": 60.13971,
+          "targets": [
+            60.13971,
+            60.72931500000001
+          ]
+        },
+        "scores": {
+          "final": 0.296757230653117,
+          "candidate": -0.11904764591805779,
+          "champion": 0.3800936373794161,
+          "reward_risk": 0.6093230401099126
+        },
+        "risk_flags": [],
+        "why_selected": "相对同组候选综合条件更优。",
+        "why_not_others": [],
+        "evidence_refs": [
+          "600549"
+        ],
+        "style_label": "stable",
+        "meta": {
+          "candidate_score": -0.11904764591805779,
+          "theme_overlap_score": 0.0,
+          "mainline_overlap_score": 0.0,
+          "reason_codes": [
+            "rr_known",
+            "state=actionable"
+          ],
+          "daily_last_date": "2026-04-29",
+          "daily_freshness_state": "stale"
+        }
+      },
+      "pulse": {
+        "symbol": "600549",
+        "last_bar_at": "2026-04-29T10:40:00",
+        "pulse_score": 0.0,
+        "momentum_state": "up",
+        "stretch_state": "normal",
+        "liquidity_state": "thin",
+        "execution_state": "invalidated",
+        "invalidated": true,
+        "entry_distance_pct": -0.03016734624336337,
+        "flags": [
+          "slot_rel_vol=0.79"
+        ],
+        "evidence_refs": [
+          "600549"
+        ],
+        "live_score": -0.6196941209305793,
+        "daily_rank_score": 0.18181818181818177,
+        "exec_score": -31.295845772783807,
+        "action": "INVALID",
+        "can_open": false,
+        "signal_type": "invalidated",
+        "entry_zone": {
+          "low": 58.370895000000004,
+          "high": 58.9605,
+          "mid": 58.370895000000004
+        },
+        "stop": 58.370895000000004,
+        "take": [
+          60.13971,
+          60.72931500000001
+        ],
+        "vwap": 5596.242829695205,
+        "orb30_high": 56.0,
+        "orb30_low": 54.9,
+        "rs_index": 0.028151107882310233,
+        "rs_industry": 0.010979229878619469,
+        "slot_rel_vol": 0.7864220957200084,
+        "extended": false,
+        "reason_codes": [
+          "slot_degraded"
+        ],
+        "provider": "akshare",
+        "volume_baseline": 9486.0,
+        "trade_day": "20260429",
+        "slot_at": "2026-04-29 10:40:00",
+        "is_stale": false,
+        "stale_reason": null
+      }
+    }
+  ],
+  "symbol_states": {
+    "601601": {
+      "symbol": "601601",
+      "last_bar_at": "2026-04-29T10:40:00",
+      "pulse_score": 0.0,
+      "momentum_state": "up",
+      "stretch_state": "normal",
+      "liquidity_state": "good",
+      "execution_state": "invalidated",
+      "invalidated": true,
+      "entry_distance_pct": -0.017025804735301908,
+      "flags": [
+        "slot_rel_vol=1.81"
+      ],
+      "evidence_refs": [
+        "601601"
+      ],
+      "live_score": 50.24002288571355,
+      "daily_rank_score": 1.0,
+      "exec_score": -30.947308195490642,
+      "action": "INVALID",
+      "can_open": false,
+      "signal_type": "invalidated",
+      "entry_zone": {
+        "low": 37.59,
+        "high": 40.32393442622951,
+        "mid": 37.59
+      },
+      "stop": 37.59,
+      "take": [
+        43.9,
+        45.217
+      ],
+      "vwap": 3722.187300107295,
+      "orb30_high": 37.68,
+      "orb30_low": 36.5,
+      "rs_index": 0.012328767123287676,
+      "rs_industry": -0.004843110880403088,
+      "slot_rel_vol": 1.8140048154093098,
+      "extended": false,
+      "reason_codes": [
+        "slot_degraded"
+      ],
+      "provider": "akshare",
+      "volume_baseline": 4984.0,
+      "trade_day": "20260429",
+      "slot_at": "2026-04-29 10:40:00",
+      "is_stale": false,
+      "stale_reason": null
+    },
+    "600089": {
+      "symbol": "600089",
+      "last_bar_at": "2026-04-29T10:40:00",
+      "pulse_score": 0.0,
+      "momentum_state": "up",
+      "stretch_state": "normal",
+      "liquidity_state": "thin",
+      "execution_state": "observe",
+      "invalidated": false,
+      "entry_distance_pct": 0.01811320754716972,
+      "flags": [
+        "slot_rel_vol=0.79"
+      ],
+      "evidence_refs": [
+        "600089"
+      ],
+      "live_score": 65.16794385031865,
+      "daily_rank_score": 0.9090909090909091,
+      "exec_score": 23.169230228111314,
+      "action": "WATCH",
+      "can_open": false,
+      "signal_type": "observe",
+      "entry_zone": {
+        "low": 26.5,
+        "high": 28.56032786885246,
+        "mid": 26.5
+      },
+      "stop": 26.5,
+      "take": [
+        31.86,
+        32.4972
+      ],
+      "vwap": 2682.065032893085,
+      "orb30_high": 26.93,
+      "orb30_low": 26.48,
+      "rs_index": 0.004841713221601429,
+      "rs_industry": -0.012330164782089335,
+      "slot_rel_vol": 0.7895754861040415,
+      "extended": false,
+      "reason_codes": [
+        "slot_degraded"
+      ],
+      "provider": "akshare",
+      "volume_baseline": 19646.0,
+      "trade_day": "20260429",
+      "slot_at": "2026-04-29 10:40:00",
+      "is_stale": false,
+      "stale_reason": null
+    },
+    "600010": {
+      "symbol": "600010",
+      "last_bar_at": "2026-04-29T10:40:00",
+      "pulse_score": 0.0,
+      "momentum_state": "up",
+      "stretch_state": "normal",
+      "liquidity_state": "thin",
+      "execution_state": "invalidated",
+      "invalidated": true,
+      "entry_distance_pct": -0.0036496350364964014,
+      "flags": [
+        "slot_rel_vol=0.62"
+      ],
+      "evidence_refs": [
+        "600010"
+      ],
+      "live_score": 44.39281499085183,
+      "daily_rank_score": 0.8181818181818181,
+      "exec_score": -16.66962562216024,
+      "action": "INVALID",
+      "can_open": false,
+      "signal_type": "invalidated",
+      "entry_zone": {
+        "low": 2.74,
+        "high": 2.82,
+        "mid": 2.74
+      },
+      "stop": 2.74,
+      "take": [
+        2.87,
+        2.88
+      ],
+      "vwap": 266.9442819262248,
+      "orb30_high": 2.73,
+      "orb30_low": 2.56,
+      "rs_index": 0.050000000000000044,
+      "rs_industry": 0.03282812199630928,
+      "slot_rel_vol": 0.6158865075992148,
+      "extended": false,
+      "reason_codes": [
+        "slot_degraded"
+      ],
+      "provider": "akshare",
+      "volume_baseline": 123532.5,
+      "trade_day": "20260429",
+      "slot_at": "2026-04-29 10:40:00",
+      "is_stale": false,
+      "stale_reason": null
+    },
+    "603993": {
+      "symbol": "603993",
+      "last_bar_at": "2026-04-29T10:40:00",
+      "pulse_score": 0.0,
+      "momentum_state": "up",
+      "stretch_state": "normal",
+      "liquidity_state": "thin",
+      "execution_state": "observe",
+      "invalidated": false,
+      "entry_distance_pct": 0.027960526315789602,
+      "flags": [
+        "slot_rel_vol=0.60"
+      ],
+      "evidence_refs": [
+        "603993"
+      ],
+      "live_score": 59.28546024481744,
+      "daily_rank_score": 0.7272727272727273,
+      "exec_score": 37.35408198396934,
+      "action": "WATCH",
+      "can_open": false,
+      "signal_type": "observe",
+      "entry_zone": {
+        "low": 18.24,
+        "high": 20.752131147540982,
+        "mid": 18.24
+      },
+      "stop": 18.24,
+      "take": [
+        23.13,
+        23.8239
+      ],
+      "vwap": 1855.4653977372993,
+      "orb30_high": 18.65,
+      "orb30_low": 18.17,
+      "rs_index": 0.029654036243822013,
+      "rs_industry": 0.012482158240131248,
+      "slot_rel_vol": 0.5977282585122533,
+      "extended": false,
+      "reason_codes": [
+        "slot_degraded"
+      ],
+      "provider": "akshare",
+      "volume_baseline": 36888.0,
+      "trade_day": "20260429",
+      "slot_at": "2026-04-29 10:40:00",
+      "is_stale": false,
+      "stale_reason": null
+    },
+    "002202": {
+      "symbol": "002202",
+      "last_bar_at": "2026-04-29T10:40:00",
+      "pulse_score": 0.0,
+      "momentum_state": "up",
+      "stretch_state": "normal",
+      "liquidity_state": "thin",
+      "execution_state": "observe",
+      "invalidated": false,
+      "entry_distance_pct": 0.0231814548361311,
+      "flags": [
+        "slot_rel_vol=0.68"
+      ],
+      "evidence_refs": [
+        "002202"
+      ],
+      "live_score": 50.158744287423254,
+      "daily_rank_score": 0.6363636363636364,
+      "exec_score": 28.168944297046842,
+      "action": "WATCH",
+      "can_open": false,
+      "signal_type": "observe",
+      "entry_zone": {
+        "low": 25.02,
+        "high": 25.39,
+        "mid": 25.02
+      },
+      "stop": 25.02,
+      "take": [
+        27.58,
+        27.72
+      ],
+      "vwap": 2552.06120766895,
+      "orb30_high": 25.62,
+      "orb30_low": 25.07,
+      "rs_index": 0.014665081252477341,
+      "rs_industry": -0.0025067967512134234,
+      "slot_rel_vol": 0.6826450152236708,
+      "extended": false,
+      "reason_codes": [
+        "slot_degraded"
+      ],
+      "provider": "akshare",
+      "volume_baseline": 25618.0,
+      "trade_day": "20260429",
+      "slot_at": "2026-04-29 10:40:00",
+      "is_stale": false,
+      "stale_reason": null
+    },
+    "002050": {
+      "symbol": "002050",
+      "last_bar_at": "2026-04-29T10:40:00",
+      "pulse_score": 0.0,
+      "momentum_state": "up",
+      "stretch_state": "normal",
+      "liquidity_state": "thin",
+      "execution_state": "observe",
+      "invalidated": false,
+      "entry_distance_pct": 0.04016913319238902,
+      "flags": [
+        "slot_rel_vol=0.59"
+      ],
+      "evidence_refs": [
+        "002050"
+      ],
+      "live_score": 41.3930878981887,
+      "daily_rank_score": 0.5454545454545454,
+      "exec_score": 19.933963368439176,
+      "action": "WATCH",
+      "can_open": false,
+      "signal_type": "observe",
+      "entry_zone": {
+        "low": 42.57,
+        "high": 47.292786885245896,
+        "mid": 42.57
+      },
+      "stop": 42.57,
+      "take": [
+        52.67,
+        53.723400000000005
+      ],
+      "vwap": 4423.301217172861,
+      "orb30_high": 44.55,
+      "orb30_low": 43.78,
+      "rs_index": 0.008656036446469395,
+      "rs_industry": -0.00851584155722137,
+      "slot_rel_vol": 0.5926029700196134,
+      "extended": false,
+      "reason_codes": [
+        "slot_degraded"
+      ],
+      "provider": "akshare",
+      "volume_baseline": 10707.0,
+      "trade_day": "20260429",
+      "slot_at": "2026-04-29 10:40:00",
+      "is_stale": false,
+      "stale_reason": null
+    },
+    "601899": {
+      "symbol": "601899",
+      "last_bar_at": "2026-04-29T10:40:00",
+      "pulse_score": 0.0,
+      "momentum_state": "up",
+      "stretch_state": "normal",
+      "liquidity_state": "thin",
+      "execution_state": "observe",
+      "invalidated": false,
+      "entry_distance_pct": 0.02826086956521734,
+      "flags": [
+        "slot_rel_vol=0.63"
+      ],
+      "evidence_refs": [
+        "601899"
+      ],
+      "live_score": 38.73686054404789,
+      "daily_rank_score": 0.4545454545454546,
+      "exec_score": 27.776427269025536,
+      "action": "WATCH",
+      "can_open": false,
+      "signal_type": "observe",
+      "entry_zone": {
+        "low": 32.2,
+        "high": 36.14524590163934,
+        "mid": 32.2
+      },
+      "stop": 32.2,
+      "take": [
+        40.61,
+        41.422200000000004
+      ],
+      "vwap": 3285.4875679073216,
+      "orb30_high": 32.95,
+      "orb30_low": 32.51,
+      "rs_index": 0.017204301075268935,
+      "rs_industry": 0.00003242307157817065,
+      "slot_rel_vol": 0.6297274789650519,
+      "extended": false,
+      "reason_codes": [
+        "slot_degraded"
+      ],
+      "provider": "akshare",
+      "volume_baseline": 34823.0,
+      "trade_day": "20260429",
+      "slot_at": "2026-04-29 10:40:00",
+      "is_stale": false,
+      "stale_reason": null
+    },
+    "600276": {
+      "symbol": "600276",
+      "last_bar_at": "2026-04-29T10:40:00",
+      "pulse_score": 0.0,
+      "momentum_state": "down",
+      "stretch_state": "normal",
+      "liquidity_state": "good",
+      "execution_state": "invalidated",
+      "invalidated": true,
+      "entry_distance_pct": -0.0005516900589749296,
+      "flags": [
+        "slot_rel_vol=1.42"
+      ],
+      "evidence_refs": [
+        "600276"
+      ],
+      "live_score": 8.42578825201436,
+      "daily_rank_score": 0.36363636363636365,
+      "exec_score": -37.1570165616847,
+      "action": "INVALID",
+      "can_open": false,
+      "signal_type": "invalidated",
+      "entry_zone": {
+        "low": 54.329973306177386,
+        "high": 54.878760915330695,
+        "mid": 54.329973306177386
+      },
+      "stop": 54.329973306177386,
+      "take": [
+        55.97633613363731,
+        56.52512374279062
+      ],
+      "vwap": 5448.219720439749,
+      "orb30_high": 54.98,
+      "orb30_low": 54.2,
+      "rs_index": -0.009666241108882034,
+      "rs_industry": -0.0268381191125728,
+      "slot_rel_vol": 1.422470502244962,
+      "extended": false,
+      "reason_codes": [
+        "slot_degraded"
+      ],
+      "provider": "akshare",
+      "volume_baseline": 9577.0,
+      "trade_day": "20260429",
+      "slot_at": "2026-04-29 10:40:00",
+      "is_stale": false,
+      "stale_reason": null
+    },
+    "002714": {
+      "symbol": "002714",
+      "last_bar_at": "2026-04-29T10:40:00",
+      "pulse_score": 0.0,
+      "momentum_state": "up",
+      "stretch_state": "normal",
+      "liquidity_state": "good",
+      "execution_state": "observe",
+      "invalidated": false,
+      "entry_distance_pct": 0.019168591224018705,
+      "flags": [
+        "slot_rel_vol=1.59"
+      ],
+      "evidence_refs": [
+        "002714"
+      ],
+      "live_score": 31.27710374518955,
+      "daily_rank_score": 0.2727272727272727,
+      "exec_score": 37.81056009499642,
+      "action": "WATCH",
+      "can_open": false,
+      "signal_type": "observe",
+      "entry_zone": {
+        "low": 43.3,
+        "high": 43.8,
+        "mid": 43.3
+      },
+      "stop": 43.3,
+      "take": [
+        45.48,
+        45.78
+      ],
+      "vwap": 4442.622815450279,
+      "orb30_high": 45.39,
+      "orb30_low": 43.39,
+      "rs_index": 0.015883977900552626,
+      "rs_industry": -0.0012879001031381385,
+      "slot_rel_vol": 1.590533262535083,
+      "extended": false,
+      "reason_codes": [
+        "slot_degraded"
+      ],
+      "provider": "akshare",
+      "volume_baseline": 6591.5,
+      "trade_day": "20260429",
+      "slot_at": "2026-04-29 10:40:00",
+      "is_stale": false,
+      "stale_reason": null
+    },
+    "600549": {
+      "symbol": "600549",
+      "last_bar_at": "2026-04-29T10:40:00",
+      "pulse_score": 0.0,
+      "momentum_state": "up",
+      "stretch_state": "normal",
+      "liquidity_state": "thin",
+      "execution_state": "invalidated",
+      "invalidated": true,
+      "entry_distance_pct": -0.03016734624336337,
+      "flags": [
+        "slot_rel_vol=0.79"
+      ],
+      "evidence_refs": [
+        "600549"
+      ],
+      "live_score": -0.6196941209305793,
+      "daily_rank_score": 0.18181818181818177,
+      "exec_score": -31.295845772783807,
+      "action": "INVALID",
+      "can_open": false,
+      "signal_type": "invalidated",
+      "entry_zone": {
+        "low": 58.370895000000004,
+        "high": 58.9605,
+        "mid": 58.370895000000004
+      },
+      "stop": 58.370895000000004,
+      "take": [
+        60.13971,
+        60.72931500000001
+      ],
+      "vwap": 5596.242829695205,
+      "orb30_high": 56.0,
+      "orb30_low": 54.9,
+      "rs_index": 0.028151107882310233,
+      "rs_industry": 0.010979229878619469,
+      "slot_rel_vol": 0.7864220957200084,
+      "extended": false,
+      "reason_codes": [
+        "slot_degraded"
+      ],
+      "provider": "akshare",
+      "volume_baseline": 9486.0,
+      "trade_day": "20260429",
+      "slot_at": "2026-04-29 10:40:00",
+      "is_stale": false,
+      "stale_reason": null
+    },
+    "600584": {
+      "symbol": "600584",
+      "last_bar_at": "2026-04-29T10:40:00",
+      "pulse_score": 0.0,
+      "momentum_state": "down",
+      "stretch_state": "normal",
+      "liquidity_state": "good",
+      "execution_state": "observe",
+      "invalidated": false,
+      "entry_distance_pct": null,
+      "flags": [
+        "slot_rel_vol=1.62"
+      ],
+      "evidence_refs": [
+        "600584"
+      ],
+      "live_score": 13.608620821959704,
+      "daily_rank_score": 0.09090909090909094,
+      "exec_score": 20.97962417262123,
+      "action": "WATCH",
+      "can_open": false,
+      "signal_type": "observe",
+      "entry_zone": {
+        "low": null,
+        "high": null,
+        "mid": null
+      },
+      "stop": null,
+      "take": [],
+      "vwap": 4383.780470283077,
+      "orb30_high": 44.63,
+      "orb30_low": 43.6,
+      "rs_index": -0.008823529411764675,
+      "rs_industry": null,
+      "slot_rel_vol": 1.6173802507655861,
+      "extended": false,
+      "reason_codes": [
+        "industry_rs_unavailable",
+        "entry_zone_missing",
+        "slot_degraded"
+      ],
+      "provider": "akshare",
+      "volume_baseline": 8653.5,
+      "trade_day": "20260429",
+      "slot_at": "2026-04-29 10:40:00",
+      "is_stale": false,
+      "stale_reason": null
+    },
+    "603019": {
+      "symbol": "603019",
+      "last_bar_at": "2026-04-29T10:40:00",
+      "pulse_score": 0.0,
+      "momentum_state": "down",
+      "stretch_state": "normal",
+      "liquidity_state": "good",
+      "execution_state": "observe",
+      "invalidated": false,
+      "entry_distance_pct": null,
+      "flags": [
+        "slot_rel_vol=0.86"
+      ],
+      "evidence_refs": [
+        "603019"
+      ],
+      "live_score": 5.7242426329889025,
+      "daily_rank_score": 0.0,
+      "exec_score": 15.063796402602375,
+      "action": "WATCH",
+      "can_open": false,
+      "signal_type": "observe",
+      "entry_zone": {
+        "low": null,
+        "high": null,
+        "mid": null
+      },
+      "stop": null,
+      "take": [],
+      "vwap": 9004.589117549118,
+      "orb30_high": 91.4,
+      "orb30_low": 89.88,
+      "rs_index": -0.005422153369481153,
+      "rs_industry": null,
+      "slot_rel_vol": 0.8567738231917337,
+      "extended": false,
+      "reason_codes": [
+        "industry_rs_unavailable",
+        "entry_zone_missing",
+        "slot_degraded"
+      ],
+      "provider": "akshare",
+      "volume_baseline": 6968.0,
+      "trade_day": "20260429",
+      "slot_at": "2026-04-29 10:40:00",
+      "is_stale": false,
+      "stale_reason": null
+    }
+  },
+  "data_quality": {
+    "snapshot_age_sec": 15207.192984,
+    "symbols_expected": 12,
+    "symbols_received": 12,
+    "benchmark_received": false,
+    "provider": "akshare",
+    "complete": false,
+    "errors": [
+      "benchmark_missing:000300",
+      "DataProviderError: AkShare index minute fetch failed: ('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))"
+    ]
+  },
+  "portfolio_snapshot": {
+    "as_of": "2026-03-20T13:34:01.357738+00:00",
+    "cash": null,
+    "equity": null,
+    "positions": [],
+    "pending_intents": [
+      {
+        "intent_id": "intent-45605cb1676e",
+        "run_id": "2099-07-01-PE",
+        "as_of": "2099-07-01-PE",
+        "symbol": "Q",
+        "side": "buy",
+        "decision_source": "gated_recommendation",
+        "gating_decision": {
+          "decision": "allow",
+          "level": "item",
+          "reasons": [],
+          "triggered_rules": [],
+          "warnings": [],
+          "inputs_snapshot": {
+            "final_score": 0.605,
+            "reliability_score": 1.0,
+            "invalidated_now": false,
+            "actionable": true,
+            "strategy": "S_OK8"
+          },
+          "fallback_used": false
+        },
+        "priority": 1.0,
+        "thesis": "S_OK8",
+        "entry_hint": null,
+        "stop_hint": null,
+        "invalidation": [],
+        "confidence": 1.0,
+        "sizing_hint": 1.0,
+        "status": "admitted",
+        "warnings": [],
+        "metadata": {
+          "created_at": "2026-03-20T13:34:01.356738+00:00"
+        },
+        "provenance": {
+          "artifact_version": "v2",
+          "symbol": "Q",
+          "strategy": "S_OK8"
+        }
+      }
+    ],
+    "recent_events": [
+      {
+        "event_id": "evt-9631fedb1eca",
+        "intent_id": "intent-45605cb1676e",
+        "event_type": "admitted",
+        "timestamp": "2026-03-20T13:34:01.357738+00:00",
+        "symbol": "Q",
+        "notes": "paper_admit",
+        "source_run_id": "2099-07-01-PE"
+      }
+    ],
+    "realized_pnl": null,
+    "unrealized_pnl": null,
+    "exposure_summary": {},
+    "warnings": []
+  },
+  "provider_meta": {
+    "benchmark_symbol": "000300",
+    "breadth_source": "derived_from_5m_bars"
+  },
+  "side_results": [
+    {
+      "event_id": "side_3d6903004769",
+      "created_at": "2026-04-29T11:13:30.873637+00:00",
+      "symbol": "600276",
+      "kind": "execution_state_change",
+      "title": "600276 状态变化",
+      "body": "wait_pullback -> invalidated",
+      "refs": {
+        "symbol": "600276",
+        "from": "wait_pullback",
+        "to": "invalidated"
+      }
+    }
+  ],
+  "created_at": "2026-04-29T11:13:30.873647+00:00",
+  "updated_at": "2026-04-29T11:13:30.873649+00:00"
+}

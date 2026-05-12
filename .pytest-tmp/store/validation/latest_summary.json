@@ -1,0 +1,564 @@
+{
+  "as_of": "2026-05-12T03:39:07.737113+00:00",
+  "parts": {
+    "event_stats": {
+      "S4": {
+        "sample_size": 5,
+        "d3_mean": 0.0,
+        "d5_mean": 0.01,
+        "d10_mean": 0.02,
+        "win_rate_d5": 0.5,
+        "available": true
+      },
+      "S_A": {
+        "available": true,
+        "sample_size": 0
+      },
+      "S_B": {
+        "available": true,
+        "sample_size": 0
+      },
+      "S_D": {
+        "available": true,
+        "sample_size": 0
+      },
+      "S_K": {
+        "available": true,
+        "sample_size": 0
+      },
+      "S_K2": {
+        "available": true,
+        "sample_size": 0
+      },
+      "S_KW": {
+        "available": true,
+        "sample_size": 0
+      },
+      "S_OK": {
+        "available": true,
+        "sample_size": 0
+      },
+      "S_OK7": {
+        "available": true,
+        "sample_size": 0
+      },
+      "S_OK8": {
+        "available": true,
+        "sample_size": 0
+      },
+      "S_OK9": {
+        "available": true,
+        "sample_size": 0
+      },
+      "S_OKW": {
+        "available": true,
+        "sample_size": 0
+      },
+      "TMP_D6": {
+        "available": true,
+        "sample_size": 0
+      },
+      "TMP_H6": {
+        "available": true,
+        "sample_size": 0
+      },
+      "TMP_K6": {
+        "available": true,
+        "sample_size": 0
+      },
+      "TMP_KC": {
+        "available": true,
+        "sample_size": 0
+      },
+      "TMP_KP": {
+        "available": true,
+        "sample_size": 0
+      },
+      "sX": {
+        "sample_size": 3,
+        "d3_mean": 0.006666666666666665,
+        "d5_mean": 0.006666666666666665,
+        "d10_mean": 0.01,
+        "win_rate_d5": 0.6666666666666666,
+        "available": true
+      }
+    },
+    "walkforward": {
+      "S4": {
+        "windows": [
+          0.0,
+          0.01,
+          0.02
+        ],
+        "stable": true,
+        "recent_rank": 1,
+        "available": true
+      },
+      "S_A": {
+        "available": true,
+        "windows": []
+      },
+      "S_B": {
+        "available": true,
+        "windows": []
+      },
+      "S_D": {
+        "available": true,
+        "windows": []
+      },
+      "S_K": {
+        "available": true,
+        "windows": []
+      },
+      "S_K2": {
+        "available": true,
+        "windows": []
+      },
+      "S_KW": {
+        "available": true,
+        "windows": []
+      },
+      "S_OK": {
+        "windows": [
+          0.01
+        ],
+        "stable": true,
+        "recent_rank": 1,
+        "available": true
+      },
+      "S_OK7": {
+        "available": true,
+        "windows": []
+      },
+      "S_OK8": {
+        "available": true,
+        "windows": []
+      },
+      "S_OK9": {
+        "available": true,
+        "windows": []
+      },
+      "S_OKW": {
+        "available": true,
+        "windows": []
+      },
+      "TMP_D6": {
+        "available": true,
+        "windows": []
+      },
+      "TMP_H6": {
+        "available": true,
+        "windows": []
+      },
+      "TMP_K6": {
+        "available": true,
+        "windows": []
+      },
+      "TMP_KC": {
+        "available": true,
+        "windows": []
+      },
+      "TMP_KP": {
+        "available": true,
+        "windows": []
+      },
+      "sX": {
+        "available": true,
+        "windows": []
+      }
+    },
+    "strategy_health": {
+      "S4": {
+        "status": "healthy",
+        "reason_codes": [],
+        "paper_trade_summary": {},
+        "event_summary": {
+          "sample_size": 5,
+          "d3_mean": 0.0,
+          "d5_mean": 0.01,
+          "d10_mean": 0.02,
+          "win_rate_d5": 0.5
+        },
+        "walkforward_summary": {
+          "stable": true,
+          "recent_rank": 1,
+          "windows": [
+            0.0,
+            0.01,
+            0.02
+          ]
+        },
+        "available": true
+      },
+      "S_A": {
+        "status": "degraded",
+        "reason_codes": [
+          "low_win_rate"
+        ],
+        "paper_trade_summary": {},
+        "event_summary": {
+          "sample_size": 0,
+          "d3_mean": null,
+          "d5_mean": null,
+          "d10_mean": null,
+          "win_rate_d5": null
+        },
+        "walkforward_summary": {
+          "stable": null,
+          "recent_rank": null,
+          "windows": []
+        },
+        "available": true
+      },
+      "S_B": {
+        "status": "degraded",
+        "reason_codes": [
+          "low_win_rate"
+        ],
+        "paper_trade_summary": {},
+        "event_summary": {
+          "sample_size": 0,
+          "d3_mean": null,
+          "d5_mean": null,
+          "d10_mean": null,
+          "win_rate_d5": null
+        },
+        "walkforward_summary": {
+          "stable": null,
+          "recent_rank": null,
+          "windows": []
+        },
+        "available": true
+      },
+      "S_D": {
+        "status": "degraded",
+        "reason_codes": [
+          "low_win_rate"
+        ],
+        "paper_trade_summary": {},
+        "event_summary": {
+          "sample_size": 0,
+          "d3_mean": null,
+          "d5_mean": null,
+          "d10_mean": null,
+          "win_rate_d5": null
+        },
+        "walkforward_summary": {
+          "stable": null,
+          "recent_rank": null,
+          "windows": []
+        },
+        "available": true
+      },
+      "S_K": {
+        "status": "degraded",
+        "reason_codes": [
+          "low_win_rate"
+        ],
+        "paper_trade_summary": {},
+        "event_summary": {
+          "sample_size": 0,
+          "d3_mean": null,
+          "d5_mean": null,
+          "d10_mean": null,
+          "win_rate_d5": null
+        },
+        "walkforward_summary": {
+          "stable": null,
+          "recent_rank": null,
+          "windows": []
+        },
+        "available": true
+      },
+      "S_K2": {
+        "status": "degraded",
+        "reason_codes": [
+          "low_win_rate"
+        ],
+        "paper_trade_summary": {},
+        "event_summary": {
+          "sample_size": 0,
+          "d3_mean": null,
+          "d5_mean": null,
+          "d10_mean": null,
+          "win_rate_d5": null
+        },
+        "walkforward_summary": {
+          "stable": null,
+          "recent_rank": null,
+          "windows": []
+        },
+        "available": true
+      },
+      "S_KW": {
+        "status": "degraded",
+        "reason_codes": [
+          "low_win_rate"
+        ],
+        "paper_trade_summary": {},
+        "event_summary": {
+          "sample_size": 0,
+          "d3_mean": null,
+          "d5_mean": null,
+          "d10_mean": null,
+          "win_rate_d5": null
+        },
+        "walkforward_summary": {
+          "stable": null,
+          "recent_rank": null,
+          "windows": []
+        },
+        "available": true
+      },
+      "S_OK": {
+        "status": "degraded",
+        "reason_codes": [
+          "low_win_rate"
+        ],
+        "paper_trade_summary": {},
+        "event_summary": {
+          "sample_size": 0,
+          "d3_mean": null,
+          "d5_mean": null,
+          "d10_mean": null,
+          "win_rate_d5": null
+        },
+        "walkforward_summary": {
+          "stable": true,
+          "recent_rank": 1,
+          "windows": [
+            0.01
+          ]
+        },
+        "available": true
+      },
+      "S_OK7": {
+        "status": "degraded",
+        "reason_codes": [
+          "low_win_rate"
+        ],
+        "paper_trade_summary": {},
+        "event_summary": {
+          "sample_size": 0,
+          "d3_mean": null,
+          "d5_mean": null,
+          "d10_mean": null,
+          "win_rate_d5": null
+        },
+        "walkforward_summary": {
+          "stable": null,
+          "recent_rank": null,
+          "windows": []
+        },
+        "available": true
+      },
+      "S_OK8": {
+        "status": "degraded",
+        "reason_codes": [
+          "low_win_rate"
+        ],
+        "paper_trade_summary": {},
+        "event_summary": {
+          "sample_size": 0,
+          "d3_mean": null,
+          "d5_mean": null,
+          "d10_mean": null,
+          "win_rate_d5": null
+        },
+        "walkforward_summary": {
+          "stable": null,
+          "recent_rank": null,
+          "windows": []
+        },
+        "available": true
+      },
+      "S_OK9": {
+        "status": "degraded",
+        "reason_codes": [
+          "low_win_rate"
+        ],
+        "paper_trade_summary": {},
+        "event_summary": {
+          "sample_size": 0,
+          "d3_mean": null,
+          "d5_mean": null,
+          "d10_mean": null,
+          "win_rate_d5": null
+        },
+        "walkforward_summary": {
+          "stable": null,
+          "recent_rank": null,
+          "windows": []
+        },
+        "available": true
+      },
+      "S_OKW": {
+        "status": "degraded",
+        "reason_codes": [
+          "low_win_rate"
+        ],
+        "paper_trade_summary": {},
+        "event_summary": {
+          "sample_size": 0,
+          "d3_mean": null,
+          "d5_mean": null,
+          "d10_mean": null,
+          "win_rate_d5": null
+        },
+        "walkforward_summary": {
+          "stable": null,
+          "recent_rank": null,
+          "windows": []
+        },
+        "available": true
+      },
+      "TMP_D6": {
+        "status": "degraded",
+        "reason_codes": [
+          "low_win_rate"
+        ],
+        "paper_trade_summary": {},
+        "event_summary": {
+          "sample_size": 0,
+          "d3_mean": null,
+          "d5_mean": null,
+          "d10_mean": null,
+          "win_rate_d5": null
+        },
+        "walkforward_summary": {
+          "stable": null,
+          "recent_rank": null,
+          "windows": []
+        },
+        "available": true
+      },
+      "TMP_H6": {
+        "status": "degraded",
+        "reason_codes": [
+          "low_win_rate"
+        ],
+        "paper_trade_summary": {},
+        "event_summary": {
+          "sample_size": 0,
+          "d3_mean": null,
+          "d5_mean": null,
+          "d10_mean": null,
+          "win_rate_d5": null
+        },
+        "walkforward_summary": {
+          "stable": null,
+          "recent_rank": null,
+          "windows": []
+        },
+        "available": true
+      },
+      "TMP_K6": {
+        "status": "degraded",
+        "reason_codes": [
+          "low_win_rate"
+        ],
+        "paper_trade_summary": {},
+        "event_summary": {
+          "sample_size": 0,
+          "d3_mean": null,
+          "d5_mean": null,
+          "d10_mean": null,
+          "win_rate_d5": null
+        },
+        "walkforward_summary": {
+          "stable": null,
+          "recent_rank": null,
+          "windows": []
+        },
+        "available": true
+      },
+      "TMP_KC": {
+        "status": "degraded",
+        "reason_codes": [
+          "low_win_rate"
+        ],
+        "paper_trade_summary": {},
+        "event_summary": {
+          "sample_size": 0,
+          "d3_mean": null,
+          "d5_mean": null,
+          "d10_mean": null,
+          "win_rate_d5": null
+        },
+        "walkforward_summary": {
+          "stable": null,
+          "recent_rank": null,
+          "windows": []
+        },
+        "available": true
+      },
+      "TMP_KP": {
+        "status": "degraded",
+        "reason_codes": [
+          "low_win_rate"
+        ],
+        "paper_trade_summary": {},
+        "event_summary": {
+          "sample_size": 0,
+          "d3_mean": null,
+          "d5_mean": null,
+          "d10_mean": null,
+          "win_rate_d5": null
+        },
+        "walkforward_summary": {
+          "stable": null,
+          "recent_rank": null,
+          "windows": []
+        },
+        "available": true
+      },
+      "sX": {
+        "status": "warning",
+        "reason_codes": [
+          "flat_recent"
+        ],
+        "paper_trade_summary": {},
+        "event_summary": {
+          "sample_size": 3,
+          "d3_mean": 0.006666666666666665,
+          "d5_mean": 0.006666666666666665,
+          "d10_mean": 0.01,
+          "win_rate_d5": 0.6666666666666666
+        },
+        "walkforward_summary": {
+          "stable": null,
+          "recent_rank": null,
+          "windows": []
+        },
+        "available": true
+      }
+    },
+    "paper_trade": {
+      "picks": [
+        {
+          "pick_id": "RID:AAA",
+          "symbol": "AAA",
+          "strategy": "S",
+          "as_of": "2099-01-01",
+          "price_ref": 10.0,
+          "entry_reached": true,
+          "hit_stop": false,
+          "hit_take": true,
+          "mfe": 0.5999999999999996,
+          "mae": 0.0,
+          "holding_days": 2,
+          "final_state": "target_hit",
+          "updated_at": "2026-05-12T03:39:07.691047+00:00"
+        }
+      ],
+      "available": true
+    },
+    "live_shadow": {
+      "available": false,
+      "dates": []
+    }
+  },
+  "source": {
+    "validation_root": "C:\\Users\\24179\\Desktop\\gp\\.pytest-tmp\\store\\validation"
+  }
+}
