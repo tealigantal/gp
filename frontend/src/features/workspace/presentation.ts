@@ -11,8 +11,32 @@ export function isIntradayEnabled(runtime?: RuntimeStatus | null) {
   return false
 }
 
+export function recommendationStateMeta(state?: string | null): ToneMeta {
+  const mapping: Record<string, ToneMeta> = {
+    TRADING_SIGNAL: { color: 'green', label: '交易信号', hint: '当前有可执行交易信号。' },
+    TRIGGER_PLAN: { color: 'gold', label: '等待触发', hint: '当前没有直接交易信号，等待触发价。' },
+    NEXT_SESSION_PLAN: { color: 'blue', label: '下个交易窗口', hint: '当前不是即时交易窗口。' },
+    NO_TRADE: { color: 'default', label: '无交易计划', hint: '当前没有合格交易计划。' },
+    UNAVAILABLE: { color: 'default', label: '数据不足', hint: '真实数据不足，无法判断。' },
+  }
+  return mapping[String(state || '').toUpperCase()] || { color: 'default', label: state || '--' }
+}
+
 export function executionStateMeta(state?: string | null): ToneMeta {
   const mapping: Record<string, ToneMeta> = {
+    TRADING_SIGNAL: { color: 'green', label: '交易信号', hint: '当前有可执行交易信号。' },
+    TRIGGER_PLAN: { color: 'gold', label: '等待触发', hint: '当前没有直接交易信号，等待触发价。' },
+    NEXT_SESSION_PLAN: { color: 'blue', label: '下个交易窗口', hint: '当前不是即时交易窗口。' },
+    NO_TRADE: { color: 'default', label: '无交易计划', hint: '当前没有合格交易计划。' },
+    WAITING_TRIGGER: { color: 'gold', label: '等待触发', hint: '策略条件存在，但还没有触发。' },
+    TREND_CONTINUATION_BUY: { color: 'green', label: '趋势延续', hint: '趋势延续策略已触发。' },
+    BREAKOUT_BUY: { color: 'green', label: '突破确认', hint: '突破策略已触发。' },
+    RECLAIM_BUY: { color: 'green', label: '修复确认', hint: '回踩修复策略已触发。' },
+    AFTERNOON_RELAUNCH_BUY: { color: 'green', label: '午后再启动', hint: '午后再启动策略已触发。' },
+    GATE_BLOCKED: { color: 'volcano', label: '风控拦截', hint: '市场或风控 gate 不允许开仓。' },
+    GATE_UNAVAILABLE: { color: 'default', label: '数据不足', hint: 'gate 数据不足，不能开仓。' },
+    OBSERVE: { color: 'default', label: '无交易计划', hint: '当前没有合格交易计划。' },
+    EXTENDED: { color: 'volcano', label: '追高风险', hint: '价格过度拉伸，不适合直接追。' },
     PLAN_READY: { color: 'green', label: '计划区间内', hint: '价格处在日线计划区间内。' },
     BUY_NOW: { color: 'green', label: '计划区间内', hint: '价格处在日线计划区间内。' },
     WAIT_PULLBACK: { color: 'gold', label: '等回踩', hint: '逻辑仍在，但不适合追高。' },
@@ -38,9 +62,13 @@ export function riskLabel(level?: string | null) {
 
 export function runActionLabel(action?: string | null) {
   const mapping: Record<string, string> = {
+    TRADING_SIGNAL: '交易信号',
+    TRIGGER_PLAN: '等待触发',
+    NEXT_SESSION_PLAN: '下个交易窗口',
+    UNAVAILABLE: '数据不足',
+    NO_TRADE: '无交易计划',
     RECOMMEND: '日线计划',
     DEGRADED: '数据受限',
-    NO_TRADE: '暂不入场',
   }
   return mapping[String(action || '').toUpperCase()] || action || '--'
 }
@@ -65,6 +93,47 @@ export function runStateMeta(
       badge: { color: 'default', label: '等待提问' },
       title: '可以直接询问今天的候选、入选原因、买入区和风控边界。',
       summary: '当前系统只使用日线计划链路。',
+    }
+  }
+
+  const recommendationState = String(run.recommendation_state || '').toUpperCase()
+  if (recommendationState === 'TRADING_SIGNAL') {
+    return {
+      badge: recommendationStateMeta(recommendationState),
+      title: '当前有可执行交易信号。',
+      summary: run.status_reason || '每只票都应按计算层给出的触发价、买入区间、止损、止盈和有效窗口执行。',
+    }
+  }
+
+  if (recommendationState === 'TRIGGER_PLAN') {
+    return {
+      badge: recommendationStateMeta(recommendationState),
+      title: '当前没有直接交易信号，下面是等待触发的交易计划。',
+      summary: run.status_reason || '不能直接买入，需要等待明确 trigger 和策略确认条件。',
+    }
+  }
+
+  if (recommendationState === 'NEXT_SESSION_PLAN') {
+    return {
+      badge: recommendationStateMeta(recommendationState),
+      title: '当前不是即时交易窗口，以下是下一交易窗口策略计划。',
+      summary: run.status_reason || '非交易时段只展示下一交易窗口计划，不能表达为可立即执行。',
+    }
+  }
+
+  if (recommendationState === 'NO_TRADE') {
+    return {
+      badge: recommendationStateMeta(recommendationState),
+      title: '当前没有合格交易计划。',
+      summary: run.status_reason || '策略、RR、风控或市场状态不支持开仓。',
+    }
+  }
+
+  if (recommendationState === 'UNAVAILABLE') {
+    return {
+      badge: recommendationStateMeta(recommendationState),
+      title: '真实数据不足，无法判断。',
+      summary: run.status_reason || '需要等待数据补齐后再生成计划。',
     }
   }
 

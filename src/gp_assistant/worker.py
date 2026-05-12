@@ -17,10 +17,16 @@ from .book.repo import (
 from .contracts.objects import CurrentSlotPointer, DayBook, LiveSlotArtifact, TrackedUniverse
 from .core.config import load_config
 from .core.logging import logger
-from .evidence.daily_freshness import TARGET_CURRENT_PENDING, daybook_symbols, reconcile_daily_freshness, resolve_daily_target
+from .evidence.daily_freshness import (
+    TARGET_CURRENT_PENDING,
+    TARGET_CURRENT_READY,
+    daybook_symbols,
+    reconcile_daily_freshness,
+    resolve_daily_target,
+)
 from .evidence.portfolio_service import load_portfolio_snapshot
 from .runtime.lanes import book_lane
-from .runtime.market_clock import compute_market_state
+from .runtime.market_clock import PHASE_POSTCLOSE_PENDING, compute_market_state
 
 
 def _portfolio_symbols(snapshot: Dict[str, Any]) -> list[str]:
@@ -43,6 +49,43 @@ def _tracked_universe(daybook: DayBook, portfolio_snapshot: Dict[str, Any]) -> T
     tracked.portfolio = holdings
     tracked.total = total
     return tracked
+
+
+def _trade_day_iso(trade_day: Any) -> str:
+    raw = str(trade_day or "").strip()
+    digits = "".join(ch for ch in raw if ch.isdigit())
+    if len(digits) >= 8:
+        return f"{digits[:4]}-{digits[4:6]}-{digits[6:8]}"
+    return raw
+
+
+def _refresh_pending_freshness_meta(
+    daybook: DayBook,
+    freshness: Dict[str, Any],
+    target_info: Dict[str, Any],
+) -> Dict[str, Any]:
+    if (
+        str(target_info.get("target_mode") or "") != TARGET_CURRENT_PENDING
+        or str(freshness.get("target_day") or "") != str(target_info.get("target_day") or "")
+    ):
+        return freshness
+    merged = dict(freshness)
+    for key in (
+        "target_mode",
+        "pending_eod_day",
+        "eod_probe",
+        "calendar_status",
+        "calendar_source",
+        "calendar_range",
+        "calendar_error",
+        "next_trading_day",
+    ):
+        if key in target_info:
+            merged[key] = target_info.get(key)
+    if merged != freshness:
+        daybook.source_meta["daily_freshness"] = merged
+        save_daybook(daybook)
+    return merged
 
 
 def _save_artifact(daybook: DayBook, artifact: LiveSlotArtifact) -> Dict[str, Any]:
@@ -73,10 +116,21 @@ def _load_or_build_daybook(trade_day: str, *, force: bool = False) -> DayBook:
     freshness = dict(daybook.source_meta.get("daily_freshness") or {}) if daybook is not None else {}
     target_info = resolve_daily_target(trade_day)
     target_day = str(target_info.get("target_day") or "")
+    target_mode = str(target_info.get("target_mode") or "")
+    if daybook is not None and freshness:
+        freshness = _refresh_pending_freshness_meta(daybook, freshness, target_info)
+    if (
+        bool(freshness.get("ready", False))
+        and str(freshness.get("target_mode") or "") == TARGET_CURRENT_READY
+        and str(freshness.get("target_day") or "") == _trade_day_iso(trade_day)
+    ):
+        target_day = str(freshness.get("target_day") or "")
+        target_mode = str(freshness.get("target_mode") or "")
     should_rebuild = (
         daybook is None
         or not freshness
         or freshness.get("target_day") != target_day
+        or str(freshness.get("target_mode") or "") != target_mode
         or not bool(freshness.get("ready", False))
     )
     if should_rebuild:
@@ -85,10 +139,39 @@ def _load_or_build_daybook(trade_day: str, *, force: bool = False) -> DayBook:
     return daybook
 
 
+_DAILY_PLAN_META_KEYS = (
+    "daybook_generated_at",
+    "daily_target_day",
+    "daily_target_mode",
+    "daily_last_reconcile_at",
+    "market_phase",
+)
+
+
+def _daily_last_reconcile_at(freshness: Dict[str, Any]) -> Any:
+    return freshness.get("last_reconcile_at") or freshness.get("generated_at") or freshness.get("reconciled_at")
+
+
+def _daily_plan_publish_meta(daybook: DayBook, *, market_phase: str) -> Dict[str, Any]:
+    freshness = dict(getattr(daybook, "source_meta", {}).get("daily_freshness") or {})
+    return {
+        "daybook_generated_at": getattr(daybook, "generated_at", None),
+        "daily_target_day": freshness.get("target_day"),
+        "daily_target_mode": freshness.get("target_mode"),
+        "daily_last_reconcile_at": _daily_last_reconcile_at(freshness),
+        "market_phase": market_phase,
+    }
+
+
+def _daily_plan_meta_matches(provider_meta: Dict[str, Any], expected_meta: Dict[str, Any]) -> bool:
+    return all(key in provider_meta and provider_meta.get(key) == expected_meta.get(key) for key in _DAILY_PLAN_META_KEYS)
+
+
 def _build_and_save_daily_plan(*, daybook: DayBook, trade_day: str, market_phase: str, force: bool = False) -> Dict[str, Any]:
     portfolio_snapshot = load_portfolio_snapshot()
     tracked = _tracked_universe(daybook, portfolio_snapshot)
     current = load_current_slot_artifact()
+    expected_meta = _daily_plan_publish_meta(daybook, market_phase=market_phase)
     if (
         not force
         and current is not None
@@ -96,6 +179,7 @@ def _build_and_save_daily_plan(*, daybook: DayBook, trade_day: str, market_phase
         and current.daybook_effective_day == daybook.trading_day
         and current.slot_status == "OK"
         and current.provider_meta.get("reason") == "daily_plan"
+        and _daily_plan_meta_matches(current.provider_meta, expected_meta)
     ):
         return {
             "trade_day": trade_day,
@@ -114,6 +198,7 @@ def _build_and_save_daily_plan(*, daybook: DayBook, trade_day: str, market_phase
         portfolio_snapshot=portfolio_snapshot,
         previous_artifact=current,
     )
+    artifact.provider_meta.update(expected_meta)
     saved = _save_artifact(daybook, artifact)
     saved.update(
         {
@@ -194,6 +279,8 @@ def reconcile_runtime_state(*, now=None, operation: str = "auto") -> Dict[str, A
         ms = compute_market_state(now)
         if operation == "postclose_archive":
             result = run_postclose_archive(now=now, force=True)
+        elif operation == "auto" and ms.market_phase == PHASE_POSTCLOSE_PENDING:
+            result = run_postclose_archive(now=now, force=False)
         else:
             result = run_preopen_init(now=now, force=(operation in {"rebuild_daybook", "replay_today"}))
         result.setdefault("market_phase", ms.market_phase)

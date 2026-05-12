@@ -36,6 +36,17 @@ def _freshness_meta(evidence: EvidencePack, run: CanonicalRunArtifact | None = N
 
 
 def _execution_phrase(pick: CanonicalPick) -> str:
+    rec_state = str(getattr(pick, "recommendation_state", "") or "").upper()
+    if rec_state == "TRADING_SIGNAL":
+        return "current executable trading signal"
+    if rec_state == "TRIGGER_PLAN":
+        return "waiting for a computed trigger plan"
+    if rec_state == "NEXT_SESSION_PLAN":
+        return "next trading-window strategy plan"
+    if rec_state == "NO_TRADE":
+        return "no executable trade plan"
+    if rec_state == "UNAVAILABLE":
+        return "real data unavailable"
     mapping = {
         "BUY_NOW": "当前可以按计划执行",
         "WAIT_PULLBACK": "逻辑还在，但更适合等回踩确认",
@@ -214,6 +225,47 @@ def _chat_fallback_text() -> str:
     return "可以直接问我今天的候选、某只票为什么入选、风控怎么看，或者为什么当前只建议暂不入场。"
 
 
+def _recommend_fallback_text(run: CanonicalRunArtifact) -> str:
+    mode = str(run.recommendation_state or run.run_action or "NO_TRADE")
+    phase = run.market_phase or "unknown"
+    executable = any(pick.can_execute_now for pick in run.picks)
+    header = [
+        f"当前模式：{mode}",
+        f"当前时段：{phase}",
+        f"数据来源：artifact_id={run.artifact_id or '-'} / slot_id={run.slot_id or '-'} / as_of={run.as_of}",
+        f"是否可立即执行：{'是' if executable else '否'}",
+    ]
+    if not run.picks:
+        reasons = "；".join(list(run.no_trade_reasons or [])[:4]) or run.status_reason or "没有可用计划"
+        return "\n".join([*header, f"结论：{mode}，{reasons}"])
+    lines = list(header)
+    for pick in run.picks[:3]:
+        plan = dict(pick.execution_plan or {})
+        ctx = dict(pick.explain_context or {})
+        risks = dict(pick.risk_pack or {})
+        lines.append(f"\n{pick.rank}. {pick.symbol}{(' ' + pick.name) if pick.name else ''}")
+        lines.append(f"结论：{pick.recommendation_state}，{_execution_phrase(pick)}。")
+        lines.append(f"策略：{pick.champion_strategy or 'NA'}，分数 {pick.champion_strategy_score:.2f}。")
+        lines.append(
+            "计划："
+            f"trigger={plan.get('trigger_price') or ctx.get('trigger_price') or '-'}，"
+            f"entry={plan.get('entry_low') or ctx.get('entry_low') or '-'}-{plan.get('entry_high') or ctx.get('entry_high') or '-'}，"
+            f"stop={plan.get('stop_price') or ctx.get('stop_price') or '-'}，"
+            f"take={plan.get('take1') or ctx.get('take1') or '-'} / {plan.get('take2') or ctx.get('take2') or '-'}，"
+            f"RR={plan.get('rr_to_take1') or ctx.get('rr_to_take1') or '-'}。"
+        )
+        reasons = list(pick.strategy_reason_codes or ctx.get("strategy_reason_codes") or [])[:4]
+        if reasons:
+            lines.append("关键证据：" + "，".join(str(item) for item in reasons))
+        risk_bits = list(risks.get("main_risks") or ctx.get("main_risks") or [])[:4]
+        if risk_bits:
+            lines.append("风险：" + "，".join(str(item) for item in risk_bits))
+        next_wait = plan.get("confirmation_conditions") or ctx.get("what_would_improve") or []
+        if next_wait:
+            lines.append("下一步：" + "，".join(str(item) for item in list(next_wait)[:3]))
+    return "\n".join(lines)
+
+
 def _fallback_text(judgment: Judgment) -> str:
     if judgment.kind == "recommend" and judgment.canonical_run is not None:
         return _recommend_fallback_text(judgment.canonical_run)
@@ -277,13 +329,16 @@ def _message_for_recommend(judgment: Judgment, text: str) -> Dict[str, Any]:
     return {
         "message_kind": "recommend",
         "lead_summary": run.status_reason,
-        "decision_state": "BUY" if any(pick.can_execute_now for pick in run.picks) else "WATCH",
+        "decision_state": run.recommendation_state,
+        "recommendation_state": run.recommendation_state,
         "market_summary": run.status_reason,
         "execution_note": execution_note,
         "risk_note": ("当前环境偏弱，执行上以确认优先。" if run.run_action == "DEGRADED" else None),
         "narrative_text": text,
         "picks": [pick.model_dump() for pick in run.picks],
         "run": run.model_dump(),
+        "explain_context": run.explain_context,
+        "decision_evidence_pack": run.decision_evidence_pack,
         "followup_suggestions": [
             (f"为什么推荐第 {run.picks[0].rank} 只" if run.picks else "为什么今天先暂不入场"),
             (f"{top_symbol} 现在还能买吗" if top_symbol else "重新转强要看什么"),
@@ -412,6 +467,11 @@ def _message_payload(frame: TurnFrame, evidence: EvidencePack, judgment: Judgmen
             "board_symbols": [entry.symbol for entry in evidence.book.board[:6]],
             "active_run_id": evidence.active_run.run_id if evidence.active_run else None,
         },
+        "llm_decision_context": (
+            judgment.canonical_run.decision_evidence_pack
+            if judgment.canonical_run is not None
+            else (evidence.active_run.decision_evidence_pack if evidence.active_run is not None else {})
+        ),
     }
 
 
@@ -523,7 +583,9 @@ def build_structured_reply(
         "last_closed_5m": evidence.book.last_closed_5m,
         "tradeable": (run.tradeable if run else evidence.book.daybook.tradeable),
         "run_action": (run.run_action if run else None),
+        "recommendation_state": (run.recommendation_state if run else None),
         "top3": ([pick.model_dump() for pick in run.picks[:3]] if run else []),
+        "decision_evidence_pack": (run.decision_evidence_pack if run else {}),
     }
     return ReplyBundle(
         session_id=session_id,

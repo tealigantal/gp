@@ -103,3 +103,22 @@ it('shows operation feedback after a tool run', () => {
   expect(screen.getByText('已刷新日线计划。')).toBeInTheDocument()
   expect(screen.getByText(/artifact daily_1/)).toBeInTheDocument()
 })
+
+it('shows publish lag and recommends postclose archive when daily data is ready but artifact is stale', () => {
+  const { container } = render(
+    <OperationsStatusCard
+      runtime={runtime({
+        book_freshness: 'lagging',
+        daily_freshness_ready: true,
+        daily_target_mode: 'current_ready',
+        daily_stale_count: 0,
+        artifact_lag_reason: 'daily_ready_current_artifact_meta_mismatch:market_phase',
+        artifact_lag_fields: ['market_phase'],
+      })}
+    />,
+  )
+
+  expect(screen.getAllByText('日线已就绪，发布待刷新').length).toBeGreaterThan(0)
+  expect(screen.getByText('daily_ready_current_artifact_meta_mismatch:market_phase')).toBeInTheDocument()
+  expect(container.querySelector('button[data-service="gp-postclose-archive"]')).toHaveClass('ant-btn-primary')
+})

@@ -40,6 +40,14 @@ function recommendedTools(runtime?: RuntimeStatus | null, manualTools: RuntimeTo
   const out: string[] = []
   const eodPending = runtime?.daily_target_mode === 'current_pending'
   const previousCompleted = runtime?.daily_target_mode === 'previous_completed'
+  const artifactLagging =
+    String(runtime?.book_freshness || '').toLowerCase() === 'lagging' || Boolean(runtime?.artifact_lag_reason)
+  if (artifactLagging && runtime?.market_phase === 'POSTCLOSE_PENDING' && toolSet.has('gp-postclose-archive')) {
+    out.push('gp-postclose-archive')
+  }
+  if (artifactLagging && out.length === 0 && toolSet.has('gp-rebuild-daybook')) {
+    out.push('gp-rebuild-daybook')
+  }
   if (runtime?.daily_freshness_ready === false && !eodPending && !previousCompleted && toolSet.has('gp-rebuild-daybook')) {
     out.push('gp-rebuild-daybook')
   }
@@ -66,6 +74,17 @@ export function OperationsStatusCard({
   const eodPending = runtime?.daily_target_mode === 'current_pending'
   const previousCompleted = runtime?.daily_target_mode === 'previous_completed'
   const dailyBlocked = runtime?.daily_freshness_ready === false && !eodPending && !previousCompleted
+  const artifactLagging =
+    String(runtime?.book_freshness || '').toLowerCase() === 'lagging' || Boolean(runtime?.artifact_lag_reason)
+  const dailyStatusLabel = artifactLagging
+    ? runtime?.market_phase === 'POSTCLOSE_PENDING'
+      ? '日线已就绪，发布待归档'
+      : '日线已就绪，发布待刷新'
+    : eodPending
+      ? '等待收盘日线'
+      : dailyBlocked
+        ? '日线未就绪'
+        : '日线已就绪'
 
   return (
     <section className="snapshot-section ops-card" aria-label="运行态与修复工具">
@@ -80,13 +99,17 @@ export function OperationsStatusCard({
           <Tag>日线模式</Tag>
           {runtime?.data_provider ? <Tag>数据源 {runtime.data_provider}</Tag> : null}
           {dailyMode ? <Tag color={dailyMode.color}>{dailyMode.label}</Tag> : null}
-          <Tag color={eodPending ? 'gold' : dailyBlocked ? 'volcano' : 'green'}>
-            {eodPending ? '等待收盘日线' : dailyBlocked ? '日线未就绪' : '日线已就绪'}
+          <Tag color={artifactLagging ? 'volcano' : eodPending ? 'gold' : dailyBlocked ? 'volcano' : 'green'}>
+            {dailyStatusLabel}
           </Tag>
         </div>
 
         <Typography.Paragraph type="secondary" className="ops-note">
-          {dailyBlocked ? runtime?.daily_blocking_reason || freshness.note : freshness.note}
+          {artifactLagging
+            ? runtime?.artifact_lag_reason || freshness.note
+            : dailyBlocked
+              ? runtime?.daily_blocking_reason || freshness.note
+              : freshness.note}
         </Typography.Paragraph>
 
         <div className="ops-compact-grid">
@@ -127,6 +150,7 @@ export function OperationsStatusCard({
           {manualTools.map((item) => (
             <Button
               key={item.service}
+              data-service={item.service}
               type={
                 suggestedTools.includes(item.service) || (item.service === 'gp-rebuild-daybook' && dailyBlocked)
                   ? 'primary'

@@ -225,6 +225,24 @@ h4 {
   gap: 10px !important;
 }
 
+.session-menu-item {
+  display: flex;
+  width: min(340px, calc(100vw - 56px));
+  max-width: calc(100vw - 56px);
+  flex-direction: column;
+  gap: 2px;
+  overflow: hidden;
+}
+
+.session-menu-preview {
+  max-width: 100%;
+}
+
+.session-dropdown .ant-dropdown-menu {
+  max-height: min(520px, calc(100vh - 240px));
+  overflow-y: auto;
+}
+
 .session-picker-btn,
 .session-new-btn {
   min-height: 42px;

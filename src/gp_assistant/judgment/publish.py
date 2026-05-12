@@ -55,11 +55,14 @@ def publish_run(session_id: str, book: MarketBook, topk: int = 3) -> AdviceRun:
     )
     canonical = build_canonical_run(book=book, run=run, picks=picks)
     run.run_action = canonical.run_action
+    run.recommendation_state = canonical.recommendation_state
     run.non_trading = canonical.non_trading
     run.status_reason = canonical.status_reason
     run.no_trade_reasons = list(canonical.no_trade_reasons)
     run.recovery_conditions = list(canonical.recovery_conditions)
     run.data_quality = dict(canonical.data_quality)
     run.data_provenance = dict(canonical.data_provenance)
+    run.explain_context = dict(canonical.explain_context)
+    run.decision_evidence_pack = dict(canonical.decision_evidence_pack)
     save_run(run)
     return run

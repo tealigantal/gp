@@ -14,6 +14,7 @@ def _pick_plan_slice(entry) -> Dict[str, Any]:
         "rank": getattr(entry, "rank", None),
         "name": getattr(entry, "name", None),
         "execution_state": getattr(entry, "execution_state", None),
+        "recommendation_state": getattr(entry, "recommendation_state", None),
         "action": getattr(entry, "action", None),
         "entry_zone": getattr(entry, "entry_zone", None),
         "stop": getattr(entry, "stop", None),
@@ -24,6 +25,12 @@ def _pick_plan_slice(entry) -> Dict[str, Any]:
         "take_profit_plan": getattr(pick, "take_profit_plan", {}) if pick else {},
         "thesis": getattr(pick, "thesis", None) if pick else None,
         "why_selected": getattr(pick, "why_selected", None) if pick else None,
+        "champion_strategy": getattr(entry, "champion_strategy", None),
+        "champion_strategy_score": getattr(entry, "champion_strategy_score", None),
+        "score_breakdown": getattr(entry, "score_breakdown", {}),
+        "strategy_context": getattr(entry, "strategy_context", {}),
+        "risk_pack": getattr(entry, "risk_pack", {}),
+        "explain_context": getattr(entry, "explain_context", {}),
     }
 
 
@@ -37,6 +44,8 @@ def _run_slice(run) -> Dict[str, Any]:
         "market_phase": run.market_phase,
         "slot_status": run.slot_status,
         "run_action": run.run_action,
+        "recommendation_state": getattr(run, "recommendation_state", None),
+        "decision_evidence_pack": getattr(run, "decision_evidence_pack", {}),
         "picks": [_pick_plan_slice(entry) for entry in run.picks[:6]],
     }
 

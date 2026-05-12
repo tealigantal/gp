@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import re
 from typing import Any, Dict
 
 from .context_engine import build_context
 from .reference_resolver import inject_entity_hints
 from ..contracts.objects import MarketBook, TurnFrame
+from ..evidence.live_quote_service import extract_user_quote
 from ..llm.interpret import parse_turn_frame
 
 
@@ -23,6 +25,89 @@ def _coerce_topk(value: Any) -> int:
         return 3
 
 
+_RANK_WORDS = {
+    "第一": 1,
+    "第1": 1,
+    "第二": 2,
+    "第2": 2,
+    "第三": 3,
+    "第3": 3,
+    "第四": 4,
+    "第4": 4,
+    "第五": 5,
+    "第5": 5,
+}
+
+
+def _rank_from_text(raw: str) -> int | None:
+    text = raw or ""
+    hits: list[tuple[int, int]] = []
+    for key, value in _RANK_WORDS.items():
+        pos = text.find(key)
+        if pos >= 0:
+            hits.append((pos, value))
+    if hits:
+        return sorted(hits, key=lambda item: item[0])[0][1]
+    match = re.search(r"第\s*(\d{1,2})\s*(只|个|名)?", text)
+    if match:
+        try:
+            return int(match.group(1))
+        except Exception:
+            return None
+    return None
+
+
+def _promote_explain_followups(frame: TurnFrame) -> TurnFrame:
+    raw = str(frame.raw_message or "")
+    refs = dict(frame.references or {})
+    rank = _rank_from_text(raw)
+    if rank is not None and refs.get("rank") is None:
+        refs["rank"] = rank
+    compare_phrases = [
+        "不如第一",
+        "和第一只比",
+        "和上一只比",
+        "第一只和第二只",
+        "第二只为什么不如第一只",
+        "谁更适合",
+    ]
+    live_phrases = ["现在能买吗", "能不能买", "现在买", "可以买", "能直接买", "能入吗"]
+    detail_phrases = [
+        "为什么第一只",
+        "第二只为什么",
+        "触发条件是什么",
+        "触发条件",
+        "为什么不直接买",
+        "为什么这个策略",
+        "为什么不是突破策略",
+        "风险在哪里",
+        "风险在哪",
+        "策略为什么",
+    ]
+    if any(phrase in raw for phrase in compare_phrases):
+        frame.request = "compare"
+        frame.subject = "compare_set"
+    elif any(phrase in raw for phrase in live_phrases):
+        frame.request = "live_entry_check"
+        frame.subject = "symbol"
+    elif _looks_like_live_price_question(raw):
+        frame.request = "live_entry_check"
+        frame.subject = "symbol"
+    elif any(phrase in raw for phrase in detail_phrases):
+        frame.request = "pick_detail"
+        frame.subject = "pick"
+    frame.references = refs
+    return frame
+
+
+def _looks_like_live_price_question(raw: str) -> bool:
+    text = str(raw or "")
+    has_price_context = any(token in text for token in ("最高", "现价", "现在", "当前", "目前", "稳定", "横盘"))
+    has_entry_context = any(token in text for token in ("入场", "能不能", "可不可以", "能买吗", "可以买", "该不该买", "冲"))
+    has_number = bool(re.search(r"\d+(?:\.\d+)?", text))
+    return bool(has_price_context and has_entry_context and has_number)
+
+
 def normalize_turn_frame(frame: TurnFrame, book: MarketBook | None = None) -> TurnFrame:
     request_alias = {
         "explain": "pick_detail",
@@ -32,12 +117,22 @@ def normalize_turn_frame(frame: TurnFrame, book: MarketBook | None = None) -> Tu
     freshness_alias = {
         "current_book": "active_run",
         "rebuild_daybook": "rebuild_run",
+        "latest_5m": "active_run",
     }
     frame.request = request_alias.get(frame.request, frame.request)
     frame.freshness = freshness_alias.get(frame.freshness, frame.freshness)
     frame.references = frame.references or {}
     frame.constraints = frame.constraints or {}
+    frame = _promote_explain_followups(frame)
+    frame.references = frame.references or {}
+    frame.constraints = frame.constraints or {}
     frame.constraints.setdefault("allow_derived_data", True)
+    if frame.request == "live_entry_check":
+        quote = extract_user_quote(frame.raw_message)
+        if any(quote.get(key) is not None for key in ("current_price", "day_high", "day_low")):
+            frame.constraints["user_quote"] = quote
+            if quote.get("symbol") and not frame.references.get("symbol"):
+                frame.references["symbol"] = quote.get("symbol")
     if frame.request == "recommend":
         frame.constraints["topk"] = _coerce_topk(frame.constraints.get("topk") or 3)
     if (

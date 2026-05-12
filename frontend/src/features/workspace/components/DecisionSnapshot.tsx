@@ -7,7 +7,7 @@ import type {
   MarketBook,
   OpsRunResponse,
 } from '../../../shared/contracts'
-import { executionStateMeta, runActionLabel, slotStatusLabel } from '../presentation'
+import { executionStateMeta, recommendationStateMeta, runActionLabel, slotStatusLabel } from '../presentation'
 import { marketPhaseLabel } from '../runtimeLabels'
 import { OperationsStatusCard } from './OperationsStatusCard'
 
@@ -51,6 +51,7 @@ export function DecisionSnapshot({
   const run = resolveRun(latest)
   const marketPhase = marketPhaseLabel(run?.market_phase || book?.market_phase || health?.runtime?.market_phase)
   const slotState = slotStatusLabel(run?.slot_status || book?.slot_status || health?.runtime?.slot_status)
+  const runRecommendation = recommendationStateMeta(run?.recommendation_state)
   const symbolRows = (run?.picks || []).length
     ? (run?.picks || []).slice(0, 5).map((pick) => ({
         key: pick.symbol,
@@ -59,7 +60,9 @@ export function DecisionSnapshot({
         name: pick.name || '--',
         summary: pick.thesis || pick.why_selected || '暂无摘要',
         actionLabel: pick.action === 'BUY' ? '计划买入' : '暂不入场',
+        recommendationState: pick.recommendation_state,
         executionState: pick.execution_state,
+        championStrategy: pick.champion_strategy,
         entryText: pick.entry_text || '',
       }))
     : !run && book
@@ -70,7 +73,9 @@ export function DecisionSnapshot({
           name: pick.name || '--',
           summary: pick.pick?.thesis || pick.summary || '暂无摘要',
           actionLabel: pick.action === 'BUY' ? '计划买入' : '暂不入场',
+          recommendationState: pick.recommendation_state,
           executionState: pick.execution_state,
+          championStrategy: pick.champion_strategy,
           entryText: '',
         }))
       : []
@@ -115,6 +120,7 @@ export function DecisionSnapshot({
       <section className="snapshot-section" aria-label="Top 标的">
         <div className="snapshot-section-title">
           <Typography.Text strong>Top 标的</Typography.Text>
+          {run?.recommendation_state ? <Tag color={runRecommendation.color}>{runRecommendation.label}</Tag> : null}
           {run ? <Tag>{runActionLabel(run.run_action)}</Tag> : null}
         </div>
         <Space direction="vertical" size={12} style={{ width: '100%' }}>
@@ -125,6 +131,7 @@ export function DecisionSnapshot({
           ) : (
             symbolRows.map((row) => {
               const state = executionStateMeta(row.executionState)
+              const recommendation = recommendationStateMeta(row.recommendationState)
               return (
                 <div key={row.key} className="snapshot-symbol-row">
                   <div className="snapshot-symbol-rank">#{row.rank}</div>
@@ -138,8 +145,9 @@ export function DecisionSnapshot({
                     </Typography.Paragraph>
                   </div>
                   <div className="snapshot-symbol-state">
-                    <Tag>{row.actionLabel}</Tag>
+                    {row.recommendationState ? <Tag color={recommendation.color}>{recommendation.label}</Tag> : <Tag>{row.actionLabel}</Tag>}
                     <Tag color={state.color}>{state.label}</Tag>
+                    {row.championStrategy ? <Tag color="geekblue">{row.championStrategy}</Tag> : null}
                     {row.entryText ? <Typography.Text type="secondary">{row.entryText}</Typography.Text> : null}
                   </div>
                 </div>

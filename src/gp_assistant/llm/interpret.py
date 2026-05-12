@@ -66,6 +66,11 @@ SYSTEM += (
     'and it is not explicitly an exit/sell question or a comparison, use request="single_stock_query", '
     'subject="symbol", and put the 6-digit code in references.symbol.'
 )
+SYSTEM += (
+    '\nRule: if the user gives intraday prices such as current price, day high, stable/sideways wording, '
+    'and asks whether they can enter/buy now, use request="live_entry_check" and subject="symbol". '
+    'Put any explicit 6-digit code in references.symbol; otherwise rely on the current focus symbol.'
+)
 
 
 def _short(value: Any, limit: int = 1200) -> str:

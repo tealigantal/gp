@@ -14,6 +14,7 @@ from ..contracts.objects import (
     PickDetailArtifact,
     RunChangeArtifact,
 )
+from ..evidence.live_quote_service import build_live_quote_snapshot
 from ..evidence.single_stock_service import analyze_single_stock
 from ..runtime.canonical_artifact import (
     build_canonical_pick,
@@ -68,6 +69,7 @@ def _stale_pick_detail(run, pick: CanonicalPick, message: str) -> PickDetailArti
         reason_codes=[*list(pick.reason_codes or []), "daily_freshness_blocked"],
         data_provenance=pick.data_provenance,
         source_run_id=(run.run_id if run else None),
+        explain_context=pick.explain_context,
     )
 
 
@@ -94,6 +96,7 @@ def _stale_live_entry(run, pick: CanonicalPick, message: str) -> LiveEntryDecisi
         reason_codes=[*list(pick.reason_codes or []), "daily_freshness_blocked"],
         data_provenance=pick.data_provenance,
         source_run_id=(run.run_id if run else None),
+        explain_context=pick.explain_context,
     )
 
 
@@ -131,6 +134,7 @@ def _stale_compare(run, picks: List[CanonicalPick], stale_points: List[str]) -> 
         comparison_points=stale_points,
         source_run_id=(run.run_id if run else None),
         data_provenance=(run.data_provenance if run else {}),
+        explain_context={"ranking_context": [pick.explain_context for pick in picks if pick.explain_context]},
     )
 
 
@@ -264,7 +268,16 @@ def live_entry_workflow(evidence: EvidencePack) -> Judgment:
     if pick is None:
         pick = build_canonical_pick(evidence.subject_entry, evidence.book)
     freshness_issue = _pick_freshness_issue(pick)
-    live_entry = _stale_live_entry(canonical_run, pick, freshness_issue) if freshness_issue else build_live_entry_view(canonical_run, pick)
+    quote_snapshot = build_live_quote_snapshot(
+        symbol=evidence.subject_entry.symbol,
+        user_message=evidence.frame.raw_message,
+        trade_day=evidence.book.pulse_trade_day or evidence.book.trading_day,
+    )
+    live_entry = (
+        _stale_live_entry(canonical_run, pick, freshness_issue)
+        if freshness_issue
+        else build_live_entry_view(canonical_run, pick, quote_snapshot=quote_snapshot)
+    )
     return Judgment(
         kind="live_entry_check",
         summary=live_entry.summary,

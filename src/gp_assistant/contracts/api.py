@@ -71,6 +71,8 @@ class RuntimeStatus(BaseModel):
     last_repair_finished_at: Optional[str] = None
     blocking_reason: Optional[str] = None
     artifact_status: Optional[str] = None
+    artifact_lag_reason: Optional[str] = None
+    artifact_lag_fields: List[str] = Field(default_factory=list)
     daily_checked_count: int = 0
     daily_stale_count: int = 0
     daily_last_reconcile_at: Optional[str] = None

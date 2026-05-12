@@ -79,6 +79,7 @@ class AdvicePick(GPModel):
     why_not_others: List[str] = Field(default_factory=list)
     evidence_refs: List[str] = Field(default_factory=list)
     style_label: Optional[str] = None
+    explain_context: Dict[str, Any] = Field(default_factory=dict)
     meta: Dict[str, Any] = Field(default_factory=dict)
 
 
@@ -130,6 +131,17 @@ class SymbolPulse(GPModel):
     slot_at: Optional[str] = None
     is_stale: bool = False
     stale_reason: Optional[str] = None
+    recommendation_state: str = "UNAVAILABLE"
+    feature_snapshot: Dict[str, Any] = Field(default_factory=dict)
+    raw_bar_summary: List[Dict[str, Any]] = Field(default_factory=list)
+    strategy_candidates: List[Dict[str, Any]] = Field(default_factory=list)
+    champion_strategy: Optional[str] = None
+    champion_strategy_score: float = 0.0
+    execution_plan: Dict[str, Any] = Field(default_factory=dict)
+    score_breakdown: Dict[str, float] = Field(default_factory=dict)
+    strategy_context: Dict[str, Any] = Field(default_factory=dict)
+    risk_pack: Dict[str, Any] = Field(default_factory=dict)
+    explain_context: Dict[str, Any] = Field(default_factory=dict)
 
 
 class BoardEntry(GPModel):
@@ -163,6 +175,17 @@ class BoardEntry(GPModel):
     style_label: Optional[str] = None
     pick: AdvicePick
     pulse: Optional[SymbolPulse] = None
+    recommendation_state: str = "UNAVAILABLE"
+    feature_snapshot: Dict[str, Any] = Field(default_factory=dict)
+    raw_bar_summary: List[Dict[str, Any]] = Field(default_factory=list)
+    strategy_candidates: List[Dict[str, Any]] = Field(default_factory=list)
+    champion_strategy: Optional[str] = None
+    champion_strategy_score: float = 0.0
+    execution_plan: Dict[str, Any] = Field(default_factory=dict)
+    score_breakdown: Dict[str, float] = Field(default_factory=dict)
+    strategy_context: Dict[str, Any] = Field(default_factory=dict)
+    risk_pack: Dict[str, Any] = Field(default_factory=dict)
+    explain_context: Dict[str, Any] = Field(default_factory=dict)
 
 
 class SideResult(GPModel):
@@ -288,6 +311,9 @@ class AdviceRun(GPModel):
     data_provenance: Dict[str, Any] = Field(default_factory=dict)
     gate_state: Optional[str] = None
     gate_reasons: List[str] = Field(default_factory=list)
+    recommendation_state: str = "NO_TRADE"
+    explain_context: Dict[str, Any] = Field(default_factory=dict)
+    decision_evidence_pack: Dict[str, Any] = Field(default_factory=dict)
 
 
 class CanonicalPick(GPModel):
@@ -327,11 +353,24 @@ class CanonicalPick(GPModel):
     rs_industry: Optional[float] = None
     slot_rel_vol: Optional[float] = None
     entry_distance_pct: Optional[float] = None
+    recommendation_state: str = "UNAVAILABLE"
+    champion_strategy: Optional[str] = None
+    champion_strategy_score: float = 0.0
+    strategy_reason_codes: List[str] = Field(default_factory=list)
+    strategy_reject_reasons: List[str] = Field(default_factory=list)
+    competing_strategies: List[Dict[str, Any]] = Field(default_factory=list)
+    score_breakdown: Dict[str, float] = Field(default_factory=dict)
+    feature_snapshot: Dict[str, Any] = Field(default_factory=dict)
+    raw_bar_summary: List[Dict[str, Any]] = Field(default_factory=list)
+    execution_plan: Dict[str, Any] = Field(default_factory=dict)
+    risk_pack: Dict[str, Any] = Field(default_factory=dict)
+    explain_context: Dict[str, Any] = Field(default_factory=dict)
 
 
 class CanonicalRunArtifact(GPModel):
     run_id: str
     artifact_id: Optional[str] = None
+    slot_id: Optional[str] = None
     book_version: Optional[str] = None
     as_of: str
     trading_day: str
@@ -341,6 +380,7 @@ class CanonicalRunArtifact(GPModel):
     market_phase: Optional[str] = None
     slot_status: Optional[str] = None
     run_action: str = "NO_TRADE"
+    recommendation_state: str = "NO_TRADE"
     tradeable: bool = False
     publish_allowed: bool = False
     non_trading: bool = False
@@ -352,6 +392,8 @@ class CanonicalRunArtifact(GPModel):
     gate: Dict[str, Any] = Field(default_factory=dict)
     data_quality: Dict[str, Any] = Field(default_factory=dict)
     data_provenance: Dict[str, Any] = Field(default_factory=dict)
+    explain_context: Dict[str, Any] = Field(default_factory=dict)
+    decision_evidence_pack: Dict[str, Any] = Field(default_factory=dict)
     tool_trace: Dict[str, Any] = Field(default_factory=dict)
 
 
@@ -377,6 +419,10 @@ class LiveEntryDecisionArtifact(GPModel):
     reason_codes: List[str] = Field(default_factory=list)
     data_provenance: Dict[str, Any] = Field(default_factory=dict)
     source_run_id: Optional[str] = None
+    explain_context: Dict[str, Any] = Field(default_factory=dict)
+    quote_snapshot: Dict[str, Any] = Field(default_factory=dict)
+    user_quote: Dict[str, Any] = Field(default_factory=dict)
+    plan_position: Dict[str, Any] = Field(default_factory=dict)
 
 
 class PickDetailArtifact(GPModel):
@@ -394,6 +440,7 @@ class PickDetailArtifact(GPModel):
     reason_codes: List[str] = Field(default_factory=list)
     data_provenance: Dict[str, Any] = Field(default_factory=dict)
     source_run_id: Optional[str] = None
+    explain_context: Dict[str, Any] = Field(default_factory=dict)
 
 
 class SingleStockAnalysisArtifact(GPModel):
@@ -441,6 +488,7 @@ class CompareArtifact(GPModel):
     comparison_points: List[str] = Field(default_factory=list)
     source_run_id: Optional[str] = None
     data_provenance: Dict[str, Any] = Field(default_factory=dict)
+    explain_context: Dict[str, Any] = Field(default_factory=dict)
 
 
 class RunChangeArtifact(GPModel):

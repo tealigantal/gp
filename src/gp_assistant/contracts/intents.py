@@ -39,4 +39,5 @@ FreshnessType = Literal[
     # legacy aliases
     "current_book",
     "rebuild_daybook",
+    "latest_5m",
 ]

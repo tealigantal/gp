@@ -21,9 +21,11 @@ export function SessionSwitcher({ sessions, currentId, onSelect, onNew, loading 
   const items = sessions.map((session) => ({
     key: session.session_id,
     label: (
-      <div style={{ display: 'flex', flexDirection: 'column', minWidth: 260 }}>
-        <Typography.Text strong>{sessionStamp(session.updated_at)}</Typography.Text>
-        <Typography.Text type="secondary" ellipsis>
+      <div className="session-menu-item">
+        <Typography.Text strong ellipsis>
+          {sessionStamp(session.updated_at)}
+        </Typography.Text>
+        <Typography.Text type="secondary" ellipsis className="session-menu-preview">
           {session.title || '未命名对话'} · {session.preview || ''}
         </Typography.Text>
       </div>
@@ -39,6 +41,7 @@ export function SessionSwitcher({ sessions, currentId, onSelect, onNew, loading 
           items,
           onClick: (info) => onSelect(info.key),
         }}
+        overlayClassName="session-dropdown"
         placement="bottomRight"
         trigger={['click']}
         disabled={!items.length}

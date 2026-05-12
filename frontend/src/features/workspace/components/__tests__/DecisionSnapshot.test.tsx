@@ -92,6 +92,7 @@ it('omits retired decision snapshot hero metadata', () => {
         as_of: new Date().toISOString(),
         trading_day: '20260101',
         run_action: 'RECOMMEND',
+        recommendation_state: 'TRIGGER_PLAN',
         tradeable: true,
         publish_allowed: true,
         non_trading: false,
@@ -114,6 +115,7 @@ it('omits retired decision snapshot hero metadata', () => {
   expect(screen.queryByText(/Decision Snapshot/i)).not.toBeInTheDocument()
   expect(screen.queryByText(/run_123/)).not.toBeInTheDocument()
   expect(screen.queryByText(/artifact_123/)).not.toBeInTheDocument()
+  expect(screen.getByText('等待触发')).toBeInTheDocument()
 })
 
 it('shows daily runtime tools from health status', () => {

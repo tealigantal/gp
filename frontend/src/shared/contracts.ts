@@ -13,13 +13,29 @@ export type ExecutionState =
   | 'INVALIDATED'
   | 'UNAVAILABLE'
 
+export type RecommendationState =
+  | 'TRADING_SIGNAL'
+  | 'TRIGGER_PLAN'
+  | 'NEXT_SESSION_PLAN'
+  | 'NO_TRADE'
+  | 'UNAVAILABLE'
+
+export interface CompetingStrategySummary {
+  strategy_name?: string
+  eligible?: boolean
+  score?: number
+  raw_score?: number
+  reason_codes?: string[]
+  reject_reasons?: string[]
+}
+
 export interface CanonicalPick {
   symbol: string
   code: string
   name?: string | null
   rank: number
-  action: 'BUY' | 'WATCH'
-  execution_state: ExecutionState
+  action: 'BUY' | 'WATCH' | string
+  execution_state: ExecutionState | string
   can_execute_now: boolean
   thesis?: string
   why_selected?: string
@@ -46,12 +62,25 @@ export interface CanonicalPick {
   rs_industry?: number | null
   slot_rel_vol?: number | null
   entry_distance_pct?: number | null
+  recommendation_state?: RecommendationState | string
+  champion_strategy?: string | null
+  champion_strategy_score?: number
+  strategy_reason_codes?: string[]
+  strategy_reject_reasons?: string[]
+  competing_strategies?: CompetingStrategySummary[]
+  score_breakdown?: Record<string, number>
+  feature_snapshot?: Record<string, unknown>
+  raw_bar_summary?: Array<Record<string, unknown>>
+  execution_plan?: Record<string, unknown>
+  risk_pack?: Record<string, unknown>
+  explain_context?: Record<string, unknown>
   data_provenance?: Record<string, unknown>
 }
 
 export interface CanonicalRunArtifact {
   run_id: string
   artifact_id?: string | null
+  slot_id?: string | null
   book_version?: string | null
   as_of: string
   trading_day: string
@@ -60,7 +89,8 @@ export interface CanonicalRunArtifact {
   pulse_slot_at?: string | null
   market_phase?: string | null
   slot_status?: string | null
-  run_action: 'RECOMMEND' | 'NO_TRADE' | 'DEGRADED'
+  run_action: 'RECOMMEND' | 'NO_TRADE' | 'DEGRADED' | string
+  recommendation_state?: RecommendationState | string
   tradeable: boolean
   publish_allowed: boolean
   non_trading: boolean
@@ -72,13 +102,15 @@ export interface CanonicalRunArtifact {
   gate: Record<string, unknown>
   data_quality: Record<string, unknown>
   data_provenance: Record<string, unknown>
+  explain_context?: Record<string, unknown>
+  decision_evidence_pack?: Record<string, unknown>
   tool_trace: Record<string, unknown>
 }
 
 export interface LiveEntryDecision {
   symbol: string
   name?: string | null
-  execution_state: ExecutionState
+  execution_state: ExecutionState | string
   can_execute_now: boolean
   next_action: string
   summary: string
@@ -97,6 +129,10 @@ export interface LiveEntryDecision {
   reason_codes?: string[]
   data_provenance?: Record<string, unknown>
   source_run_id?: string | null
+  explain_context?: Record<string, unknown>
+  quote_snapshot?: Record<string, unknown>
+  user_quote?: Record<string, unknown>
+  plan_position?: Record<string, unknown>
 }
 
 export interface PickDetailArtifact {
@@ -109,11 +145,12 @@ export interface PickDetailArtifact {
   stop_text?: string | null
   take_text?: string | null
   invalidation?: string | null
-  execution_state?: ExecutionState | null
+  execution_state?: ExecutionState | string | null
   risk_level?: string
   reason_codes?: string[]
   data_provenance?: Record<string, unknown>
   source_run_id?: string | null
+  explain_context?: Record<string, unknown>
 }
 
 export interface SingleStockAnalysisArtifact {
@@ -151,6 +188,7 @@ export interface CompareArtifact {
   comparison_points: string[]
   source_run_id?: string | null
   data_provenance?: Record<string, unknown>
+  explain_context?: Record<string, unknown>
 }
 
 export interface RunChangeArtifact {
@@ -167,12 +205,15 @@ export interface CanonicalRecommendMessage {
   message_kind: 'recommend'
   narrative_text: string
   lead_summary?: string
-  decision_state?: 'BUY' | 'WATCH'
+  decision_state?: 'BUY' | 'WATCH' | RecommendationState | string
+  recommendation_state?: RecommendationState | string
   market_summary?: string
   execution_note?: string | null
   risk_note?: string | null
   picks: CanonicalPick[]
   run: CanonicalRunArtifact
+  explain_context?: Record<string, unknown>
+  decision_evidence_pack?: Record<string, unknown>
   followup_suggestions?: string[]
   freshness_meta?: Record<string, unknown>
 }
@@ -346,6 +387,8 @@ export interface RuntimeStatus {
   last_repair_finished_at?: string | null
   blocking_reason?: string | null
   artifact_status: string
+  artifact_lag_reason?: string | null
+  artifact_lag_fields?: string[]
   services: RuntimeToolInfo[]
 }
 
@@ -455,6 +498,8 @@ export interface AdvicePick {
   why_not_others: string[]
   evidence_refs: string[]
   style_label?: string | null
+  explain_context?: Record<string, unknown>
+  meta?: Record<string, unknown>
 }
 
 export interface SymbolPulse {
@@ -475,8 +520,34 @@ export interface SymbolPulse {
   action?: string
   can_open?: boolean
   signal_type?: string
+  entry_zone?: Record<string, unknown>
+  stop?: number | null
+  take?: number[]
+  vwap?: number | null
+  orb30_high?: number | null
+  orb30_low?: number | null
+  rs_index?: number | null
+  rs_industry?: number | null
+  slot_rel_vol?: number | null
+  extended?: boolean
+  reason_codes?: string[]
+  provider?: string | null
+  volume_baseline?: number | null
   trade_day?: string | null
   slot_at?: string | null
+  is_stale?: boolean
+  stale_reason?: string | null
+  recommendation_state?: RecommendationState | string
+  feature_snapshot?: Record<string, unknown>
+  raw_bar_summary?: Array<Record<string, unknown>>
+  strategy_candidates?: CompetingStrategySummary[]
+  champion_strategy?: string | null
+  champion_strategy_score?: number
+  execution_plan?: Record<string, unknown>
+  score_breakdown?: Record<string, number>
+  strategy_context?: Record<string, unknown>
+  risk_pack?: Record<string, unknown>
+  explain_context?: Record<string, unknown>
 }
 
 export interface BoardEntry {
@@ -510,6 +581,17 @@ export interface BoardEntry {
   style_label?: string | null
   pick: AdvicePick
   pulse?: SymbolPulse | null
+  recommendation_state?: RecommendationState | string
+  feature_snapshot?: Record<string, unknown>
+  raw_bar_summary?: Array<Record<string, unknown>>
+  strategy_candidates?: CompetingStrategySummary[]
+  champion_strategy?: string | null
+  champion_strategy_score?: number
+  execution_plan?: Record<string, unknown>
+  score_breakdown?: Record<string, number>
+  strategy_context?: Record<string, unknown>
+  risk_pack?: Record<string, unknown>
+  explain_context?: Record<string, unknown>
 }
 
 export interface SideResult {
@@ -568,6 +650,9 @@ export interface AdviceRun {
   reason?: string | null
   picks: BoardEntry[]
   evidence_refs: string[]
+  recommendation_state?: RecommendationState | string
+  explain_context?: Record<string, unknown>
+  decision_evidence_pack?: Record<string, unknown>
 }
 
 export interface BookResponse {

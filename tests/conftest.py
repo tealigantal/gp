@@ -88,6 +88,8 @@ def pytest_collection_modifyitems(config, items):
         "test_akshare_request_timeout.py",
         "test_runtime_lanes.py",
         "test_market_clock_slots.py",
+        "test_intraday_multistrategy.py",
+        "test_live_entry_quote_plan.py",
     )
     for item in items:
         fn = item.location[0]

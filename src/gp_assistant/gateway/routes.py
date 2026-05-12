@@ -41,7 +41,7 @@ from ..runtime.market_clock import (
     compute_market_state,
 )
 from ..runtime.repair import load_repair_status_snapshot
-from ..evidence.daily_freshness import resolve_daily_target
+from ..evidence.daily_freshness import TARGET_CURRENT_READY, resolve_daily_target
 from ..runtime.turn_loop import run_turn_sync
 from ..runtime.utils import now_iso
 from ..worker import reconcile_runtime_state
@@ -105,9 +105,77 @@ def _ops_executor(operation: str) -> tuple[str, Callable[[], dict[str, Any]]] | 
     return mapping.get(operation)
 
 
-def _book_freshness(book, market_phase: str, target_slot_at: str | None, *, intraday_runtime_enabled: bool) -> str:
+_DAILY_PLAN_META_KEYS = (
+    "daybook_generated_at",
+    "daily_target_day",
+    "daily_target_mode",
+    "daily_last_reconcile_at",
+    "market_phase",
+)
+
+
+def _daily_last_reconcile_at(freshness: dict[str, Any]) -> Any:
+    return freshness.get("last_reconcile_at") or freshness.get("generated_at") or freshness.get("reconciled_at")
+
+
+def _daily_plan_publish_meta(book, *, market_phase: str) -> dict[str, Any]:
+    daybook = getattr(book, "daybook", None)
+    source_meta = getattr(daybook, "source_meta", {}) or {}
+    freshness = dict(source_meta.get("daily_freshness") or {})
+    return {
+        "daybook_generated_at": getattr(daybook, "generated_at", None),
+        "daily_target_day": freshness.get("target_day"),
+        "daily_target_mode": freshness.get("target_mode"),
+        "daily_last_reconcile_at": _daily_last_reconcile_at(freshness),
+        "market_phase": market_phase,
+    }
+
+
+def _artifact_lag_status(
+    book,
+    *,
+    market_phase: str,
+    daily_runtime: dict[str, Any],
+) -> tuple[bool, str | None, list[str]]:
+    if book is None:
+        return False, None, []
+    if not bool(daily_runtime.get("daily_freshness_ready")):
+        return False, None, []
+    if str(daily_runtime.get("daily_target_mode") or "").lower() != "current_ready":
+        return False, None, []
+
+    artifact_id = getattr(book, "artifact_id", None)
+    if not artifact_id:
+        return True, "daily_ready_current_artifact_missing", ["artifact_id"]
+    artifact = load_slot_artifact(str(artifact_id), trade_day=getattr(book, "trading_day", None))
+    if artifact is None:
+        return True, "daily_ready_current_artifact_unavailable", ["artifact"]
+
+    provider_meta = dict(getattr(artifact, "provider_meta", {}) or {})
+    expected_meta = _daily_plan_publish_meta(book, market_phase=market_phase)
+    lag_fields: list[str] = []
+    if provider_meta.get("reason") != "daily_plan":
+        lag_fields.append("reason")
+    for key in _DAILY_PLAN_META_KEYS:
+        if key not in provider_meta or provider_meta.get(key) != expected_meta.get(key):
+            lag_fields.append(key)
+    if not lag_fields:
+        return False, None, []
+    return True, f"daily_ready_current_artifact_meta_mismatch:{','.join(lag_fields)}", lag_fields
+
+
+def _book_freshness(
+    book,
+    market_phase: str,
+    target_slot_at: str | None,
+    *,
+    intraday_runtime_enabled: bool,
+    artifact_lagging: bool = False,
+) -> str:
     if book is None:
         return "unavailable"
+    if artifact_lagging:
+        return "lagging"
     if not intraday_runtime_enabled:
         return "daily_only"
     slot_status = str(getattr(book, "slot_status", "") or "").upper()
@@ -135,6 +203,14 @@ def _daily_freshness_fields(book) -> dict[str, Any]:
         "daily_blocking_reason": freshness.get("blocking_reason"),
         "daily_failed_symbols": list(freshness.get("failed_symbols") or []),
     }
+
+
+def _trade_day_iso(trade_day: Any) -> str:
+    raw = str(trade_day or "").strip()
+    digits = "".join(ch for ch in raw if ch.isdigit())
+    if len(digits) >= 8:
+        return f"{digits[:4]}-{digits[4:6]}-{digits[6:8]}"
+    return raw
 
 
 def _load_current_book_best_effort():
@@ -174,6 +250,16 @@ def _runtime_status(book, *, lock_error: str | None = None) -> RuntimeStatus:
         else daily_freshness.get("eod_probe")
     )
     source_target_day = daily_freshness.get("daily_target_day")
+    source_target_mode = daily_freshness.get("daily_target_mode")
+    if (
+        daily_freshness.get("daily_freshness_ready") is True
+        and str(source_target_mode or "") == TARGET_CURRENT_READY
+        and str(source_target_day or "") == _trade_day_iso(ms.target_daybook_effective_day)
+    ):
+        daily_target_day = source_target_day
+        daily_target_mode = source_target_mode
+        pending_eod_day = daily_freshness.get("pending_eod_day")
+        eod_probe = daily_freshness.get("eod_probe")
     if source_target_day and daily_target_day and str(source_target_day) != str(daily_target_day):
         daily_freshness = {
             **daily_freshness,
@@ -191,6 +277,11 @@ def _runtime_status(book, *, lock_error: str | None = None) -> RuntimeStatus:
         "pending_eod_day": str(pending_eod_day) if pending_eod_day else None,
         "eod_probe": eod_probe if isinstance(eod_probe, dict) else None,
     }
+    artifact_lagging, artifact_lag_reason, artifact_lag_fields = _artifact_lag_status(
+        book,
+        market_phase=ms.market_phase,
+        daily_runtime=daily_runtime,
+    )
     return RuntimeStatus(
         market_phase=str(snapshot.market_phase if snapshot else ms.market_phase),
         calendar_source=ms.calendar_source,
@@ -208,6 +299,7 @@ def _runtime_status(book, *, lock_error: str | None = None) -> RuntimeStatus:
             ms.market_phase,
             ms.target_pulse_slot_at,
             intraday_runtime_enabled=intraday_runtime_enabled,
+            artifact_lagging=artifact_lagging,
         ),
         book_updated_at=(getattr(book, "updated_at", None) if book else None),
         artifact_id=(getattr(book, "artifact_id", None) if book else None),
@@ -236,7 +328,13 @@ def _runtime_status(book, *, lock_error: str | None = None) -> RuntimeStatus:
                 )
             )
         ),
-        artifact_status=str(snapshot.artifact_status if snapshot else (getattr(book, "slot_status", None) or "unavailable")),
+        artifact_status=str(
+            snapshot.artifact_status
+            if snapshot
+            else ("lagging" if artifact_lagging else (getattr(book, "slot_status", None) or "unavailable"))
+        ),
+        artifact_lag_reason=artifact_lag_reason,
+        artifact_lag_fields=artifact_lag_fields,
         services=_runtime_services(),
         **daily_runtime,
     )

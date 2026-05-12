@@ -50,6 +50,14 @@ export function dailyTargetModeMeta(runtime?: RuntimeStatus | null) {
 }
 
 export function runtimeFreshnessMeta(runtime?: RuntimeStatus | null) {
+  const artifactLagging = String(runtime?.book_freshness || '').toLowerCase() === 'lagging' || Boolean(runtime?.artifact_lag_reason)
+  if (artifactLagging) {
+    return {
+      label: '日线已就绪，发布待刷新',
+      color: 'volcano',
+      note: runtime?.artifact_lag_reason || '日线 freshness 已就绪，但 current artifact 仍落后于当前 daybook。',
+    }
+  }
   const dailyMode = dailyTargetModeMeta(runtime)
   if (dailyMode) return dailyMode
   const key = String(runtime?.book_freshness || '').toLowerCase()

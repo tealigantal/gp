@@ -751,6 +751,7 @@ def _explain_decision_text(reply: ReplyBundle, judgment: Judgment) -> str:
 
 def _agent_system_prompt() -> str:
     return (
+        "For live entry checks, preserve whether the quote was verified by minute data or only derived from the user's price. "
         "你是一个 A 股短线股票助手。"
         "你必须先读取工具结果，再用正常业务语言回答用户。"
         "不要提到代码、模块名、planner trace、tool 名称、内部实现或调试字段。"
@@ -887,6 +888,7 @@ def _final_text_from_tools(
             {
                 "role": "system",
                 "content": (
+                    "For live_check cards with quote_snapshot, keep the quote source visible: minute-data verified, bid/ask verified, or user-quote only. "
                     "现在只根据上面的工具结果给出最终答复。使用自然业务语言，避免泄露内部实现。"
                     "如果工具结果包含业务卡片，你必须解释卡片中的关键信息如何支撑结论：先说结论，"
                     "再解释选择依据、执行含义、风险边界或缺失数据。不要只复述卡片标题、字段名或简单摘要。"

@@ -29,6 +29,32 @@ def _entry_by_rank(entries: List[BoardEntry], rank: int | None) -> BoardEntry | 
 
 
 def _extract_rank(raw: str) -> int | None:
+    text = raw or ""
+    rank_words = {
+        "第一": 1,
+        "第1": 1,
+        "第二": 2,
+        "第2": 2,
+        "第三": 3,
+        "第3": 3,
+        "第四": 4,
+        "第4": 4,
+        "第五": 5,
+        "第5": 5,
+    }
+    hits = []
+    for key, value in rank_words.items():
+        pos = text.find(key)
+        if pos >= 0:
+            hits.append((pos, value))
+    if hits:
+        return sorted(hits, key=lambda item: item[0])[0][1]
+    digit_match = re.search(r"第\s*(\d{1,2})\s*(?:只|个|名)?", text)
+    if digit_match:
+        try:
+            return int(digit_match.group(1))
+        except Exception:
+            return None
     match = _RANK_RE.search(raw or "")
     if not match:
         return None

@@ -69,6 +69,38 @@ class _Book:
     )()
 
 
+class _ReadyBook:
+    book_version = "daily_old"
+    artifact_id = "daily_old"
+    trading_day = "20260512"
+    updated_at = "2026-05-12T10:42:54+08:00"
+    daybook_effective_day = "20260512"
+    pulse_trade_day = None
+    pulse_slot_at = None
+    last_closed_5m = None
+    slot_status = "OK"
+    publish_allowed = True
+    board = []
+    tracked_universe = type("Tracked", (), {"total": []})()
+    daybook = type(
+        "Daybook",
+        (),
+        {
+            "generated_at": "2026-05-12T16:52:00+08:00",
+            "source_meta": {
+                "daily_freshness": {
+                    "ready": True,
+                    "target_day": "2026-05-12",
+                    "target_mode": "current_ready",
+                    "checked_count": 50,
+                    "stale_count": 0,
+                    "last_reconcile_at": "2026-05-12T16:52:00+08:00",
+                }
+            },
+        },
+    )()
+
+
 def _config(intraday_runtime_enabled: bool = True):
     return SimpleNamespace(
         provider=SimpleNamespace(data_provider="akshare"),
@@ -169,3 +201,48 @@ def test_runtime_daily_target_prefers_resolver_over_stale_book(monkeypatch):
     assert runtime["daily_stale_count"] == 0
     assert runtime["daily_blocking_reason"] is None
     assert runtime["daily_failed_symbols"] == []
+
+
+def test_health_reports_lagging_when_daily_ready_but_current_artifact_meta_is_stale(monkeypatch):
+    state = SimpleNamespace(
+        market_phase="POSTCLOSE_PENDING",
+        target_daybook_effective_day="20260512",
+        target_pulse_trade_day="20260512",
+        target_pulse_slot_at="2026-05-12 14:55:00",
+        calendar_source="official",
+        calendar_status="ok",
+        calendar_range_start="20260101",
+        calendar_range_end="20261231",
+        calendar_error=None,
+        next_trading_day="20260513",
+    )
+    stale_artifact = SimpleNamespace(provider_meta={"reason": "daily_plan", "market_phase": "INTRADAY_AM"})
+
+    monkeypatch.setattr(routes, "load_config", lambda: _config(True))
+    monkeypatch.setattr(routes, "load_current_book", lambda: _ReadyBook())
+    monkeypatch.setattr(routes, "compute_market_state", lambda now=None: state)
+    monkeypatch.setattr(routes, "load_repair_status_snapshot", lambda: None)
+    monkeypatch.setattr(
+        routes,
+        "resolve_daily_target",
+        lambda *_, **__: {
+            "target_day": "2026-05-11",
+            "target_mode": "current_pending",
+            "pending_eod_day": "2026-05-12",
+            "eod_probe": None,
+        },
+    )
+    monkeypatch.setattr(routes, "load_slot_artifact", lambda artifact_id, trade_day=None: stale_artifact)
+
+    response = client.get("/api/health")
+
+    assert response.status_code == 200, response.text
+    runtime = response.json()["runtime"]
+    assert runtime["daily_freshness_ready"] is True
+    assert runtime["daily_target_day"] == "2026-05-12"
+    assert runtime["daily_target_mode"] == "current_ready"
+    assert runtime["daily_stale_count"] == 0
+    assert runtime["book_freshness"] == "lagging"
+    assert runtime["artifact_status"] == "lagging"
+    assert "daily_ready_current_artifact_meta_mismatch" in runtime["artifact_lag_reason"]
+    assert "market_phase" in runtime["artifact_lag_fields"]

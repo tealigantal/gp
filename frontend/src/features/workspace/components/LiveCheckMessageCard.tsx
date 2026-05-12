@@ -1,7 +1,7 @@
 import { Card, Descriptions, Space, Tag, Typography } from 'antd'
 import type { LiveEntryDecision } from '../../../shared/contracts'
 import { fmtPct } from '../../../shared/format'
-import { executionStateMeta } from '../presentation'
+import { executionStateMeta, recommendationStateMeta } from '../presentation'
 
 interface LiveCheckMessageCardProps {
   view: LiveEntryDecision
@@ -10,14 +10,21 @@ interface LiveCheckMessageCardProps {
 
 export function LiveCheckMessageCard({ view, text }: LiveCheckMessageCardProps) {
   const state = executionStateMeta(view.execution_state)
+  const recommendationState =
+    typeof view.explain_context?.recommendation_state === 'string' ? view.explain_context.recommendation_state : null
+  const recommendation = recommendationStateMeta(recommendationState)
+  const championStrategy =
+    typeof view.explain_context?.champion_strategy === 'string' ? view.explain_context.champion_strategy : null
 
   return (
     <Card size="small" className="detail-card">
       <Space direction="vertical" size={12} style={{ width: '100%' }}>
         <Space wrap>
+          {recommendationState ? <Tag color={recommendation.color}>{recommendation.label}</Tag> : null}
           <Tag color={state.color}>{state.label}</Tag>
           <Tag>{view.symbol}</Tag>
           {view.gate_state ? <Tag>{view.gate_state}</Tag> : null}
+          {championStrategy ? <Tag color="geekblue">{championStrategy}</Tag> : null}
         </Space>
 
         <Typography.Paragraph style={{ margin: 0, whiteSpace: 'pre-wrap' }}>{text}</Typography.Paragraph>

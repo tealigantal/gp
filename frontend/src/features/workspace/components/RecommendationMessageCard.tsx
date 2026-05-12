@@ -1,6 +1,6 @@
 import { Card, Space, Tag, Typography } from 'antd'
 import type { CanonicalPick, CanonicalRunArtifact, RuntimeStatus } from '../../../shared/contracts'
-import { runStateMeta, runActionLabel, slotStatusLabel } from '../presentation'
+import { recommendationStateMeta, runStateMeta, runActionLabel, slotStatusLabel } from '../presentation'
 import { marketPhaseLabel } from '../runtimeLabels'
 import { RecommendationPickCard } from './RecommendationPickCard'
 
@@ -13,6 +13,7 @@ interface RecommendationMessageCardProps {
 
 export function RecommendationMessageCard({ picks, run, runtime, onPrompt }: RecommendationMessageCardProps) {
   const state = runStateMeta(run, { runtime })
+  const recommendation = recommendationStateMeta(run?.recommendation_state)
 
   return (
     <Card className="recommendation-message-card">
@@ -28,9 +29,11 @@ export function RecommendationMessageCard({ picks, run, runtime, onPrompt }: Rec
             </Typography.Paragraph>
           </div>
           <Space wrap>
+            {run?.recommendation_state ? <Tag color={recommendation.color}>{recommendation.label}</Tag> : null}
             {run?.run_action ? <Tag>{runActionLabel(run.run_action)}</Tag> : null}
             {run?.market_phase ? <Tag>{marketPhaseLabel(run.market_phase)}</Tag> : null}
             {run?.slot_status ? <Tag>{slotStatusLabel(run.slot_status)}</Tag> : null}
+            {run?.slot_id ? <Tag>{run.slot_id}</Tag> : null}
           </Space>
         </div>
 

@@ -16,6 +16,7 @@ from ..contracts.objects import (
     RunChangeArtifact,
     SlotGate,
 )
+from ..intraday.plans import NEXT_SESSION_PLAN, NO_TRADE, TRADING_SIGNAL, TRIGGER_PLAN, UNAVAILABLE, compact_context, finite_float
 from ..evidence.daily_freshness import active_freshness_for_current_target
 from .dialogue_text import clean_user_reason, clean_user_reasons
 from ..runtime.market_clock import (
@@ -27,7 +28,7 @@ from ..runtime.market_clock import (
 )
 
 
-BUY_SIGNAL_STATES = {"breakout_buy", "reclaim_buy", "afternoon_relaunch_buy"}
+BUY_SIGNAL_STATES = {"breakout_buy", "reclaim_buy", "afternoon_relaunch_buy", "trend_continuation_buy"}
 
 
 def _as_text(value: Any) -> Optional[str]:
@@ -58,6 +59,15 @@ def _list_floats(values: Any) -> List[float]:
 
 
 def _entry_zone_from_entry(entry: BoardEntry) -> Dict[str, Any]:
+    plan = dict(getattr(entry, "execution_plan", {}) or {})
+    if plan:
+        return {
+            "low": plan.get("entry_low"),
+            "high": plan.get("entry_high"),
+            "mid": plan.get("entry_mid"),
+            "trigger": plan.get("trigger_price"),
+            "type": plan.get("entry_type"),
+        }
     zone = dict(entry.entry_zone or {})
     if zone:
         return zone
@@ -83,6 +93,13 @@ def _range_text(zone: Dict[str, Any]) -> Optional[str]:
 
 
 def _entry_text(entry: BoardEntry) -> Optional[str]:
+    plan = dict(getattr(entry, "execution_plan", {}) or {})
+    if plan:
+        trigger = _as_float(plan.get("trigger_price"))
+        low = _as_float(plan.get("entry_low"))
+        high = _as_float(plan.get("entry_high"))
+        if trigger is not None and low is not None and high is not None:
+            return f"trigger {trigger:.2f}, entry {low:.2f} - {high:.2f}"
     plan = entry.pick.entry_plan or {}
     for key in ("text", "desc", "range"):
         text = _as_text(plan.get(key))
@@ -92,6 +109,10 @@ def _entry_text(entry: BoardEntry) -> Optional[str]:
 
 
 def _stop_value(entry: BoardEntry) -> Optional[float]:
+    plan = dict(getattr(entry, "execution_plan", {}) or {})
+    stop = _as_float(plan.get("stop_price"))
+    if stop is not None:
+        return stop
     stop = _as_float(entry.stop)
     if stop is not None:
         return stop
@@ -104,6 +125,11 @@ def _stop_value(entry: BoardEntry) -> Optional[float]:
 
 
 def _stop_text(entry: BoardEntry) -> Optional[str]:
+    plan = dict(getattr(entry, "execution_plan", {}) or {})
+    stop = _as_float(plan.get("stop_price"))
+    reason = _as_text(plan.get("invalidation_reason"))
+    if stop is not None:
+        return f"{stop:.2f}" + (f" ({reason})" if reason else "")
     plan = entry.pick.stop_plan or {}
     for key in ("text", "desc", "level"):
         text = _as_text(plan.get(key))
@@ -114,6 +140,10 @@ def _stop_text(entry: BoardEntry) -> Optional[str]:
 
 
 def _take_values(entry: BoardEntry) -> List[float]:
+    plan = dict(getattr(entry, "execution_plan", {}) or {})
+    planned = [value for value in (_as_float(plan.get("take1")), _as_float(plan.get("take2"))) if value is not None]
+    if planned:
+        return planned
     if entry.take:
         return _list_floats(entry.take)
     plan = entry.pick.take_profit_plan or {}
@@ -126,6 +156,12 @@ def _take_values(entry: BoardEntry) -> List[float]:
 
 
 def _take_text(entry: BoardEntry) -> Optional[str]:
+    plan = dict(getattr(entry, "execution_plan", {}) or {})
+    planned = [value for value in (_as_float(plan.get("take1")), _as_float(plan.get("take2"))) if value is not None]
+    if planned:
+        rr1 = _as_float(plan.get("rr_to_take1"))
+        rr_text = f", RR {rr1:.2f}" if rr1 is not None else ""
+        return " / ".join(f"{value:.2f}" for value in planned) + rr_text
     plan = entry.pick.take_profit_plan or {}
     for key in ("text", "desc"):
         text = _as_text(plan.get(key))
@@ -188,6 +224,17 @@ def _status_reason(book: MarketBook) -> str:
 
 
 def _pick_execution_state(entry: BoardEntry, book: MarketBook) -> str:
+    recommendation_state = str(getattr(entry, "recommendation_state", "") or "").upper()
+    if recommendation_state == TRADING_SIGNAL:
+        return "PLAN_READY"
+    if recommendation_state == TRIGGER_PLAN:
+        return "WAIT_PULLBACK"
+    if recommendation_state == NEXT_SESSION_PLAN:
+        return "WAIT_NEXT_SESSION"
+    if recommendation_state == UNAVAILABLE:
+        return "UNAVAILABLE"
+    if recommendation_state == NO_TRADE:
+        return "INVALIDATED" if entry.invalidated else "WATCH_ONLY"
     signal = str((entry.pulse.execution_state if entry.pulse else entry.execution_state) or "").lower()
     gate_state = str(book.gate.state or "").upper()
     if entry.invalidated or signal in {"invalidated", "below_support", "breakdown_risk"}:
@@ -206,12 +253,17 @@ def _pick_execution_state(entry: BoardEntry, book: MarketBook) -> str:
 
 
 def _pick_action(entry: BoardEntry, execution_state: str) -> str:
-    if execution_state in {"PLAN_READY", "WAIT_PULLBACK"}:
+    if str(getattr(entry, "recommendation_state", "") or "").upper() == TRADING_SIGNAL:
         return "BUY"
     return "WATCH"
 
 
 def _pick_risk_level(entry: BoardEntry, execution_state: str, book: MarketBook) -> str:
+    recommendation_state = str(getattr(entry, "recommendation_state", "") or "").upper()
+    if recommendation_state in {UNAVAILABLE, NO_TRADE}:
+        return "high" if entry.invalidated else "medium"
+    if recommendation_state == TRADING_SIGNAL:
+        return "medium_low"
     if execution_state in {"INVALIDATED", "RISK_HIGH"}:
         return "high"
     if execution_state == "WAIT_PULLBACK":
@@ -224,6 +276,7 @@ def _pick_risk_level(entry: BoardEntry, execution_state: str, book: MarketBook) 
 def build_canonical_pick(entry: BoardEntry, book: MarketBook) -> CanonicalPick:
     execution_state = _pick_execution_state(entry, book)
     action = _pick_action(entry, execution_state)
+    recommendation_state = str(getattr(entry, "recommendation_state", "") or "").upper() or UNAVAILABLE
     zone = _entry_zone_from_entry(entry)
     entry_text = _entry_text(entry)
     stop = _stop_value(entry)
@@ -231,7 +284,28 @@ def build_canonical_pick(entry: BoardEntry, book: MarketBook) -> CanonicalPick:
     take_values = _take_values(entry)
     take_text = _take_text(entry)
 
-    technical_basis: List[str] = []
+    explain_context = dict(getattr(entry, "explain_context", {}) or {})
+    score_breakdown = dict(getattr(entry, "score_breakdown", {}) or {})
+    feature_snapshot = dict(getattr(entry, "feature_snapshot", {}) or {})
+    execution_plan = dict(getattr(entry, "execution_plan", {}) or {})
+    risk_pack = dict(getattr(entry, "risk_pack", {}) or {})
+    strategy_context = dict(getattr(entry, "strategy_context", {}) or {})
+    champion_strategy = getattr(entry, "champion_strategy", None) or strategy_context.get("champion_strategy")
+    champion_strategy_score = finite_float(getattr(entry, "champion_strategy_score", 0.0) or strategy_context.get("champion_strategy_score"))
+    competing_strategies = list(strategy_context.get("competing_strategies") or [])
+    if not competing_strategies:
+        competing_strategies = [
+            {
+                "strategy_name": item.get("strategy_name"),
+                "eligible": item.get("eligible"),
+                "score": item.get("raw_score"),
+                "reason_codes": item.get("reason_codes") or [],
+                "reject_reasons": item.get("reject_reasons") or [],
+            }
+            for item in list(getattr(entry, "strategy_candidates", []) or [])[:3]
+            if isinstance(item, dict)
+        ]
+    technical_basis: List[str] = list(strategy_context.get("strategy_reason_codes") or [])[:6]
 
     missing_fields: List[str] = []
     if not entry_text:
@@ -262,6 +336,9 @@ def build_canonical_pick(entry: BoardEntry, book: MarketBook) -> CanonicalPick:
         data_provenance["gate_metrics"] = dict(book.gate.metrics)
     if entry.reason_codes:
         data_provenance["reason_codes"] = list(entry.reason_codes)
+    data_provenance["recommendation_state"] = recommendation_state
+    if champion_strategy:
+        data_provenance["champion_strategy"] = champion_strategy
     pick_meta = dict(entry.pick.meta or {})
     if pick_meta.get("daily_last_date"):
         data_provenance["daily_last_date"] = pick_meta.get("daily_last_date")
@@ -281,7 +358,7 @@ def build_canonical_pick(entry: BoardEntry, book: MarketBook) -> CanonicalPick:
         rank=entry.rank,
         action=action,
         execution_state=execution_state,
-        can_execute_now=execution_state == "PLAN_READY",
+        can_execute_now=recommendation_state == TRADING_SIGNAL,
         thesis=thesis,
         why_selected=why_selected,
         entry_zone=zone,
@@ -304,14 +381,82 @@ def build_canonical_pick(entry: BoardEntry, book: MarketBook) -> CanonicalPick:
         artifact_id=entry.artifact_id or book.artifact_id,
         slot_id=entry.slot_id or book.slot_id,
         data_provenance=data_provenance,
-        vwap=None,
-        orb30_high=None,
-        orb30_low=None,
-        rs_index=None,
-        rs_industry=None,
-        slot_rel_vol=None,
-        entry_distance_pct=None,
+        vwap=entry.vwap,
+        orb30_high=entry.orb30_high,
+        orb30_low=entry.orb30_low,
+        rs_index=entry.rs_index,
+        rs_industry=entry.rs_industry,
+        slot_rel_vol=entry.slot_rel_vol,
+        entry_distance_pct=finite_float(feature_snapshot.get("distance_to_entry")) if feature_snapshot else None,
+        recommendation_state=recommendation_state,
+        champion_strategy=champion_strategy,
+        champion_strategy_score=champion_strategy_score,
+        strategy_reason_codes=list(strategy_context.get("strategy_reason_codes") or []),
+        strategy_reject_reasons=list(strategy_context.get("strategy_reject_reasons") or []),
+        competing_strategies=competing_strategies[:3],
+        score_breakdown={key: finite_float(value) for key, value in score_breakdown.items()},
+        feature_snapshot=feature_snapshot,
+        raw_bar_summary=list(getattr(entry, "raw_bar_summary", []) or [])[-8:],
+        execution_plan=execution_plan,
+        risk_pack=risk_pack,
+        explain_context=explain_context,
     )
+
+
+def _aggregate_recommendation_state(picks: List[CanonicalPick], book: MarketBook) -> str:
+    if not picks:
+        if book.data_quality and not book.data_quality.complete:
+            return UNAVAILABLE
+        return NO_TRADE
+    states = [str(pick.recommendation_state or "").upper() for pick in picks]
+    if any(state == TRADING_SIGNAL for state in states):
+        return TRADING_SIGNAL
+    if any(state == TRIGGER_PLAN for state in states):
+        return TRIGGER_PLAN
+    if any(state == NEXT_SESSION_PLAN for state in states):
+        return NEXT_SESSION_PLAN
+    if states and all(state == UNAVAILABLE for state in states):
+        return UNAVAILABLE
+    return NO_TRADE
+
+
+def _legacy_run_action(recommendation_state: str, *, degraded: bool) -> str:
+    if recommendation_state in {NO_TRADE, UNAVAILABLE}:
+        return "NO_TRADE"
+    if degraded:
+        return "DEGRADED"
+    return "RECOMMEND"
+
+
+def _run_evidence_pack_from_picks(book: MarketBook, picks: List[CanonicalPick]) -> Dict[str, Any]:
+    full = [pick.explain_context for pick in picks if pick.explain_context]
+    pick_symbols = {pick.symbol for pick in picks}
+    rivals: List[Dict[str, Any]] = []
+    for entry in list(book.board or []):
+        if entry.symbol in pick_symbols:
+            continue
+        if entry.explain_context:
+            rivals.append(compact_context(entry.explain_context))
+        if len(rivals) >= 3:
+            break
+    return {
+        "top_picks_full_context": full,
+        "nearby_rivals_compact_context": rivals,
+        "raw_bar_summary": {pick.symbol: list(pick.raw_bar_summary or [])[-8:] for pick in picks if pick.raw_bar_summary},
+        "context_policy": {
+            "top_picks": "full explain_context",
+            "nearby_rivals": "compact score and strategy fields",
+            "bars": "last 6-12 five-minute summary bars only",
+        },
+        "gate": book.gate.model_dump() if book.gate else {},
+        "artifact": {
+            "artifact_id": book.artifact_id,
+            "slot_id": book.slot_id,
+            "as_of": book.updated_at,
+            "market_phase": book.market_phase,
+            "slot_status": book.slot_status,
+        },
+    }
 
 
 def build_canonical_run(*, book: MarketBook, run: AdviceRun, picks: Iterable[BoardEntry]) -> CanonicalRunArtifact:
@@ -330,22 +475,24 @@ def build_canonical_run(*, book: MarketBook, run: AdviceRun, picks: Iterable[Boa
     )
     blocked_reason = _as_text(daybook_freshness.get("blocking_reason"))
     degraded = not bool(book.data_quality.complete) or gate_state == "DEGRADED"
-    executable_count = sum(1 for pick in canonical_picks_all if pick.execution_state in {"PLAN_READY", "WAIT_PULLBACK"})
+    recommendation_state = _aggregate_recommendation_state(canonical_picks_all, book)
+    executable_count = sum(1 for pick in canonical_picks_all if pick.recommendation_state in {TRADING_SIGNAL, TRIGGER_PLAN, NEXT_SESSION_PLAN})
     watch_only_count = sum(1 for pick in canonical_picks_all if pick.execution_state == "WATCH_ONLY")
-    if not has_plan:
+    if recommendation_state in {NO_TRADE, UNAVAILABLE}:
         run_action = "NO_TRADE"
     elif stale_daily_picks:
         run_action = "NO_TRADE"
     elif gate_state == "BLOCKED" and executable_count == 0 and watch_only_count == len(canonical_picks_all):
         run_action = "NO_TRADE"
-    elif degraded and gate_state != "ALLOW":
-        run_action = "DEGRADED"
     else:
-        run_action = "RECOMMEND"
+        run_action = _legacy_run_action(recommendation_state, degraded=bool(degraded and gate_state != "ALLOW"))
     canonical_picks = [] if run_action == "NO_TRADE" else canonical_picks_all
+    decision_evidence_pack = _run_evidence_pack_from_picks(book, canonical_picks)
 
     no_trade_reasons: List[str] = []
     if run_action == "NO_TRADE":
+        if recommendation_state == UNAVAILABLE:
+            no_trade_reasons.append("real_intraday_data_unavailable")
         if stale_daily_picks:
             no_trade_reasons.append(f"日线数据未补齐到目标交易日：{', '.join(stale_daily_picks[:6])}")
         freshness_blocking_reason = _as_text(daybook_freshness.get("blocking_reason"))
@@ -385,15 +532,17 @@ def build_canonical_run(*, book: MarketBook, run: AdviceRun, picks: Iterable[Boa
     return CanonicalRunArtifact(
         run_id=run.run_id,
         artifact_id=book.artifact_id,
+        slot_id=book.slot_id,
         book_version=book.book_version,
         as_of=book.updated_at,
         trading_day=book.trading_day,
         daybook_effective_day=book.daybook_effective_day or book.daybook.trading_day,
-        pulse_trade_day=None,
-        pulse_slot_at=None,
+        pulse_trade_day=book.pulse_trade_day,
+        pulse_slot_at=book.pulse_slot_at,
         market_phase=book.market_phase,
         slot_status=("OK" if bool(book.data_quality.complete) else book.slot_status),
         run_action=run_action,
+        recommendation_state=recommendation_state,
         tradeable=bool(book.daybook.tradeable),
         publish_allowed=bool(book.publish_allowed),
         non_trading=_market_phase_non_trading(book.market_phase),
@@ -405,6 +554,15 @@ def build_canonical_run(*, book: MarketBook, run: AdviceRun, picks: Iterable[Boa
         gate=book.gate.model_dump(),
         data_quality=book.data_quality.model_dump(),
         data_provenance=data_provenance,
+        explain_context={
+            "recommendation_state": recommendation_state,
+            "top_symbols": [pick.symbol for pick in canonical_picks],
+            "artifact_id": book.artifact_id,
+            "slot_id": book.slot_id,
+            "as_of": book.updated_at,
+            "market_phase": book.market_phase,
+        },
+        decision_evidence_pack=decision_evidence_pack,
         tool_trace={
             "gate_state": gate_state,
             "gate_reasons": list(book.gate.reasons or []),
@@ -414,6 +572,18 @@ def build_canonical_run(*, book: MarketBook, run: AdviceRun, picks: Iterable[Boa
 
 
 def build_no_trade_view(run: CanonicalRunArtifact, book: MarketBook) -> NoTradeArtifact:
+    if run.recommendation_state == UNAVAILABLE:
+        reasons = clean_user_reasons(run.no_trade_reasons or ["real_intraday_data_unavailable"])
+        summary = "UNAVAILABLE: real data is insufficient, so no trade plan is forced."
+        return NoTradeArtifact(
+            run_action=UNAVAILABLE,
+            market_summary=summary,
+            status_reason=run.status_reason or summary,
+            no_trade_reasons=reasons,
+            recovery_conditions=list(run.recovery_conditions or []),
+            data_provenance=run.data_provenance,
+            source_run_id=run.run_id,
+        )
     if run.run_action == "NO_TRADE":
         reasons = clean_user_reasons(run.no_trade_reasons)
         summary = "今天不硬给票，当前没有足够清晰的日线计划。"
@@ -448,10 +618,139 @@ def build_pick_detail_view(run: CanonicalRunArtifact, pick: CanonicalPick) -> Pi
         reason_codes=pick.reason_codes,
         data_provenance=pick.data_provenance,
         source_run_id=run.run_id,
+        explain_context=pick.explain_context,
     )
 
 
-def build_live_entry_view(run: CanonicalRunArtifact, pick: CanonicalPick) -> LiveEntryDecisionArtifact:
+def _plan_levels_from_pick(pick: CanonicalPick) -> Dict[str, Optional[float]]:
+    plan = dict(pick.execution_plan or {})
+    ctx = dict(pick.explain_context or {})
+    zone = dict(pick.entry_zone or {})
+    return {
+        "trigger": _as_float(plan.get("trigger_price") or ctx.get("trigger_price") or zone.get("trigger")),
+        "entry_low": _as_float(plan.get("entry_low") or ctx.get("entry_low") or zone.get("low")),
+        "entry_high": _as_float(plan.get("entry_high") or ctx.get("entry_high") or zone.get("high")),
+        "stop": _as_float(plan.get("stop_price") or ctx.get("stop_price") or pick.stop),
+        "take1": _as_float(plan.get("take1") or ctx.get("take1") or (pick.take_profit[0] if pick.take_profit else None)),
+        "take2": _as_float(plan.get("take2") or ctx.get("take2") or (pick.take_profit[1] if len(pick.take_profit) > 1 else None)),
+    }
+
+
+def _fmt_price(value: Optional[float]) -> str:
+    return f"{value:.2f}" if value is not None else "--"
+
+
+def _plan_position(price: Optional[float], levels: Dict[str, Optional[float]]) -> Dict[str, Any]:
+    low = levels.get("entry_low")
+    high = levels.get("entry_high")
+    trigger = levels.get("trigger")
+    stop = levels.get("stop")
+    zone_ratio = None
+    if price is not None and low is not None and high is not None and high > low:
+        zone_ratio = (price - low) / (high - low)
+    return {
+        "price": price,
+        "entry_low": low,
+        "entry_high": high,
+        "trigger": trigger,
+        "stop": stop,
+        "in_entry_zone": bool(price is not None and low is not None and high is not None and low <= price <= high),
+        "above_trigger": bool(price is not None and trigger is not None and price >= trigger),
+        "below_stop": bool(price is not None and stop is not None and price <= stop),
+        "zone_ratio": zone_ratio,
+        "distance_to_stop_pct": (
+            ((price - stop) / price)
+            if price is not None and stop is not None and price > 0
+            else None
+        ),
+    }
+
+
+def _live_quote_basis_text(quote: Dict[str, Any]) -> str:
+    source = str(quote.get("source") or "")
+    current = _as_float(quote.get("current_price"))
+    high = _as_float(quote.get("day_high"))
+    avg = _as_float(quote.get("average_price"))
+    latest = _as_text(quote.get("latest_time"))
+    if source == "akshare:minute_1m":
+        bits = [f"已用分钟数据核验到 {latest or '最新可用分钟'}"]
+        if current is not None:
+            bits.append(f"最新价 {_fmt_price(current)}")
+        if high is not None:
+            bits.append(f"当日高点 {_fmt_price(high)}")
+        if avg is not None:
+            bits.append(f"均价 {_fmt_price(avg)}")
+        user_quote = dict(quote.get("user_quote") or {})
+        user_price = _as_float(user_quote.get("current_price"))
+        if quote.get("user_quote_mismatch") and user_price is not None and current is not None:
+            bits.append(f"你给的现价 {_fmt_price(user_price)} 与分钟最新价 {_fmt_price(current)} 有差异")
+        return "，".join(bits) + "。"
+    if source == "akshare:bid_ask":
+        bits = ["已用盘口数据核验"]
+        if current is not None:
+            bits.append(f"最新价 {_fmt_price(current)}")
+        if high is not None:
+            bits.append(f"当日高点 {_fmt_price(high)}")
+        return "，".join(bits) + "。"
+    if source == "user":
+        user_quote = dict(quote.get("user_quote") or {})
+        user_price = _as_float(user_quote.get("current_price") or quote.get("current_price"))
+        user_high = _as_float(user_quote.get("day_high") or quote.get("day_high"))
+        bits = ["未完成实时核验，以下仅按你给的价格判断"]
+        if user_price is not None:
+            bits.append(f"现价 {_fmt_price(user_price)}")
+        if user_high is not None:
+            bits.append(f"当日高点 {_fmt_price(user_high)}")
+        return "，".join(bits) + "。"
+    return "当前没有拿到可核验的盘中价格，只能按日线计划做条件判断。"
+
+
+def _live_entry_decision_text(pick: CanonicalPick, quote: Dict[str, Any], position: Dict[str, Any]) -> tuple[str, str]:
+    price = _as_float(position.get("price"))
+    low = _as_float(position.get("entry_low"))
+    high = _as_float(position.get("entry_high"))
+    trigger = _as_float(position.get("trigger"))
+    stop = _as_float(position.get("stop"))
+    zone_ratio = _as_float(position.get("zone_ratio"))
+    basis = _live_quote_basis_text(quote)
+    plan = f"计划区间 {_fmt_price(low)} - {_fmt_price(high)}，触发价 {_fmt_price(trigger)}，失效/止损 {_fmt_price(stop)}。"
+    if price is None:
+        decision = "没有可用现价，不能给即时入场动作；先等价格数据恢复后再判断。"
+        return f"{basis}\n{plan}\n结论：{decision}", decision
+    if bool(position.get("below_stop")):
+        decision = "不入场，现价已经触及或低于失效线，先取消这条计划。"
+        return f"{basis}\n{plan}\n结论：{decision}", decision
+    if bool(position.get("in_entry_zone")):
+        if pick.execution_state == "WAIT_PULLBACK":
+            if trigger is not None and price < trigger and zone_ratio is not None and zone_ratio >= 0.55:
+                decision = "不是标准低吸点；价格仍在买入区间上半部，且没有突破触发价。稳健等回踩，激进只能轻仓试探并严守止损。"
+            elif trigger is not None and price >= trigger:
+                decision = "价格已经到触发价附近；若分钟走势能继续站稳并放量，可以小仓试探，否则不要追。"
+            else:
+                decision = "在计划区间内但仍属于等待回踩；更好的动作是等靠近支撑后企稳，激进只能轻仓试探。"
+        elif pick.execution_state == "PLAN_READY":
+            decision = "在计划区间内，可以按计划分批试探，但仍要用止损线控制风险。"
+        elif pick.execution_state == "WAIT_NEXT_SESSION":
+            decision = "盘中价格进入计划区间，但这条仍是下一交易窗口计划；现在只做条件观察，不直接追。"
+        else:
+            decision = "价格在计划区间内，但当前执行状态没有给出买入信号，先观察。"
+    elif high is not None and price > high:
+        if trigger is not None and price >= trigger:
+            decision = "价格已经高于计划区间上沿，只有放量站稳触发价才考虑小仓；稳健做法是不追高。"
+        else:
+            decision = "价格高于计划区间上沿，性价比不够，先不追。"
+    elif low is not None and price < low:
+        decision = "价格低于计划区间下沿，先等重新站回区间并企稳，不提前接。"
+    else:
+        decision = "价格位置还不能和计划区间完整匹配，先不做主动入场。"
+    return f"{basis}\n{plan}\n结论：{decision}", decision
+
+
+def build_live_entry_view(
+    run: CanonicalRunArtifact,
+    pick: CanonicalPick,
+    quote_snapshot: Dict[str, Any] | None = None,
+) -> LiveEntryDecisionArtifact:
     next_action = {
         "PLAN_READY": "价格处在日线计划区间内，按买入区、失效位和仓位规则分批处理。",
         "WAIT_PULLBACK": "逻辑仍在，等价格回到买入区再处理。",
@@ -466,6 +765,19 @@ def build_live_entry_view(run: CanonicalRunArtifact, pick: CanonicalPick) -> Liv
         "RISK_HIGH": "当前风险偏高。",
         "INVALIDATED": "计划已经失效。",
     }.get(pick.execution_state, "当前按日线计划处理。")
+    quote = dict(quote_snapshot or {})
+    levels = _plan_levels_from_pick(pick)
+    price = _as_float(quote.get("current_price"))
+    position = _plan_position(price, levels)
+    if quote:
+        summary, next_action = _live_entry_decision_text(pick, quote, position)
+    explain_context = {
+        **dict(pick.explain_context or {}),
+        "recommendation_state": pick.recommendation_state,
+        "quote_snapshot": quote,
+        "plan_position": position,
+    }
+    vwap = pick.vwap if pick.vwap is not None else _as_float(quote.get("average_price"))
     return LiveEntryDecisionArtifact(
         symbol=pick.symbol,
         name=pick.name,
@@ -475,12 +787,17 @@ def build_live_entry_view(run: CanonicalRunArtifact, pick: CanonicalPick) -> Liv
         summary=summary,
         gate_state=run.gate.get("state") if isinstance(run.gate, dict) else None,
         gate_reasons=list(run.gate.get("reasons") or []) if isinstance(run.gate, dict) else [],
+        vwap=vwap,
         entry_text=pick.entry_text,
         stop_text=pick.stop_text,
         take_text=pick.take_text,
         reason_codes=pick.reason_codes,
         data_provenance=pick.data_provenance,
         source_run_id=run.run_id,
+        explain_context=explain_context,
+        quote_snapshot=quote,
+        user_quote=dict(quote.get("user_quote") or {}),
+        plan_position=position,
     )
 
 
@@ -534,6 +851,16 @@ def build_compare_view(run: CanonicalRunArtifact, picks: List[CanonicalPick]) ->
     if len(ordered) >= 2:
         leader = ordered[0]
         runner = ordered[1]
+        comparison_points.append(
+            "score_breakdown: "
+            f"live {leader.live_score:.2f}/{runner.live_score:.2f}, "
+            f"strategy {leader.champion_strategy_score:.2f}/{runner.champion_strategy_score:.2f}, "
+            f"exec {finite_float(leader.score_breakdown.get('execution_quality_score')):.2f}/{finite_float(runner.score_breakdown.get('execution_quality_score')):.2f}, "
+            f"RR {finite_float(leader.score_breakdown.get('rr_score')):.2f}/{finite_float(runner.score_breakdown.get('rr_score')):.2f}, "
+            f"RS {finite_float(leader.score_breakdown.get('relative_strength_score')):.2f}/{finite_float(runner.score_breakdown.get('relative_strength_score')):.2f}, "
+            f"risk_penalty {finite_float(leader.score_breakdown.get('risk_penalty')):.2f}/{finite_float(runner.score_breakdown.get('risk_penalty')):.2f}, "
+            f"data_quality {finite_float(leader.score_breakdown.get('data_quality_score')):.2f}/{finite_float(runner.score_breakdown.get('data_quality_score')):.2f}."
+        )
         comparison_points.append(f"{leader.symbol} 排在前面，主要因为执行状态 {leader.execution_state} 优于 {runner.execution_state}。")
         if float(leader.final_score or 0.0) != float(runner.final_score or 0.0):
             comparison_points.append(f"综合分 {leader.final_score:.2f} 对比 {runner.final_score:.2f}。")
@@ -550,12 +877,24 @@ def build_compare_view(run: CanonicalRunArtifact, picks: List[CanonicalPick]) ->
                 "final_score": pick.final_score,
                 "live_score": pick.live_score,
                 "risk_level": pick.risk_level,
+                "recommendation_state": pick.recommendation_state,
+                "champion_strategy": pick.champion_strategy,
+                "champion_strategy_score": pick.champion_strategy_score,
+                "execution_quality_score": finite_float(pick.score_breakdown.get("execution_quality_score")),
+                "rr_score": finite_float(pick.score_breakdown.get("rr_score")),
+                "relative_strength_score": finite_float(pick.score_breakdown.get("relative_strength_score")),
+                "risk_penalty": finite_float(pick.score_breakdown.get("risk_penalty")),
+                "data_quality_score": finite_float(pick.score_breakdown.get("data_quality_score")),
             }
             for pick in ordered
         ],
         comparison_points=comparison_points,
         source_run_id=run.run_id,
         data_provenance=run.data_provenance,
+        explain_context={
+            "compared_symbols": [pick.symbol for pick in ordered],
+            "ranking_context": [pick.explain_context for pick in ordered if pick.explain_context],
+        },
     )
 
 
