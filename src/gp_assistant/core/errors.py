@@ -1,5 +1,3 @@
-# 简介：统一异常类型定义。包含 APIError、通用包内错误、数据源错误、
-# 以及凭证缺失错误，用于 HTTP 与内部逻辑的标准化报错。
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -23,6 +21,36 @@ class APIError(Exception):
 
 class GPAssistantError(Exception):
     pass
+
+
+class IntentLLMUnavailable(GPAssistantError):
+    def __init__(self, reason: str):
+        self.reason = str(reason or "unknown")
+        super().__init__(f"LLM intent parser unavailable: {self.reason}")
+
+
+class IntentParseFailed(GPAssistantError):
+    def __init__(
+        self,
+        message: str,
+        *,
+        reason: str | None = None,
+        raw_output: str | None = None,
+        attempts: int = 1,
+    ):
+        self.reason = str(reason or message)
+        self.raw_output = raw_output
+        self.attempts = int(attempts)
+        super().__init__(message)
+
+    def detail(self) -> Dict[str, Any]:
+        detail: Dict[str, Any] = {
+            "reason": self.reason,
+            "attempts": self.attempts,
+        }
+        if self.raw_output:
+            detail["raw_output"] = self.raw_output
+        return detail
 
 
 class DataProviderError(Exception):

@@ -16,8 +16,8 @@ def detect_setups(df: pd.DataFrame) -> List[Setup]:
     prev_close = df["close"].shift(1)
     gap_pct = (df["open"] - prev_close) / prev_close.replace(0, 1e-12)
     mask = gap_pct > 0.02
-    # Strategy: gap up then fade; only for observation per rules
-    return [Setup(int(i), "高开>2%观察") for i in df.index[mask.fillna(False)]]
+    # Strategy: gap up then fade; do not enter by default.
+    return [Setup(int(i), "高开>2%暂不入场") for i in df.index[mask.fillna(False)]]
 
 
 def key_bands(df: pd.DataFrame, setup: Setup) -> Dict[str, float]:
@@ -30,8 +30,8 @@ def key_bands(df: pd.DataFrame, setup: Setup) -> Dict[str, float]:
 
 def confirm_text(setup: Setup, q_grade: str) -> Dict[str, str]:
     return {
-        "window_A_text": "当日禁买，仅观察结构变化",
-        "window_B_text": "仅观察，不执行；等待后续回踩确认",
+        "window_A_text": "当日禁买，暂不入场",
+        "window_B_text": "暂不执行；等待后续回踩确认",
     }
 
 

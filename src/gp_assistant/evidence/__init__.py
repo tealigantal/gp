@@ -1,4 +1,4 @@
-from .market_service import current_trading_day, build_day_selection, fetch_minute_bars_5m
+from .market_service import current_trading_day, build_day_selection
 from .validation_service import build_validation_slice
 from .portfolio_service import load_portfolio_snapshot
 from .universe_service import load_universe_symbols

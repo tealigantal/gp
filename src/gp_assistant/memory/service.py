@@ -82,6 +82,10 @@ def commit_turn(session_id: str, user_message: str, reply: ReplyBundle, judgment
                 session.last_focus_rank = int(judgment.subject_entry.rank)
             except Exception:
                 pass
+        elif judgment.single_stock_analysis is not None and k == 'single_stock_query':
+            session.focus_subject = {'type': 'symbol', 'symbol': judgment.single_stock_analysis.symbol}
+            session.last_focus_symbol = judgment.single_stock_analysis.symbol
+            session.last_focus_rank = None
         if reply.symbols and k == 'compare':
             session.compare_set = list(reply.symbols[:3])
     session.last_claim_ids = [c.claim_id for c in claims][-20:]

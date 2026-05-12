@@ -1,9 +1,145 @@
 from __future__ import annotations
 
+from datetime import datetime
+from pathlib import Path
+from types import SimpleNamespace
+
 import pandas as pd
 
 from gp_assistant.evidence import daily_freshness
 from gp_assistant.evidence import market_service
+import gp_assistant.runtime.market_clock as market_clock
+from gp_assistant.runtime.market_clock import PHASE_INTRADAY_PM, PHASE_NON_TRADING, PHASE_POSTCLOSE_PENDING
+
+
+def test_resolve_daily_target_intraday_uses_previous_completed(monkeypatch):
+    state = SimpleNamespace(
+        market_phase=PHASE_INTRADAY_PM,
+        target_daybook_effective_day="20260430",
+        target_pulse_trade_day="20260430",
+        target_pulse_slot_at="2026-04-30 13:15:00",
+    )
+    monkeypatch.setattr(daily_freshness, "compute_market_state", lambda now=None: state)
+    monkeypatch.setattr(daily_freshness, "_previous_open_day_ymd", lambda ymd: "20260429")
+
+    target = daily_freshness.resolve_daily_target("2026-04-30")
+
+    assert target["target_day"] == "2026-04-29"
+    assert target["target_mode"] == "previous_completed"
+    assert target["daybook_trading_day"] == "20260430"
+
+
+def test_resolve_daily_target_postclose_pending_waits_for_eod(monkeypatch):
+    state = SimpleNamespace(
+        market_phase=PHASE_POSTCLOSE_PENDING,
+        target_daybook_effective_day="20260430",
+        target_pulse_trade_day="20260430",
+        target_pulse_slot_at="2026-04-30 14:55:00",
+    )
+    monkeypatch.setattr(daily_freshness, "compute_market_state", lambda now=None: state)
+    monkeypatch.setattr(daily_freshness, "_previous_open_day_ymd", lambda ymd: "20260429")
+    monkeypatch.setattr(
+        daily_freshness,
+        "probe_eod_daily_ready",
+        lambda target_day, force=False: {"target_day": "2026-04-30", "ready": False, "ok_count": 1},
+    )
+
+    target = daily_freshness.resolve_daily_target("2026-04-30")
+
+    assert target["target_day"] == "2026-04-29"
+    assert target["target_mode"] == "current_pending"
+    assert target["pending_eod_day"] == "2026-04-30"
+
+
+def test_resolve_daily_target_postclose_ready_uses_current_day(monkeypatch):
+    state = SimpleNamespace(
+        market_phase=PHASE_POSTCLOSE_PENDING,
+        target_daybook_effective_day="20260430",
+        target_pulse_trade_day="20260430",
+        target_pulse_slot_at="2026-04-30 14:55:00",
+    )
+    monkeypatch.setattr(daily_freshness, "compute_market_state", lambda now=None: state)
+    monkeypatch.setattr(
+        daily_freshness,
+        "probe_eod_daily_ready",
+        lambda target_day, force=False: {"target_day": "2026-04-30", "ready": True, "ok_count": 2},
+    )
+
+    target = daily_freshness.resolve_daily_target("2026-04-30")
+
+    assert target["target_day"] == "2026-04-30"
+    assert target["target_mode"] == "current_ready"
+    assert target["pending_eod_day"] is None
+
+
+def test_resolve_daily_target_holiday_uses_previous_completed_day(monkeypatch):
+    cal = pd.DataFrame(
+        [
+            {"cal_date": "20260430", "is_open": 1},
+            {"cal_date": "20260501", "is_open": 0},
+            {"cal_date": "20260502", "is_open": 0},
+            {"cal_date": "20260503", "is_open": 0},
+            {"cal_date": "20260504", "is_open": 0},
+            {"cal_date": "20260505", "is_open": 0},
+            {"cal_date": "20260506", "is_open": 1},
+        ]
+    )
+    monkeypatch.setattr(market_clock, "_load_calendar_df", lambda: cal)
+
+    target = daily_freshness.resolve_daily_target(now=datetime(2026, 5, 4, 10, 0))
+
+    assert target["target_day"] == "2026-04-30"
+    assert target["target_mode"] == "previous_completed"
+    assert target["daybook_trading_day"] == "20260430"
+    assert target["next_trading_day"] == "20260506"
+
+
+def test_active_freshness_discards_stale_holiday_target_when_book_matches_current(monkeypatch):
+    state = SimpleNamespace(
+        market_phase=PHASE_NON_TRADING,
+        target_daybook_effective_day="20260430",
+        target_pulse_trade_day=None,
+        target_pulse_slot_at=None,
+        calendar_status="ok",
+        calendar_source="official",
+        calendar_range_start="20250101",
+        calendar_range_end="20261231",
+        next_trading_day="20260506",
+        calendar_error=None,
+    )
+    monkeypatch.setattr(daily_freshness, "compute_market_state", lambda now=None: state)
+    stale = {
+        "ready": False,
+        "target_day": "2026-05-04",
+        "blocking_reason": "日线数据未补齐到 2026-05-04，当前不发布正式推荐",
+    }
+
+    active = daily_freshness.active_freshness_for_current_target(stale, book_day="20260430")
+
+    assert active == {}
+
+
+def test_resolve_daily_target_reads_cached_eod_probe_without_network(monkeypatch):
+    state = SimpleNamespace(
+        market_phase=PHASE_POSTCLOSE_PENDING,
+        target_daybook_effective_day="20260430",
+        target_pulse_trade_day="20260430",
+        target_pulse_slot_at="2026-04-30 14:55:00",
+    )
+    cached_probe = {"target_day": "2026-04-30", "ready": True, "ok_count": 3}
+    monkeypatch.setattr(daily_freshness, "compute_market_state", lambda now=None: state)
+    monkeypatch.setattr(daily_freshness, "_read_eod_probe_cache", lambda target_day, ttl_sec: cached_probe)
+    monkeypatch.setattr(
+        daily_freshness,
+        "probe_eod_daily_ready",
+        lambda *_, **__: (_ for _ in ()).throw(AssertionError("network probe should not run")),
+    )
+
+    target = daily_freshness.resolve_daily_target("2026-04-30", allow_probe=False)
+
+    assert target["target_day"] == "2026-04-30"
+    assert target["target_mode"] == "current_ready"
+    assert target["eod_probe"] == cached_probe
 
 
 def test_reconcile_daily_freshness_marks_failed_refresh(monkeypatch):
@@ -38,6 +174,7 @@ def test_reconcile_daily_freshness_marks_failed_refresh(monkeypatch):
 
 
 def test_audit_daily_freshness_focus_symbols(monkeypatch):
+    monkeypatch.setattr(daily_freshness, "_history_db_path", lambda: Path("__missing_history_for_daily_freshness_test__.db"))
     monkeypatch.setattr(
         daily_freshness,
         "inspect_symbol_freshness",

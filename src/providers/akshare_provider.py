@@ -39,11 +39,30 @@ class AkshareProvider(DataProvider):
         return out
 
     def get_trade_calendar(self, start: str, end: str, exchange: str = "SSE") -> pd.DataFrame:  # pragma: no cover
+        start_ymd = pd.to_datetime(start).strftime("%Y%m%d")
+        end_ymd = pd.to_datetime(end).strftime("%Y%m%d")
+        if start_ymd > end_ymd:
+            raise ProviderError("Trade calendar start date must be before end date.", api="tool_trade_date_hist_sina")
+
         df = self.ak.tool_trade_date_hist_sina()
-        df = df[(df["trade_date"] >= start) & (df["trade_date"] <= end)].copy()
-        df.rename(columns={"trade_date": "cal_date"}, inplace=True)
-        df["is_open"] = 1
-        return df[["cal_date", "is_open"]]
+        if df is None or df.empty or "trade_date" not in df.columns:
+            raise ProviderError("AkShare returned an empty trade calendar.", api="tool_trade_date_hist_sina")
+
+        open_days = pd.to_datetime(df["trade_date"], errors="coerce").dropna().dt.strftime("%Y%m%d")
+        if open_days.empty:
+            raise ProviderError("AkShare trade calendar has no parseable trade dates.", api="tool_trade_date_hist_sina")
+        if start_ymd < str(open_days.min()) or end_ymd > str(open_days.max()):
+            raise ProviderError(
+                "AkShare trade calendar does not cover the requested range.",
+                api="tool_trade_date_hist_sina",
+                hint=f"available={open_days.min()}..{open_days.max()} requested={start_ymd}..{end_ymd}",
+            )
+
+        all_days = pd.date_range(start=start_ymd, end=end_ymd, freq="D").strftime("%Y%m%d")
+        out = pd.DataFrame({"cal_date": all_days})
+        open_set = set(open_days)
+        out["is_open"] = out["cal_date"].isin(open_set).astype(int)
+        return out[["cal_date", "is_open"]]
 
     def get_daily_bar(self, ts_codes: Iterable[str], start: str, end: str) -> pd.DataFrame:  # pragma: no cover
         rows = []

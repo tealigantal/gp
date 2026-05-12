@@ -51,6 +51,8 @@ def _map_pick(rank: int, item: Dict[str, Any]) -> AdvicePick:
             'candidate_score': float(item.get('candidate_score') or 0.0),
             'theme_overlap_score': float(item.get('theme_overlap_score') or 0.0),
             'mainline_overlap_score': float(item.get('mainline_overlap_score') or 0.0),
+            'execution_state': str(diag.get('execution_state') or ''),
+            'actionable': bool(diag.get('actionable') is True),
             'reason_codes': [str(x) for x in (item.get('reason_codes') or [])],
             'daily_last_date': item.get('last_date'),
             'daily_freshness_state': item.get('daily_freshness_state'),
@@ -72,14 +74,13 @@ def build_daybook(trading_day: str, *, topk: int = 10, reserve_count: int = 2, r
             reserve_picks.append(_map_pick(len(picks) + len(reserve_picks) + 1, cand))
         if len(reserve) >= reserve_count:
             break
-    themes = [str(t.get('name')) for t in (raw.get('themes') or []) if isinstance(t, dict) and t.get('name')]
     return DayBook(
         trading_day=trading_day,
         generated_at=now_iso(),
         regime=raw.get('env') or {},
         tradeable=bool(raw.get('tradeable', bool(picks))),
         reason=raw.get('message') or raw.get('reason'),
-        themes=themes,
+        themes=[],
         picks=picks,
         reserve_picks=reserve_picks,
         reserve_symbols=reserve,

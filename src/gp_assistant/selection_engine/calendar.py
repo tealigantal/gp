@@ -2,10 +2,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Dict
 
-from ..runtime.market_clock import compute_market_state
+from ..runtime.market_clock import compute_market_state, resolve_trading_day_on_or_before
 from ..core.config import load_config
 
 
@@ -32,7 +32,11 @@ def calendar_summary() -> Dict[str, str]:
     # expose daybook-effective day as YYYY-MM-DD
     as_of = f"{ms.target_daybook_effective_day[:4]}-{ms.target_daybook_effective_day[4:6]}-{ms.target_daybook_effective_day[6:8]}"
     tw = trading_window_now()
-    return {"as_of": as_of, "window": tw.label, "timezone": cfg.timezone}
+    out = {"as_of": as_of, "window": tw.label, "timezone": cfg.timezone}
+    if ms.next_trading_day:
+        out["next_trading_day"] = f"{ms.next_trading_day[:4]}-{ms.next_trading_day[4:6]}-{ms.next_trading_day[6:8]}"
+    out["calendar_status"] = ms.calendar_status
+    return out
 
 
 # Thin compatibility wrappers for legacy callers
@@ -41,7 +45,5 @@ def is_trading_day(dt: datetime) -> bool:
 
 
 def nearest_trading_day(dt: datetime) -> datetime:
-    d = dt
-    while not is_trading_day(d):
-        d -= timedelta(days=1)
-    return d
+    ymd = resolve_trading_day_on_or_before(dt)
+    return datetime.strptime(ymd, "%Y%m%d")

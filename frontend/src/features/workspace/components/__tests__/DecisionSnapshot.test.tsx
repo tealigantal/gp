@@ -1,14 +1,14 @@
 import { render, screen } from '@testing-library/react'
 import { DecisionSnapshot } from '../DecisionSnapshot'
-import type { ChatResponse, HealthResponse, MarketBook, SessionResponse } from '../../../../shared/contracts'
+import type { ChatResponse, HealthResponse, MarketBook } from '../../../../shared/contracts'
 
 function bookWithFallback(): MarketBook {
   return {
     trading_day: '20260101',
     book_version: 'book_fallback',
     artifact_id: 'artifact_fallback',
-    slot_status: 'DEGRADED',
-    publish_allowed: false,
+    slot_status: 'OK',
+    publish_allowed: true,
     updated_at: new Date().toISOString(),
     regime: {},
     daybook: {
@@ -49,9 +49,9 @@ const health: HealthResponse = {
     worker_poll_interval_sec: 15,
     book_freshness: 'postclose_ready',
     book_updated_at: new Date().toISOString(),
-    last_closed_5m: '2026-01-01 14:55:00',
-    slot_status: 'DEGRADED',
-    publish_allowed: false,
+    last_closed_5m: null,
+    slot_status: 'OK',
+    publish_allowed: true,
     daily_freshness_ready: true,
     daily_target_day: '2026-01-01',
     daily_checked_count: 3,
@@ -61,35 +61,21 @@ const health: HealthResponse = {
       {
         service: 'gp-worker',
         mode: 'always_on',
-        command: 'python -m gp_assistant.cli pulse-loop',
+        command: 'python -m gp_assistant.cli daily-loop',
         description: 'worker',
       },
       {
-        service: 'gp-replay-today',
+        service: 'gp-rebuild-daybook',
         mode: 'manual',
         profile: 'ops',
-        command: 'python -m gp_assistant.cli replay-today',
-        description: 'replay',
+        command: 'python -m gp_assistant.cli rebuild-daybook',
+        description: 'rebuild',
       },
     ],
   },
 }
 
-const session: SessionResponse = {
-  session: {
-    session_id: 's1',
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-    focus_subject: {},
-    compare_set: [],
-    user_preferences: {},
-    last_claim_ids: [],
-  },
-  recent_turns: [],
-  recent_claims: [],
-}
-
-it('uses the same run_id and artifact_id from latest message snapshot', () => {
+it('omits retired decision snapshot hero metadata', () => {
   const latest: ChatResponse = {
     session_id: 's1',
     reply: 'ok',
@@ -105,10 +91,11 @@ it('uses the same run_id and artifact_id from latest message snapshot', () => {
         book_version: 'book_123',
         as_of: new Date().toISOString(),
         trading_day: '20260101',
-        run_action: 'DEGRADED',
+        run_action: 'RECOMMEND',
+        recommendation_state: 'TRIGGER_PLAN',
         tradeable: true,
-        publish_allowed: false,
-        non_trading: true,
+        publish_allowed: true,
+        non_trading: false,
         no_trade_reasons: [],
         recovery_conditions: [],
         themes: [],
@@ -124,52 +111,15 @@ it('uses the same run_id and artifact_id from latest message snapshot', () => {
     planner_trace: {},
     evidence_refs: [],
   }
-  render(<DecisionSnapshot book={bookWithFallback()} session={session} latest={latest} health={health} />)
-  expect(screen.getByText(/run_123/)).toBeInTheDocument()
-  expect(screen.getByText(/artifact_123/)).toBeInTheDocument()
+  render(<DecisionSnapshot book={bookWithFallback()} latest={latest} health={health} />)
+  expect(screen.queryByText(/Decision Snapshot/i)).not.toBeInTheDocument()
+  expect(screen.queryByText(/run_123/)).not.toBeInTheDocument()
+  expect(screen.queryByText(/artifact_123/)).not.toBeInTheDocument()
+  expect(screen.getByText('等待触发')).toBeInTheDocument()
 })
 
-it('shows next-session wording for postclose plans', () => {
-  const latest: ChatResponse = {
-    session_id: 's1',
-    reply: 'ok',
-    run_id: 'run_123',
-    symbols: [],
-    message: {
-      message_kind: 'recommend',
-      narrative_text: 'ok',
-      picks: [],
-      run: {
-        run_id: 'run_123',
-        artifact_id: 'artifact_123',
-        as_of: new Date().toISOString(),
-        trading_day: '20260101',
-        run_action: 'DEGRADED',
-        tradeable: true,
-        publish_allowed: false,
-        non_trading: true,
-        no_trade_reasons: [],
-        recovery_conditions: [],
-        themes: [],
-        picks: [],
-        gate: {},
-        data_quality: { complete: false },
-        data_provenance: {},
-        tool_trace: {},
-      },
-    },
-    right_panel: {},
-    ui_items: [],
-    planner_trace: {},
-    evidence_refs: [],
-  }
-  render(<DecisionSnapshot book={bookWithFallback()} session={session} latest={latest} health={health} />)
-  expect(screen.getByText('下一交易窗口计划')).toBeInTheDocument()
-})
-
-it('shows runtime tools from health status', () => {
-  render(<DecisionSnapshot book={bookWithFallback()} session={session} latest={null} health={health} />)
-  expect(screen.getByText('运行与工具')).toBeInTheDocument()
+it('shows daily runtime tools from health status', () => {
+  render(<DecisionSnapshot book={bookWithFallback()} latest={null} health={health} />)
   expect(screen.getByText('gp-worker')).toBeInTheDocument()
-  expect(screen.getByText('gp-replay-today')).toBeInTheDocument()
+  expect(screen.getByText('gp-rebuild-daybook')).toBeInTheDocument()
 })

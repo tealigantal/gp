@@ -5,6 +5,8 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 from ..contracts.objects import MarketBook, SessionState
+from ..core.config import load_config
+from ..llm.semantics import SemanticTurnSignals, analyze_turn_semantics
 from .market_clock import (
     compute_market_state,
     PHASE_NON_TRADING,
@@ -15,6 +17,10 @@ from .market_clock import (
     PHASE_INTRADAY_PM,
     PHASE_POSTCLOSE_PENDING,
 )
+
+
+def _intraday_runtime_enabled() -> bool:
+    return bool(getattr(load_config(), "intraday_runtime_enabled", False))
 
 
 @dataclass
@@ -49,37 +55,59 @@ def _extract_rank_from_zh(s: str) -> Optional[int]:
     return None
 
 
-def _simple_preparse(user_message: str, *, session: SessionState, book: Optional[MarketBook]) -> Dict[str, Any]:
+def _session_semantic_slice(session: SessionState) -> Dict[str, Any]:
+    return {
+        "active_run_id": session.active_run_id,
+        "previous_run_id": session.previous_run_id,
+        "focus_subject": session.focus_subject,
+        "last_focus_symbol": session.last_focus_symbol,
+        "last_focus_rank": session.last_focus_rank,
+    }
+
+
+def _book_semantic_slice(book: Optional[MarketBook]) -> Dict[str, Any]:
+    if book is None:
+        return {}
+    return {
+        "trading_day": book.trading_day,
+        "market_phase": book.market_phase,
+        "slot_status": book.slot_status,
+        "board": [
+            {"symbol": getattr(entry, "symbol", None), "rank": getattr(entry, "rank", None), "name": getattr(entry, "name", None)}
+            for entry in list(getattr(book, "board", []) or [])[:10]
+        ],
+    }
+
+
+def _simple_preparse(
+    user_message: str,
+    *,
+    session: SessionState,
+    book: Optional[MarketBook],
+    semantic_signals: Optional[SemanticTurnSignals] = None,
+) -> Dict[str, Any]:
     msg = (user_message or "").strip()
-    m = msg
-    # history keywords
-    history = any(k in m for k in ["上一轮", "上一次", "前一次", "历史"])
-    # rebuild/recommend keywords
-    want_rebuild = any(k in m for k in ["重算", "重跑", "重新给", "给我", "推荐", "今天给"])
-    # intraday/live keywords
-    want_live = any(k in m for k in ["现在", "还能", "能不能", "盘中", "5分钟", "5m", "实时", "live"])
-    # exit keywords
-    want_exit = any(k in m for k in ["卖", "止损", "止盈", "减仓", "拿不拿", "退出"])
+    signals = semantic_signals or analyze_turn_semantics(
+        user_message=msg,
+        session=_session_semantic_slice(session),
+        book=_book_semantic_slice(book),
+    )
+    history = bool(signals.history_mode)
+    want_rebuild = signals.refresh_intent == "rebuild"
+    want_live = signals.refresh_intent == "live"
     # parse symbols (6-digit A-share code naive)
     import re
     symbols: List[str] = []
-    for s in re.findall(r"(?<!\d)(?:60|00|30)\d{4}(?!\d)", m):
+    for s in re.findall(r"(?<!\d)(?:60|68|00|30)\d{4}(?!\d)", msg):
         if s not in symbols:
             symbols.append(s)
-    # Pronoun to focus symbol
-    if any(k in m for k in ['这只', '这个票']) and not symbols:
-        try:
-            fs = None
-            if isinstance(session.focus_subject, dict) and session.focus_subject.get('type') == 'symbol':
-                fs = session.focus_subject.get('symbol')
-            if not fs:
-                fs = getattr(session, 'last_focus_symbol', None)
-            if isinstance(fs, str) and fs:
-                symbols.append(fs)
-        except Exception:
-            pass
+    if want_live and not symbols:
+        fs = session.focus_subject.get("symbol") if isinstance(session.focus_subject, dict) and session.focus_subject.get("type") == "symbol" else None
+        fs = fs or getattr(session, "last_focus_symbol", None)
+        if isinstance(fs, str) and fs:
+            symbols.append(fs)
     # Ordinal rank to board symbol
-    rk = _extract_rank_from_zh(m)
+    rk = _extract_rank_from_zh(msg)
     if rk and not symbols and book is not None and getattr(book, 'board', None):
         try:
             for e in book.board:
@@ -91,7 +119,7 @@ def _simple_preparse(user_message: str, *, session: SessionState, book: Optional
     return {
         'history_mode': history,
         'want_rebuild': want_rebuild,
-        'want_live': (want_live or want_exit),
+        'want_live': want_live,
         'symbols': symbols,
     }
 
@@ -159,10 +187,16 @@ def make_refresh_plan(
     book: Optional[MarketBook],
     user_message: str,
     now: Optional[datetime] = None,
+    semantic_signals: Optional[SemanticTurnSignals] = None,
 ) -> RefreshPlan:
     ms = compute_market_state(now)
-    parsed = _simple_preparse(user_message, session=session, book=book)
+    parsed = _simple_preparse(user_message, session=session, book=book, semantic_signals=semantic_signals)
     level = _decide_level(ms.market_phase, parsed['want_rebuild'], parsed['want_live'])
+    if not _intraday_runtime_enabled():
+        if level == "L1":
+            level = "L0"
+        elif level == "L3":
+            level = "L2"
     scope = _decide_scope(parsed['symbols']) if level == 'L1' else ('watchset' if level in {'L2', 'L3'} else 'none')
     invalidate = _invalidate_active_run(session, ms.__dict__, requires_live=(level in {'L1', 'L3'}))
     reasons: List[str] = []
@@ -193,19 +227,17 @@ def make_refresh_plan(
 def make_dashboard_refresh_plan(now: Optional[datetime] = None) -> RefreshPlan:
     """Build a conservative refresh plan for dashboard/book endpoint.
 
-    - Intraday: L1 pulse_only on watchset to latest closed 5m.
-    - Non-intraday: L2 rebuild daybook to the target completed day.
+    - Daily mode: L2 rebuild daybook to the target completed day.
     """
     ms = compute_market_state(now)
-    intraday = ms.market_phase in {PHASE_OPEN_NO_FIRST_BAR, PHASE_INTRADAY_AM, PHASE_LUNCH_BREAK, PHASE_INTRADAY_PM}
-    level = 'L1' if intraday else 'L2'
-    scope = 'watchset' if intraday else 'watchset'
+    level = 'L2'
+    scope = 'watchset'
     return RefreshPlan(
         level=level,
         scope=scope,
         target_daybook_effective_day=ms.target_daybook_effective_day,
-        target_pulse_trade_day=ms.target_pulse_trade_day,
-        target_pulse_slot_at=ms.target_pulse_slot_at,
+        target_pulse_trade_day=None,
+        target_pulse_slot_at=None,
         market_phase=ms.market_phase,
         data_status=ms.data_status,
         invalidate_active_run=False,

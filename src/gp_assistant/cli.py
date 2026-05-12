@@ -8,7 +8,7 @@ import uvicorn
 from .evidence.daily_freshness import audit_daily_freshness
 from .gateway.app import app
 from .runtime.turn_loop import run_turn_sync
-from .worker import reconcile_runtime_state, run_pulse_loop
+from .worker import reconcile_runtime_state, run_daily_loop
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -19,9 +19,8 @@ def main(argv: list[str] | None = None) -> int:
     p_serve.add_argument("--host", default="127.0.0.1")
     p_serve.add_argument("--port", type=int, default=8000)
 
-    sub.add_parser("pulse-loop", help="run the intraday slot worker loop")
-    sub.add_parser("replay-today", help="replay all closed slots up to the current slot")
-    sub.add_parser("rebuild-daybook", help="generate today daybook and preopen unavailable artifact")
+    sub.add_parser("daily-loop", help="run the daily plan worker loop")
+    sub.add_parser("rebuild-daybook", help="generate today daily plan artifact")
     sub.add_parser("postclose-archive", help="archive post-close state")
     sub.add_parser("audit-daily-freshness", help="audit daily freshness and stale symbols")
 
@@ -33,11 +32,8 @@ def main(argv: list[str] | None = None) -> int:
     if args.cmd == "serve":
         uvicorn.run(app, host=args.host, port=args.port)
         return 0
-    if args.cmd == "pulse-loop":
-        run_pulse_loop()
-        return 0
-    if args.cmd == "replay-today":
-        print(json.dumps(reconcile_runtime_state(operation="replay_today"), ensure_ascii=False, indent=2))
+    if args.cmd == "daily-loop":
+        run_daily_loop()
         return 0
     if args.cmd == "rebuild-daybook":
         print(json.dumps(reconcile_runtime_state(operation="rebuild_daybook"), ensure_ascii=False, indent=2))

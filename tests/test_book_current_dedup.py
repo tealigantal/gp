@@ -55,9 +55,9 @@ def test_book_is_fresh_for_plan_matches_exact_slot():
     assert book_is_fresh_for_plan(_book(), _plan()) is True
 
 
-def test_book_is_fresh_for_plan_rejects_slot_mismatch():
-    stale = _book().model_copy(update={"pulse_slot_at": "2024-03-20 09:55:00"})
-    assert book_is_fresh_for_plan(stale, _plan()) is False
+def test_book_is_fresh_for_plan_ignores_retired_slot_mismatch():
+    current = _book().model_copy(update={"pulse_slot_at": "2024-03-20 09:55:00"})
+    assert book_is_fresh_for_plan(current, _plan()) is True
 
 
 def test_current_book_endpoint_is_read_only(monkeypatch):

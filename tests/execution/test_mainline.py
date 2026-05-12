@@ -1,9 +1,6 @@
 from __future__ import annotations
 
-import os
-from pathlib import Path
-import json
-
+from gp_assistant.core.paths import store_dir
 from gp_assistant.kernel import facade as k
 from gp_assistant.validation.strategy_health import save_strategy_health
 from gp_assistant.selection_engine.artifact_store import persist_artifact_v2
@@ -96,7 +93,7 @@ def test_execution_only_consumes_gated():
 
 
 def test_missing_validation_summary_stable():
-    p = Path('store/validation/latest_summary.json')
+    p = store_dir() / 'validation' / 'latest_summary.json'
     if p.exists():
         p.unlink()
     # healthy strategy even without summary file should still build intent

@@ -9,6 +9,7 @@ import requests
 
 from ..core.paths import store_dir
 from ..core.config import load_config
+from ..llm.semantics import assess_announcement_risk
 from ..search.history_store import (
     canonical_query_id,
     ensure_query,
@@ -116,20 +117,30 @@ def fetch_announcements(symbol: str) -> Dict[str, Any]:
     since_iso = default_start_iso
     rows = list_items(qid, since=since_iso)
     lst = [r["payload"] for r in rows]
-    # risk summary
-    text = "\n".join(x.get("title", "") for x in lst)
-    risk_kw = ["减持", "解禁", "异常波动", "风险提示", "问询", "立案", "下修", "预亏", "失败"]
-    hits = [kw for kw in risk_kw if kw in text]
-    risk_level = ("high" if len(hits) >= 2 else ("medium" if hits else None))
+    semantic_error = None
+    try:
+        risk = assess_announcement_risk(lst)
+        risk_level = risk.risk_level
+        evidence = risk.evidence
+        semantic_reason = risk.reason
+    except Exception as e:  # noqa: BLE001
+        risk_level = None
+        evidence = []
+        semantic_reason = None
+        semantic_error = str(e)
 
     result: Dict[str, Any] = {
         "list": lst,
         "risk_level": risk_level,
-        "evidence": hits[:2],
+        "evidence": evidence,
         "catalyst": [],
         "_reason": "cninfo_ok" if net_ok else "cninfo_cached_or_failed",
         "source": "store:cninfo",
     }
+    if semantic_reason:
+        result["risk_reason"] = semantic_reason
+    if semantic_error:
+        result["semantic_error"] = semantic_error
     if not net_ok:
         result["error"] = locals().get("net_err")
     return result

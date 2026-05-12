@@ -1,8 +1,8 @@
-﻿"""Recommendation engine (UTF-8 normalized, minimal reconstruction).
+"""Recommendation engine (UTF-8 normalized, minimal reconstruction).
 
 This module orchestrates the end-to-end recommendation flow:
  - Fetch snapshot once via provider (agent is the only caller)
- - Build environment and themes using the shared snapshot (or degrade when None)
+ - Build environment and derived mainline using the shared snapshot/candidate pool
  - Build candidate pool via candidate_gen (with diagnostics stats)
  - Compute minimal pick fields and write outputs
  - Centralize degradation reasons and hard tradeable decision
@@ -29,10 +29,8 @@ from .calibration import apply_scores_to_v2_item, compute_no_trade_gate
 from .calendar import calendar_summary
 from .datahub import MarketDataHub
 from .market_env import score_regime
-from .theme_pool import build_themes
 from .theme_hints import build_mover_hints
 from .strict_output import normalize_payload
-from .theme_concept import last_concept_status
 from .mainline import build_mainline
 from ..core.strict import is_strict
 from .candidate_gen import generate_candidates
@@ -162,7 +160,7 @@ def run(date: Optional[str] = None, topk: int = 3, universe: str = "auto", symbo
     as_of = date or cal["as_of"]
     hub = MarketDataHub()
 
-    # Fast path: when caller provides concrete symbols, skip expensive snapshot/thematic computations.
+    # Fast path: when caller provides concrete symbols, skip expensive full-market snapshot computations.
     symbols_mode = (str(universe or "").strip().lower() == "symbols" and bool(symbols))
 
     # 数据阶段：快照（Spot Snapshot）
@@ -228,19 +226,15 @@ def run(date: Optional[str] = None, topk: int = 3, universe: str = "auto", symbo
             except Exception:
                 pass
 
-    # Environ + themes
+    # Environ + mainline. Theme ranking endpoints are intentionally disabled.
     if symbols_mode:
         env = {"grade": "C", "degrade": "symbols_mode", "missing": ["snapshot_skipped"]}
         themes = []
-        mainline = {"indicator": "今日", "sectors": [], "errors": ["skipped_symbols_mode"]}
+        mainline = {"indicator": "今日", "sectors": [], "errors": ["pending_derived"], "source": "derived:unavailable"}
     else:
         env = score_regime(hub, snapshot=snapshot_df)
-        themes = build_themes(hub, snapshot=snapshot_df)
-        # Mainline （资金流主线）
-        try:
-            mainline = build_mainline(indicator="今日", topn=max(1, int(getattr(cfg, "mainline_top_n", 2))), snapshot=snapshot_df)
-        except Exception as _e:
-            mainline = {"indicator": "今日", "sectors": [], "errors": ["build_mainline_failed"]}
+        themes = []
+        mainline = {"indicator": "今日", "sectors": [], "errors": ["pending_derived"], "source": "derived:unavailable"}
 
     # Base selection
     if universe == "symbols" and symbols:
@@ -252,15 +246,9 @@ def run(date: Optional[str] = None, topk: int = 3, universe: str = "auto", symbo
         universe_syms = None
         universe_meta = None
 
-    # Prepare early thematic/mainline prefilter (cheap shrink)
-    try:
-        theme_names_pref = [str(t.get("name")) for t in (themes or []) if isinstance(t, dict)]
-    except Exception:
-        theme_names_pref = []
-    try:
-        mainline_names_pref = [str(s.get("name")) for s in (mainline.get("sectors") or [])] if isinstance(mainline, dict) else []
-    except Exception:
-        mainline_names_pref = []
+    # Theme/mainline prefilter is disabled. Mainline is calculated later from the generated market universe.
+    theme_names_pref: List[str] = []
+    mainline_names_pref: List[str] = []
     restrict_for_prefilter = False
     industry_prefilter = None
 
@@ -275,29 +263,9 @@ def run(date: Optional[str] = None, topk: int = 3, universe: str = "auto", symbo
         feats_precomp = {}
     t1 = time.perf_counter()
 
-    # Thematic overlap scoring and optional restriction to mainline/themes
+    # Theme overlap is disabled; keep compatibility fields at zero.
     def _compute_thematic_overlap(cand: Dict[str, Any]) -> Dict[str, Any]:
-        ind = str(cand.get("industry") or "").strip()
-        theme_names = [str(t.get("name")) for t in (themes or []) if isinstance(t, dict)]
-        mainline_names = [str(s.get("name")) for s in (mainline.get("sectors") or []) if isinstance(s, dict)] if isinstance(mainline, dict) else []
-        tscore = 0.0
-        mscore = 0.0
-        treasons: List[str] = []
-        # Theme overlap: strict equals for industry themes; loose contains as fallback
-        if ind:
-            if any(ind == tn for tn in theme_names):
-                tscore = 1.0
-                treasons.append("industry_theme_match")
-            elif any(ind in tn or tn in ind for tn in theme_names):
-                tscore = 0.5
-                treasons.append("industry_theme_partial")
-        # Mainline overlap: loose match with sector names
-        if ind:
-            if any(ind == mn for mn in mainline_names):
-                mscore = 1.0
-            elif any(ind in mn or mn in ind for mn in mainline_names):
-                mscore = 0.6
-        return {"theme_overlap_score": float(tscore), "mainline_overlap_score": float(mscore), "reasons": treasons}
+        return {"theme_overlap_score": 0.0, "mainline_overlap_score": 0.0, "reasons": []}
 
     themed_pool: List[Dict[str, Any]] = []
     thematic_none_count = 0
@@ -778,6 +746,32 @@ def run(date: Optional[str] = None, topk: int = 3, universe: str = "auto", symbo
         item["peer_consensus_score"] = _peer_consensus(industry_name)
         item["mainline_soft_score"] = 0.0
 
+    try:
+        mainline = build_mainline(
+            indicator="今日",
+            topn=max(1, int(getattr(cfg, "mainline_top_n", 2))),
+            snapshot=snapshot_df,
+            candidates=picks,
+        )
+    except Exception as _e:
+        mainline = {
+            "indicator": "今日",
+            "sectors": [],
+            "errors": [f"build_mainline_failed:{type(_e).__name__}"],
+            "source": "derived:unavailable",
+        }
+
+    try:
+        mainline_names = {str(s.get("name") or "").strip() for s in (mainline.get("sectors") or []) if isinstance(s, dict)}
+        for item in picks:
+            industry_name = str(item.get("industry") or "").strip()
+            if industry_name and industry_name in mainline_names:
+                item["mainline_soft_score"] = 0.08
+    except Exception:
+        pass
+    mainline_available = bool(isinstance(mainline, dict) and (mainline.get("sectors") or []))
+    mainline_errors = (list(mainline.get("errors") or []) if isinstance(mainline, dict) else [])
+
     # Second-stage rerank by candidate/thematic/champion with execution penalties and breakdown
     def _score_components(item: Dict[str, Any]) -> Dict[str, float]:
         champ = item.get("champion", {}) or {}
@@ -864,13 +858,13 @@ def run(date: Optional[str] = None, topk: int = 3, universe: str = "auto", symbo
             item["reason_codes"] = rc
             # User-facing thesis in Chinese (generic)
             if state == 'actionable':
-                user_msg = "接近计划买点，执行条件较充分，留意盘中确认。"
+                user_msg = "接近计划买点，日线计划条件较充分。"
             elif state in {'waiting_pullback', 'observe_only'}:
-                user_msg = "结构候选靠前，但当前执行条件一般，建议观察等待更优位置。"
+                user_msg = "结构候选靠前，但当前位置一般，建议等待更优位置。"
             elif state in {'below_support', 'breakdown_risk'}:
                 user_msg = "状态偏弱或跌破支撑，建议谨慎，等待重回计划区间。"
             else:
-                user_msg = "候选结构较优，具体执行以盘中信号为准。"
+                user_msg = "候选结构较优，具体处理以日线计划区间和风控边界为准。"
             if 'industry_strength' in reason_parts:
                 user_msg += " 所属行业近期强度较高。"
             if 'peer_consensus' in reason_parts:
@@ -905,12 +899,12 @@ def run(date: Optional[str] = None, topk: int = 3, universe: str = "auto", symbo
         "timezone": cfg.timezone,
         "env": env,
         "themes": themes,
-                "mainline": mainline,
-"candidate_pool": pool,
+        "mainline": mainline,
+        "candidate_pool": pool,
         "picks": picks,
         "execution_checklist": [
             "1) 环境分层",
-            "2) 主线限制",
+            "2) 全市场主线计算",
             "3) 硬条件评估",
         ],
         "disclaimer": "本内容仅供研究与教育，不构成任何投资建议或收益承诺；市场有风险，决策需独立承担",
@@ -1008,7 +1002,6 @@ def run(date: Optional[str] = None, topk: int = 3, universe: str = "auto", symbo
         degrade_record(dbg, "SNAPSHOT_ROUTE_SKIPPED", {"routes": snap_meta.get("skipped_routes")}, severity=("warn" if _is_non_trading else "degrade"))
     if snapshot_df is None:
         degrade_record(dbg, "ENV_NEUTRALIZED", {}, severity=("warn" if _is_non_trading else "degrade"))
-        degrade_record(dbg, "THEMES_EMPTY", {}, severity=("warn" if _is_non_trading else "degrade"))
         degrade_record(dbg, "MARKET_STATS_MISSING", {}, severity=("warn" if _is_non_trading else "degrade"))
 
     # Structured cleanliness check (do not rely on source text)
@@ -1128,24 +1121,20 @@ def run(date: Optional[str] = None, topk: int = 3, universe: str = "auto", symbo
         "as_of_ts": snap_meta.get("as_of_ts"),
         "error": snap_meta.get("error"),
     }
-    try:
-        lcs = last_concept_status()
-    except Exception:
-        lcs = {"attempted": [], "error": None}
     ds_themes = {
-        "ok": bool(payload.get("themes")),
-        "source": (lcs.get("source") or ",".join(sorted(set([str(t.get("source")) for t in (payload.get("themes") or []) if isinstance(t, dict) and t.get("source")]))) or None),
-        "attempted": lcs.get("attempted") or [],
-        "error": lcs.get("error"),
-        "as_of_ts": (lcs.get("as_of_ts") or snap_meta.get("as_of_ts")),
-        "stale": bool(lcs.get("stale") or False),
+        "ok": False,
+        "source": "disabled",
+        "attempted": [],
+        "error": None,
+        "as_of_ts": snap_meta.get("as_of_ts"),
+        "stale": False,
     }
     ds_mainline = {
         "ok": bool(mainline.get("sectors")),
-        "source": mainline.get("source") or "akshare:stock_sector_fund_flow_rank",
+        "source": mainline.get("source") or "derived:unavailable",
         "error": None if (mainline.get("sectors")) else (";".join(mainline.get("errors") or []) if mainline.get("errors") else None),
         "as_of_ts": mainline.get("as_of_ts"),
-        "stale": bool((isinstance(mainline.get("source"), str) and mainline.get("source") == "cache:file") or (isinstance(mainline.get("errors"), list) and any("stale_cache_used" in str(e) for e in mainline.get("errors") or []))),
+        "stale": False,
     }
     ds_daily = {
         "ok": True,

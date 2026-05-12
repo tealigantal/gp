@@ -1,16 +1,15 @@
 from __future__ import annotations
 
-import json
-from pathlib import Path
 from fastapi.testclient import TestClient
 
+from gp_assistant.core.paths import store_dir
 from gp_assistant.kernel import facade as k
 from gp_assistant.gateway.app import app
 from gp_assistant.selection_engine.artifact_store import persist_artifact_v2
 
 
 def _persist_minimal(run_id: str) -> None:
-    base = Path('store/recommend')
+    base = store_dir() / 'recommend'
     base.mkdir(parents=True, exist_ok=True)
     obj = {
         'run_id': run_id,

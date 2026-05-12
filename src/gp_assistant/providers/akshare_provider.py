@@ -10,6 +10,7 @@ No new dependencies are introduced; API signatures are preserved.
 from __future__ import annotations
 
 from typing import Dict, Any, Optional, List
+import threading
 import time
 import pandas as pd
 
@@ -17,6 +18,9 @@ from ..core.errors import DataProviderError
 from .base import MarketDataProvider
 from ..core.config import load_config
 from ..core.paths import cache_dir
+
+
+_REQUEST_PATCH_LOCK = threading.RLock()
 
 
 class AkShareProvider(MarketDataProvider):
@@ -754,59 +758,65 @@ class AkShareProvider(MarketDataProvider):
     # ---- Internals: request patch + retry ----------------------------------
     def _with_requests_timeout(self, fn):  # noqa: ANN001
         import requests  # type: ignore
-        original = requests.sessions.Session.request
 
-        def wrapped(session, method, url, **kwargs):  # noqa: ANN001
-            # Only enforce for AkShare-related hosts; leave others (e.g., LLM providers) untouched
-            is_ak_host = False
-            try:
-                if isinstance(url, str):
-                    u = url.lower()
-                    if ("eastmoney.com" in u) or ("sina.com" in u) or ("sinajs.cn" in u):
-                        is_ak_host = True
-            except Exception:
+        with _REQUEST_PATCH_LOCK:
+            original = requests.sessions.Session.request
+            if getattr(original, "_gp_timeout_wrapped", False):
+                return fn()
+
+            def wrapped(session, method, url, **kwargs):  # noqa: ANN001
+                # Only enforce for AkShare-related hosts; leave others (e.g., LLM providers) untouched
                 is_ak_host = False
-
-            if is_ak_host:
-                to = kwargs.get("timeout", None)
-                eff = None
                 try:
-                    eff = float(to) if to is not None else None
-                except Exception:
-                    eff = None
-                # Choose the larger of existing timeout and provider's timeout; enforce a positive floor
-                base = self.timeout_sec if isinstance(self.timeout_sec, (int, float)) else 0
-                try:
-                    base = float(base)
-                except Exception:
-                    base = 0.0
-                if eff is None or (isinstance(base, (int, float)) and eff < base):
-                    eff = float(base)
-                if eff is None or eff <= 0:
-                    eff = 10.0  # safe minimum to avoid 0 meaning immediate timeout
-                kwargs["timeout"] = eff
-                try:
-                    hdrs = dict(kwargs.get("headers") or {})
-                    hdrs.setdefault(
-                        "User-Agent",
-                        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120 Safari/537.36",
-                    )
                     if isinstance(url, str):
-                        if "eastmoney.com" in url:
-                            hdrs.setdefault("Referer", "https://quote.eastmoney.com/")
-                        elif "sina.com" in url or "sinajs.cn" in url:
-                            hdrs.setdefault("Referer", "https://finance.sina.com.cn/")
-                    kwargs["headers"] = hdrs
+                        u = url.lower()
+                        if ("eastmoney.com" in u) or ("sina.com" in u) or ("sinajs.cn" in u):
+                            is_ak_host = True
                 except Exception:
-                    pass
-            # Non-AkShare hosts fall through with original kwargs (no forced timeout)
-            return original(session, method, url, **kwargs)
+                    is_ak_host = False
 
-        try:
-            requests.sessions.Session.request = wrapped  # type: ignore
-            return fn()
-        finally:
-            requests.sessions.Session.request = original  # type: ignore
+                if is_ak_host:
+                    to = kwargs.get("timeout", None)
+                    eff = None
+                    try:
+                        eff = float(to) if to is not None else None
+                    except Exception:
+                        eff = None
+                    # Choose the larger of existing timeout and provider's timeout; enforce a positive floor
+                    base = self.timeout_sec if isinstance(self.timeout_sec, (int, float)) else 0
+                    try:
+                        base = float(base)
+                    except Exception:
+                        base = 0.0
+                    if eff is None or (isinstance(base, (int, float)) and eff < base):
+                        eff = float(base)
+                    if eff is None or eff <= 0:
+                        eff = 10.0  # safe minimum to avoid 0 meaning immediate timeout
+                    kwargs["timeout"] = eff
+                    try:
+                        hdrs = dict(kwargs.get("headers") or {})
+                        hdrs.setdefault(
+                            "User-Agent",
+                            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120 Safari/537.36",
+                        )
+                        if isinstance(url, str):
+                            if "eastmoney.com" in url:
+                                hdrs.setdefault("Referer", "https://quote.eastmoney.com/")
+                            elif "sina.com" in url or "sinajs.cn" in url:
+                                hdrs.setdefault("Referer", "https://finance.sina.com.cn/")
+                        kwargs["headers"] = hdrs
+                    except Exception:
+                        pass
+                # Non-AkShare hosts fall through with original kwargs (no forced timeout)
+                return original(session, method, url, **kwargs)
+
+            try:
+                setattr(wrapped, "_gp_timeout_wrapped", True)
+                requests.sessions.Session.request = wrapped  # type: ignore
+                return fn()
+            finally:
+                if requests.sessions.Session.request is wrapped:
+                    requests.sessions.Session.request = original  # type: ignore
 
     def _call_with_retry(self, fn, retries: int = 3):  # noqa: ANN001
         import random

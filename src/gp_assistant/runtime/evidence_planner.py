@@ -25,6 +25,8 @@ def plan_evidence(frame: TurnFrame) -> Dict[str, Any]:
         need["need_active_run"] = True
         need["need_subject_entry"] = True
         return need
+    if frame.request == "single_stock_query":
+        return need
     if frame.request == "no_trade_explain":
         need["need_active_run"] = True
         if frame.subject == "symbol":

@@ -117,6 +117,7 @@ def test_worker_preopen_writes_current_pointer(monkeypatch):
 def test_boot_replay_rebuilds_closed_slots_and_updates_pointer(monkeypatch):
     temp_root = Path(tempfile.mkdtemp(prefix="slot_replay_", dir=str(Path.cwd())))
     monkeypatch.setenv("GP_STORE_DIR", str(temp_root / "store"))
+    monkeypatch.setattr("gp_assistant.worker._intraday_runtime_enabled", lambda: True)
 
     daybook = DayBook(
         trading_day="20240320",
@@ -197,5 +198,49 @@ def test_boot_replay_rebuilds_closed_slots_and_updates_pointer(monkeypatch):
         assert pointer is not None
         assert pointer.slot_at == "2024-03-20 10:15:00"
         assert repo.load_current_slot_artifact() is not None
+    finally:
+        shutil.rmtree(temp_root, ignore_errors=True)
+
+
+def test_boot_replay_skips_intraday_fetch_when_runtime_disabled(monkeypatch):
+    temp_root = Path(tempfile.mkdtemp(prefix="slot_replay_disabled_", dir=str(Path.cwd())))
+    monkeypatch.setenv("GP_STORE_DIR", str(temp_root / "store"))
+    monkeypatch.setattr("gp_assistant.worker._intraday_runtime_enabled", lambda: False)
+
+    daybook = DayBook(
+        trading_day="20240320",
+        generated_at="2024-03-20T09:00:00+08:00",
+        picks=[
+            AdvicePick(
+                symbol="600519",
+                rank=1,
+                industry="white-liquor",
+                entry_plan={"high": 10.30, "mid": 10.18},
+                stop_plan={"price": 9.85},
+                take_profit_plan={"targets": [10.80]},
+            )
+        ],
+        reserve_picks=[],
+        reserve_symbols=[],
+        source_meta={"daily_freshness": {"ready": True, "target_day": "2024-03-20"}},
+    )
+
+    def _unexpected_fetch(**kwargs):
+        raise AssertionError("fetch_intraday_bundle should not run when intraday runtime is disabled")
+
+    monkeypatch.setattr("gp_assistant.worker._load_or_build_daybook", lambda trade_day: daybook)
+    monkeypatch.setattr("gp_assistant.worker.load_portfolio_snapshot", lambda: {"positions": []})
+    monkeypatch.setattr("gp_assistant.worker.fetch_intraday_bundle", _unexpected_fetch)
+
+    try:
+        out = boot_replay_to_current_slot(now=datetime(2024, 3, 20, 10, 17), force=True)
+        current = repo.load_current_slot_artifact()
+        assert out["disabled"] is True
+        assert out["reason"] == "intraday_runtime_disabled"
+        assert out["slot_status"] == "UNAVAILABLE"
+        assert out["slot_at"] == "2024-03-20 10:15:00"
+        assert current is not None
+        assert current.provider_meta["reason"] == "intraday_runtime_disabled"
+        assert current.slot_at == "2024-03-20 10:15:00"
     finally:
         shutil.rmtree(temp_root, ignore_errors=True)

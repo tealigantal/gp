@@ -189,6 +189,19 @@ def build_v2_dict_from_v1(payload: Dict[str, Any], *, risk_profile: Optional[str
 
 
 def read_artifact_v2(run_id: Optional[str] = None, as_of: Optional[str] = None) -> Dict[str, Any]:
+    if not run_id and not as_of:
+        base = store_dir() / "recommend"
+        latest_v2 = base / "latest_v2.json"
+        latest_v1 = base / "latest.json"
+        try:
+            if latest_v1.exists() and (not latest_v2.exists() or latest_v1.stat().st_mtime > latest_v2.stat().st_mtime):
+                v1_latest = _read_v1_from_store(None, None)
+                if isinstance(v1_latest, dict):
+                    out = build_v2_dict_from_v1(v1_latest)
+                    out["fallback_used"] = True
+                    return out
+        except Exception:
+            pass
     # 1) prefer persisted v2
     v2p = _read_v2_from_store(run_id, as_of)
     if isinstance(v2p, dict):
