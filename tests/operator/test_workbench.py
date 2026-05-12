@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from pathlib import Path
+from gp_assistant.core.paths import store_dir
 from gp_assistant.kernel import facade as k
 from gp_assistant.gateway.app import app
 from fastapi.testclient import TestClient
@@ -11,7 +11,7 @@ from gp_assistant.portfolio.store import portfolio_state_path
 
 def _cleanup():
     # remove validation summary and portfolio to force fallback
-    p = Path('store/validation/latest_summary.json')
+    p = store_dir() / 'validation' / 'latest_summary.json'
     if p.exists():
         p.unlink()
     pp = portfolio_state_path()

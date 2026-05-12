@@ -2,12 +2,19 @@ from __future__ import annotations
 
 from ..book.repo import save_run
 from ..contracts.objects import AdviceRun, MarketBook
+from ..evidence.daily_freshness import active_freshness_for_current_target
 from ..runtime.canonical_artifact import build_canonical_run
 from ..runtime.utils import gen_id, now_iso
 
 
 def publish_run(session_id: str, book: MarketBook, topk: int = 3) -> AdviceRun:
-    freshness = dict(book.daybook.source_meta.get("daily_freshness") or {})
+    book_day = book.daybook_effective_day or book.daybook.trading_day
+    raw_freshness = dict(book.daybook.source_meta.get("daily_freshness") or {})
+    freshness = active_freshness_for_current_target(
+        raw_freshness,
+        book_day=book_day,
+    )
+    stale_freshness_discarded = bool(raw_freshness) and not freshness
     freshness_ready = bool(freshness.get("ready", True))
     picks = list(book.board[:topk]) if freshness_ready else []
     run = AdviceRun(
@@ -18,7 +25,11 @@ def publish_run(session_id: str, book: MarketBook, topk: int = 3) -> AdviceRun:
         trading_day=book.trading_day,
         regime=book.regime,
         tradeable=bool(book.daybook.tradeable and freshness_ready),
-        reason=(freshness.get("blocking_reason") if not freshness_ready else (book.daybook.reason or book.data_status)),
+        reason=(
+            freshness.get("blocking_reason")
+            if not freshness_ready
+            else (None if stale_freshness_discarded else book.daybook.reason) or book.data_status
+        ),
         picks=picks,
         evidence_refs=[book.book_version, *([book.artifact_id] if book.artifact_id else [])],
         artifact_id=book.artifact_id,
@@ -44,11 +55,14 @@ def publish_run(session_id: str, book: MarketBook, topk: int = 3) -> AdviceRun:
     )
     canonical = build_canonical_run(book=book, run=run, picks=picks)
     run.run_action = canonical.run_action
+    run.recommendation_state = canonical.recommendation_state
     run.non_trading = canonical.non_trading
     run.status_reason = canonical.status_reason
     run.no_trade_reasons = list(canonical.no_trade_reasons)
     run.recovery_conditions = list(canonical.recovery_conditions)
     run.data_quality = dict(canonical.data_quality)
     run.data_provenance = dict(canonical.data_provenance)
+    run.explain_context = dict(canonical.explain_context)
+    run.decision_evidence_pack = dict(canonical.decision_evidence_pack)
     save_run(run)
     return run

@@ -54,5 +54,5 @@ def event_study(df: pd.DataFrame, setups: List[Setup]):
     high20 = df["high"].rolling(20).max()
     breakout = df["close"] > high20.shift(1)
     # mark pullback days simply as next day of breakout
-    mask = breakout.shift(1).fillna(False)
+    mask = breakout.shift(1, fill_value=False).astype(bool)
     return event_study_from_mask(df, mask)

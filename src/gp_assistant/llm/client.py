@@ -1,29 +1,21 @@
-# 简介：LLM 客户端（OpenAI Chat Completions 兼容）。从环境读取配置；
-# 未配置时优雅降级为可读提示，避免阻断对话路径。
 from __future__ import annotations
 
 import json
-import os
 from typing import Any, Dict, List, Optional, Tuple
+
 import requests
 
 from ..core.config import load_config
 
 
 class LLMClient:
-    """OpenAI Chat Completions compatible client with graceful degradation.
-
-    - Reads base URL, API key, model from env (via AppConfig)
-    - If API key or base URL missing, returns a readable degraded reply.
-    """
+    """OpenAI Chat Completions compatible client."""
 
     def __init__(self, base_url: Optional[str] = None, api_key: Optional[str] = None, model: Optional[str] = None):
         cfg = load_config()
         self.base_url = (base_url or cfg.llm_base_url or "").strip()
         self.api_key = (api_key or cfg.llm_api_key or "").strip()
-        # Default to DeepSeek-friendly model name if not provided
         self.model = (model or cfg.chat_model or "deepseek-chat").strip()
-        # timeout<=0 表示不限制，由 requests 使用阻塞式无超时
         self.timeout = cfg.request_timeout_sec
 
     @staticmethod
@@ -45,9 +37,9 @@ class LLMClient:
         if response_format:
             payload["response_format"] = response_format
         if extra:
-            for k, v in extra.items():
-                if k not in payload and v is not None:
-                    payload[k] = v
+            for key, value in extra.items():
+                if key not in payload and value is not None:
+                    payload[key] = value
         return payload
 
     def available(self) -> Tuple[bool, str]:
@@ -100,17 +92,13 @@ class LLMClient:
         model: Optional[str] = None,
         tool_choice: Optional[str] = None,
     ) -> Dict[str, Any]:
-        """Single chat/completions step with optional tools exposure.
-
-        Returns a dict like { role: 'assistant', content: str|None, tool_calls: [ ... ]|None }
-        """
         ok, reason = self.available()
         if not ok:
             raise RuntimeError(f"LLM 未就绪：{reason}")
 
         url = self.base_url.rstrip("/") + "/chat/completions"
         payload: Dict[str, Any] = {
-            "model": (model or self.model or "deepseek-chat"),
+            "model": model or self.model or "deepseek-chat",
             "messages": messages,
             "temperature": float(temperature),
             "stream": False,
@@ -129,12 +117,10 @@ class LLMClient:
         resp = requests.post(url, headers=headers, data=data, timeout=timeout)
         resp.raise_for_status()
         obj = resp.json()
-        ch = ((obj or {}).get("choices") or [{}])[0]
-        msg = ch.get("message") or {}
-        # Normalize minimal surface
-        out = {
+        choice = ((obj or {}).get("choices") or [{}])[0]
+        msg = choice.get("message") or {}
+        return {
             "role": msg.get("role") or "assistant",
             "content": msg.get("content"),
             "tool_calls": msg.get("tool_calls") or [],
         }
-        return out

@@ -6,9 +6,21 @@ export default function App() {
     <ConfigProvider
       theme={{
         token: {
-          colorPrimary: '#2563eb',
-          borderRadius: 10,
-          fontFamily: 'Inter, PingFang SC, Microsoft YaHei, sans-serif',
+          colorPrimary: '#2457d6',
+          colorInfo: '#2457d6',
+          colorSuccess: '#2b8a63',
+          colorWarning: '#d08c24',
+          borderRadius: 20,
+          fontFamily: '"Aptos", "Segoe UI Variable", "SF Pro Text", "PingFang SC", "Microsoft YaHei", sans-serif',
+        },
+        components: {
+          Button: {
+            borderRadius: 999,
+            controlHeight: 42,
+          },
+          Card: {
+            borderRadiusLG: 26,
+          },
         },
       }}
     >

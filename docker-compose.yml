@@ -1,21 +1,22 @@
-﻿x-gp-build: &gp-build
+x-gp-build: &gp-build
   context: .
   args:
     BASE_PY_IMAGE: ${BASE_PY_IMAGE:-docker.m.daocloud.io/library/python:3.11-slim-bookworm}
     PIP_INDEX_URL: ${PIP_INDEX_URL:-https://pypi.org/simple}
-    HTTP_PROXY: ${HTTP_PROXY:-http://host.docker.internal:7890}
-    HTTPS_PROXY: ${HTTPS_PROXY:-http://host.docker.internal:7890}
-    ALL_PROXY: ${ALL_PROXY:-http://host.docker.internal:7890}
+    HTTP_PROXY: ${HTTP_PROXY:-}
+    HTTPS_PROXY: ${HTTPS_PROXY:-}
+    ALL_PROXY: ${ALL_PROXY:-}
 
 x-gp-env: &gp-env
   TZ: ${TZ:-Asia/Shanghai}
-  HTTP_PROXY: ${HTTP_PROXY:-http://host.docker.internal:7890}
-  HTTPS_PROXY: ${HTTPS_PROXY:-http://host.docker.internal:7890}
-  ALL_PROXY: ${ALL_PROXY:-http://host.docker.internal:7890}
+  HTTP_PROXY: ${HTTP_PROXY:-}
+  HTTPS_PROXY: ${HTTPS_PROXY:-}
+  ALL_PROXY: ${ALL_PROXY:-}
 
   GP_RUN_MODE: ${GP_RUN_MODE:-prod}
   GP_DEV_MODE: ${GP_DEV_MODE:-0}
   GP_RECOMMEND_MODE: ${GP_RECOMMEND_MODE:-}
+  GP_INTRADAY_RUNTIME_ENABLED: ${GP_INTRADAY_RUNTIME_ENABLED:-0}
   GP_DEV_SYMBOLS: ${GP_DEV_SYMBOLS:-}
   GP_DEV_OHLCV_LEN: ${GP_DEV_OHLCV_LEN:-90}
   GP_CORS_ORIGINS: ${GP_CORS_ORIGINS:-}
@@ -66,18 +67,12 @@ services:
 
   gp-worker:
     <<: *gp-service
-    command: ["python", "-m", "gp_assistant.cli", "pulse-loop"]
+    command: ["python", "-m", "gp_assistant.cli", "daily-loop"]
     restart: unless-stopped
 
   gp-rebuild-daybook:
     <<: *gp-service
     command: ["python", "-m", "gp_assistant.cli", "rebuild-daybook"]
-    profiles: ["ops"]
-    restart: "no"
-
-  gp-replay-today:
-    <<: *gp-service
-    command: ["python", "-m", "gp_assistant.cli", "replay-today"]
     profiles: ["ops"]
     restart: "no"
 
@@ -94,13 +89,13 @@ services:
         BASE_NODE_IMAGE: ${BASE_NODE_IMAGE:-docker.m.daocloud.io/library/node:20-alpine}
         BASE_NGINX_IMAGE: ${BASE_NGINX_IMAGE:-docker.m.daocloud.io/library/nginx:1.25-alpine}
         NPM_REGISTRY: ${NPM_REGISTRY:-https://registry.npmmirror.com}
-        HTTP_PROXY: ${HTTP_PROXY:-http://host.docker.internal:7890}
-        HTTPS_PROXY: ${HTTPS_PROXY:-http://host.docker.internal:7890}
-        ALL_PROXY: ${ALL_PROXY:-http://host.docker.internal:7890}
+        HTTP_PROXY: ${HTTP_PROXY:-}
+        HTTPS_PROXY: ${HTTPS_PROXY:-}
+        ALL_PROXY: ${ALL_PROXY:-}
     environment:
-      HTTP_PROXY: ${HTTP_PROXY:-http://host.docker.internal:7890}
-      HTTPS_PROXY: ${HTTPS_PROXY:-http://host.docker.internal:7890}
-      ALL_PROXY: ${ALL_PROXY:-http://host.docker.internal:7890}
+      HTTP_PROXY: ${HTTP_PROXY:-}
+      HTTPS_PROXY: ${HTTPS_PROXY:-}
+      ALL_PROXY: ${ALL_PROXY:-}
     depends_on:
       - gp
     ports:

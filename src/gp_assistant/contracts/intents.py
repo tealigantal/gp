@@ -11,6 +11,7 @@ RequestType = Literal[
     "term_explain",
     "recommend",
     "pick_detail",
+    "single_stock_query",
     "live_entry_check",
     "no_trade_explain",
     "compare",
@@ -33,10 +34,10 @@ SubjectType = Literal[
 
 FreshnessType = Literal[
     "active_run",
-    "latest_5m",
     "rebuild_run",
     "next_session_plan",
     # legacy aliases
     "current_book",
     "rebuild_daybook",
+    "latest_5m",
 ]

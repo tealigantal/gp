@@ -14,6 +14,8 @@ from ..contracts.objects import (
     PickDetailArtifact,
     RunChangeArtifact,
 )
+from ..evidence.live_quote_service import build_live_quote_snapshot
+from ..evidence.single_stock_service import analyze_single_stock
 from ..runtime.canonical_artifact import (
     build_canonical_pick,
     build_canonical_run,
@@ -67,6 +69,7 @@ def _stale_pick_detail(run, pick: CanonicalPick, message: str) -> PickDetailArti
         reason_codes=[*list(pick.reason_codes or []), "daily_freshness_blocked"],
         data_provenance=pick.data_provenance,
         source_run_id=(run.run_id if run else None),
+        explain_context=pick.explain_context,
     )
 
 
@@ -76,7 +79,7 @@ def _stale_live_entry(run, pick: CanonicalPick, message: str) -> LiveEntryDecisi
         name=pick.name,
         execution_state="UNAVAILABLE",
         can_execute_now=False,
-        next_action="先补齐该标的日线，再重新检查 5 分钟入场结构。",
+        next_action="先补齐该标的日线，再重新检查日线入场结构。",
         summary=message,
         gate_state=(run.gate.get("state") if run and isinstance(run.gate, dict) else None),
         gate_reasons=list(run.gate.get("reasons") or []) if run and isinstance(run.gate, dict) else [],
@@ -93,6 +96,7 @@ def _stale_live_entry(run, pick: CanonicalPick, message: str) -> LiveEntryDecisi
         reason_codes=[*list(pick.reason_codes or []), "daily_freshness_blocked"],
         data_provenance=pick.data_provenance,
         source_run_id=(run.run_id if run else None),
+        explain_context=pick.explain_context,
     )
 
 
@@ -130,6 +134,7 @@ def _stale_compare(run, picks: List[CanonicalPick], stale_points: List[str]) -> 
         comparison_points=stale_points,
         source_run_id=(run.run_id if run else None),
         data_provenance=(run.data_provenance if run else {}),
+        explain_context={"ranking_context": [pick.explain_context for pick in picks if pick.explain_context]},
     )
 
 
@@ -159,7 +164,7 @@ def recommend_workflow(session_id: str, evidence: EvidencePack, *, topk: int) ->
 
 def pick_detail_workflow(evidence: EvidencePack) -> Judgment:
     if evidence.subject_entry is None:
-        raise ValueError("pick_detail requires subject_entry")
+        return _missing_subject_workflow(evidence)
     run = evidence.active_run
     if run is None:
         run = publish_run(session_id=evidence.session.session_id, book=evidence.book, topk=max(3, len(evidence.book.board)))
@@ -180,6 +185,26 @@ def pick_detail_workflow(evidence: EvidencePack) -> Judgment:
     )
 
 
+def single_stock_workflow(evidence: EvidencePack) -> Judgment:
+    refs = evidence.frame.references or {}
+    symbol = str(refs.get("symbol") or "").strip()
+    analysis = analyze_single_stock(symbol, book=evidence.book)
+    if analysis.data_status.get("error") == "invalid_symbol":
+        summary = "未识别到有效的 6 位 A 股代码，暂不做单票分析。"
+    elif analysis.overall_state == "UNAVAILABLE":
+        summary = f"{analysis.symbol} 的日线数据不足，暂不输出正式交易结论。"
+    elif analysis.overall_state == "STALE_OBSERVE":
+        summary = f"{analysis.symbol} 只能基于未补齐到目标交易日的日线做结构观察。"
+    else:
+        summary = f"{analysis.symbol} 已完成日线与冠军策略分析，当前状态为 {analysis.overall_state}。"
+    return Judgment(
+        kind="single_stock_query",
+        summary=summary,
+        single_stock_analysis=analysis,
+        evidence_refs=[evidence.book.book_version, analysis.symbol],
+    )
+
+
 def no_trade_workflow(evidence: EvidencePack) -> Judgment:
     run = evidence.active_run or publish_run(session_id=evidence.session.session_id, book=evidence.book, topk=max(3, len(evidence.book.board)))
     canonical_run = build_canonical_run(book=evidence.book, run=run, picks=run.picks)
@@ -195,16 +220,64 @@ def no_trade_workflow(evidence: EvidencePack) -> Judgment:
     )
 
 
+def _missing_subject_message(evidence: EvidencePack) -> str:
+    frame = getattr(evidence, "frame", None)
+    if getattr(frame, "request", None) == "compare":
+        return "当前没有足够可比较的标的，先不做强弱排序。"
+    refs = getattr(frame, "references", {}) or {}
+    if refs.get("rank") is not None:
+        return f"当前没有可核对的第 {refs.get('rank')} 只标的，先不做单票执行判断。"
+    if refs.get("symbol"):
+        return f"当前计划里没有找到 {refs.get('symbol')}，先不做单票执行判断。"
+    return "当前没有明确可核对的标的，先不做单票执行判断。"
+
+
+def _missing_subject_workflow(evidence: EvidencePack) -> Judgment:
+    base = no_trade_workflow(evidence)
+    message = _missing_subject_message(evidence)
+    no_trade = base.no_trade
+    if no_trade is not None:
+        reasons: list[str] = []
+        for item in [message, *list(no_trade.no_trade_reasons or [])]:
+            text = str(item or "").strip()
+            if text and text not in reasons:
+                reasons.append(text)
+        no_trade = no_trade.model_copy(
+            update={
+                "market_summary": message,
+                "status_reason": message,
+                "no_trade_reasons": reasons[:5],
+            }
+        )
+    return base.model_copy(
+        update={
+            "kind": "no_trade",
+            "summary": message,
+            "subject_entry": None,
+            "no_trade": no_trade,
+        }
+    )
+
+
 def live_entry_workflow(evidence: EvidencePack) -> Judgment:
     if evidence.subject_entry is None:
-        raise ValueError("live_entry_check requires subject_entry")
+        return _missing_subject_workflow(evidence)
     run = evidence.active_run or publish_run(session_id=evidence.session.session_id, book=evidence.book, topk=max(3, len(evidence.book.board)))
     canonical_run = build_canonical_run(book=evidence.book, run=run, picks=run.picks)
     pick = next((item for item in canonical_run.picks if item.symbol == evidence.subject_entry.symbol), None)
     if pick is None:
         pick = build_canonical_pick(evidence.subject_entry, evidence.book)
     freshness_issue = _pick_freshness_issue(pick)
-    live_entry = _stale_live_entry(canonical_run, pick, freshness_issue) if freshness_issue else build_live_entry_view(canonical_run, pick)
+    quote_snapshot = build_live_quote_snapshot(
+        symbol=evidence.subject_entry.symbol,
+        user_message=evidence.frame.raw_message,
+        trade_day=evidence.book.pulse_trade_day or evidence.book.trading_day,
+    )
+    live_entry = (
+        _stale_live_entry(canonical_run, pick, freshness_issue)
+        if freshness_issue
+        else build_live_entry_view(canonical_run, pick, quote_snapshot=quote_snapshot)
+    )
     return Judgment(
         kind="live_entry_check",
         summary=live_entry.summary,
@@ -222,9 +295,13 @@ def compare_workflow(evidence: EvidencePack) -> Judgment:
         entries = list(evidence.active_run.picks[:2])
     if not entries:
         entries = list(evidence.book.board[:2])
+    if not entries:
+        return _missing_subject_workflow(evidence)
     run = evidence.active_run or publish_run(session_id=evidence.session.session_id, book=evidence.book, topk=max(3, len(evidence.book.board)))
     canonical_run = build_canonical_run(book=evidence.book, run=run, picks=run.picks)
     picks = [next((item for item in canonical_run.picks if item.symbol == entry.symbol), build_canonical_pick(entry, evidence.book)) for entry in entries]
+    if not picks:
+        return _missing_subject_workflow(evidence)
     stale_points = [issue for issue in (_pick_freshness_issue(pick) for pick in picks) if issue]
     compare_view = _stale_compare(canonical_run, picks, stale_points) if stale_points else build_compare_view(canonical_run, picks)
     return Judgment(
@@ -240,7 +317,7 @@ def compare_workflow(evidence: EvidencePack) -> Judgment:
 
 def exit_workflow(evidence: EvidencePack) -> Judgment:
     if evidence.subject_entry is None:
-        raise ValueError("exit_decision requires subject_entry")
+        return _missing_subject_workflow(evidence)
     run = evidence.active_run or publish_run(session_id=evidence.session.session_id, book=evidence.book, topk=max(3, len(evidence.book.board)))
     canonical_run = build_canonical_run(book=evidence.book, run=run, picks=run.picks)
     pick = next((item for item in canonical_run.picks if item.symbol == evidence.subject_entry.symbol), None)

@@ -29,6 +29,32 @@ def _entry_by_rank(entries: List[BoardEntry], rank: int | None) -> BoardEntry | 
 
 
 def _extract_rank(raw: str) -> int | None:
+    text = raw or ""
+    rank_words = {
+        "第一": 1,
+        "第1": 1,
+        "第二": 2,
+        "第2": 2,
+        "第三": 3,
+        "第3": 3,
+        "第四": 4,
+        "第4": 4,
+        "第五": 5,
+        "第5": 5,
+    }
+    hits = []
+    for key, value in rank_words.items():
+        pos = text.find(key)
+        if pos >= 0:
+            hits.append((pos, value))
+    if hits:
+        return sorted(hits, key=lambda item: item[0])[0][1]
+    digit_match = re.search(r"第\s*(\d{1,2})\s*(?:只|个|名)?", text)
+    if digit_match:
+        try:
+            return int(digit_match.group(1))
+        except Exception:
+            return None
     match = _RANK_RE.search(raw or "")
     if not match:
         return None
@@ -55,20 +81,6 @@ def inject_entity_hints(frame: TurnFrame, memory_ctx: Dict, book: MarketBook) ->
     if "focus_symbol" not in refs and isinstance(session.focus_subject, dict):
         if session.focus_subject.get("type") == "symbol" and session.focus_subject.get("symbol"):
             refs["focus_symbol"] = session.focus_subject.get("symbol")
-    if not refs.get("symbol"):
-        focus_symbol = refs.get("focus_symbol") or getattr(session, "last_focus_symbol", None)
-        if any(token in raw for token in ("这只", "这个票", "这个标的", "它")) and focus_symbol:
-            refs["symbol"] = focus_symbol
-    if frame.request == "compare" and not refs.get("compare_symbols"):
-        ranks = [entry.rank for entry in active_entries if f"第{entry.rank}" in raw]
-        if len(ranks) >= 2:
-            compare_symbols = []
-            for rank in ranks[:3]:
-                entry = _entry_by_rank(active_entries, rank)
-                if entry:
-                    compare_symbols.append(entry.symbol)
-            if compare_symbols:
-                refs["compare_symbols"] = compare_symbols
     if frame.request in {"pick_detail", "live_entry_check", "exit_decision"} and not refs.get("symbol") and refs.get("rank") is not None:
         entry = _entry_by_rank(active_entries, int(refs["rank"]))
         if entry:

@@ -1,4 +1,4 @@
-﻿"""候选集生成（完整实现）。
+"""候选集生成（完整实现）。
 
 基于快照/参数/本地 Universe，拉取日线 -> 计算指标/筹码/风险 ->
 给出可观测字段与必要的 veto/flags 信息，供后续策略与 UI 使用。
@@ -16,6 +16,7 @@ import pandas as pd
 from ..core.config import load_config
 from ..providers.universe_provider import UniverseProvider
 from ..providers.boards import is_mainboard
+from ..runtime.market_clock import compute_market_state, resolve_trading_day_on_or_before
 from .datahub import MarketDataHub
 from ..strategy.indicators import compute_indicators
 from ..strategy.chip_model import compute_chip
@@ -109,19 +110,12 @@ def generate_candidates(
     # Resolve target trading day (with after-close gating)
     def _resolve_target(as_of_str: Optional[str]) -> pd.Timestamp:
         try:
-            tz = getattr(cfg, "timezone", "Asia/Shanghai")
             if as_of_str is not None:
-                base = pd.to_datetime(as_of_str).normalize()
-            else:
-                now_local = pd.Timestamp.now(tz=tz)
-                base = now_local.normalize() if (now_local.time() >= pd.Timestamp('1900-01-01T15:05:00').time()) else (now_local - pd.Timedelta(days=1)).normalize()
+                return pd.to_datetime(resolve_trading_day_on_or_before(as_of_str)).normalize()
+            ms = compute_market_state()
+            return pd.to_datetime(ms.target_daybook_effective_day).normalize()
         except Exception:
-            base = (pd.to_datetime(as_of_str).normalize() if as_of_str is not None else pd.Timestamp.now().normalize())
-        # Minimal weekend fallback; holiday exceptions not covered here
-        d = base
-        while d.weekday() >= 5:
-            d = d - pd.Timedelta(days=1)
-        return d
+            return pd.to_datetime(as_of_str).normalize() if as_of_str is not None else pd.Timestamp.now().normalize()
     _target_trading_day = _resolve_target(as_of).date()
 
     # 1) 基础股票池
@@ -400,7 +394,7 @@ def generate_candidates(
             "close": close,
         }
 
-        # 观察/禁止标记
+        # 暂不入场/禁止标记
         observe_only = False
         reasons: List[str] = []
         if cand["liquidity"]["grade"] == "C":
@@ -470,6 +464,5 @@ def generate_candidates(
     if return_features:
         return pool[: max(1, topk) * 5], veto_reasons, stats, feats_by_symbol
     return pool[: max(1, topk) * 5], veto_reasons, stats
-
 
 

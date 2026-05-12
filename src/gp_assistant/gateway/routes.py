@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any, Callable
 
 from fastapi import APIRouter, HTTPException
+from fastapi.responses import JSONResponse
 
 from ..book.engine import load_current_book
 from ..book.repo import load_run, load_slot_artifact
@@ -18,10 +19,11 @@ from ..contracts.api import (
     SessionResponse,
 )
 from ..core.config import load_config
-from ..evidence.daily_freshness import audit_daily_freshness
+from ..core.errors import APIError, IntentLLMUnavailable, IntentParseFailed
 from ..evidence.market_service import current_trading_day
 from ..gateway.events import list_side_results
 from ..gateway.sessions import get_session_diagnostics, get_session_payload, sanitize_chat_payload
+from ..kernel import facade as kernel_facade
 from ..llm.client import LLMClient
 from ..memory._sqlite import gateway_stats
 from ..memory.session_store import list_sessions
@@ -39,11 +41,23 @@ from ..runtime.market_clock import (
     compute_market_state,
 )
 from ..runtime.repair import load_repair_status_snapshot
+from ..evidence.daily_freshness import TARGET_CURRENT_READY, resolve_daily_target
 from ..runtime.turn_loop import run_turn_sync
 from ..runtime.utils import now_iso
 from ..worker import reconcile_runtime_state
 
 router = APIRouter()
+
+
+def _artifact_not_found(error: str) -> JSONResponse:
+    return JSONResponse(
+        status_code=404,
+        content={
+            "ok": False,
+            "artifact_version": "v2",
+            "error": error,
+        },
+    )
 
 
 def _runtime_services() -> list[RuntimeToolInfo]:
@@ -57,28 +71,21 @@ def _runtime_services() -> list[RuntimeToolInfo]:
         RuntimeToolInfo(
             service="gp-worker",
             mode="always_on",
-            command="python -m gp_assistant.cli pulse-loop",
-            description="后台 worker，按市场时段自动修复日线、5 分钟线和 current artifact。",
+            command="python -m gp_assistant.cli daily-loop",
+            description="后台 worker，按市场时段自动刷新日线计划和 current artifact。",
         ),
         RuntimeToolInfo(
-            service="repair-start",
+            service="gp-rebuild-daybook",
             mode="manual",
             profile="ops",
-            command="python -m gp_assistant.cli repair-start",
+            command="python -m gp_assistant.cli rebuild-daybook",
             description="立即启动一次有边界的运行时修复。",
         ),
         RuntimeToolInfo(
-            service="repair-retry",
+            service="gp-postclose-archive",
             mode="manual",
             profile="ops",
-            command="python -m gp_assistant.cli repair-retry",
-            description="重试当前市场时段对应的运行时修复计划。",
-        ),
-        RuntimeToolInfo(
-            service="repair-audit",
-            mode="manual",
-            profile="ops",
-            command="python -m gp_assistant.cli repair-audit",
+            command="python -m gp_assistant.cli postclose-archive",
             description="执行显式 daily freshness audit，用于运维诊断。",
         ),
     ]
@@ -86,44 +93,137 @@ def _runtime_services() -> list[RuntimeToolInfo]:
 
 def _ops_executor(operation: str) -> tuple[str, Callable[[], dict[str, Any]]] | None:
     mapping: dict[str, tuple[str, Callable[[], dict[str, Any]]]] = {
-        "repair-start": (
+        "gp-rebuild-daybook": (
             "已启动一次运行时修复。",
-            lambda: reconcile_runtime_state(operation="repair_start"),
+            lambda: reconcile_runtime_state(operation="rebuild_daybook"),
         ),
-        "repair-retry": (
-            "已重试当前运行时修复。",
-            lambda: reconcile_runtime_state(operation="repair_retry"),
-        ),
-        "repair-audit": (
+        "gp-postclose-archive": (
             "已完成一次 daily freshness audit。",
-            lambda: audit_daily_freshness(limit=25),
+            lambda: reconcile_runtime_state(operation="postclose_archive"),
         ),
     }
     return mapping.get(operation)
 
 
-def _book_freshness(book, market_phase: str, target_slot_at: str | None) -> str:
+_DAILY_PLAN_META_KEYS = (
+    "daybook_generated_at",
+    "daily_target_day",
+    "daily_target_mode",
+    "daily_last_reconcile_at",
+    "market_phase",
+)
+
+
+def _daily_last_reconcile_at(freshness: dict[str, Any]) -> Any:
+    return freshness.get("last_reconcile_at") or freshness.get("generated_at") or freshness.get("reconciled_at")
+
+
+def _daily_plan_publish_meta(book, *, market_phase: str) -> dict[str, Any]:
+    daybook = getattr(book, "daybook", None)
+    source_meta = getattr(daybook, "source_meta", {}) or {}
+    freshness = dict(source_meta.get("daily_freshness") or {})
+    return {
+        "daybook_generated_at": getattr(daybook, "generated_at", None),
+        "daily_target_day": freshness.get("target_day"),
+        "daily_target_mode": freshness.get("target_mode"),
+        "daily_last_reconcile_at": _daily_last_reconcile_at(freshness),
+        "market_phase": market_phase,
+    }
+
+
+def _artifact_lag_status(
+    book,
+    *,
+    market_phase: str,
+    daily_runtime: dict[str, Any],
+) -> tuple[bool, str | None, list[str]]:
+    if book is None:
+        return False, None, []
+    if not bool(daily_runtime.get("daily_freshness_ready")):
+        return False, None, []
+    if str(daily_runtime.get("daily_target_mode") or "").lower() != "current_ready":
+        return False, None, []
+
+    artifact_id = getattr(book, "artifact_id", None)
+    if not artifact_id:
+        return True, "daily_ready_current_artifact_missing", ["artifact_id"]
+    artifact = load_slot_artifact(str(artifact_id), trade_day=getattr(book, "trading_day", None))
+    if artifact is None:
+        return True, "daily_ready_current_artifact_unavailable", ["artifact"]
+
+    provider_meta = dict(getattr(artifact, "provider_meta", {}) or {})
+    expected_meta = _daily_plan_publish_meta(book, market_phase=market_phase)
+    lag_fields: list[str] = []
+    if provider_meta.get("reason") != "daily_plan":
+        lag_fields.append("reason")
+    for key in _DAILY_PLAN_META_KEYS:
+        if key not in provider_meta or provider_meta.get(key) != expected_meta.get(key):
+            lag_fields.append(key)
+    if not lag_fields:
+        return False, None, []
+    return True, f"daily_ready_current_artifact_meta_mismatch:{','.join(lag_fields)}", lag_fields
+
+
+def _book_freshness(
+    book,
+    market_phase: str,
+    target_slot_at: str | None,
+    *,
+    intraday_runtime_enabled: bool,
+    artifact_lagging: bool = False,
+) -> str:
     if book is None:
         return "unavailable"
+    if artifact_lagging:
+        return "lagging"
+    if not intraday_runtime_enabled:
+        return "daily_only"
     slot_status = str(getattr(book, "slot_status", "") or "").upper()
     if slot_status and slot_status != "OK":
         return "degraded"
-    last_closed_5m = getattr(book, "last_closed_5m", None)
-    if market_phase in {PHASE_PREOPEN, PHASE_OPEN_NO_FIRST_BAR} and not last_closed_5m:
-        return "awaiting_first_slot"
-    if target_slot_at and last_closed_5m:
-        if str(last_closed_5m) >= str(target_slot_at):
-            return "postclose_ready" if market_phase == PHASE_POSTCLOSE_PENDING else "current"
-        return "lagging"
+    if market_phase == PHASE_POSTCLOSE_PENDING:
+        return "postclose_ready"
     if market_phase == PHASE_NON_TRADING:
         return "non_trading"
-    if last_closed_5m:
-        return "available"
-    return "unavailable"
+    return "daily_only"
 
 
-def _runtime_status(book) -> RuntimeStatus:
+def _daily_freshness_fields(book) -> dict[str, Any]:
+    source_meta = getattr(getattr(book, "daybook", None), "source_meta", {}) or {}
+    freshness = dict(source_meta.get("daily_freshness") or {})
+    return {
+        "daily_freshness_ready": bool(freshness.get("ready", False)),
+        "daily_target_day": freshness.get("target_day"),
+        "daily_target_mode": freshness.get("target_mode"),
+        "pending_eod_day": freshness.get("pending_eod_day"),
+        "eod_probe": freshness.get("eod_probe"),
+        "daily_checked_count": int(freshness.get("checked_count") or len(freshness.get("checked_symbols") or [])),
+        "daily_stale_count": int(freshness.get("stale_count") or len(freshness.get("stale_symbols") or [])),
+        "daily_last_reconcile_at": freshness.get("last_reconcile_at") or freshness.get("generated_at") or freshness.get("reconciled_at"),
+        "daily_blocking_reason": freshness.get("blocking_reason"),
+        "daily_failed_symbols": list(freshness.get("failed_symbols") or []),
+    }
+
+
+def _trade_day_iso(trade_day: Any) -> str:
+    raw = str(trade_day or "").strip()
+    digits = "".join(ch for ch in raw if ch.isdigit())
+    if len(digits) >= 8:
+        return f"{digits[:4]}-{digits[4:6]}-{digits[6:8]}"
+    return raw
+
+
+def _load_current_book_best_effort():
+    try:
+        with book_lane():
+            return load_current_book(), None
+    except TimeoutError as ex:
+        return None, str(ex)
+
+
+def _runtime_status(book, *, lock_error: str | None = None) -> RuntimeStatus:
     cfg = load_config()
+    intraday_runtime_enabled = False
     ms = compute_market_state()
     snapshot = load_repair_status_snapshot()
     auto_update_expected = ms.market_phase in {
@@ -135,13 +235,72 @@ def _runtime_status(book) -> RuntimeStatus:
         PHASE_CLOSING_AUCTION,
         PHASE_POSTCLOSE_PENDING,
     }
+    daily_freshness = _daily_freshness_fields(book) if book else {}
+    daily_target = resolve_daily_target(ms.target_daybook_effective_day, allow_probe=False)
+    daily_target_day = daily_target.get("target_day") or daily_freshness.get("daily_target_day")
+    daily_target_mode = daily_target.get("target_mode") or daily_freshness.get("daily_target_mode")
+    pending_eod_day = (
+        daily_target.get("pending_eod_day")
+        if "pending_eod_day" in daily_target
+        else daily_freshness.get("pending_eod_day")
+    )
+    eod_probe = (
+        daily_target.get("eod_probe")
+        if "eod_probe" in daily_target
+        else daily_freshness.get("eod_probe")
+    )
+    source_target_day = daily_freshness.get("daily_target_day")
+    source_target_mode = daily_freshness.get("daily_target_mode")
+    if (
+        daily_freshness.get("daily_freshness_ready") is True
+        and str(source_target_mode or "") == TARGET_CURRENT_READY
+        and str(source_target_day or "") == _trade_day_iso(ms.target_daybook_effective_day)
+    ):
+        daily_target_day = source_target_day
+        daily_target_mode = source_target_mode
+        pending_eod_day = daily_freshness.get("pending_eod_day")
+        eod_probe = daily_freshness.get("eod_probe")
+    if source_target_day and daily_target_day and str(source_target_day) != str(daily_target_day):
+        daily_freshness = {
+            **daily_freshness,
+            "daily_freshness_ready": False,
+            "daily_checked_count": 0,
+            "daily_stale_count": 0,
+            "daily_last_reconcile_at": None,
+            "daily_blocking_reason": None,
+            "daily_failed_symbols": [],
+        }
+    daily_runtime = {
+        **daily_freshness,
+        "daily_target_day": str(daily_target_day) if daily_target_day else (snapshot.daily_target_day if snapshot else None),
+        "daily_target_mode": str(daily_target_mode) if daily_target_mode else None,
+        "pending_eod_day": str(pending_eod_day) if pending_eod_day else None,
+        "eod_probe": eod_probe if isinstance(eod_probe, dict) else None,
+    }
+    artifact_lagging, artifact_lag_reason, artifact_lag_fields = _artifact_lag_status(
+        book,
+        market_phase=ms.market_phase,
+        daily_runtime=daily_runtime,
+    )
     return RuntimeStatus(
         market_phase=str(snapshot.market_phase if snapshot else ms.market_phase),
+        calendar_source=ms.calendar_source,
+        calendar_status=ms.calendar_status,
+        calendar_range={"start": ms.calendar_range_start, "end": ms.calendar_range_end},
+        calendar_error=ms.calendar_error,
+        next_trading_day=ms.next_trading_day,
         data_provider=str(getattr(cfg.provider, "data_provider", "unknown") or "unknown"),
         auto_update_service="gp-worker",
         auto_update_expected=auto_update_expected,
+        intraday_runtime_enabled=intraday_runtime_enabled,
         worker_poll_interval_sec=max(5, int(getattr(cfg, "intraday_poll_interval_sec", 15) or 15)),
-        book_freshness=_book_freshness(book, ms.market_phase, ms.target_pulse_slot_at),
+        book_freshness=_book_freshness(
+            book,
+            ms.market_phase,
+            ms.target_pulse_slot_at,
+            intraday_runtime_enabled=intraday_runtime_enabled,
+            artifact_lagging=artifact_lagging,
+        ),
         book_updated_at=(getattr(book, "updated_at", None) if book else None),
         artifact_id=(getattr(book, "artifact_id", None) if book else None),
         daybook_effective_day=(getattr(book, "daybook_effective_day", None) if book else None),
@@ -152,14 +311,32 @@ def _runtime_status(book) -> RuntimeStatus:
         publish_allowed=bool(getattr(book, "publish_allowed", False) if book else False),
         repair_status=str(snapshot.repair_status if snapshot else "idle"),
         repair_stage=str(snapshot.repair_stage if snapshot else "idle"),
-        daily_target_day=(snapshot.daily_target_day if snapshot else ms.target_daybook_effective_day),
         pulse_target_trade_day=(snapshot.pulse_target_trade_day if snapshot else ms.target_pulse_trade_day),
         pulse_target_slot_at=(snapshot.pulse_target_slot_at if snapshot else ms.target_pulse_slot_at),
         last_repair_started_at=(snapshot.last_repair_started_at if snapshot else None),
         last_repair_finished_at=(snapshot.last_repair_finished_at if snapshot else None),
-        blocking_reason=(snapshot.blocking_reason if snapshot else None),
-        artifact_status=str(snapshot.artifact_status if snapshot else (getattr(book, "slot_status", None) or "unavailable")),
+        blocking_reason=(
+            snapshot.blocking_reason
+            if snapshot and snapshot.blocking_reason
+            else (
+                lock_error
+                if lock_error
+                else (
+                    "当前只使用日线计划模块。"
+                    if not intraday_runtime_enabled
+                    else None
+                )
+            )
+        ),
+        artifact_status=str(
+            snapshot.artifact_status
+            if snapshot
+            else ("lagging" if artifact_lagging else (getattr(book, "slot_status", None) or "unavailable"))
+        ),
+        artifact_lag_reason=artifact_lag_reason,
+        artifact_lag_fields=artifact_lag_fields,
         services=_runtime_services(),
+        **daily_runtime,
     )
 
 
@@ -167,16 +344,73 @@ def _runtime_status(book) -> RuntimeStatus:
 @router.post("/api/chat", response_model=ChatResponse)
 def chat(req: ChatRequest) -> ChatResponse:
     session_id = req.session_id or "default"
-    with session_lane(session_id):
-        out = run_turn_sync(session_id=session_id, user_message=req.message)
+    try:
+        with session_lane(session_id):
+            out = run_turn_sync(session_id=session_id, user_message=req.message)
+    except IntentLLMUnavailable as ex:
+        raise APIError(
+            status_code=503,
+            message="LLM 意图解析服务不可用",
+            detail={"reason": ex.reason},
+        ) from ex
+    except IntentParseFailed as ex:
+        raise APIError(
+            status_code=502,
+            message="LLM 意图解析返回无效结果",
+            detail=ex.detail(),
+        ) from ex
     return ChatResponse(**sanitize_chat_payload(out))
+
+
+@router.get("/api/recommend_v2")
+def recommend_v2(run_id: str | None = None, as_of: str | None = None):
+    try:
+        return kernel_facade.get_artifact_v2(run_id=run_id, as_of=as_of)
+    except FileNotFoundError:
+        return _artifact_not_found("recommend_v2_unavailable")
+
+
+@router.post("/api/compare")
+def compare_symbols(body: dict[str, Any]):
+    run_id = body.get("run_id") or body.get("as_of")
+    raw_symbols = body.get("symbols") or []
+    symbols = [str(symbol).strip() for symbol in raw_symbols if str(symbol).strip()] if isinstance(raw_symbols, list) else []
+    try:
+        return kernel_facade.compare_symbols(str(run_id) if run_id else None, symbols)
+    except FileNotFoundError:
+        return _artifact_not_found("recommend_v2_unavailable")
+
+
+@router.get("/api/pick")
+def pick_detail(run_id: str | None = None, symbol: str | None = None):
+    if not symbol:
+        return JSONResponse(
+            status_code=400,
+            content={"ok": False, "artifact_version": "v2", "error": "symbol_required"},
+        )
+    try:
+        return kernel_facade.get_pick_detail(run_id, symbol)
+    except FileNotFoundError:
+        return _artifact_not_found("recommend_v2_unavailable")
+
+
+@router.get("/api/validation/summary")
+def validation_summary():
+    return kernel_facade.get_validation_summary()
+
+
+@router.get("/api/workbench")
+def workbench(run_id: str | None = None, as_of: str | None = None):
+    try:
+        return kernel_facade.get_workbench_snapshot(run_id=run_id, as_of=as_of)
+    except FileNotFoundError:
+        return _artifact_not_found("recommend_v2_unavailable")
 
 
 @router.get("/health", response_model=HealthResponse)
 @router.get("/api/health", response_model=HealthResponse)
 def health() -> HealthResponse:
-    with book_lane():
-        book = load_current_book()
+    book, lock_error = _load_current_book_best_effort()
     ok, _ = LLMClient().available()
     return HealthResponse(
         status="ok",
@@ -184,43 +418,40 @@ def health() -> HealthResponse:
         book_version=(book.book_version if book else None),
         llm_ready=ok,
         storage=gateway_stats(),
-        runtime=_runtime_status(book),
+        runtime=_runtime_status(book, lock_error=lock_error),
     )
 
 
 @router.get("/api/ops/repair/status")
 def repair_status() -> dict[str, Any]:
-    with book_lane():
-        book = load_current_book()
-    return {"runtime": _runtime_status(book).model_dump()}
+    book, lock_error = _load_current_book_best_effort()
+    return {"runtime": _runtime_status(book, lock_error=lock_error).model_dump()}
 
 
 @router.post("/api/ops/repair/{operation}", response_model=OpsRunResponse)
 def run_repair_ops(operation: str) -> OpsRunResponse:
-    executor = _ops_executor(f"repair-{operation}")
+    executor = _ops_executor(operation)
     if executor is None:
         raise HTTPException(status_code=404, detail=f"Unknown repair operation: {operation}")
     default_message, fn = executor
     result = fn()
-    with book_lane():
-        book = load_current_book()
+    book, lock_error = _load_current_book_best_effort()
     status = "blocked" if bool(result.get("blocked")) else "ok"
     message = result.get("message") or default_message
     return OpsRunResponse(
-        operation=f"repair-{operation}",
+        operation=operation,
         status=status,
         message=message,
         executed_at=now_iso(),
         result=result,
-        runtime=_runtime_status(book),
+        runtime=_runtime_status(book, lock_error=lock_error),
     )
 
 
 @router.get("/api/book/current", response_model=BookResponse)
 def current_book() -> BookResponse:
-    with book_lane():
-        book = load_current_book()
-    return BookResponse(book=book.model_dump())
+    book, _lock_error = _load_current_book_best_effort()
+    return BookResponse(book=book.model_dump() if book else {})
 
 
 @router.get("/api/book/slot/{artifact_id}", response_model=BookResponse)

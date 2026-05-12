@@ -5,6 +5,7 @@ __pycache__/
 .venv/
 venv/
 .pytest_cache/
+.pytest-tmp/
 .mypy_cache/
 .ruff_cache/
 
@@ -27,6 +28,8 @@ store/backtest/
 store/snapshots/
 store/sessions/
 store/search/
+store/book/
+store/runs/
 store/book/*.lock
 store/search/*.lock
 store/*.duckdb

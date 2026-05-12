@@ -24,6 +24,7 @@ export function compactJson(value: unknown) {
 
 export function tagColorByExecution(state?: string | null) {
   switch (String(state || '').toUpperCase()) {
+    case 'PLAN_READY':
     case 'BUY_NOW':
       return 'green'
     case 'WAIT_PULLBACK':

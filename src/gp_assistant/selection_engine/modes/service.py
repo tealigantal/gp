@@ -173,9 +173,18 @@ def _load_trade_calendar() -> Optional[pd.DataFrame]:
             # normalize columns
             if "cal_date" in df.columns and "is_open" in df.columns:
                 df = df[["cal_date", "is_open"]].copy()
-                df["cal_date"] = df["cal_date"].astype(str)
-                df["is_open"] = df["is_open"].astype(int)
-                return df
+                df["cal_date"] = (
+                    df["cal_date"]
+                    .astype(str)
+                    .str.strip()
+                    .str.replace("-", "", regex=False)
+                    .str.slice(0, 8)
+                )
+                df = df[df["cal_date"].str.fullmatch(r"\d{8}", na=False)]
+                df["is_open"] = pd.to_numeric(df["is_open"], errors="coerce").fillna(0).astype(int)
+                df["is_open"] = (df["is_open"] == 1).astype(int)
+                df = df.drop_duplicates(subset=["cal_date"], keep="last").sort_values("cal_date").reset_index(drop=True)
+                return df if not df.empty else None
     except Exception:
         return None
     return None

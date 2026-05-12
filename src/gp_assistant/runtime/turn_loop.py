@@ -16,16 +16,19 @@ from ..contracts.objects import (
     ReplyBundle,
     TurnFrame,
 )
+from ..core.errors import IntentLLMUnavailable
 from ..core.logging import logger
 from ..judgment.chat import judge_chat
 from ..judgment.engine import make_judgment
 from ..llm.client import LLMClient
+from ..llm.semantics import assess_card_explanation, repair_card_explanation
 from ..memory.service import commit_turn, load_memory_context
 from ..worker import reconcile_runtime_state
-from .concern_parser import parse_concern, quick_parse_concern
+from .concern_parser import parse_concern
+from .dialogue_text import clean_user_reasons, execution_state_label, intraday_runtime_enabled
 from .evidence_planner import plan_evidence
 from .grounding import validate_reply
-from .narrator import build_default_text, build_reply, build_structured_reply
+from .narrator import build_default_text, build_structured_reply
 from .reference_resolver import resolve_subject_and_compare
 from .repair import RepairStatusSnapshot, load_repair_status_snapshot
 
@@ -110,8 +113,8 @@ def _should_invalidate_active_run(session, book: MarketBook, active_run) -> bool
 
 def _resolve_subject_entry(frame: TurnFrame, memory_ctx: Dict[str, Any], book: MarketBook, active_run, previous_run=None):
     session = memory_ctx["session"]
-    raw = (frame.raw_message or "").strip()
-    history_requested = any(token in raw for token in ("上一次", "上一轮", "之前", "历史"))
+    constraints = dict(frame.constraints or {})
+    history_requested = bool(constraints.get("history_mode")) or frame.request == "run_change"
     active_entries = list(previous_run.picks) if history_requested and previous_run is not None else (
         list(active_run.picks) if active_run else list(book.board)
     )
@@ -156,38 +159,12 @@ def build_evidence_pack(
     )
 
 
-def _legacy_turn(session_id: str, user_message: str, memory_ctx: Dict[str, Any], book: MarketBook) -> tuple[ReplyBundle, Judgment]:
-    frame = parse_concern(memory_ctx, book, user_message)
-    if frame.request == "term_explain":
-        result = _term_explain_result(session_id=session_id, memory_ctx=memory_ctx, book=book, frame=frame)
-        reply = _bundle_from_tool_result(session_id, result, text=result.reply_text)
-        judgment = judge_chat()
-        return reply, judgment
-    plan = plan_evidence(frame)
-    session = memory_ctx["session"]
-    active_run = load_run(session.active_run_id) if plan.get("need_active_run") and session.active_run_id else None
-    invalidate_active_run = _should_invalidate_active_run(session, book, active_run)
-    evidence = build_evidence_pack(frame, memory_ctx, book, plan, invalidate_active_run=invalidate_active_run)
-    judgment = make_judgment(session_id=session_id, frame=frame, evidence=evidence)
-    reply = build_reply(
-        session_id=session_id,
-        frame=frame,
-        evidence=evidence,
-        judgment=judgment,
-        recent_turns=memory_ctx.get("recent_turns") or [],
-    )
-    validate_reply(reply, judgment)
-    return reply, judgment
-
-
-def _wants_decision_basis(user_message: str) -> bool:
-    text = str(user_message or "").strip()
-    keywords = ("怎么得出的", "怎么得出来的", "怎么来的", "依据是什么", "为什么这么判断", "怎么判断的")
-    return any(keyword in text for keyword in keywords)
-
-
 def _is_market_request(frame: TurnFrame) -> bool:
     return frame.request not in {"chat", "term_explain"}
+
+
+def _requires_runtime_market_ready(frame: TurnFrame) -> bool:
+    return frame.request not in {"chat", "term_explain", "single_stock_query"}
 
 
 def _latest_assistant_message(memory_ctx: Dict[str, Any]) -> Dict[str, Any]:
@@ -215,61 +192,185 @@ def _recent_assistant_messages(memory_ctx: Dict[str, Any]) -> List[Dict[str, Any
     return out
 
 
-def _message_search_blob(message: Dict[str, Any]) -> str:
-    chunks: List[str] = []
-    for key in ("narrative_text", "message_kind", "symbol", "term"):
-        value = message.get(key)
+_BUSINESS_MESSAGE_KINDS = {
+    "pick_detail",
+    "recommend",
+    "single_stock_query",
+    "live_entry_check",
+    "exit_decision",
+    "compare",
+    "run_change",
+    "no_trade",
+}
+
+_BUSINESS_CARD_TOOL_NAMES = {
+    "get_recommendation",
+    "get_pick_detail",
+    "get_single_stock_analysis",
+    "get_live_entry_check",
+    "compare_symbols",
+    "get_exit_decision",
+    "get_run_change",
+    "explain_decision_basis",
+}
+
+
+def _message_kind(candidate: Dict[str, Any]) -> str:
+    message = dict(candidate.get("message") or {})
+    meta = dict(candidate.get("meta") or {})
+    return str(message.get("message_kind") or meta.get("kind") or "").strip()
+
+
+def _message_symbols(message: Dict[str, Any]) -> set[str]:
+    symbols: set[str] = set()
+    for value in (message.get("symbol"),):
         if isinstance(value, str) and value.strip():
-            chunks.append(value.strip())
-    for section in ("pick", "live_check", "exit_decision", "compare", "run"):
-        value = message.get(section)
-        if not isinstance(value, dict):
-            continue
-        for nested_key in ("symbol", "thesis", "why_selected", "summary", "entry_text", "stop_text", "take_text", "next_action", "status_reason"):
-            nested = value.get(nested_key)
-            if isinstance(nested, str) and nested.strip():
-                chunks.append(nested.strip())
-        for nested_list_key in ("gate_reasons", "comparison_points", "no_trade_reasons", "recovery_conditions"):
-            nested_list = value.get(nested_list_key)
-            if isinstance(nested_list, list):
-                chunks.extend(str(item).strip() for item in nested_list if str(item).strip())
-    return "\n".join(chunks)
+            symbols.add(value.strip())
+    for key in ("symbols",):
+        values = message.get(key)
+        if isinstance(values, list):
+            symbols.update(str(item).strip() for item in values if str(item).strip())
+    for key in ("pick", "live_check", "exit_decision"):
+        value = message.get(key)
+        if isinstance(value, dict) and str(value.get("symbol") or "").strip():
+            symbols.add(str(value.get("symbol")).strip())
+    for key in ("picks",):
+        values = message.get(key)
+        if isinstance(values, list):
+            for item in values:
+                if isinstance(item, dict) and str(item.get("symbol") or "").strip():
+                    symbols.add(str(item.get("symbol")).strip())
+    run = message.get("run")
+    if isinstance(run, dict):
+        for item in run.get("picks") or []:
+            if isinstance(item, dict) and str(item.get("symbol") or "").strip():
+                symbols.add(str(item.get("symbol")).strip())
+    return symbols
 
 
-def _find_term_explain_source(memory_ctx: Dict[str, Any], term: str, raw_message: str) -> Dict[str, Any]:
+def _find_term_explain_source(memory_ctx: Dict[str, Any], frame: TurnFrame) -> Dict[str, Any]:
     messages = _recent_assistant_messages(memory_ctx)
     if not messages:
         return {}
-    if "观察" in term or "为什么仅观察" in raw_message or "为什么只观察" in raw_message:
+    refs = frame.references or {}
+    wanted_symbol = str(refs.get("symbol") or refs.get("focus_symbol") or "").strip()
+    session_symbol = str(getattr(memory_ctx["session"], "last_focus_symbol", None) or "").strip()
+    for symbol in (wanted_symbol, session_symbol):
+        if not symbol:
+            continue
         for candidate in messages:
             message = dict(candidate.get("message") or {})
-            if message.get("message_kind") in {"live_entry_check", "recommend", "no_trade"}:
-                blob = _message_search_blob(message)
-                if "观察" in blob or "WATCH_ONLY" in blob:
-                    return candidate
-    if term:
-        for candidate in messages:
-            blob = _message_search_blob(dict(candidate.get("message") or {}))
-            if term in blob:
+            if _message_kind(candidate) in _BUSINESS_MESSAGE_KINDS and symbol in _message_symbols(message):
                 return candidate
+    for candidate in messages:
+        if _message_kind(candidate) in _BUSINESS_MESSAGE_KINDS:
+            return candidate
     return messages[0]
 
 
-def _extract_term_text(user_message: str) -> str:
-    text = str(user_message or "").strip().strip("？?。！!")
-    prefixes = ("什么是", "这句话什么意思", "什么意思")
-    for prefix in prefixes:
-        if text.startswith(prefix):
-            term = text[len(prefix):].strip("：:，,。 ")
-            if term:
-                return term
-    suffixes = ("是什么意思", "什么意思")
-    for suffix in suffixes:
-        if text.endswith(suffix):
-            term = text[: -len(suffix)].strip("：:，,。 ")
-            if term:
-                return term
-    return text
+def _format_price_list(values: Any) -> str | None:
+    if isinstance(values, list):
+        out: list[str] = []
+        for value in values:
+            try:
+                out.append(f"{float(value):.2f}")
+            except Exception:
+                text = str(value or "").strip()
+                if text:
+                    out.append(text)
+        return " / ".join(out) if out else None
+    return None
+
+
+def _range_from_zone(zone: Any) -> str | None:
+    if not isinstance(zone, dict):
+        return None
+    low = zone.get("low")
+    high = zone.get("high")
+    mid = zone.get("mid") or zone.get("price")
+    try:
+        if low is not None and high is not None:
+            return f"{float(low):.2f} - {float(high):.2f}"
+        if mid is not None:
+            return f"{float(mid):.2f}"
+    except Exception:
+        return None
+    return None
+
+
+def _candidate_pick_objects(message: Dict[str, Any]) -> list[Dict[str, Any]]:
+    out: list[Dict[str, Any]] = []
+    for key in ("pick", "live_check"):
+        value = message.get(key)
+        if isinstance(value, dict) and value:
+            out.append(value)
+    exit_value = message.get("exit_decision")
+    if isinstance(exit_value, dict) and exit_value:
+        take = _format_price_list(exit_value.get("take_profit"))
+        out.append(
+            {
+                "symbol": exit_value.get("symbol"),
+                "stop_text": exit_value.get("invalidation"),
+                "take_text": take,
+                "source_run_id": exit_value.get("source_run_id"),
+            }
+        )
+    picks = message.get("picks")
+    if isinstance(picks, list):
+        out.extend(item for item in picks if isinstance(item, dict))
+    run = message.get("run")
+    if isinstance(run, dict):
+        out.extend(item for item in (run.get("picks") or []) if isinstance(item, dict))
+    return out
+
+
+def _select_pick_fact(message: Dict[str, Any], frame: TurnFrame, memory_ctx: Dict[str, Any]) -> Dict[str, Any]:
+    candidates = _candidate_pick_objects(message)
+    if not candidates:
+        return {}
+    refs = frame.references or {}
+    wanted_symbol = str(refs.get("symbol") or refs.get("focus_symbol") or getattr(memory_ctx["session"], "last_focus_symbol", None) or "").strip()
+    wanted_rank = refs.get("rank") or getattr(memory_ctx["session"], "last_focus_rank", None)
+    if wanted_symbol:
+        for item in candidates:
+            if str(item.get("symbol") or "").strip() == wanted_symbol:
+                return dict(item)
+    if wanted_rank is not None:
+        for item in candidates:
+            try:
+                if int(item.get("rank")) == int(wanted_rank):
+                    return dict(item)
+            except Exception:
+                continue
+    return dict(candidates[0])
+
+
+def _explain_grounded_fields(message: Dict[str, Any], pick: Dict[str, Any]) -> Dict[str, Any]:
+    run = message.get("run") if isinstance(message.get("run"), dict) else {}
+    entry_text = str(pick.get("entry_text") or "").strip() or _range_from_zone(pick.get("entry_zone"))
+    stop_text = str(pick.get("stop_text") or pick.get("invalidation") or "").strip()
+    take_text = str(pick.get("take_text") or "").strip() or _format_price_list(pick.get("take_profit"))
+    return {
+        "symbol": pick.get("symbol"),
+        "rank": pick.get("rank"),
+        "name": pick.get("name"),
+        "thesis": pick.get("thesis"),
+        "why_selected": pick.get("why_selected"),
+        "entry_text": entry_text,
+        "stop_text": stop_text,
+        "take_text": take_text,
+        "execution_state": pick.get("execution_state"),
+        "source_run_id": pick.get("source_run_id") or run.get("run_id") or message.get("run_id"),
+        "market_phase": run.get("market_phase"),
+        "daybook_effective_day": run.get("daybook_effective_day"),
+        "pulse_slot_at": run.get("pulse_slot_at"),
+    }
+
+
+def _extract_term_text(frame: TurnFrame) -> str:
+    constraints = dict(frame.constraints or {})
+    term = str(constraints.get("term_text") or "").strip()
+    return term or str(frame.raw_message or "").strip()
 
 
 def _term_explain_result(
@@ -279,49 +380,36 @@ def _term_explain_result(
     book: MarketBook,
     frame: TurnFrame,
 ) -> AgentToolResult:
-    latest = _find_term_explain_source(memory_ctx, _extract_term_text(frame.raw_message), frame.raw_message)
+    latest = _find_term_explain_source(memory_ctx, frame)
     if not latest:
         latest = _latest_assistant_message(memory_ctx)
     message = dict(latest.get("message") or {})
     meta = dict(latest.get("meta") or {})
-    term = _extract_term_text(frame.raw_message)
-    reply_text = "我先按上一轮已经给出的结论继续解释。"
-    suggestions = ["这只现在还能买吗", "为什么仅观察", "今天给我 3 只"]
+    term = _extract_term_text(frame)
+    pick_fact = _select_pick_fact(message, frame, memory_ctx)
+    grounded_fields = _explain_grounded_fields(message, pick_fact) if pick_fact else {}
+    source_kind = message.get("message_kind") or meta.get("kind")
+    reply_text = "我会基于最近一条结构化业务结论解释，不重新计算新的市场判断。"
+    suggestions = ["这只现在还能买吗", "为什么暂不入场", "今天给我 3 只"]
 
-    if "观察" in term or "为什么仅观察" in frame.raw_message or "为什么只观察" in frame.raw_message:
-        live_check = dict(message.get("live_check") or {})
-        run = dict(message.get("run") or {})
-        gate_reasons = list(live_check.get("gate_reasons") or run.get("gate", {}).get("reasons") or [])
-        state = str(live_check.get("execution_state") or "").strip() or "WATCH_ONLY"
-        next_action = str(live_check.get("next_action") or "").strip() or "先等更清晰的入场确认。"
-        reasons_text = "；".join(gate_reasons[:4]) if gate_reasons else "当前盘中闸门未放行，或者个股还没回到更合适的买点。"
-        reply_text = (
-            f"这里说“仅观察”，结论是现在不建议主动追进，而不是这只票已经失效。\n"
-            f"关键依据是：当前执行状态是 {state}，盘中约束主要来自 {reasons_text}。\n"
-            f"执行上先按“{next_action}”处理，等闸门放行、回踩确认或量能条件改善后再看。"
-        )
-        suggestions = ["这只现在还能买吗", "什么条件下才算能买", "今天给我 3 只"]
-    elif term and ("支撑带" in term or "止损" in term or "跌破" in term):
-        latest_pick = dict(message.get("pick") or {})
-        latest_live = dict(message.get("live_check") or {})
-        stop_text = str(latest_pick.get("stop_text") or latest_live.get("stop_text") or "收盘有效跌破支撑带").strip()
-        entry_text = str(latest_pick.get("entry_text") or latest_live.get("entry_text") or "").strip()
-        take_text = str(latest_pick.get("take_text") or latest_live.get("take_text") or "").strip()
-        reply_text = (
-            f"“{term}”是在解释风控边界，不是让你盘中看到一下跌破就立刻追着卖。\n"
-            f"它的含义是：如果收盘后价格确认跌出原先的支撑区域，原来的买入逻辑就要视为失效。\n"
-            f"执行上通常要把它和买入区 {entry_text or '当前计划区间'}、止盈位 {take_text or '既定目标位'} 一起看；一旦收盘确认跌破 {stop_text}，就不再按原计划继续持有或新开仓。"
-        )
-        suggestions = ["这只现在还能买吗", "它的止盈止损点再说一遍", "为什么仅观察"]
-    else:
-        narrative_text = str(message.get("narrative_text") or getattr(latest.get("turn"), "content", "") or "").strip()
-        if narrative_text:
-            reply_text = (
-                f"你这句是在追问上一轮的表述。\n"
-                f"上一轮的核心结论是：{narrative_text}\n"
-                f"如果你要，我可以继续把它拆成“为什么这样判断、现在该怎么执行、什么条件下结论会变化”三部分。"
-            )
-            suggestions = ["为什么这样判断", "现在该怎么执行", "什么条件下结论会变化"]
+    if grounded_fields:
+        bits = []
+        if grounded_fields.get("symbol"):
+            bits.append(f"标的 {grounded_fields['symbol']}")
+        if grounded_fields.get("entry_text"):
+            bits.append(f"买入区 {grounded_fields['entry_text']}")
+        if grounded_fields.get("stop_text"):
+            bits.append(f"止损/失效 {grounded_fields['stop_text']}")
+        if grounded_fields.get("take_text"):
+            bits.append(f"止盈 {grounded_fields['take_text']}")
+        if grounded_fields.get("execution_state"):
+            bits.append(f"执行状态 {execution_state_label(str(grounded_fields['execution_state']))}")
+        if bits:
+            reply_text = "我会基于最近一条结构化业务结论解释：" + "；".join(bits) + "。"
+        suggestions = ["这只现在还能买吗", "它的止盈止损点再说一遍", "为什么这样判断"]
+    elif message.get("narrative_text"):
+        reply_text = "我只找到了上一轮文本结论，缺少可核对的结构化计划字段；我会说明这一限制，不能补造计算公式。"
+        suggestions = ["今天给我 3 只", "这只票为什么能上榜", "当前该看什么"]
 
     return AgentToolResult(
         tool_name="explain_followup",
@@ -330,7 +418,11 @@ def _term_explain_result(
             "message_kind": "term_explain",
             "narrative_text": reply_text,
             "term": term,
-            "source_message_kind": message.get("message_kind") or meta.get("kind"),
+            "source_message_kind": source_kind,
+            "source_symbol": grounded_fields.get("symbol"),
+            "source_run_id": grounded_fields.get("source_run_id"),
+            "grounded_fields": {key: value for key, value in grounded_fields.items() if value not in (None, "", [])},
+            "source_narrative_text": message.get("narrative_text"),
             "followup_suggestions": suggestions,
             "freshness_meta": {
                 "market_phase": book.market_phase,
@@ -371,20 +463,26 @@ def _tool_schema(name: str, description: str) -> Dict[str, Any]:
 
 
 def _assistant_context_result(book: MarketBook) -> AgentToolResult:
+    intraday_enabled = intraday_runtime_enabled()
+    reply_text = (
+        "你好，我可以直接帮你看今天的候选、某只票还能不能买、止盈止损怎么设，或者解释上一条结论。"
+        if intraday_enabled
+        else "你好，我可以直接帮你看今天的候选、解释某只票为什么入选，或者说明当前该看什么。当前只使用日线计划模块。"
+    )
     summary = GroundingSummary(
         market_phase=book.market_phase,
         daily_target_day=book.daybook_effective_day or book.daybook.trading_day,
         pulse_slot_at=book.pulse_slot_at,
         repair_status="ready",
-        decision_basis_labels=["产品背景", "风险边界"],
+        decision_basis_labels=["product_context", "risk_boundary"],
     )
     return AgentToolResult(
         tool_name="get_assistant_context",
-        reply_text="这是一个 A 股短线股票助手，结论基于日线、盘中 5 分钟线、市场阶段、执行状态和风控条件，不会自动下单，也不会对外暴露内部实现。",
+        reply_text=reply_text,
         message={
             "message_kind": "chat",
-            "narrative_text": "这是一个 A 股短线股票助手，结论基于日线、盘中 5 分钟线、市场阶段、执行状态和风控条件。",
-            "followup_suggestions": ["给我当前推荐的前三个标的", "这只票为什么能上榜", "今天适合空仓观察还是执行计划"],
+            "narrative_text": reply_text,
+            "followup_suggestions": ["给我当前推荐的前三个标的", "这只票为什么能上榜", "今天适合空仓暂不入场还是执行计划"],
             "freshness_meta": {
                 "market_phase": book.market_phase,
                 "daybook_effective_day": book.daybook_effective_day,
@@ -531,6 +629,7 @@ def _business_tool(
         "explain_followup": "term_explain",
         "get_recommendation": "recommend",
         "get_pick_detail": "pick_detail",
+        "get_single_stock_analysis": "single_stock_query",
         "get_live_entry_check": "live_entry_check",
         "compare_symbols": "compare",
         "get_exit_decision": "exit_decision",
@@ -592,33 +691,12 @@ def _market_phase_label(value: str | None) -> str:
 
 
 def _execution_state_label(value: str | None) -> str | None:
-    mapping = {
-        "BUY_NOW": "可执行",
-        "BREAKOUT_BUY": "等待放量突破确认",
-        "RECLAIM_BUY": "等待回踩确认",
-        "AFTERNOON_RELAUNCH_BUY": "等待午后重新走强确认",
-        "WAIT_PULLBACK": "更适合等回踩确认",
-        "WAIT_NEXT_SESSION": "更适合放到下一交易窗口再确认",
-        "WATCH_ONLY": "暂时以观察为主",
-        "OBSERVE": "暂时以观察为主",
-        "RISK_HIGH": "风险偏高",
-        "INVALIDATED": "已触发失效条件",
-        "UNAVAILABLE": "执行数据暂不完整",
-    }
-    key = str(value or "").strip().upper()
-    return mapping.get(key)
+    label = execution_state_label(value)
+    return label if label != "继续检查" else None
 
 
 def _safe_risk_notes(notes: list[str] | None) -> list[str]:
-    out: list[str] = []
-    for raw in notes or []:
-        text = str(raw or "").strip()
-        if not text:
-            continue
-        has_cjk = any("\u4e00" <= ch <= "\u9fff" for ch in text)
-        if has_cjk or " " in text:
-            out.append(text)
-    return out
+    return clean_user_reasons(notes or [])
 
 
 def _explain_decision_text(reply: ReplyBundle, judgment: Judgment) -> str:
@@ -626,8 +704,11 @@ def _explain_decision_text(reply: ReplyBundle, judgment: Judgment) -> str:
     parts: list[str] = []
     market_phase = _market_phase_label(basis.market_phase)
     daily_target_day = basis.daily_target_day or "当前交易日"
-    pulse_slot_at = basis.pulse_slot_at or "最新可读快照"
-    parts.append(f"这个结论是基于当前{market_phase}的快照得出的，日线使用的是 {daily_target_day}，盘中参考到 {pulse_slot_at}。")
+    if intraday_runtime_enabled():
+        pulse_slot_at = basis.pulse_slot_at or "最新可读快照"
+        parts.append(f"这个结论是基于当前{market_phase}的快照得出的，日线使用的是 {daily_target_day}，盘中参考到 {pulse_slot_at}。")
+    else:
+        parts.append(f"这个结论是基于当前{market_phase}的快照得出的，当前只使用日线计划和暂不入场结论，生效日是 {daily_target_day}。")
 
     detail = judgment.pick_detail
     if detail is not None:
@@ -670,11 +751,13 @@ def _explain_decision_text(reply: ReplyBundle, judgment: Judgment) -> str:
 
 def _agent_system_prompt() -> str:
     return (
+        "For live entry checks, preserve whether the quote was verified by minute data or only derived from the user's price. "
         "你是一个 A 股短线股票助手。"
         "你必须先读取工具结果，再用正常业务语言回答用户。"
         "不要提到代码、模块名、planner trace、tool 名称、内部实现或调试字段。"
         "如果工具显示数据仍在修复中，就明确说明数据修复中，暂不发布正式结论。"
         "如果工具给出推荐、单票、比较、卖出或变更结果，只能基于这些结果作答，不要编造。"
+        "用户的追问可能很短或很口语化，你要结合工具里的最近结构化事实解释，不要复读上一轮解释文本。"
     )
 
 
@@ -683,6 +766,65 @@ def _extract_llm_text(response: Dict[str, Any]) -> str:
         return str(((response or {}).get("choices") or [{}])[0].get("message", {}).get("content") or "").strip()
     except Exception:
         return ""
+
+
+def _is_business_card_result(result: AgentToolResult) -> bool:
+    message_kind = str((result.message or {}).get("message_kind") or "").strip()
+    return result.tool_name in _BUSINESS_CARD_TOOL_NAMES or message_kind in _BUSINESS_MESSAGE_KINDS
+
+
+def _quality_passes(quality) -> bool:
+    return bool(quality.is_explaining_card and quality.grounded_to_card and not quality.needs_repair)
+
+
+def _ensure_business_card_explanation(
+    client: LLMClient,
+    result: AgentToolResult,
+    *,
+    text: str,
+    fallback_text: str,
+) -> str:
+    body = str(text or "").strip()
+    fallback_body = str(fallback_text or "").strip()
+    if not body or (fallback_body and body == fallback_body):
+        repaired = repair_card_explanation(
+            card_message=dict(result.message or {}),
+            bad_text=text,
+            fallback_text=fallback_text,
+            client=client,
+        )
+        repaired_quality = assess_card_explanation(
+            card_message=dict(result.message or {}),
+            assistant_text=repaired,
+            fallback_text=fallback_text,
+            client=client,
+        )
+        if _quality_passes(repaired_quality):
+            return repaired
+        raise RuntimeError(f"LLM explanation missing or ungrounded for {result.tool_name}: {repaired_quality.reason or 'quality_check_failed'}")
+    quality = assess_card_explanation(
+        card_message=dict(result.message or {}),
+        assistant_text=text,
+        fallback_text=fallback_text,
+        client=client,
+    )
+    if _quality_passes(quality):
+        return text
+    repaired = repair_card_explanation(
+        card_message=dict(result.message or {}),
+        bad_text=text,
+        fallback_text=fallback_text,
+        client=client,
+    )
+    repaired_quality = assess_card_explanation(
+        card_message=dict(result.message or {}),
+        assistant_text=repaired,
+        fallback_text=fallback_text,
+        client=client,
+    )
+    if _quality_passes(repaired_quality):
+        return repaired
+    raise RuntimeError(f"LLM explanation missing or ungrounded for {result.tool_name}: {repaired_quality.reason or quality.reason or 'quality_check_failed'}")
 
 
 def _tool_call_name(tool_call: Dict[str, Any]) -> str:
@@ -745,7 +887,13 @@ def _final_text_from_tools(
             *messages,
             {
                 "role": "system",
-                "content": "现在只根据上面的工具结果给出最终答复。使用自然业务语言，简洁表达，避免泄露内部实现。",
+                "content": (
+                    "For live_check cards with quote_snapshot, keep the quote source visible: minute-data verified, bid/ask verified, or user-quote only. "
+                    "现在只根据上面的工具结果给出最终答复。使用自然业务语言，避免泄露内部实现。"
+                    "如果工具结果包含业务卡片，你必须解释卡片中的关键信息如何支撑结论：先说结论，"
+                    "再解释选择依据、执行含义、风险边界或缺失数据。不要只复述卡片标题、字段名或简单摘要。"
+                    "不得编造工具结果之外的价格、公式、来源或交易结论；如果字段不足，要直接说明缺少可核对字段。"
+                ),
             },
         ],
         temperature=0.2,
@@ -807,9 +955,10 @@ def run_turn_sync(session_id: str | None, user_message: str) -> Dict[str, Any]:
     except Exception:
         pass
 
-    quick_frame = quick_parse_concern(memory_ctx, book, user_message)
-    market_request = _is_market_request(quick_frame) or _wants_decision_basis(user_message)
-    if market_request:
+    frame = parse_concern(memory_ctx, book, user_message)
+    market_request = _is_market_request(frame)
+    runtime_ready_required = _requires_runtime_market_ready(frame)
+    if market_request and runtime_ready_required:
         snapshot = load_repair_status_snapshot()
         market_ready = _market_ready_result(book, snapshot=snapshot, blocking_reason_override=repair_blocking_reason)
         if _repair_blocks_market_answers(book, snapshot=snapshot, blocking_reason_override=repair_blocking_reason):
@@ -828,8 +977,8 @@ def run_turn_sync(session_id: str | None, user_message: str) -> Dict[str, Any]:
                 "grounding_summary": reply.grounding_summary,
             }
 
-    frame = parse_concern(memory_ctx, book, user_message)
-    market_request = _is_market_request(frame) or _wants_decision_basis(user_message)
+    market_request = _is_market_request(frame)
+    runtime_ready_required = _requires_runtime_market_ready(frame)
 
     client = LLMClient()
     try:
@@ -838,18 +987,7 @@ def run_turn_sync(session_id: str | None, user_message: str) -> Dict[str, Any]:
         ok = False
 
     if not ok:
-        reply, judgment = _legacy_turn(session_id, user_message, memory_ctx, book)
-        commit_turn(session_id=session_id, user_message=user_message, reply=reply, judgment=judgment)
-        return {
-            "session_id": reply.session_id,
-            "reply": reply.text,
-            "message": reply.message,
-            "run_id": reply.run_id,
-            "symbols": reply.symbols,
-            "right_panel": reply.right_panel,
-            "ui_items": reply.ui_items,
-            "grounding_summary": reply.grounding_summary,
-        }
+        raise IntentLLMUnavailable("LLM became unavailable after intent parsing")
 
     messages: List[Dict[str, Any]] = [
         {"role": "system", "content": _agent_system_prompt()},
@@ -887,29 +1025,27 @@ def run_turn_sync(session_id: str | None, user_message: str) -> Dict[str, Any]:
                 fallback_result=active_result,
             )
         elif market_request:
-            snapshot = load_repair_status_snapshot()
-            market_ready = _market_ready_result(book, snapshot=snapshot, blocking_reason_override=repair_blocking_reason)
-            active_result = _execute_single_tool_round(
-                client,
-                messages,
-                schema=_tool_schema(
-                    "ensure_market_ready",
-                    "Check whether the current market-facing answer can be published or whether runtime repair is still in progress.",
-                ),
-                fallback_result=market_ready,
-            )
-            if not _repair_blocks_market_answers(book, snapshot=snapshot, blocking_reason_override=repair_blocking_reason):
-                wants_basis = _wants_decision_basis(user_message)
+            snapshot = load_repair_status_snapshot() if runtime_ready_required else None
+            if runtime_ready_required:
+                market_ready = _market_ready_result(book, snapshot=snapshot, blocking_reason_override=repair_blocking_reason)
+                active_result = _execute_single_tool_round(
+                    client,
+                    messages,
+                    schema=_tool_schema(
+                        "ensure_market_ready",
+                        "Check whether the current market-facing answer can be published or whether runtime repair is still in progress.",
+                    ),
+                    fallback_result=market_ready,
+                )
+            if (not runtime_ready_required) or (not _repair_blocks_market_answers(book, snapshot=snapshot, blocking_reason_override=repair_blocking_reason)):
                 if frame.request == "term_explain":
                     tool_name = "explain_followup"
                     description = "Explain the most recent assistant wording or term using the already committed session conclusion, without recomputing a new market judgment."
-                elif wants_basis:
-                    tool_name = "explain_decision_basis"
-                    description = "Explain how the current conclusion was derived using market phase, daybook day, 5-minute slot, selection basis, execution state, and risk boundaries."
                 else:
                     tool_name = {
                         "recommend": "get_recommendation",
                         "pick_detail": "get_pick_detail",
+                        "single_stock_query": "get_single_stock_analysis",
                         "live_entry_check": "get_live_entry_check",
                         "compare": "compare_symbols",
                         "exit_decision": "get_exit_decision",
@@ -919,6 +1055,7 @@ def run_turn_sync(session_id: str | None, user_message: str) -> Dict[str, Any]:
                     description = {
                         "get_recommendation": "Return the current short-term stock recommendation set for the active market phase.",
                         "get_pick_detail": "Return the detail, rationale, and plan for the current subject stock.",
+                        "get_single_stock_analysis": "Return a single-symbol daily K-line analysis with champion strategy score and data freshness status.",
                         "get_live_entry_check": "Return whether the current subject stock can be executed now and what to do next.",
                         "compare_symbols": "Compare the current candidate symbols and explain which one is stronger.",
                         "get_exit_decision": "Return the current exit or hold decision for the subject stock.",
@@ -938,7 +1075,22 @@ def run_turn_sync(session_id: str | None, user_message: str) -> Dict[str, Any]:
                     schema=_tool_schema(tool_name, description),
                     fallback_result=business_result,
                 )
-        final_text = active_result.reply_text or _final_text_from_tools(client, messages, fallback_text=user_message)
+        if active_result.tool_name == "explain_followup":
+            final_text = _final_text_from_tools(client, messages, fallback_text=active_result.reply_text)
+        elif _is_business_card_result(active_result):
+            proposed_text = _final_text_from_tools(
+                client,
+                messages,
+                fallback_text=active_result.reply_text,
+            )
+            final_text = _ensure_business_card_explanation(
+                client,
+                active_result,
+                text=proposed_text,
+                fallback_text=active_result.reply_text,
+            )
+        else:
+            final_text = active_result.reply_text or _final_text_from_tools(client, messages, fallback_text=user_message)
         reply = _bundle_from_tool_result(session_id, active_result, text=final_text)
         validate_reply(reply, active_judgment)
         commit_turn(session_id=session_id, user_message=user_message, reply=reply, judgment=active_judgment)
@@ -953,19 +1105,8 @@ def run_turn_sync(session_id: str | None, user_message: str) -> Dict[str, Any]:
             "grounding_summary": reply.grounding_summary,
         }
     except Exception as ex:
-        logger.exception("[turn] tool agent failed, fallback to legacy path: %s", ex)
-        reply, judgment = _legacy_turn(session_id, user_message, memory_ctx, book)
-        commit_turn(session_id=session_id, user_message=user_message, reply=reply, judgment=judgment)
-        return {
-            "session_id": reply.session_id,
-            "reply": reply.text,
-            "message": reply.message,
-            "run_id": reply.run_id,
-            "symbols": reply.symbols,
-            "right_panel": reply.right_panel,
-            "ui_items": reply.ui_items,
-            "grounding_summary": reply.grounding_summary,
-        }
+        logger.exception("[turn] tool agent failed without legacy fallback: %s", ex)
+        raise
 
 
 run_turn = run_turn_sync

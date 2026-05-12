@@ -10,6 +10,7 @@ from .workflow import (
     pick_detail_workflow,
     recommend_workflow,
     run_change_workflow,
+    single_stock_workflow,
 )
 
 
@@ -22,6 +23,8 @@ def make_judgment(session_id: str, frame: TurnFrame, evidence: EvidencePack) -> 
         return recommend_workflow(session_id=session_id, evidence=evidence, topk=topk)
     if frame.request == "pick_detail":
         return pick_detail_workflow(evidence)
+    if frame.request == "single_stock_query":
+        return single_stock_workflow(evidence)
     if frame.request == "no_trade_explain":
         return no_trade_workflow(evidence)
     if frame.request == "live_entry_check":

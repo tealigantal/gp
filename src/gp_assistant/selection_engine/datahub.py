@@ -1,4 +1,4 @@
-﻿# 简介：行情数据枢纽（严格模式）。仅返回真实数据（或本地 fixtures），不做合成降级。
+# 简介：行情数据枢纽（严格模式）。仅返回真实数据（或本地 fixtures），不做合成降级。
 from __future__ import annotations
 
 import json
@@ -11,14 +11,8 @@ from datetime import datetime, timezone, timedelta, time as _time
 import pandas as pd
 
 from ..core.paths import store_dir
-# unified calendar/clock provided via runtime.market_clock
 from ..core.config import load_config
-try:
-    # Optional calendar loader (uses data/raw/trade_calendar.parquet if available)
-    from ..selection_engine.modes.service import _load_trade_calendar  # type: ignore
-except Exception:  # pragma: no cover
-    _load_trade_calendar = None  # type: ignore
-from ..core.config import load_config
+from ..runtime.market_clock import compute_market_state, resolve_trading_day_on_or_before
 from ..providers.factory import get_provider
 from ..tools.market_data import normalize_daily_ohlcv
 from ..search.history_store import (
@@ -169,22 +163,9 @@ class MarketDataHub:
                     """
                     try:
                         if as_of_str is not None:
-                            base = pd.to_datetime(as_of_str).normalize()
-                            cal = _load_trade_calendar() if _load_trade_calendar else None
-                            if isinstance(cal, pd.DataFrame) and not cal.empty and {"cal_date", "is_open"} <= set(cal.columns):
-                                ymd = base.strftime("%Y%m%d")
-                                sub = cal[(cal["cal_date"] <= ymd) & (cal["is_open"] == 1)]
-                                if not sub.empty:
-                                    return pd.to_datetime(str(sub.iloc[-1]["cal_date"]).strip()).normalize()
-                            # Fallback weekday-only
-                            d = base
-                            while d.weekday() >= 5:
-                                d = d - pd.Timedelta(days=1)
-                            return d.normalize()
-                        else:
-                            from ..runtime.market_clock import compute_market_state  # lazy import to avoid cycles
-                            ms = compute_market_state()
-                            return pd.to_datetime(ms.target_daybook_effective_day).normalize()
+                            return pd.to_datetime(resolve_trading_day_on_or_before(as_of_str)).normalize()
+                        ms = compute_market_state()
+                        return pd.to_datetime(ms.target_daybook_effective_day).normalize()
                     except Exception:
                         return (pd.to_datetime(as_of_str).normalize() if as_of_str is not None else pd.Timestamp.now().normalize())
 
@@ -339,7 +320,14 @@ class MarketDataHub:
         last_item_time_final = meta_q_final.get("last_item_time") or meta_q_initial.get("last_item_time")
         freshness_state = "missing"
         if isinstance(last_item_time_final, str) and last_item_time_final.strip():
-            freshness_state = "current" if last_item_time_final == target_trading_day else "stale"
+            try:
+                freshness_state = (
+                    "current"
+                    if pd.to_datetime(last_item_time_final).normalize() >= pd.to_datetime(target_trading_day).normalize()
+                    else "stale"
+                )
+            except Exception:
+                freshness_state = "current" if last_item_time_final >= str(target_trading_day) else "stale"
         if network_error and freshness_state != "current":
             freshness_state = "failed_refresh"
         meta["requested_as_of"] = as_of
@@ -364,22 +352,9 @@ class MarketDataHub:
         def _resolve_target(as_of_str: Optional[str]) -> pd.Timestamp:
             try:
                 if as_of_str is not None:
-                    base = pd.to_datetime(as_of_str).normalize()
-                    cal = _load_trade_calendar() if _load_trade_calendar else None
-                    if isinstance(cal, pd.DataFrame) and not cal.empty and {"cal_date", "is_open"} <= set(cal.columns):
-                        ymd = base.strftime("%Y%m%d")
-                        sub = cal[(cal["cal_date"] <= ymd) & (cal["is_open"] == 1)]
-                        if not sub.empty:
-                            return pd.to_datetime(str(sub.iloc[-1]["cal_date"]))
-                    # fallback weekend-step back
-                    d = base
-                    while d.weekday() >= 5:
-                        d = d - pd.Timedelta(days=1)
-                    return d
-                else:
-                    from ..runtime.market_clock import compute_market_state  # lazy import
-                    ms = compute_market_state()
-                    return pd.to_datetime(ms.target_daybook_effective_day)
+                    return pd.to_datetime(resolve_trading_day_on_or_before(as_of_str))
+                ms = compute_market_state()
+                return pd.to_datetime(ms.target_daybook_effective_day)
             except Exception:
                 return (pd.to_datetime(as_of_str).normalize() if as_of_str is not None else pd.Timestamp.now().normalize())
 
@@ -478,7 +453,16 @@ class MarketDataHub:
             meta_q = _query_meta(qids[s])
             last_item_time = meta_q.get("last_item_time")
             target_trading_day = target.date().isoformat()
-            freshness_state = "current" if last_item_time == target_trading_day else ("stale" if last_item_time else "missing")
+            freshness_state = "missing"
+            if last_item_time:
+                try:
+                    freshness_state = (
+                        "current"
+                        if pd.to_datetime(last_item_time).normalize() >= pd.to_datetime(target_trading_day).normalize()
+                        else "stale"
+                    )
+                except Exception:
+                    freshness_state = "current" if str(last_item_time) >= str(target_trading_day) else "stale"
             meta = {
                 "source": f"store:daily:{provider.name}",
                 **m,

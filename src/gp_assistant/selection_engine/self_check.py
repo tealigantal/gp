@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import sys
 import os
@@ -9,7 +9,7 @@ import pandas as pd
 from ..core.config import load_config
 from ..providers.factory import get_provider
 from .datahub import MarketDataHub
-from .theme_pool import build_themes
+from .mainline import build_mainline
 from ..strategy import library as strat_lib
 from ..strategy.indicators import compute_indicators
 from ..strategy.chip_model import compute_chip
@@ -40,17 +40,17 @@ def main() -> int:
 
     hub = MarketDataHub()
     provider = get_provider()
-    # Snapshot and themes (best effort)
+    # Snapshot and derived market mainline (best effort)
     try:
         snap = provider.get_spot_snapshot()
     except Exception as e:
         snap = None
         print(f"[self-check] snapshot error: {e}")
-    themes = build_themes(hub, snapshot=snap)
+    mainline = build_mainline(snapshot=snap)
     cols = list(map(str, snap.columns)) if isinstance(snap, pd.DataFrame) else []
-    print('[self-check] themes source:', (themes[0].get('source') if themes else 'none'))
+    print('[self-check] mainline source:', mainline.get('source') or 'none')
     print('[self-check] snapshot cols:', ','.join(cols[:12]))
-    print('[self-check] top themes:', [(t.get('name'), t.get('strength')) for t in themes[:2]])
+    print('[self-check] top mainline:', [(t.get('name'), t.get('score')) for t in (mainline.get('sectors') or [])[:2]])
 
     # Symbols to inspect
     syms = ['sz002969', 'sz002455', 'sh601869']

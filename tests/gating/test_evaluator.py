@@ -1,9 +1,8 @@
 from __future__ import annotations
 
-import json
-from pathlib import Path
 from fastapi.testclient import TestClient
 
+from gp_assistant.core.paths import store_dir
 from gp_assistant.kernel import facade as k
 from gp_assistant.gateway.app import app
 from gp_assistant.validation.strategy_health import save_strategy_health
@@ -12,7 +11,7 @@ from gp_assistant.selection_engine.artifact_store import persist_artifact_v2
 
 
 def _rm_summary():
-    p = Path('store/validation/latest_summary.json')
+    p = store_dir() / 'validation' / 'latest_summary.json'
     if p.exists():
         p.unlink()
 
