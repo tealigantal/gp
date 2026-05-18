@@ -29,6 +29,8 @@ AM_SLOT_CLOSE_START = time(9, 35)
 AM_SLOT_CLOSE_END = time(11, 30)
 PM_SLOT_CLOSE_START = time(13, 5)
 PM_SLOT_CLOSE_END = time(14, 55)
+PM_CONTINUOUS_AUCTION_END = time(14, 57)
+CLOSING_AUCTION_END = time(15, 0)
 
 
 @dataclass
@@ -323,7 +325,12 @@ def compute_market_state(now: Optional[datetime] = None) -> MarketState:
         pulse_day = trade_day
         slot_str = format_slot_at(last_closed_trade_slot(tnow))
         data_status = "ok"
-    elif PM_SLOT_CLOSE_END < tt < time(15, 0):
+    elif PM_SLOT_CLOSE_END < tt < PM_CONTINUOUS_AUCTION_END:
+        phase = PHASE_INTRADAY_PM
+        pulse_day = trade_day
+        slot_str = format_slot_at(_combine(trade_day, 14, 55))
+        data_status = "ok"
+    elif PM_CONTINUOUS_AUCTION_END <= tt < CLOSING_AUCTION_END:
         phase = PHASE_CLOSING_AUCTION
         pulse_day = trade_day
         slot_str = format_slot_at(_combine(trade_day, 14, 55))

@@ -10,6 +10,8 @@ from gp_assistant.runtime import freshness_policy
 import gp_assistant.runtime.market_clock as market_clock
 from gp_assistant.runtime.freshness_policy import make_refresh_plan
 from gp_assistant.runtime.market_clock import (
+    PHASE_CLOSING_AUCTION,
+    PHASE_INTRADAY_PM,
     PHASE_NON_TRADING,
     PHASE_OPEN_NO_FIRST_BAR,
     PHASE_POSTCLOSE_PENDING,
@@ -55,6 +57,17 @@ def test_open_no_first_bar_has_no_closed_slot():
     assert ms.market_phase == PHASE_OPEN_NO_FIRST_BAR
     assert ms.target_pulse_trade_day == "20240320"
     assert ms.target_pulse_slot_at is None
+
+
+def test_closing_auction_starts_at_1457_not_last_5m_slot():
+    ms = compute_market_state(datetime(2024, 3, 20, 14, 56))
+    assert ms.market_phase == PHASE_INTRADAY_PM
+    assert ms.target_pulse_trade_day == "20240320"
+    assert ms.target_pulse_slot_at == "2024-03-20 14:55:00"
+
+    closing = compute_market_state(datetime(2024, 3, 20, 14, 57))
+    assert closing.market_phase == PHASE_CLOSING_AUCTION
+    assert closing.target_pulse_slot_at == "2024-03-20 14:55:00"
 
 
 def test_intraday_plan_keeps_today_daybook_and_slot(monkeypatch):

@@ -22,6 +22,7 @@ from ..intraday.plans import (
 )
 from ..intraday.scoring import (
     action_for_state,
+    build_entry_readiness,
     build_risk_pack,
     build_score_breakdown,
     can_open_for_state,
@@ -227,6 +228,14 @@ def evaluate_slot_pulses(
         action = action_for_state(recommendation_state)
         can_open = can_open_for_state(recommendation_state)
         plan = dict(champion.plan or {})
+        if plan:
+            plan["entry_readiness"] = build_entry_readiness(
+                features=feature_snapshot,
+                plan=plan,
+                gate=gate,
+                market_phase=inferred_phase,
+                previous_action=previous_actions.get(symbol),
+            )
         execution_state = execution_state_for_recommendation(recommendation_state, champion.strategy_name)
         if recommendation_state == TRIGGER_PLAN:
             execution_state = (
@@ -258,6 +267,10 @@ def evaluate_slot_pulses(
             reason_codes.append("data_unavailable")
         else:
             reason_codes.append("no_trade")
+        entry_blockers = list((plan.get("entry_readiness") or {}).get("blockers") or [])
+        if entry_blockers and recommendation_state == TRIGGER_PLAN:
+            reason_codes.append("entry_conditions_pending")
+            reason_codes.extend([f"entry_check_{blocker}_not_met" for blocker in entry_blockers[:6]])
         pulse = SymbolPulse(
             symbol=symbol,
             last_bar_at=str(pd.to_datetime(df["trade_time"].iloc[-1]).isoformat()) if "trade_time" in df.columns else slot_at,

@@ -304,6 +304,8 @@ def _context_for_entry(entry: BoardEntry, *, previous_entry: BoardEntry | None, 
         "do_not_chase_reason": risks.get("do_not_chase_reason"),
         "what_would_improve": list(risks.get("what_would_improve") or []),
         "what_would_cancel": list(risks.get("what_would_cancel") or []),
+        "entry_readiness": plan.get("entry_readiness") or risks.get("entry_readiness"),
+        "entry_blockers": list(risks.get("entry_blockers") or (plan.get("entry_readiness") or {}).get("blockers") or []),
         "data_quality_warnings": list(risks.get("data_quality_warnings") or []),
         "market_gate_risks": list(risks.get("market_gate_risks") or []),
         "late_session_risk": risks.get("late_session_risk"),
@@ -377,7 +379,23 @@ def build_board(
                 risk_pack=dict(pulse.risk_pack or {}),
             )
         )
-    entries.sort(key=lambda entry: (float(entry.live_score or 0.0), float(entry.final_score or 0.0)), reverse=True)
+    state_priority = {
+        TRADING_SIGNAL: 4,
+        TRIGGER_PLAN: 3,
+        NEXT_SESSION_PLAN: 2,
+        NO_TRADE: 1,
+        UNAVAILABLE: 0,
+    }
+    entries.sort(
+        key=lambda entry: (
+            state_priority.get(str(entry.recommendation_state or "").upper(), 0),
+            1 if entry.can_open else 0,
+            0 if entry.invalidated else 1,
+            float(entry.live_score or 0.0),
+            float(entry.final_score or 0.0),
+        ),
+        reverse=True,
+    )
     for idx, entry in enumerate(entries, start=1):
         entry.rank = idx
         entry.pick.rank = idx

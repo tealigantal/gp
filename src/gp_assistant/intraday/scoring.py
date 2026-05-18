@@ -11,6 +11,7 @@ from .plans import (
     finite_float,
     is_continuous_intraday,
     is_non_execution_phase,
+    maybe_float,
     plan_has_prices,
 )
 from .strategies import StrategyCandidate
@@ -18,7 +19,163 @@ from .strategies import StrategyCandidate
 
 MAX_ALLOWED_STOP_DISTANCE = 0.045
 MIN_DATA_QUALITY_SCORE = 35.0
+MIN_EXECUTION_DATA_QUALITY_SCORE = 55.0
 MIN_TRADING_RR = 1.3
+MIN_ENTRY_SLOT_REL_VOL = 1.3
+MIN_ENTRY_RS_INDEX = 0.0
+MIN_ENTRY_PRICE_VS_VWAP = 0.0
+
+
+def _rounded(value: Any) -> float | None:
+    parsed = maybe_float(value)
+    return None if parsed is None else round(float(parsed), 6)
+
+
+def _entry_check(
+    *,
+    name: str,
+    meaning: str,
+    current: Any,
+    threshold: str,
+    passed: bool,
+    blocker: bool = True,
+) -> Dict[str, Any]:
+    current_value = current if isinstance(current, (str, bool)) else _rounded(current)
+    return {
+        "name": name,
+        "meaning": meaning,
+        "current": current_value,
+        "threshold": threshold,
+        "passed": bool(passed),
+        "blocker": bool(blocker),
+    }
+
+
+def build_entry_readiness(
+    *,
+    features: Dict[str, Any],
+    plan: Dict[str, Any],
+    gate: Any | None,
+    market_phase: str | None,
+    previous_action: str | None = None,
+) -> Dict[str, Any]:
+    """Unified execution gate for turning a triggered plan into a BUY signal."""
+    gate_state = str(getattr(gate, "state", "") if gate is not None else "").upper()
+    close = maybe_float(features.get("close") or features.get("last_price"))
+    trigger = maybe_float(plan.get("trigger_price"))
+    entry_low = maybe_float(plan.get("entry_low"))
+    entry_high = maybe_float(plan.get("entry_high"))
+    vwap = maybe_float(features.get("vwap"))
+    price_vs_vwap = maybe_float(features.get("price_vs_vwap"))
+    slot_rel_vol = maybe_float(features.get("slot_rel_vol"))
+    rs_index = maybe_float(features.get("rs_index"))
+    rs_industry = maybe_float(features.get("rs_industry"))
+    industry_strength = maybe_float(features.get("industry_strength_score"))
+    rr_to_take1 = maybe_float(plan.get("rr_to_take1"))
+    data_quality_score = maybe_float(features.get("data_quality_score"))
+    stop_distance = _stop_distance_pct(features, plan)
+    continuous = is_continuous_intraday(market_phase) and not is_non_execution_phase(market_phase)
+    price_in_plan = bool(
+        plan.get("triggered")
+        and close is not None
+        and trigger is not None
+        and entry_low is not None
+        and entry_high is not None
+        and close >= trigger
+        and entry_low <= close <= max(entry_high, trigger * 1.012)
+    )
+    rs_industry_supported = bool(
+        rs_industry is not None
+        and (
+            rs_industry >= 0
+            or (industry_strength is not None and industry_strength >= 55.0)
+        )
+    )
+    checks = [
+        _entry_check(
+            name="market_phase",
+            meaning="Only continuous auction sessions can produce a same-session entry.",
+            current=str(market_phase or ""),
+            threshold="INTRADAY_AM or INTRADAY_PM",
+            passed=continuous,
+        ),
+        _entry_check(
+            name="price_location",
+            meaning="Price must have triggered the plan without chasing beyond the entry zone.",
+            current=close,
+            threshold=f"close >= trigger_price {trigger}; entry zone {entry_low}-{entry_high}",
+            passed=price_in_plan,
+        ),
+        _entry_check(
+            name="price_vs_vwap",
+            meaning="Price must be above VWAP, so the entry is not below the intraday volume-weighted cost line.",
+            current=price_vs_vwap,
+            threshold=f"> {MIN_ENTRY_PRICE_VS_VWAP}",
+            passed=bool(vwap is not None and vwap > 0 and price_vs_vwap is not None and price_vs_vwap > MIN_ENTRY_PRICE_VS_VWAP),
+        ),
+        _entry_check(
+            name="slot_rel_vol",
+            meaning="Current 5-minute volume must be elevated versus the same time-window baseline.",
+            current=slot_rel_vol,
+            threshold=f">= {MIN_ENTRY_SLOT_REL_VOL}",
+            passed=bool(slot_rel_vol is not None and slot_rel_vol >= MIN_ENTRY_SLOT_REL_VOL),
+        ),
+        _entry_check(
+            name="rs_index",
+            meaning="Stock must outperform the benchmark index during the current window.",
+            current=rs_index,
+            threshold=f"> {MIN_ENTRY_RS_INDEX}",
+            passed=bool(rs_index is not None and rs_index > MIN_ENTRY_RS_INDEX),
+        ),
+        _entry_check(
+            name="rs_industry",
+            meaning="Stock must not be weaker than its industry context.",
+            current=rs_industry,
+            threshold="rs_industry >= 0 or industry_strength_score >= 55",
+            passed=rs_industry_supported,
+        ),
+        _entry_check(
+            name="rr_to_take1",
+            meaning="Reward-to-risk to first target must justify the entry.",
+            current=rr_to_take1,
+            threshold=f">= {MIN_TRADING_RR}",
+            passed=bool(rr_to_take1 is not None and rr_to_take1 >= MIN_TRADING_RR),
+        ),
+        _entry_check(
+            name="stop_distance",
+            meaning="Stop distance must be controlled enough for a fresh entry.",
+            current=stop_distance,
+            threshold=f"<= {MAX_ALLOWED_STOP_DISTANCE}",
+            passed=stop_distance <= MAX_ALLOWED_STOP_DISTANCE,
+        ),
+        _entry_check(
+            name="market_gate",
+            meaning="Market gate must allow new long entries.",
+            current=gate_state,
+            threshold="ALLOW or DEGRADED, not BLOCKED/KILLED/UNAVAILABLE",
+            passed=gate_state not in {"", "UNAVAILABLE", "BLOCKED", "KILLED"},
+        ),
+        _entry_check(
+            name="data_quality",
+            meaning="Intraday data must be complete enough to trust the entry decision.",
+            current=data_quality_score,
+            threshold=f">= {MIN_EXECUTION_DATA_QUALITY_SCORE}",
+            passed=bool(data_quality_score is not None and data_quality_score >= MIN_EXECUTION_DATA_QUALITY_SCORE),
+        ),
+        _entry_check(
+            name="late_session",
+            meaning="New first entries are blocked late in the session.",
+            current=bool(features.get("is_late_session")),
+            threshold="False unless previous action is BUY",
+            passed=not bool(features.get("is_late_session")) or str(previous_action or "").upper() == "BUY",
+        ),
+    ]
+    blockers = [check["name"] for check in checks if check["blocker"] and not check["passed"]]
+    return {
+        "ready": not blockers,
+        "blockers": blockers,
+        "checks": checks,
+    }
 
 
 def _candidate_component(candidate: StrategyCandidate, name: str) -> float:
@@ -88,15 +245,25 @@ def build_risk_pack(
         risks.append("late_session_risk")
     if data_warnings:
         risks.extend(data_warnings)
+    entry_readiness = build_entry_readiness(
+        features=features,
+        plan=plan,
+        gate=gate,
+        market_phase=str(features.get("market_phase") or ""),
+    )
+    for blocker in entry_readiness["blockers"]:
+        risks.append(f"entry_check_{blocker}_not_met")
     improve: List[str] = []
     if finite_float(features.get("price_vs_vwap")) <= 0:
         improve.append("price_reclaim_vwap")
-    if finite_float(features.get("slot_rel_vol")) < 1.0:
-        improve.append("slot_rel_vol_improves")
+    if finite_float(features.get("slot_rel_vol")) < MIN_ENTRY_SLOT_REL_VOL:
+        improve.append(f"slot_rel_vol_reaches_{MIN_ENTRY_SLOT_REL_VOL}")
     if finite_float(features.get("rs_index")) <= 0:
         improve.append("rs_index_turns_positive")
     if finite_float(plan.get("rr_to_take1")) < MIN_TRADING_RR:
         improve.append("wait_for_better_entry_or_higher_target")
+    for blocker in entry_readiness["blockers"]:
+        improve.append(f"entry_check_{blocker}_passes")
     cancel = list(plan.get("invalidation_rules") or [])
     if not cancel:
         cancel = list(champion.invalidation_rules or [])
@@ -110,6 +277,8 @@ def build_risk_pack(
         "late_session_risk": bool(features.get("is_late_session")),
         "stop_too_far_risk": bool(_stop_distance_pct(features, plan) > MAX_ALLOWED_STOP_DISTANCE),
         "rr_not_enough_risk": bool(finite_float(plan.get("rr_to_take1")) < MIN_TRADING_RR),
+        "entry_readiness": entry_readiness,
+        "entry_blockers": list(entry_readiness["blockers"]),
         "recommendation_state": recommendation_state,
     }
 
@@ -173,7 +342,16 @@ def determine_recommendation_state(
         return TRIGGER_PLAN
     if bool(features.get("extended_flag")) and champion.strategy_name != "TREND_CONTINUATION_5M":
         return TRIGGER_PLAN
-    if data_quality_score < 55.0:
+    if data_quality_score < MIN_EXECUTION_DATA_QUALITY_SCORE:
+        return TRIGGER_PLAN
+    entry_readiness = build_entry_readiness(
+        features=features,
+        plan=plan,
+        gate=gate,
+        market_phase=market_phase,
+        previous_action=previous_action,
+    )
+    if not bool(entry_readiness.get("ready")):
         return TRIGGER_PLAN
     return TRADING_SIGNAL
 

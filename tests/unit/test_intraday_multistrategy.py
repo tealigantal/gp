@@ -17,6 +17,7 @@ from gp_assistant.contracts.objects import (
     MarketBook,
     SessionState,
     SlotGate,
+    SymbolPulse,
     TrackedUniverse,
     TurnFrame,
 )
@@ -167,6 +168,70 @@ def test_recommendation_states_for_trading_plan_next_session_and_unavailable():
     unavailable = evaluate_slot_pulses(**{**common, "bars": {}})["600519"]
     assert unavailable.recommendation_state == UNAVAILABLE
     assert unavailable.can_open is False
+
+
+def test_trading_signal_requires_entry_readiness_volume_gate():
+    daybook = _daybook()
+    symbol_bars = _bars([10.00, 10.05, 10.08, 10.10, 10.12, 10.15, 10.25], vols=[90, 95, 100, 105, 110, 100, 110])
+    benchmark = _bars([10.00, 10.01, 10.01, 10.02, 10.02, 10.03, 10.03], vols=[100] * 7)
+
+    pulse = evaluate_slot_pulses(
+        daybook=daybook,
+        tracked_universe=_tracked(),
+        bars={"600519": symbol_bars},
+        benchmark=benchmark,
+        slot_baselines={"600519": {"10:05": 100.0}},
+        gate=SlotGate(state="ALLOW", score=80.0, reasons=["ok"]),
+        slot_at="2024-03-20 10:05:00",
+        trade_day="20240320",
+        provider="test",
+        market_phase="INTRADAY_AM",
+    )["600519"]
+
+    assert pulse.recommendation_state == TRIGGER_PLAN
+    assert pulse.can_open is False
+    readiness = pulse.execution_plan["entry_readiness"]
+    assert readiness["ready"] is False
+    assert "slot_rel_vol" in readiness["blockers"]
+    assert any(check["name"] == "slot_rel_vol" and check["threshold"] == ">= 1.3" for check in readiness["checks"])
+
+
+def test_board_ranking_prioritizes_executable_signals_over_watch_score():
+    daybook = _daybook(
+        picks=[
+            _pick("600519", rank=1),
+            _pick("000001", rank=2),
+        ]
+    )
+    watch_pulse = SymbolPulse(
+        symbol="600519",
+        live_score=92.0,
+        daily_rank_score=1.0,
+        exec_score=70.0,
+        action="WATCH",
+        can_open=False,
+        execution_state="waiting_trigger",
+        invalidated=False,
+        extended=False,
+        recommendation_state=TRIGGER_PLAN,
+    )
+    buy_pulse = SymbolPulse(
+        symbol="000001",
+        live_score=78.0,
+        daily_rank_score=0.5,
+        exec_score=75.0,
+        action="BUY",
+        can_open=True,
+        execution_state="breakout_buy",
+        invalidated=False,
+        extended=False,
+        recommendation_state=TRADING_SIGNAL,
+    )
+
+    board = build_board(daybook, {"600519": watch_pulse, "000001": buy_pulse}, artifact_id="a", slot_id="s")
+
+    assert [entry.symbol for entry in board] == ["000001", "600519"]
+    assert board[0].can_open is True
 
 
 def test_explain_context_survives_publish_and_reaches_narrator(monkeypatch):

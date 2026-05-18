@@ -162,7 +162,7 @@ def _slot_flags(slot_at: str | None) -> Dict[str, Any]:
         hhmm = ""
     minutes_to_close = 0
     if hhmm:
-        close = "11:30" if hhmm <= "11:30" else "14:55"
+        close = "11:30" if hhmm <= "11:30" else "14:57"
         close_dt = pd.to_datetime(f"2000-01-01 {close}")
         cur_dt = pd.to_datetime(f"2000-01-01 {hhmm}")
         minutes_to_close = max(0, int((close_dt - cur_dt).total_seconds() // 60))
