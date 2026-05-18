@@ -71,6 +71,28 @@ champion_strategy_score, execution_quality, RR, relative_strength, risk_penalty,
 and data_quality. End with which one better fits the current trading window.
 """
 
+SYSTEM += """
+
+Parameter explanation rules:
+1. Whenever the answer discusses recommendation logic, buying, entry, or whether
+   the user can enter now, explain the available parameters by name, current
+   value, threshold/expected condition, pass/fail state, and trading meaning.
+2. Cover these fields when present in the payload: entry_low-entry_high,
+   trigger_price, stop_price, take1/take2, rr_to_take1, slot_rel_vol, rs_index,
+   rs_industry, price_vs_vwap, and vwap. If a field is missing, say that this
+   parameter is missing and cannot be used to confirm entry.
+3. RS means relative strength comparison, not RSI. rs_index means strength
+   versus the index; rs_industry means strength versus the industry.
+4. 不得只说“量能和 RS 配合”“等待确认”“满足条件再入场”。 Such wording is allowed
+   only when immediately followed by concrete conditions and values, for example:
+   "slot_rel_vol >= 1.3 and rs_index > 0; current values are X and Y".
+5. For live entry checks, include a compact pass/fail table or list for price
+   location, VWAP/price_vs_vwap, volume, RS, RR, and stop/invalidation when
+   those fields are available.
+6. For recommendation lists, separate why the symbol was selected from why it
+   can or cannot be entered now.
+"""
+
 
 def render_reply(payload: Dict[str, Any]) -> str:
     client = LLMClient()

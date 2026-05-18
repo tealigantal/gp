@@ -152,6 +152,22 @@ CARD_QUALITY_SYSTEM = """
 3. 如果文本为空、等于 fallback_text、泄露内部工具/模块/trace、或和卡片无关，needs_repair=true。
 4. 不按固定关键词判断，按语义判断。
 """
+CARD_QUALITY_SYSTEM += """
+
+Parameter-quality standards:
+1. If card_message contains entry/trigger/stop/take/RR/VWAP/volume/RS fields,
+   assistant_text must explain parameter meaning, current value, threshold or
+   expected condition, pass/fail state, and effect on entry.
+2. Relevant fields include entry_low-entry_high, trigger_price, stop_price,
+   take1/take2, rr_to_take1, slot_rel_vol, rs_index, rs_industry,
+   price_vs_vwap, and vwap.
+3. RS means relative strength comparison, not RSI.
+4. Mark needs_repair=true if assistant_text only says "volume and RS confirm",
+   "wait for confirmation", "enter after conditions are met", or similar
+   generic wording without concrete values and thresholds.
+5. If available card parameters are missing from assistant_text, or missing
+   parameters are not explicitly called out as unavailable, mark needs_repair=true.
+"""
 
 
 def assess_card_explanation(
@@ -187,6 +203,19 @@ CARD_REPAIR_SYSTEM = """
 2. 可以简短，但必须和卡片事实直接相关。
 3. 不要提内部工具、模块、trace、JSON、调试字段。
 4. 不要编造 card_message 之外的价格、公式、来源或交易结论。
+"""
+CARD_REPAIR_SYSTEM += """
+
+Parameter repair rules:
+1. When card_message has parameters, rewrite with parameter meaning, current
+   value, threshold/expected condition, pass/fail state, and entry impact.
+2. Cover available entry_low-entry_high, trigger_price, stop_price, take1/take2,
+   rr_to_take1, slot_rel_vol, rs_index, rs_industry, price_vs_vwap, and vwap.
+3. Explain RS as relative strength comparison, not RSI.
+4. Do not write only generic wording such as "volume and RS confirm" or
+   "wait for confirmation"; include concrete conditions and values.
+5. If a parameter is missing from card_message, say it is missing and cannot be
+   used to confirm entry. Do not invent it.
 """
 
 

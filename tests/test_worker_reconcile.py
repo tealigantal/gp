@@ -142,6 +142,7 @@ def test_postclose_archive_builds_daily_plan_without_replay(monkeypatch):
     result = worker.run_postclose_archive()
 
     assert result["archived"] is True
+    assert result["daily_status"] == "ready"
     assert result["artifact_id"] == "daily_1"
     assert build_calls[0]["daybook"] is daybook
     assert build_calls[0]["market_phase"] == PHASE_POSTCLOSE_PENDING
@@ -182,6 +183,7 @@ def test_auto_postclose_rebuilds_current_artifact_when_old_artifact_lacks_freshn
     current = repo.load_current_slot_artifact()
 
     assert result["archived"] is True
+    assert result["daily_status"] == "ready"
     assert result.get("noop") is not True
     assert current is not None
     assert current.artifact_id != "daily_old"
@@ -365,6 +367,52 @@ def test_postclose_archive_waits_when_eod_daily_pending(monkeypatch):
     assert result["archived"] is False
     assert result["pending"] is True
     assert result["reason"] == "eod_daily_pending"
+    assert result["daily_status"] == "eod_pending"
+
+
+def test_postclose_archive_persists_blocked_current_day_freshness_without_publishing(monkeypatch):
+    state = SimpleNamespace(
+        market_phase=PHASE_POSTCLOSE_PENDING,
+        target_daybook_effective_day="20260513",
+        target_pulse_trade_day="20260513",
+        target_pulse_slot_at="2026-05-13 14:55:00",
+    )
+    stale_daybook = _daybook(target_day="2026-05-12", target_mode="current_pending")
+    stale_daybook.trading_day = "20260513"
+    blocked_daybook = _daybook(target_day="2026-05-13", target_mode="current_ready")
+    blocked_daybook.trading_day = "20260513"
+    blocked_daybook.source_meta["daily_freshness"].update(
+        {
+            "ready": False,
+            "stale_count": 1,
+            "stale_symbols": ["002594"],
+            "blocking_reason": "日线数据未补齐到 2026-05-13，当前不发布正式推荐",
+        }
+    )
+    saved: list[DayBook] = []
+
+    monkeypatch.setattr(worker, "compute_market_state", lambda now=None: state)
+    monkeypatch.setattr(worker, "load_daybook", lambda trade_day: stale_daybook)
+    monkeypatch.setattr(
+        worker,
+        "resolve_daily_target",
+        lambda trade_day: {"target_day": "2026-05-13", "target_mode": "current_ready", "pending_eod_day": None},
+    )
+    monkeypatch.setattr(worker, "build_daybook", lambda trade_day, **_: blocked_daybook)
+    monkeypatch.setattr(worker, "save_daybook", lambda daybook: saved.append(daybook))
+    monkeypatch.setattr(
+        worker,
+        "_build_and_save_daily_plan",
+        lambda **_: (_ for _ in ()).throw(AssertionError("blocked daily freshness must not publish")),
+    )
+
+    result = worker.run_postclose_archive()
+
+    assert saved == [blocked_daybook]
+    assert result["blocked"] is True
+    assert result["reason"] == "daily_freshness_blocked"
+    assert result["daily_status"] == "freshness_blocked"
+    assert result["daily_freshness"]["target_day"] == "2026-05-13"
 
 
 def test_auto_postclose_waits_when_eod_probe_is_pending(monkeypatch):

@@ -365,6 +365,7 @@ export interface RuntimeStatus {
   publish_allowed: boolean
   repair_status: string
   repair_stage: string
+  daily_status?: 'eod_pending' | 'freshness_blocked' | 'artifact_lagging' | 'ready' | 'previous_completed' | 'unavailable' | string | null
   daily_freshness_ready?: boolean
   daily_target_day?: string | null
   daily_target_mode?: 'previous_completed' | 'current_ready' | 'current_pending' | string
@@ -380,6 +381,7 @@ export interface RuntimeStatus {
   daily_stale_count?: number
   daily_last_reconcile_at?: string | null
   daily_blocking_reason?: string | null
+  daily_stale_symbols?: string[]
   daily_failed_symbols?: string[]
   pulse_target_trade_day?: string | null
   pulse_target_slot_at?: string | null

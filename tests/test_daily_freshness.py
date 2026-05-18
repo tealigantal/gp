@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from datetime import datetime
+import json
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -140,6 +141,22 @@ def test_resolve_daily_target_reads_cached_eod_probe_without_network(monkeypatch
     assert target["target_day"] == "2026-04-30"
     assert target["target_mode"] == "current_ready"
     assert target["eod_probe"] == cached_probe
+
+
+def test_expired_positive_eod_probe_stays_ready_for_same_target(monkeypatch, tmp_path):
+    probe_path = tmp_path / "eod_daily_probe.json"
+    probe = {
+        "target_day": "2026-04-30",
+        "ready": True,
+        "checked_at": (datetime.now(timezone.utc) - timedelta(hours=2)).isoformat(),
+        "ok_count": 3,
+    }
+    probe_path.write_text(json.dumps(probe), encoding="utf-8")
+    monkeypatch.setattr(daily_freshness, "_eod_probe_path", lambda: probe_path)
+
+    cached = daily_freshness._read_eod_probe_cache("2026-04-30", ttl_sec=30)
+
+    assert cached == probe
 
 
 def test_reconcile_daily_freshness_marks_failed_refresh(monkeypatch):

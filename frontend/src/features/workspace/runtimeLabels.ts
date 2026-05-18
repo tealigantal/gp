@@ -24,6 +24,8 @@ export function marketPhaseLabel(phase?: string | null) {
 
 export function dailyTargetModeMeta(runtime?: RuntimeStatus | null) {
   const mode = String(runtime?.daily_target_mode || '').toLowerCase()
+  const blockedCurrentReady = mode === 'current_ready' && runtime?.daily_freshness_ready === false
+  if (blockedCurrentReady) return null
   if (mode === 'previous_completed') {
     return {
       label: '使用上一已完成日线',
@@ -49,15 +51,66 @@ export function dailyTargetModeMeta(runtime?: RuntimeStatus | null) {
   return null
 }
 
-export function runtimeFreshnessMeta(runtime?: RuntimeStatus | null) {
-  const artifactLagging = String(runtime?.book_freshness || '').toLowerCase() === 'lagging' || Boolean(runtime?.artifact_lag_reason)
+export function dailyStatusMeta(runtime?: RuntimeStatus | null) {
+  const explicit = String(runtime?.daily_status || '').toLowerCase()
+  const artifactLagging =
+    explicit === 'artifact_lagging' ||
+    String(runtime?.book_freshness || '').toLowerCase() === 'lagging' ||
+    Boolean(runtime?.artifact_lag_reason)
+  const eodPending = explicit === 'eod_pending' || runtime?.daily_target_mode === 'current_pending'
+  const previousCompleted = explicit === 'previous_completed' || runtime?.daily_target_mode === 'previous_completed'
+  const freshnessBlocked =
+    explicit === 'freshness_blocked' || (runtime?.daily_freshness_ready === false && !eodPending && !previousCompleted)
+
   if (artifactLagging) {
     return {
-      label: '日线已就绪，发布待刷新',
+      label: runtime?.market_phase === 'POSTCLOSE_PENDING' ? '日线已就绪，发布待归档' : '日线已就绪，发布待刷新',
       color: 'volcano',
       note: runtime?.artifact_lag_reason || '日线 freshness 已就绪，但 current artifact 仍落后于当前 daybook。',
     }
   }
+  if (eodPending) {
+    const retry = runtime?.eod_probe?.next_retry_after ? `下次探测 ${fmtDateTime(runtime.eod_probe.next_retry_after)}。` : ''
+    return {
+      label: '等待今日收盘日线',
+      color: 'gold',
+      note: `今日 ${runtime?.pending_eod_day || runtime?.daily_target_day || '--'} 收盘日线尚未确认。${retry}`,
+    }
+  }
+  if (freshnessBlocked) {
+    return {
+      label: '日线未就绪',
+      color: 'volcano',
+      note: runtime?.daily_blocking_reason || `日线目标 ${runtime?.daily_target_day || '--'} 尚未完成全量 freshness 校验。`,
+    }
+  }
+  if (explicit === 'ready' || runtime?.daily_target_mode === 'current_ready') {
+    return {
+      label: '今日日线已就绪',
+      color: 'green',
+      note: `日线目标 ${runtime?.daily_target_day || '--'} 已就绪。`,
+    }
+  }
+  if (previousCompleted) {
+    return {
+      label: '使用上一已完成日线',
+      color: 'blue',
+      note: `日线目标为 ${runtime?.daily_target_day || '--'}。`,
+    }
+  }
+  if (explicit === 'unavailable') {
+    return {
+      label: '暂无可用 book',
+      color: 'default',
+      note: '当前还没有有效的日线计划 book。',
+    }
+  }
+  return null
+}
+
+export function runtimeFreshnessMeta(runtime?: RuntimeStatus | null) {
+  const dailyStatus = dailyStatusMeta(runtime)
+  if (dailyStatus) return dailyStatus
   const dailyMode = dailyTargetModeMeta(runtime)
   if (dailyMode) return dailyMode
   const key = String(runtime?.book_freshness || '').toLowerCase()

@@ -193,6 +193,8 @@ def _read_eod_probe_cache(target_iso: str, ttl_sec: int) -> dict[str, Any] | Non
     checked_at = cached.get("checked_at")
     if not isinstance(checked_at, str) or not checked_at.strip():
         return None
+    if cached.get("ready") is True:
+        return cached
     try:
         checked = datetime.fromisoformat(checked_at)
         if checked.tzinfo is None:

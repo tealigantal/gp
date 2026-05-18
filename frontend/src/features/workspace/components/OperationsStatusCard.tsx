@@ -38,17 +38,23 @@ function summarizeResult(result?: Record<string, unknown>) {
 function recommendedTools(runtime?: RuntimeStatus | null, manualTools: RuntimeToolInfo[] = []) {
   const toolSet = new Set(manualTools.map((item) => item.service))
   const out: string[] = []
-  const eodPending = runtime?.daily_target_mode === 'current_pending'
-  const previousCompleted = runtime?.daily_target_mode === 'previous_completed'
+  const dailyStatus = String(runtime?.daily_status || '').toLowerCase()
+  const eodPending = dailyStatus ? dailyStatus === 'eod_pending' : runtime?.daily_target_mode === 'current_pending'
+  const previousCompleted = dailyStatus
+    ? dailyStatus === 'previous_completed'
+    : runtime?.daily_target_mode === 'previous_completed'
   const artifactLagging =
+    dailyStatus === 'artifact_lagging' ||
     String(runtime?.book_freshness || '').toLowerCase() === 'lagging' || Boolean(runtime?.artifact_lag_reason)
+  const dailyBlocked =
+    dailyStatus === 'freshness_blocked' || (runtime?.daily_freshness_ready === false && !eodPending && !previousCompleted)
   if (artifactLagging && runtime?.market_phase === 'POSTCLOSE_PENDING' && toolSet.has('gp-postclose-archive')) {
     out.push('gp-postclose-archive')
   }
   if (artifactLagging && out.length === 0 && toolSet.has('gp-rebuild-daybook')) {
     out.push('gp-rebuild-daybook')
   }
-  if (runtime?.daily_freshness_ready === false && !eodPending && !previousCompleted && toolSet.has('gp-rebuild-daybook')) {
+  if (dailyBlocked && toolSet.has('gp-rebuild-daybook')) {
     out.push('gp-rebuild-daybook')
   }
   if (runtime?.market_phase === 'POSTCLOSE_PENDING' && !eodPending && toolSet.has('gp-postclose-archive')) {
@@ -71,26 +77,22 @@ export function OperationsStatusCard({
   const manualTools = (runtime?.services || []).filter((item) => item.mode !== 'always_on')
   const suggestedTools = recommendedTools(runtime, manualTools)
   const opSummary = summarizeResult(opsResult?.result)
-  const eodPending = runtime?.daily_target_mode === 'current_pending'
-  const previousCompleted = runtime?.daily_target_mode === 'previous_completed'
-  const dailyBlocked = runtime?.daily_freshness_ready === false && !eodPending && !previousCompleted
+  const dailyStatus = String(runtime?.daily_status || '').toLowerCase()
+  const eodPending = dailyStatus ? dailyStatus === 'eod_pending' : runtime?.daily_target_mode === 'current_pending'
+  const previousCompleted = dailyStatus
+    ? dailyStatus === 'previous_completed'
+    : runtime?.daily_target_mode === 'previous_completed'
+  const dailyBlocked =
+    dailyStatus === 'freshness_blocked' || (runtime?.daily_freshness_ready === false && !eodPending && !previousCompleted)
   const artifactLagging =
+    dailyStatus === 'artifact_lagging' ||
     String(runtime?.book_freshness || '').toLowerCase() === 'lagging' || Boolean(runtime?.artifact_lag_reason)
-  const dailyStatusLabel = artifactLagging
-    ? runtime?.market_phase === 'POSTCLOSE_PENDING'
-      ? '日线已就绪，发布待归档'
-      : '日线已就绪，发布待刷新'
-    : eodPending
-      ? '等待收盘日线'
-      : dailyBlocked
-        ? '日线未就绪'
-        : '日线已就绪'
+  const dailyStatusLabel = freshness.label
 
   return (
     <section className="snapshot-section ops-card" aria-label="运行态与修复工具">
       <div className="snapshot-section-title">
         <Typography.Text strong>运行态与修复工具</Typography.Text>
-        <Tag color={freshness.color}>{freshness.label}</Tag>
       </div>
 
       <Space direction="vertical" size={12} style={{ width: '100%' }}>
@@ -98,7 +100,7 @@ export function OperationsStatusCard({
           <Tag color="green">{runtime?.auto_update_service || 'gp-worker'}</Tag>
           <Tag>日线模式</Tag>
           {runtime?.data_provider ? <Tag>数据源 {runtime.data_provider}</Tag> : null}
-          {dailyMode ? <Tag color={dailyMode.color}>{dailyMode.label}</Tag> : null}
+          {dailyMode && dailyMode.label !== dailyStatusLabel ? <Tag color={dailyMode.color}>{dailyMode.label}</Tag> : null}
           <Tag color={artifactLagging ? 'volcano' : eodPending ? 'gold' : dailyBlocked ? 'volcano' : 'green'}>
             {dailyStatusLabel}
           </Tag>

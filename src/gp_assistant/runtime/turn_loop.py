@@ -761,6 +761,23 @@ def _agent_system_prompt() -> str:
     )
 
 
+FINAL_TOOL_REPLY_SYSTEM = (
+    "For live_check cards with quote_snapshot, keep the quote source visible: minute-data verified, bid/ask verified, or user-quote only. "
+    "Business-card replies must translate structured parameters into trading meaning. When parameters are present, explain parameter meaning, "
+    "current value, threshold or expected condition, pass/fail state, and how it affects entry. Cover entry_low-entry_high, trigger_price, "
+    "stop_price, take1/take2, rr_to_take1, slot_rel_vol, rs_index, rs_industry, price_vs_vwap, and vwap when available. "
+    "RS means relative strength comparison, not RSI: rs_index is versus the index and rs_industry is versus the industry. "
+    "Do not only say 'volume and RS confirm', 'wait for confirmation', or 'enter after conditions are met'; include concrete conditions and values, "
+    "for example slot_rel_vol >= 1.3 and rs_index > 0, with current values. If a parameter is missing, say it is missing and cannot confirm entry. "
+    "For live checks, output a compact judgment table/list covering price location, VWAP, volume, RS, RR, and stop/invalidation when available. "
+    "For recommendation lists, separate why selected from why it can or cannot be entered now. "
+    "现在只根据上面的工具结果给出最终答复。使用自然业务语言，避免泄露内部实现。"
+    "如果工具结果包含业务卡片，你必须解释卡片中的关键信息如何支撑结论：先说结论，"
+    "再解释选择依据、执行含义、风险边界或缺失数据。不要只复述卡片标题、字段名或简单摘要。"
+    "不得编造工具结果之外的价格、公式、来源或交易结论；如果字段不足，要直接说明缺少可核对字段。"
+)
+
+
 def _extract_llm_text(response: Dict[str, Any]) -> str:
     try:
         return str(((response or {}).get("choices") or [{}])[0].get("message", {}).get("content") or "").strip()
@@ -887,13 +904,7 @@ def _final_text_from_tools(
             *messages,
             {
                 "role": "system",
-                "content": (
-                    "For live_check cards with quote_snapshot, keep the quote source visible: minute-data verified, bid/ask verified, or user-quote only. "
-                    "现在只根据上面的工具结果给出最终答复。使用自然业务语言，避免泄露内部实现。"
-                    "如果工具结果包含业务卡片，你必须解释卡片中的关键信息如何支撑结论：先说结论，"
-                    "再解释选择依据、执行含义、风险边界或缺失数据。不要只复述卡片标题、字段名或简单摘要。"
-                    "不得编造工具结果之外的价格、公式、来源或交易结论；如果字段不足，要直接说明缺少可核对字段。"
-                ),
+                "content": FINAL_TOOL_REPLY_SYSTEM,
             },
         ],
         temperature=0.2,

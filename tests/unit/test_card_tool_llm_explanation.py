@@ -6,6 +6,12 @@ from types import SimpleNamespace
 import pytest
 
 from gp_assistant.contracts.objects import AgentToolResult, DayBook, Judgment, MarketBook, SessionState, TurnFrame
+from gp_assistant.llm.semantics import (
+    CARD_QUALITY_SYSTEM,
+    CARD_REPAIR_SYSTEM,
+    assess_card_explanation,
+    repair_card_explanation,
+)
 from gp_assistant.runtime import turn_loop
 
 
@@ -417,3 +423,120 @@ def test_repair_blocking_result_does_not_require_card_llm_explanation(monkeypatc
     assert out["message"]["message_kind"] == "chat"
     assert "暂不发布正式市场结论" in out["reply"]
     assert committed["called"] is True
+
+
+def test_parameter_explanation_prompt_contracts_are_present():
+    assert "parameter meaning, current value, threshold" in turn_loop.FINAL_TOOL_REPLY_SYSTEM
+    assert "slot_rel_vol" in turn_loop.FINAL_TOOL_REPLY_SYSTEM
+    assert "rs_index" in turn_loop.FINAL_TOOL_REPLY_SYSTEM
+    assert "rr_to_take1" in turn_loop.FINAL_TOOL_REPLY_SYSTEM
+    assert "price_vs_vwap" in turn_loop.FINAL_TOOL_REPLY_SYSTEM
+    assert "why selected" in turn_loop.FINAL_TOOL_REPLY_SYSTEM
+    assert "why it can or cannot be entered now" in turn_loop.FINAL_TOOL_REPLY_SYSTEM
+    assert "Parameter-quality standards" in CARD_QUALITY_SYSTEM
+    assert "needs_repair=true" in CARD_QUALITY_SYSTEM
+    assert "slot_rel_vol" in CARD_QUALITY_SYSTEM
+    assert "Parameter repair rules" in CARD_REPAIR_SYSTEM
+    assert "Do not invent it" in CARD_REPAIR_SYSTEM
+
+
+def test_quality_checker_rejects_generic_volume_rs_entry_text():
+    class _LLM:
+        def available(self):
+            return True, None
+
+        def chat(self, messages, json_mode=False, temperature=0.0, **kwargs):
+            assert json_mode is True
+            assert "Parameter-quality standards" in messages[0]["content"]
+            assert "slot_rel_vol" in messages[0]["content"]
+            payload = json.loads(messages[1]["content"])
+            assistant_text = payload["assistant_text"]
+            needs_repair = "量能和 RS" in assistant_text and "slot_rel_vol" not in assistant_text
+            return {
+                "choices": [
+                    {
+                        "message": {
+                            "content": json.dumps(
+                                {
+                                    "is_explaining_card": not needs_repair,
+                                    "grounded_to_card": not needs_repair,
+                                    "needs_repair": needs_repair,
+                                    "reason": "generic parameter wording" if needs_repair else "ok",
+                                },
+                                ensure_ascii=False,
+                            )
+                        }
+                    }
+                ]
+            }
+
+    quality = assess_card_explanation(
+        card_message={
+            "message_kind": "live_entry_check",
+            "symbol": "600519",
+            "entry_low": 10.0,
+            "entry_high": 10.3,
+            "trigger_price": 10.3,
+            "stop_price": 9.85,
+            "rr_to_take1": 1.4,
+            "slot_rel_vol": 1.1,
+            "rs_index": 0.02,
+            "vwap": 10.12,
+            "price_vs_vwap": 0.004,
+        },
+        assistant_text="等量能和 RS 确认再入场",
+        fallback_text="fallback",
+        client=_LLM(),
+    )
+
+    assert quality.needs_repair is True
+    assert quality.is_explaining_card is False
+    assert quality.reason == "generic parameter wording"
+
+
+def test_repair_prompt_forces_available_parameter_explanation():
+    class _LLM:
+        def available(self):
+            return True, None
+
+        def chat(self, messages, temperature=0.2, **kwargs):
+            assert "Parameter repair rules" in messages[0]["content"]
+            assert "slot_rel_vol" in messages[0]["content"]
+            payload = json.loads(messages[1]["content"])
+            card = payload["card_message"]
+            assert card["trigger_price"] == 10.3
+            text = (
+                "入场区间 10.00-10.30；触发价 10.30；止损 9.85；"
+                "rr_to_take1 当前 1.40，达到 1.30 以上才有基础收益风险比；"
+                "slot_rel_vol 当前 1.10，低于 1.30，量能未确认；"
+                "rs_index 当前 0.02，大于 0，强于指数；"
+                "vwap 当前 10.12，price_vs_vwap 当前 0.004，价格略在 VWAP 上方。"
+            )
+            return {"choices": [{"message": {"content": text}}]}
+
+    repaired = repair_card_explanation(
+        card_message={
+            "message_kind": "live_entry_check",
+            "symbol": "600519",
+            "entry_low": 10.0,
+            "entry_high": 10.3,
+            "trigger_price": 10.3,
+            "stop_price": 9.85,
+            "rr_to_take1": 1.4,
+            "slot_rel_vol": 1.1,
+            "rs_index": 0.02,
+            "vwap": 10.12,
+            "price_vs_vwap": 0.004,
+        },
+        bad_text="等量能和 RS 确认再入场",
+        fallback_text="fallback",
+        client=_LLM(),
+    )
+
+    assert "入场区间" in repaired
+    assert "触发价" in repaired
+    assert "止损" in repaired
+    assert "rr_to_take1" in repaired
+    assert "slot_rel_vol" in repaired
+    assert "rs_index" in repaired
+    assert "vwap" in repaired

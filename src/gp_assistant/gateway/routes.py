@@ -41,7 +41,13 @@ from ..runtime.market_clock import (
     compute_market_state,
 )
 from ..runtime.repair import load_repair_status_snapshot
-from ..evidence.daily_freshness import TARGET_CURRENT_READY, resolve_daily_target
+from ..evidence.daily_freshness import (
+    TARGET_CURRENT_PENDING,
+    TARGET_CURRENT_READY,
+    TARGET_PREVIOUS_COMPLETED,
+    load_latest_daily_freshness_report,
+    resolve_daily_target,
+)
 from ..runtime.turn_loop import run_turn_sync
 from ..runtime.utils import now_iso
 from ..worker import reconcile_runtime_state
@@ -153,6 +159,13 @@ def _artifact_lag_status(
 
     provider_meta = dict(getattr(artifact, "provider_meta", {}) or {})
     expected_meta = _daily_plan_publish_meta(book, market_phase=market_phase)
+    expected_meta.update(
+        {
+            "daily_target_day": daily_runtime.get("daily_target_day"),
+            "daily_target_mode": daily_runtime.get("daily_target_mode"),
+            "daily_last_reconcile_at": daily_runtime.get("daily_last_reconcile_at"),
+        }
+    )
     lag_fields: list[str] = []
     if provider_meta.get("reason") != "daily_plan":
         lag_fields.append("reason")
@@ -188,9 +201,7 @@ def _book_freshness(
     return "daily_only"
 
 
-def _daily_freshness_fields(book) -> dict[str, Any]:
-    source_meta = getattr(getattr(book, "daybook", None), "source_meta", {}) or {}
-    freshness = dict(source_meta.get("daily_freshness") or {})
+def _daily_freshness_fields_from_report(freshness: dict[str, Any]) -> dict[str, Any]:
     return {
         "daily_freshness_ready": bool(freshness.get("ready", False)),
         "daily_target_day": freshness.get("target_day"),
@@ -201,8 +212,55 @@ def _daily_freshness_fields(book) -> dict[str, Any]:
         "daily_stale_count": int(freshness.get("stale_count") or len(freshness.get("stale_symbols") or [])),
         "daily_last_reconcile_at": freshness.get("last_reconcile_at") or freshness.get("generated_at") or freshness.get("reconciled_at"),
         "daily_blocking_reason": freshness.get("blocking_reason"),
+        "daily_stale_symbols": list(freshness.get("stale_symbols") or []),
         "daily_failed_symbols": list(freshness.get("failed_symbols") or []),
     }
+
+
+def _daily_freshness_fields(book) -> dict[str, Any]:
+    source_meta = getattr(getattr(book, "daybook", None), "source_meta", {}) or {}
+    freshness = dict(source_meta.get("daily_freshness") or {})
+    return _daily_freshness_fields_from_report(freshness)
+
+
+def _latest_daily_freshness_fields_for_target(target_day: Any) -> dict[str, Any]:
+    target_iso = _trade_day_iso(target_day)
+    if not target_iso:
+        return {}
+    report = load_latest_daily_freshness_report() or {}
+    if _trade_day_iso(report.get("target_day")) != target_iso:
+        return {}
+    return _daily_freshness_fields_from_report(dict(report))
+
+
+def _empty_daily_freshness_fields() -> dict[str, Any]:
+    return {
+        "daily_freshness_ready": False,
+        "daily_checked_count": 0,
+        "daily_stale_count": 0,
+        "daily_last_reconcile_at": None,
+        "daily_blocking_reason": None,
+        "daily_stale_symbols": [],
+        "daily_failed_symbols": [],
+    }
+
+
+def _daily_status(daily_runtime: dict[str, Any], *, artifact_lagging: bool, book) -> str:
+    if book is None:
+        return "unavailable"
+    if artifact_lagging:
+        return "artifact_lagging"
+    mode = str(daily_runtime.get("daily_target_mode") or "").lower()
+    ready = bool(daily_runtime.get("daily_freshness_ready"))
+    if mode == TARGET_CURRENT_PENDING:
+        return "eod_pending"
+    if mode == TARGET_PREVIOUS_COMPLETED:
+        return "previous_completed"
+    if mode == TARGET_CURRENT_READY:
+        return "ready" if ready else "freshness_blocked"
+    if not ready and daily_runtime.get("daily_blocking_reason"):
+        return "freshness_blocked"
+    return "ready" if ready else "unavailable"
 
 
 def _trade_day_iso(trade_day: Any) -> str:
@@ -235,41 +293,49 @@ def _runtime_status(book, *, lock_error: str | None = None) -> RuntimeStatus:
         PHASE_CLOSING_AUCTION,
         PHASE_POSTCLOSE_PENDING,
     }
-    daily_freshness = _daily_freshness_fields(book) if book else {}
+    book_daily_freshness = _daily_freshness_fields(book) if book else {}
+    daily_freshness = dict(book_daily_freshness)
     daily_target = resolve_daily_target(ms.target_daybook_effective_day, allow_probe=False)
-    daily_target_day = daily_target.get("target_day") or daily_freshness.get("daily_target_day")
-    daily_target_mode = daily_target.get("target_mode") or daily_freshness.get("daily_target_mode")
+    daily_target_day = daily_target.get("target_day") or book_daily_freshness.get("daily_target_day")
+    daily_target_mode = daily_target.get("target_mode") or book_daily_freshness.get("daily_target_mode")
     pending_eod_day = (
         daily_target.get("pending_eod_day")
         if "pending_eod_day" in daily_target
-        else daily_freshness.get("pending_eod_day")
+        else book_daily_freshness.get("pending_eod_day")
     )
     eod_probe = (
         daily_target.get("eod_probe")
         if "eod_probe" in daily_target
-        else daily_freshness.get("eod_probe")
+        else book_daily_freshness.get("eod_probe")
     )
-    source_target_day = daily_freshness.get("daily_target_day")
-    source_target_mode = daily_freshness.get("daily_target_mode")
+    source_target_day = book_daily_freshness.get("daily_target_day")
+    source_target_mode = book_daily_freshness.get("daily_target_mode")
     if (
-        daily_freshness.get("daily_freshness_ready") is True
+        book_daily_freshness.get("daily_freshness_ready") is True
         and str(source_target_mode or "") == TARGET_CURRENT_READY
         and str(source_target_day or "") == _trade_day_iso(ms.target_daybook_effective_day)
     ):
         daily_target_day = source_target_day
         daily_target_mode = source_target_mode
-        pending_eod_day = daily_freshness.get("pending_eod_day")
-        eod_probe = daily_freshness.get("eod_probe")
+        pending_eod_day = book_daily_freshness.get("pending_eod_day")
+        eod_probe = book_daily_freshness.get("eod_probe")
+        daily_freshness = dict(book_daily_freshness)
     if source_target_day and daily_target_day and str(source_target_day) != str(daily_target_day):
-        daily_freshness = {
-            **daily_freshness,
-            "daily_freshness_ready": False,
-            "daily_checked_count": 0,
-            "daily_stale_count": 0,
-            "daily_last_reconcile_at": None,
-            "daily_blocking_reason": None,
-            "daily_failed_symbols": [],
-        }
+        latest_fields = _latest_daily_freshness_fields_for_target(daily_target_day)
+        daily_freshness = latest_fields or {**book_daily_freshness, **_empty_daily_freshness_fields()}
+        if latest_fields:
+            daily_target_day = latest_fields.get("daily_target_day") or daily_target_day
+            daily_target_mode = latest_fields.get("daily_target_mode") or daily_target_mode
+            pending_eod_day = latest_fields.get("pending_eod_day")
+            eod_probe = latest_fields.get("eod_probe")
+    elif daily_target_day:
+        latest_fields = _latest_daily_freshness_fields_for_target(daily_target_day)
+        if latest_fields:
+            daily_freshness = latest_fields
+            daily_target_day = latest_fields.get("daily_target_day") or daily_target_day
+            daily_target_mode = latest_fields.get("daily_target_mode") or daily_target_mode
+            pending_eod_day = latest_fields.get("pending_eod_day")
+            eod_probe = latest_fields.get("eod_probe")
     daily_runtime = {
         **daily_freshness,
         "daily_target_day": str(daily_target_day) if daily_target_day else (snapshot.daily_target_day if snapshot else None),
@@ -282,6 +348,7 @@ def _runtime_status(book, *, lock_error: str | None = None) -> RuntimeStatus:
         market_phase=ms.market_phase,
         daily_runtime=daily_runtime,
     )
+    daily_runtime["daily_status"] = _daily_status(daily_runtime, artifact_lagging=artifact_lagging, book=book)
     return RuntimeStatus(
         market_phase=str(snapshot.market_phase if snapshot else ms.market_phase),
         calendar_source=ms.calendar_source,

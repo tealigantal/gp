@@ -18,6 +18,16 @@ function fmtCount(value?: number) {
 }
 
 function currentBookState(book?: MarketBook, health?: HealthResponse) {
+  const dailyStatus = String(health?.runtime?.daily_status || '').toLowerCase()
+  if (dailyStatus === 'freshness_blocked') {
+    return { color: 'volcano' as const, text: '日线未就绪' }
+  }
+  if (dailyStatus === 'eod_pending') {
+    return { color: 'gold' as const, text: '等待收盘日线' }
+  }
+  if (dailyStatus === 'artifact_lagging') {
+    return { color: 'volcano' as const, text: '等待日线更新' }
+  }
   const slotStatus = String(book?.slot_status || '').toUpperCase()
   if (slotStatus && slotStatus !== 'OK') {
     return { color: 'gold' as const, text: '数据受限' }

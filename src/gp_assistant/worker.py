@@ -256,6 +256,7 @@ def run_postclose_archive(*, now=None, force: bool = False) -> Dict[str, Any]:
             "archived": False,
             "pending": True,
             "reason": "eod_daily_pending",
+            "daily_status": "eod_pending",
             "daily_freshness": freshness,
             "message": "今日收盘日线尚未就绪，后台会按探测 TTL 自动重试。",
         }
@@ -266,11 +267,13 @@ def run_postclose_archive(*, now=None, force: bool = False) -> Dict[str, Any]:
             "archived": False,
             "blocked": True,
             "reason": "daily_freshness_blocked",
+            "daily_status": "freshness_blocked",
             "daily_freshness": freshness,
             "message": freshness.get("blocking_reason") or "日线数据未补齐到目标交易日，当前不执行收盘归档。",
         }
     saved = _build_and_save_daily_plan(daybook=daybook, trade_day=ms.target_daybook_effective_day, market_phase=ms.market_phase, force=force)
     saved["archived"] = True
+    saved["daily_status"] = "ready"
     return saved
 
 

@@ -65,13 +65,14 @@ it('renders clickable runtime tool buttons', () => {
 })
 
 it.each([
-  ['previous_completed', '使用上一已完成日线'],
-  ['current_pending', '等待今日收盘日线'],
-  ['current_ready', '今日日线已就绪'],
-])('renders daily target mode %s', (mode, label) => {
+  ['previous_completed', 'previous_completed', '使用上一已完成日线'],
+  ['current_pending', 'eod_pending', '等待今日收盘日线'],
+  ['current_ready', 'ready', '今日日线已就绪'],
+])('renders daily target mode %s', (mode, dailyStatus, label) => {
   render(
     <OperationsStatusCard
       runtime={runtime({
+        daily_status: dailyStatus,
         daily_freshness_ready: mode !== 'current_pending',
         daily_target_mode: mode,
         daily_target_day: mode === 'previous_completed' ? '2026-04-29' : '2026-04-30',
@@ -81,7 +82,29 @@ it.each([
     />,
   )
 
-  expect(screen.getAllByText(label).length).toBeGreaterThan(0)
+  expect(screen.getAllByText(label)).toHaveLength(1)
+})
+
+it('does not show current-ready text when full daily freshness is blocked', () => {
+  render(
+    <OperationsStatusCard
+      runtime={runtime({
+        daily_status: 'freshness_blocked',
+        daily_freshness_ready: false,
+        daily_target_mode: 'current_ready',
+        daily_target_day: '2026-05-13',
+        daily_checked_count: 50,
+        daily_stale_count: 1,
+        daily_stale_symbols: ['002594'],
+        daily_blocking_reason: '日线数据未补齐到 2026-05-13，当前不发布正式推荐',
+      })}
+    />,
+  )
+
+  expect(screen.getAllByText('日线未就绪').length).toBeGreaterThan(0)
+  expect(screen.queryByText('今日日线已就绪')).not.toBeInTheDocument()
+  expect(screen.getByText('日线数据未补齐到 2026-05-13，当前不发布正式推荐')).toBeInTheDocument()
+  expect(screen.getByText('50 / 1')).toBeInTheDocument()
 })
 
 it('shows operation feedback after a tool run', () => {
@@ -109,6 +132,7 @@ it('shows publish lag and recommends postclose archive when daily data is ready 
     <OperationsStatusCard
       runtime={runtime({
         book_freshness: 'lagging',
+        daily_status: 'artifact_lagging',
         daily_freshness_ready: true,
         daily_target_mode: 'current_ready',
         daily_stale_count: 0,
@@ -118,7 +142,7 @@ it('shows publish lag and recommends postclose archive when daily data is ready 
     />,
   )
 
-  expect(screen.getAllByText('日线已就绪，发布待刷新').length).toBeGreaterThan(0)
+  expect(screen.getAllByText('日线已就绪，发布待归档').length).toBeGreaterThan(0)
   expect(screen.getByText('daily_ready_current_artifact_meta_mismatch:market_phase')).toBeInTheDocument()
   expect(container.querySelector('button[data-service="gp-postclose-archive"]')).toHaveClass('ant-btn-primary')
 })

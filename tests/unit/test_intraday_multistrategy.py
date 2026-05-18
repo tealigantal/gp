@@ -233,6 +233,13 @@ def test_llm_prompt_safety_contract_mentions_state_boundaries():
     assert "Do not say NEXT_SESSION_PLAN can be bought now" in SYSTEM
     assert "Do not say buy when gate is BLOCKED or UNAVAILABLE" in SYSTEM
     assert "Do not generate missing values" in SYSTEM
+    assert "Parameter explanation rules" in SYSTEM
+    assert "slot_rel_vol" in SYSTEM
+    assert "rs_index" in SYSTEM
+    assert "rr_to_take1" in SYSTEM
+    assert "price_vs_vwap" in SYSTEM
+    assert "RS means relative strength comparison, not RSI" in SYSTEM
+    assert "不得只说“量能和 RS 配合”" in SYSTEM
 
 
 def test_parser_promotes_explain_compare_and_plan_detail(monkeypatch):
