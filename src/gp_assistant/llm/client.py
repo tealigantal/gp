@@ -15,7 +15,7 @@ class LLMClient:
         cfg = load_config()
         self.base_url = (base_url or cfg.llm_base_url or "").strip()
         self.api_key = (api_key or cfg.llm_api_key or "").strip()
-        self.model = (model or cfg.chat_model or "deepseek-v4-flash").strip()
+        self.model = (model or cfg.chat_model or "deepseek-chat").strip()
         self.agent_model = (getattr(cfg, "agent_model", None) or self.model).strip()
         self.timeout = cfg.request_timeout_sec
 
@@ -122,7 +122,7 @@ class LLMClient:
 
         url = self.base_url.rstrip("/") + "/chat/completions"
         payload: Dict[str, Any] = {
-            "model": model or self.model or "deepseek-v4-flash",
+            "model": model or self.model or "deepseek-chat",
             "messages": messages,
             "temperature": float(temperature),
             "stream": False,
