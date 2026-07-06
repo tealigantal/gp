@@ -5,9 +5,11 @@ from typing import List, Optional
 from ..contracts.objects import (
     BoardEntry,
     CanonicalPick,
+    CandidateComparisonArtifact,
     CompareArtifact,
     EvidencePack,
     ExitDecisionArtifact,
+    IntradaySituationArtifact,
     Judgment,
     LiveEntryDecisionArtifact,
     NoTradeArtifact,
@@ -312,6 +314,103 @@ def compare_workflow(evidence: EvidencePack) -> Judgment:
         compare_entries=entries,
         compare_view=compare_view,
         evidence_refs=[evidence.book.book_version, run.run_id],
+    )
+
+
+def candidate_compare_workflow(evidence: EvidencePack) -> Judgment:
+    refs = dict(evidence.frame.references or {})
+    constraints = dict(evidence.frame.constraints or {})
+    entries: List[BoardEntry] = list(evidence.compare_entries or [])
+    if not entries and evidence.active_run is not None:
+        entries = list(evidence.active_run.picks)
+    if not entries:
+        entries = list(evidence.book.board)
+
+    top_n = constraints.get("top_n") or constraints.get("rank_scope_top_n")
+    try:
+        scope_count = max(1, min(int(top_n), len(entries))) if top_n is not None else len(entries)
+    except Exception:
+        scope_count = len(entries)
+    scoped_entries = list(entries[:scope_count])
+    scope_symbols = [entry.symbol for entry in scoped_entries]
+
+    selected_symbol = str(refs.get("selected_symbol") or refs.get("symbol") or "").strip() or None
+    selected_entry = next((entry for entry in scoped_entries if entry.symbol == selected_symbol), None)
+    if selected_entry is None and refs.get("rank") is not None:
+        try:
+            wanted_rank = int(refs.get("rank"))
+        except Exception:
+            wanted_rank = -1
+        selected_entry = next((entry for entry in scoped_entries if int(entry.rank) == wanted_rank), None)
+        if selected_entry is not None:
+            selected_symbol = selected_entry.symbol
+        elif wanted_rank > 0:
+            raise ValueError(f"agent selected rank outside candidate scope: {wanted_rank}")
+    if selected_symbol and selected_entry is None:
+        raise ValueError(f"agent selected symbol outside candidate scope: {selected_symbol}")
+
+    try:
+        confidence = float(constraints.get("confidence") or 0.0)
+    except Exception:
+        confidence = 0.0
+    reason = str(constraints.get("selection_reason") or constraints.get("reason") or "").strip()
+    if not reason:
+        reason = "模型根据当前候选集合和用户约束完成了比较。"
+    artifact = CandidateComparisonArtifact(
+        compared_symbols=scope_symbols,
+        selected_symbol=selected_symbol,
+        selected_rank=(int(selected_entry.rank) if selected_entry is not None else None),
+        selection_reason=reason,
+        rejected_symbols=[symbol for symbol in scope_symbols if symbol != selected_symbol],
+        user_constraint=str(constraints.get("user_constraint") or evidence.frame.raw_message or "").strip(),
+        candidate_scope=scope_symbols,
+        confidence=max(0.0, min(1.0, confidence)),
+        source_run_id=(evidence.active_run.run_id if evidence.active_run else None),
+        model_reasoning_summary=str(constraints.get("model_reasoning_summary") or "").strip() or None,
+    )
+    canonical_run = build_canonical_run(book=evidence.book, run=evidence.active_run, picks=evidence.active_run.picks) if evidence.active_run else None
+    return Judgment(
+        kind="candidate_compare",
+        summary=artifact.selection_reason,
+        run=evidence.active_run,
+        canonical_run=canonical_run,
+        subject_entry=selected_entry,
+        compare_entries=scoped_entries,
+        candidate_comparison=artifact,
+        evidence_refs=[evidence.book.book_version, *([evidence.active_run.run_id] if evidence.active_run else [])],
+    )
+
+
+def intraday_situation_workflow(evidence: EvidencePack) -> Judgment:
+    base = live_entry_workflow(evidence)
+    live_entry = base.live_entry
+    quote = dict(getattr(live_entry, "quote_snapshot", {}) or {}) if live_entry is not None else {}
+    user_quote = dict(quote.get("user_quote") or {})
+    verified = bool(quote.get("verified"))
+    source = "verified" if verified else ("unverified_user_input" if quote.get("source") == "user" else "quote_unavailable")
+    symbol = (live_entry.symbol if live_entry is not None else None) or str((evidence.frame.references or {}).get("symbol") or "").strip() or None
+    if live_entry is not None:
+        summary = live_entry.summary
+    elif base.no_trade is not None:
+        summary = base.no_trade.status_reason
+    else:
+        summary = "盘中情况暂时没有足够可核对的标的。"
+    artifact = IntradaySituationArtifact(
+        symbol=symbol,
+        source=source,
+        verified=verified,
+        user_quote=user_quote,
+        quote_snapshot=quote,
+        live_entry=live_entry,
+        summary=summary,
+        source_run_id=(base.run.run_id if base.run else None),
+    )
+    return base.model_copy(
+        update={
+            "kind": "intraday_situation",
+            "summary": summary,
+            "intraday_situation": artifact,
+        }
     )
 
 

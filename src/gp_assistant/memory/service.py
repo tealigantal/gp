@@ -57,7 +57,15 @@ def commit_turn(session_id: str, user_message: str, reply: ReplyBundle, judgment
     session.last_turn_id = turn_id
     k = (judgment.kind or '').lower()
     if k != 'chat':
-        if judgment.run is not None:
+        if judgment.candidate_comparison is not None and judgment.candidate_comparison.selected_symbol:
+            session.focus_subject = {'type': 'symbol', 'symbol': judgment.candidate_comparison.selected_symbol}
+            session.last_focus_symbol = judgment.candidate_comparison.selected_symbol
+            session.last_focus_rank = judgment.candidate_comparison.selected_rank
+            session.compare_set = list(judgment.candidate_comparison.compared_symbols[:3])
+        elif judgment.intraday_situation is not None and judgment.intraday_situation.symbol:
+            session.focus_subject = {'type': 'symbol', 'symbol': judgment.intraday_situation.symbol}
+            session.last_focus_symbol = judgment.intraday_situation.symbol
+        elif judgment.run is not None:
             session.previous_run_id = session.active_run_id
             session.active_run_id = judgment.run.run_id
             session.last_seen_book_version = judgment.run.book_version

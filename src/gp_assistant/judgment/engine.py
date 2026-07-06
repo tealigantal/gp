@@ -4,7 +4,9 @@ from ..contracts.objects import EvidencePack, Judgment, TurnFrame
 from .chat import judge_chat
 from .workflow import (
     compare_workflow,
+    candidate_compare_workflow,
     exit_workflow,
+    intraday_situation_workflow,
     live_entry_workflow,
     no_trade_workflow,
     pick_detail_workflow,
@@ -31,6 +33,10 @@ def make_judgment(session_id: str, frame: TurnFrame, evidence: EvidencePack) -> 
         return live_entry_workflow(evidence)
     if frame.request == "compare":
         return compare_workflow(evidence)
+    if frame.request == "candidate_compare":
+        return candidate_compare_workflow(evidence)
+    if frame.request == "intraday_situation":
+        return intraday_situation_workflow(evidence)
     if frame.request == "exit_decision":
         return exit_workflow(evidence)
     if frame.request == "run_change":

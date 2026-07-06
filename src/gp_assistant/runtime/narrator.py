@@ -184,6 +184,39 @@ def _compare_fallback_text(judgment: Judgment) -> str:
     return "\n".join(lines) or judgment.summary
 
 
+def _candidate_compare_fallback_text(judgment: Judgment) -> str:
+    view = judgment.candidate_comparison
+    if view is None:
+        return judgment.summary
+    if not view.selected_symbol:
+        return f"我按你的约束比较了当前候选，但没有选出足够明确的一只。{view.selection_reason}"
+    rank = f"第 {view.selected_rank} 只" if view.selected_rank is not None else "当前候选"
+    lines = [
+        f"按你的约束，我会选 {rank}：{view.selected_symbol}。",
+        f"理由：{view.selection_reason}",
+    ]
+    if view.rejected_symbols:
+        lines.append(f"其余候选暂不优先：{'、'.join(view.rejected_symbols)}。")
+    lines.append("这个判断使用模型对名称、代码、上下文和你给出的约束的理解；交易执行仍以本地计划和盘中核验为准。")
+    return "\n".join(lines)
+
+
+def _intraday_situation_fallback_text(judgment: Judgment) -> str:
+    situation = judgment.intraday_situation
+    if situation is None:
+        return judgment.summary
+    live_entry = situation.live_entry
+    source_text = "本地行情已验证" if situation.verified else "盘中价未能验证，只按你提供的数据做条件判断"
+    symbol = situation.symbol or "这只票"
+    if live_entry is None:
+        return f"{symbol}：{source_text}。{situation.summary or judgment.summary}"
+    return (
+        f"{symbol} 当前判断：{live_entry.summary}\n"
+        f"数据来源：{source_text}。\n"
+        f"下一步：{live_entry.next_action}"
+    )
+
+
 def _exit_fallback_text(judgment: Judgment) -> str:
     exit_view = judgment.exit_decision
     if exit_view is None:
@@ -279,6 +312,10 @@ def _fallback_text(judgment: Judgment) -> str:
         return _live_entry_fallback_text(judgment)
     if judgment.kind == "compare":
         return _compare_fallback_text(judgment)
+    if judgment.kind == "candidate_compare":
+        return _candidate_compare_fallback_text(judgment)
+    if judgment.kind == "intraday_situation":
+        return _intraday_situation_fallback_text(judgment)
     if judgment.kind == "exit_decision":
         return _exit_fallback_text(judgment)
     if judgment.kind == "run_change":
@@ -419,6 +456,43 @@ def _build_canonical_message(evidence: EvidencePack, judgment: Judgment, text: s
             "followup_suggestions": ["为什么第二个不是第一", "第二只差在哪", "这只现在还能买吗"],
             "freshness_meta": _freshness_meta(evidence, run),
         }
+    if judgment.kind == "candidate_compare":
+        run = judgment.canonical_run
+        view = judgment.candidate_comparison
+        return {
+            "message_kind": "candidate_compare",
+            "narrative_text": text,
+            "candidate_compare": (view.model_dump() if view else {}),
+            "compare": {
+                "compared_symbols": (view.compared_symbols if view else []),
+                "leader_symbol": (view.selected_symbol if view else None),
+                "ranking": [
+                    {"symbol": symbol, "selected": bool(view and symbol == view.selected_symbol)}
+                    for symbol in (view.candidate_scope if view else [])
+                ],
+                "comparison_points": ([view.selection_reason] if view and view.selection_reason else []),
+                "source_run_id": (view.source_run_id if view else None),
+                "data_provenance": {"source": "model_selection_with_program_scope_check"},
+            },
+            "run": (run.model_dump() if run else None),
+            "symbols": (view.compared_symbols if view else []),
+            "followup_suggestions": ["这只现在还能买吗", "和第一只比呢", "按盘中情况再看一下"],
+            "freshness_meta": _freshness_meta(evidence, run),
+        }
+    if judgment.kind == "intraday_situation":
+        run = judgment.canonical_run
+        situation = judgment.intraday_situation
+        symbol = situation.symbol if situation else None
+        return {
+            "message_kind": "intraday_situation",
+            "narrative_text": text,
+            "intraday_situation": (situation.model_dump() if situation else {}),
+            "live_check": (situation.live_entry.model_dump() if situation and situation.live_entry else {}),
+            "run": (run.model_dump() if run else None),
+            "symbol": symbol,
+            "followup_suggestions": ["要不要等回踩", "如果再冲高怎么办", "止损放哪里"],
+            "freshness_meta": _freshness_meta(evidence, run),
+        }
     if judgment.kind == "exit_decision":
         run = judgment.canonical_run
         exit_view = judgment.exit_decision
@@ -523,6 +597,14 @@ def _decision_basis(evidence: EvidencePack, judgment: Judgment) -> DecisionBasis
     elif judgment.compare_view is not None:
         labels.extend(["相对强弱", "执行优先级"])
         selection_reason = judgment.summary
+    elif judgment.candidate_comparison is not None:
+        labels.extend(["模型候选选择", "候选范围校验"])
+        selection_reason = judgment.candidate_comparison.selection_reason or judgment.summary
+    elif judgment.intraday_situation is not None:
+        labels.extend(["盘中用户输入", "执行判断"])
+        selection_reason = judgment.intraday_situation.summary or judgment.summary
+        if not judgment.intraday_situation.verified:
+            risk_notes.append("盘中价未能验证，只能按用户提供的数据条件判断")
     elif judgment.exit_decision is not None:
         labels.extend(["持仓风控", "止盈止损"])
         selection_reason = judgment.exit_decision.reason or judgment.summary
@@ -564,7 +646,11 @@ def build_structured_reply(
     run = judgment.canonical_run
     message = _build_canonical_message(evidence, judgment, text)
     symbols: List[str] = []
-    if run is not None:
+    if judgment.candidate_comparison is not None:
+        symbols = [symbol for symbol in judgment.candidate_comparison.compared_symbols if symbol]
+    elif judgment.intraday_situation is not None and judgment.intraday_situation.symbol:
+        symbols = [judgment.intraday_situation.symbol]
+    elif run is not None:
         symbols = [pick.symbol for pick in run.picks]
     elif judgment.single_stock_analysis is not None and judgment.single_stock_analysis.symbol:
         symbols = [judgment.single_stock_analysis.symbol]
@@ -599,6 +685,7 @@ def build_structured_reply(
         grounding_summary=_grounding_summary(evidence, judgment).model_dump(),
         decision_basis=_decision_basis(evidence, judgment).model_dump(),
         tool_trace={},
+        agent_trace={},
     )
 
 

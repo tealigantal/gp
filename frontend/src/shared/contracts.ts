@@ -191,6 +191,30 @@ export interface CompareArtifact {
   explain_context?: Record<string, unknown>
 }
 
+export interface CandidateComparisonArtifact {
+  compared_symbols: string[]
+  selected_symbol?: string | null
+  selected_rank?: number | null
+  selection_reason: string
+  rejected_symbols: string[]
+  user_constraint: string
+  candidate_scope: string[]
+  confidence: number
+  source_run_id?: string | null
+  model_reasoning_summary?: string | null
+}
+
+export interface IntradaySituationArtifact {
+  symbol?: string | null
+  source: string
+  verified: boolean
+  user_quote: Record<string, unknown>
+  quote_snapshot: Record<string, unknown>
+  live_entry?: LiveEntryDecision | null
+  summary: string
+  source_run_id?: string | null
+}
+
 export interface RunChangeArtifact {
   current_run_id?: string | null
   previous_run_id?: string | null
@@ -269,6 +293,28 @@ export interface CanonicalCompareMessage {
   freshness_meta?: Record<string, unknown>
 }
 
+export interface CanonicalCandidateCompareMessage {
+  message_kind: 'candidate_compare'
+  narrative_text: string
+  candidate_compare: CandidateComparisonArtifact
+  compare: CompareArtifact
+  run?: CanonicalRunArtifact | null
+  symbols?: string[]
+  followup_suggestions?: string[]
+  freshness_meta?: Record<string, unknown>
+}
+
+export interface CanonicalIntradaySituationMessage {
+  message_kind: 'intraday_situation'
+  narrative_text: string
+  intraday_situation: IntradaySituationArtifact
+  live_check: LiveEntryDecision
+  run?: CanonicalRunArtifact | null
+  symbol?: string | null
+  followup_suggestions?: string[]
+  freshness_meta?: Record<string, unknown>
+}
+
 export interface CanonicalExitDecisionMessage {
   message_kind: 'exit_decision'
   narrative_text: string
@@ -310,6 +356,8 @@ export type CanonicalMessage =
   | CanonicalSingleStockQueryMessage
   | CanonicalLiveEntryMessage
   | CanonicalCompareMessage
+  | CanonicalCandidateCompareMessage
+  | CanonicalIntradaySituationMessage
   | CanonicalExitDecisionMessage
   | CanonicalRunChangeMessage
   | CanonicalTermExplainMessage

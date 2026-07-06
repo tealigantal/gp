@@ -40,7 +40,8 @@ x-gp-env: &gp-env
   GP_TRADEABLE_MIN_CANDIDATES: ${GP_TRADEABLE_MIN_CANDIDATES:-20}
   LLM_BASE_URL: ${LLM_BASE_URL:-https://api.deepseek.com/beta}
   LLM_API_KEY: ${LLM_API_KEY:-}
-  CHAT_MODEL: ${CHAT_MODEL:-deepseek-chat}
+  CHAT_MODEL: ${CHAT_MODEL:-deepseek-v4-flash}
+  AGENT_MODEL: ${AGENT_MODEL:-deepseek-v4-flash}
 
 x-gp-volumes: &gp-volumes
   - ./data:/app/data

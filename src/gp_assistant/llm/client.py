@@ -15,7 +15,8 @@ class LLMClient:
         cfg = load_config()
         self.base_url = (base_url or cfg.llm_base_url or "").strip()
         self.api_key = (api_key or cfg.llm_api_key or "").strip()
-        self.model = (model or cfg.chat_model or "deepseek-chat").strip()
+        self.model = (model or cfg.chat_model or "deepseek-v4-flash").strip()
+        self.agent_model = (getattr(cfg, "agent_model", None) or self.model).strip()
         self.timeout = cfg.request_timeout_sec
 
     @staticmethod
@@ -83,6 +84,27 @@ class LLMClient:
         resp.raise_for_status()
         return resp.json()
 
+    @staticmethod
+    def strict_tool(
+        *,
+        name: str,
+        description: str,
+        parameters: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        schema = dict(parameters or {})
+        schema.setdefault("type", "object")
+        schema.setdefault("properties", {})
+        schema.setdefault("additionalProperties", False)
+        return {
+            "type": "function",
+            "function": {
+                "name": name,
+                "description": description,
+                "parameters": schema,
+                "strict": True,
+            },
+        }
+
     def run_chat_with_tools(
         self,
         messages: List[Dict[str, Any]],
@@ -90,7 +112,9 @@ class LLMClient:
         *,
         temperature: float = 0.2,
         model: Optional[str] = None,
-        tool_choice: Optional[str] = None,
+        tool_choice: Optional[Any] = None,
+        thinking: Optional[Dict[str, Any]] = None,
+        extra: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         ok, reason = self.available()
         if not ok:
@@ -98,15 +122,21 @@ class LLMClient:
 
         url = self.base_url.rstrip("/") + "/chat/completions"
         payload: Dict[str, Any] = {
-            "model": model or self.model or "deepseek-chat",
+            "model": model or self.model or "deepseek-v4-flash",
             "messages": messages,
             "temperature": float(temperature),
             "stream": False,
         }
         if tools:
             payload["tools"] = tools
-        if tool_choice:
-            payload["tool_choice"] = str(tool_choice)
+        if tool_choice is not None:
+            payload["tool_choice"] = tool_choice
+        if thinking is not None:
+            payload["thinking"] = thinking
+        if extra:
+            for key, value in extra.items():
+                if key not in payload and value is not None:
+                    payload[key] = value
         headers = {
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json",
@@ -123,4 +153,23 @@ class LLMClient:
             "role": msg.get("role") or "assistant",
             "content": msg.get("content"),
             "tool_calls": msg.get("tool_calls") or [],
+            "reasoning_content": msg.get("reasoning_content"),
         }
+
+    def agent_tool_step(
+        self,
+        messages: List[Dict[str, Any]],
+        tools: List[Dict[str, Any]],
+        *,
+        tool_choice: Optional[Any] = "required",
+        temperature: float = 0.0,
+        thinking: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        return self.run_chat_with_tools(
+            messages,
+            tools=tools,
+            temperature=temperature,
+            model=self.agent_model,
+            tool_choice=tool_choice,
+            thinking=thinking,
+        )

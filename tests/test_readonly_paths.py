@@ -3,15 +3,7 @@ from __future__ import annotations
 from fastapi.testclient import TestClient
 
 from gp_assistant.book import repo
-from gp_assistant.contracts.objects import (
-    DayBook,
-    EvidencePack,
-    Judgment,
-    MarketBook,
-    ReplyBundle,
-    SessionState,
-    TurnFrame,
-)
+from gp_assistant.contracts.objects import DayBook, MarketBook, SessionState
 from gp_assistant.gateway import routes
 from gp_assistant.gateway.app import app
 from gp_assistant.runtime import turn_loop
@@ -43,17 +35,38 @@ def _book() -> MarketBook:
 
 def test_run_turn_sync_does_not_refresh_or_write(monkeypatch):
     book = _book()
-    frame = TurnFrame(frame_id="f1", raw_message="现在怎么看", subject="market", request="chat", freshness="current_book")
-    evidence = EvidencePack(frame=frame, session=SessionState(session_id="s1", created_at="t", updated_at="t"), book=book)
-    judgment = Judgment(kind="chat", summary="readonly")
-    reply = ReplyBundle(session_id="s1", text="readonly", kind="chat")
+
+    class _LLM:
+        def available(self):
+            return True, "ok"
+
+        def agent_tool_step(self, messages, tools, tool_choice="required", temperature=0.0):
+            return {
+                "role": "assistant",
+                "content": None,
+                "tool_calls": [
+                    {
+                        "id": "call_1",
+                        "type": "function",
+                        "function": {
+                            "name": "answer_chat",
+                            "arguments": "{\"answer\":\"readonly\",\"reason\":\"readonly path\"}",
+                        },
+                    }
+                ],
+            }
 
     monkeypatch.setattr(turn_loop, "load_current_book", lambda: book)
-    monkeypatch.setattr(turn_loop, "parse_concern", lambda memory_ctx, loaded_book, user_message: frame)
-    monkeypatch.setattr(turn_loop, "plan_evidence", lambda parsed_frame: {})
-    monkeypatch.setattr(turn_loop, "build_evidence_pack", lambda frame, memory_ctx, loaded_book, plan, invalidate_active_run=False: evidence)
-    monkeypatch.setattr(turn_loop, "make_judgment", lambda session_id, frame, evidence: judgment)
-    monkeypatch.setattr(turn_loop, "build_reply", lambda session_id, frame, evidence, judgment, recent_turns=None: reply)
+    monkeypatch.setattr(turn_loop, "LLMClient", _LLM)
+    monkeypatch.setattr(
+        turn_loop,
+        "load_memory_context",
+        lambda session_id: {
+            "session": SessionState(session_id="s1", created_at="t", updated_at="t"),
+            "recent_turns": [],
+            "recent_claims": [],
+        },
+    )
     monkeypatch.setattr(turn_loop, "validate_reply", lambda reply, judgment: None)
     monkeypatch.setattr(turn_loop, "commit_turn", lambda **kwargs: None)
     monkeypatch.setattr(repo, "save_current_pointer", lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("unexpected write")))

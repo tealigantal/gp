@@ -491,6 +491,30 @@ class CompareArtifact(GPModel):
     explain_context: Dict[str, Any] = Field(default_factory=dict)
 
 
+class CandidateComparisonArtifact(GPModel):
+    compared_symbols: List[str] = Field(default_factory=list)
+    selected_symbol: Optional[str] = None
+    selected_rank: Optional[int] = None
+    selection_reason: str = ""
+    rejected_symbols: List[str] = Field(default_factory=list)
+    user_constraint: str = ""
+    candidate_scope: List[str] = Field(default_factory=list)
+    confidence: float = 0.0
+    source_run_id: Optional[str] = None
+    model_reasoning_summary: Optional[str] = None
+
+
+class IntradaySituationArtifact(GPModel):
+    symbol: Optional[str] = None
+    source: str = "unverified_user_input"
+    verified: bool = False
+    user_quote: Dict[str, Any] = Field(default_factory=dict)
+    quote_snapshot: Dict[str, Any] = Field(default_factory=dict)
+    live_entry: Optional[LiveEntryDecisionArtifact] = None
+    summary: str = ""
+    source_run_id: Optional[str] = None
+
+
 class RunChangeArtifact(GPModel):
     current_run_id: Optional[str] = None
     previous_run_id: Optional[str] = None
@@ -534,6 +558,15 @@ class AgentToolResult(GPModel):
     tool_trace: Dict[str, Any] = Field(default_factory=dict)
 
 
+class AgentActionTrace(GPModel):
+    selected_tools: List[str] = Field(default_factory=list)
+    final_tool: Optional[str] = None
+    max_tool_rounds: int = 3
+    stopped_reason: str = "completed"
+    reasoning_content_seen: bool = False
+    errors: List[str] = Field(default_factory=list)
+
+
 class EvidencePack(GPModel):
     frame: TurnFrame
     session: SessionState
@@ -561,6 +594,8 @@ class Judgment(GPModel):
     no_trade: Optional[NoTradeArtifact] = None
     exit_decision: Optional[ExitDecisionArtifact] = None
     compare_view: Optional[CompareArtifact] = None
+    candidate_comparison: Optional[CandidateComparisonArtifact] = None
+    intraday_situation: Optional[IntradaySituationArtifact] = None
     run_change_view: Optional[RunChangeArtifact] = None
     exit_view: Dict[str, Any] = Field(default_factory=dict)
     claims: List[Claim] = Field(default_factory=list)
@@ -583,3 +618,4 @@ class ReplyBundle(GPModel):
     grounding_summary: Dict[str, Any] = Field(default_factory=dict)
     decision_basis: Dict[str, Any] = Field(default_factory=dict)
     tool_trace: Dict[str, Any] = Field(default_factory=dict)
+    agent_trace: Dict[str, Any] = Field(default_factory=dict)

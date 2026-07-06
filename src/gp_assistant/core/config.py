@@ -53,7 +53,9 @@ class AppConfig:
     # LLM
     llm_base_url: Optional[str] = os.getenv("LLM_BASE_URL")
     llm_api_key: Optional[str] = os.getenv("LLM_API_KEY")
-    chat_model: str = os.getenv("CHAT_MODEL", "deepseek-chat")
+    chat_model: str = os.getenv("CHAT_MODEL", "deepseek-v4-flash")
+    agent_model: str = os.getenv("AGENT_MODEL", os.getenv("CHAT_MODEL", "deepseek-v4-flash"))
+    agent_max_tool_rounds: int = int(os.getenv("GP_AGENT_MAX_TOOL_ROUNDS", "3"))
 
     # AkShare routes (optional)
     ak_spot_priority: List[str] = field(default_factory=lambda: ["em", "sina"])

@@ -95,7 +95,27 @@ function renderFromCanonical(
       </Space>
     )
   }
+  if (message.message_kind === 'intraday_situation') {
+    return (
+      <Space direction="vertical" size={10} style={{ width: '100%' }}>
+        {message.live_check ? (
+          <LiveCheckMessageCard view={message.live_check} text={message.narrative_text} />
+        ) : (
+          <FollowupTextMessage content={message.narrative_text} label="盘中分析" />
+        )}
+        <SuggestedFollowups suggestions={message.followup_suggestions} onPick={(text) => onPrompt?.(text)} />
+      </Space>
+    )
+  }
   if (message.message_kind === 'compare') {
+    return (
+      <Space direction="vertical" size={10} style={{ width: '100%' }}>
+        <CompareMessageCard compare={message.compare} text={message.narrative_text} />
+        <SuggestedFollowups suggestions={message.followup_suggestions} onPick={(text) => onPrompt?.(text)} />
+      </Space>
+    )
+  }
+  if (message.message_kind === 'candidate_compare') {
     return (
       <Space direction="vertical" size={10} style={{ width: '100%' }}>
         <CompareMessageCard compare={message.compare} text={message.narrative_text} />

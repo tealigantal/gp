@@ -106,21 +106,25 @@ def test_run_turn_sync_term_explain_bypasses_repair_block(monkeypatch):
         def available(self):
             return True, None
 
-        def run_chat_with_tools(self, messages, tools, temperature=0.0):
-            name = tools[0]["function"]["name"]
+        def agent_tool_step(self, messages, tools, tool_choice="required", temperature=0.0):
             return {
                 "role": "assistant",
                 "content": None,
-                "tool_calls": [{"id": name, "type": "function", "function": {"name": name, "arguments": "{}"}}],
+                "tool_calls": [
+                    {
+                        "id": "call_1",
+                        "type": "function",
+                        "function": {
+                            "name": "answer_chat",
+                            "arguments": "{\"answer\":\"收盘有效跌破支撑带是这轮计划里的止损/失效边界。\",\"reason\":\"term\"}",
+                        },
+                    }
+                ],
             }
-
-        def chat(self, messages, temperature=0.2):
-            return {"choices": [{"message": {"content": "收盘有效跌破支撑带是这轮计划里的止损/失效边界。"}}]}
 
     monkeypatch.setattr(turn_loop, "LLMClient", _LLM)
     monkeypatch.setattr(turn_loop, "load_memory_context", lambda session_id: {"session": session, "recent_turns": [turn]})
     monkeypatch.setattr(turn_loop, "load_current_book", lambda: book)
-    monkeypatch.setattr(turn_loop, "parse_concern", lambda memory_ctx, loaded_book, user_message: frame)
     monkeypatch.setattr(
         turn_loop,
         "load_repair_status_snapshot",
@@ -139,7 +143,7 @@ def test_run_turn_sync_term_explain_bypasses_repair_block(monkeypatch):
 
     out = turn_loop.run_turn_sync(session_id="s1", user_message="什么是收盘有效跌破支撑带")
 
-    assert out["message"]["message_kind"] == "term_explain"
+    assert out["message"]["message_kind"] == "chat"
     assert "收盘有效跌破支撑带" in out["reply"]
     assert "暂不发布正式市场结论" not in out["reply"]
 
@@ -245,13 +249,12 @@ def test_run_turn_sync_tool_agent_failure_does_not_use_legacy_fallback(monkeypat
         def available(self):
             return True, None
 
-        def run_chat_with_tools(self, messages, tools, temperature=0.0):
+        def agent_tool_step(self, messages, tools, tool_choice="required", temperature=0.0):
             raise RuntimeError("tool call failed")
 
     monkeypatch.setattr(turn_loop, "LLMClient", _FailingLLM)
     monkeypatch.setattr(turn_loop, "load_memory_context", lambda session_id: {"session": session, "recent_turns": []})
     monkeypatch.setattr(turn_loop, "load_current_book", lambda: book)
-    monkeypatch.setattr(turn_loop, "parse_concern", lambda memory_ctx, loaded_book, user_message: frame)
     monkeypatch.setattr(turn_loop, "load_repair_status_snapshot", lambda: None)
 
     def _commit_turn(**kwargs):

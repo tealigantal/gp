@@ -40,6 +40,14 @@ def plan_evidence(frame: TurnFrame) -> Dict[str, Any]:
         need["need_active_run"] = True
         need["need_compare_entries"] = True
         return need
+    if frame.request == "candidate_compare":
+        need["need_active_run"] = True
+        need["need_compare_entries"] = True
+        return need
+    if frame.request == "intraday_situation":
+        need["need_active_run"] = True
+        need["need_subject_entry"] = True
+        return need
     if frame.request == "exit_decision":
         need["need_active_run"] = True
         need["need_subject_entry"] = True

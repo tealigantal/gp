@@ -200,6 +200,8 @@ def validate_turn_frame(frame: TurnFrame) -> TurnFrame:
         "live_entry_check",
         "no_trade_explain",
         "compare",
+        "candidate_compare",
+        "intraday_situation",
         "exit_decision",
         "run_change",
     }

@@ -15,6 +15,8 @@ RequestType = Literal[
     "live_entry_check",
     "no_trade_explain",
     "compare",
+    "candidate_compare",
+    "intraday_situation",
     "exit_decision",
     "run_change",
     # legacy aliases
