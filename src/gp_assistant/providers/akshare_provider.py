@@ -57,12 +57,13 @@ class AkShareProvider(MarketDataProvider):
         - price: float
         - pct_chg: float (percent units, e.g., 1.23)
         - chg: float (absolute change)
+        - open/high/low/prev_close: intraday snapshot fields when available
         - volume: float
         - amount: float (成交额)
         - ts: optional timestamp
         """
         if not isinstance(df, pd.DataFrame) or df.empty:
-            return pd.DataFrame(columns=["code", "symbol", "name", "price", "pct_chg", "chg", "volume", "amount", "ts"])  # type: ignore[arg-type]
+            return pd.DataFrame(columns=["code", "symbol", "name", "price", "pct_chg", "chg", "open", "high", "low", "prev_close", "volume", "amount", "ts"])  # type: ignore[arg-type]
 
         raw_cols = [str(c) for c in list(df.columns)]
         x = df.copy()
@@ -89,6 +90,10 @@ class AkShareProvider(MarketDataProvider):
         price_col = _pick(["最新价", "现价", "close", "最新", "价格", "收盘价"]) or None
         pct_col = _pick(["涨跌幅", "涨幅", "涨跌幅(%)", "涨跌幅%", "pct_chg", "changePct"]) or None
         chg_col = _pick(["涨跌额", "涨跌", "change"]) or None
+        open_col = _pick(["今开", "开盘", "open"]) or None
+        high_col = _pick(["最高", "最高价", "high"]) or None
+        low_col = _pick(["最低", "最低价", "low"]) or None
+        prev_close_col = _pick(["昨收", "昨收价", "prev_close", "previous_close"]) or None
         vol_col = _pick(["成交量", "成交量(手)", "成交量(股)", "总手", "volume"]) or None
         amt_col = _pick(["成交额", "成交额(元)", "金额", "turnover", "amount"]) or None
         ts_col = _pick(["更新时间", "时间", "时间戳", "timestamp"]) or None
@@ -155,6 +160,22 @@ class AkShareProvider(MarketDataProvider):
             out["chg"] = _coerce_num(x[chg_col])
         else:
             out["chg"] = pd.NA
+        if open_col and open_col in x.columns:
+            out["open"] = _coerce_num(x[open_col])
+        else:
+            out["open"] = pd.NA
+        if high_col and high_col in x.columns:
+            out["high"] = _coerce_num(x[high_col])
+        else:
+            out["high"] = pd.NA
+        if low_col and low_col in x.columns:
+            out["low"] = _coerce_num(x[low_col])
+        else:
+            out["low"] = pd.NA
+        if prev_close_col and prev_close_col in x.columns:
+            out["prev_close"] = _coerce_num(x[prev_close_col])
+        else:
+            out["prev_close"] = pd.NA
         if vol_col and vol_col in x.columns:
             out["volume"] = _coerce_num(x[vol_col])
         else:
@@ -180,7 +201,7 @@ class AkShareProvider(MarketDataProvider):
         # attach meta to self for later retrieval
         schema_meta = {
             "schema": {
-                "canonical": ["code", "symbol", "name", "price", "pct_chg", "chg", "volume", "amount", "ts"],
+                "canonical": ["code", "symbol", "name", "price", "pct_chg", "chg", "open", "high", "low", "prev_close", "volume", "amount", "ts"],
                 "raw_columns": raw_cols,
                 "route": route,
             },

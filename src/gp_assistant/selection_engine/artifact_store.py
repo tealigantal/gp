@@ -164,6 +164,7 @@ def build_v2_dict_from_v1(payload: Dict[str, Any], *, risk_profile: Optional[str
         "universe_name": v2.universe_name,
         "symbols": v2.symbols,
         "themes": v2.themes,
+        "market_context": v2.market_context,
         "items": [it.__dict__ for it in v2.items],
         "artifact_version": "v2",
         "fallback_used": False,

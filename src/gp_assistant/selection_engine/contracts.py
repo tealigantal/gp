@@ -67,6 +67,12 @@ class PickItemV2:
     invalidation: List[str] = field(default_factory=list)
     # Phase 2.6: separate current invalidated status from rule list
     invalidated_now: bool = False
+    tail_confirmation_score: Optional[float] = None
+    strategy_weight: Optional[float] = None
+    rr_capped: Optional[bool] = None
+    breakdown_penalty: Optional[float] = None
+    hot_board_score: Optional[float] = None
+    midday_adjustment_reason_codes: List[str] = field(default_factory=list)
     notes: Optional[str] = None
     evidence: Dict[str, Any] = field(default_factory=lambda: EvidencePlaceholder().__dict__)
     # Phase 2.6: internal score basis (not for frontend reliance)
@@ -87,6 +93,7 @@ class PickArtifactV2:
     symbols: List[str]
     themes: List[str]
     items: List[PickItemV2]
+    market_context: Dict[str, Any] = field(default_factory=dict)
 
 
 def _safe_float(v: Any) -> Optional[float]:
@@ -299,6 +306,12 @@ def build_v2_from_v1(payload: Dict[str, Any], *, risk_profile: Optional[str] = N
             rr = _safe_float(diag.get("reward_risk"))
             actionable = bool(diag.get("actionable") is True)
             state = str(diag.get("execution_state") or "") or None
+            tail_confirmation_score = _safe_float(p.get("tail_confirmation_score"))
+            strategy_weight = _safe_float(p.get("strategy_weight"))
+            breakdown_penalty = _safe_float(p.get("breakdown_penalty"))
+            hot_board_score = _safe_float(p.get("hot_board_score"))
+            rr_capped = bool(p.get("rr_capped") is True or diag.get("rr_capped") is True)
+            midday_codes = [str(x) for x in (p.get("midday_adjustment_reason_codes") or []) if isinstance(x, str)]
             # signal age from setup_age (bars proxy)
             age = _safe_int(diag.get("setup_age"))
             # liquidity grade best-effort
@@ -337,6 +350,17 @@ def build_v2_from_v1(payload: Dict[str, Any], *, risk_profile: Optional[str] = N
             try:
                 if rr is not None:
                     basis["reward_risk_raw"] = rr
+            except Exception:
+                pass
+            try:
+                if tail_confirmation_score is not None:
+                    basis["tail_confirmation_score"] = tail_confirmation_score
+                if breakdown_penalty is not None:
+                    basis["breakdown_penalty"] = breakdown_penalty
+                if hot_board_score is not None:
+                    basis["hot_board_score"] = hot_board_score
+                if strategy_weight is not None:
+                    basis["strategy_weight"] = strategy_weight
             except Exception:
                 pass
             try:
@@ -379,6 +403,12 @@ def build_v2_from_v1(payload: Dict[str, Any], *, risk_profile: Optional[str] = N
                 actionable=actionable,
                 # Phase 2.6: default not invalidated unless we can prove otherwise
                 invalidated_now=False,
+                tail_confirmation_score=tail_confirmation_score,
+                strategy_weight=strategy_weight,
+                rr_capped=rr_capped,
+                breakdown_penalty=breakdown_penalty,
+                hot_board_score=hot_board_score,
+                midday_adjustment_reason_codes=midday_codes,
                 signal_age_days=age,
                 liquidity_grade=liq,
                 volatility_grade=vol,
@@ -403,4 +433,5 @@ def build_v2_from_v1(payload: Dict[str, Any], *, risk_profile: Optional[str] = N
         symbols=symbols,
         themes=theme_names,
         items=items,
+        market_context=dict(payload.get("market_context") or {}),
     )

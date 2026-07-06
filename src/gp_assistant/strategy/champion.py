@@ -1,11 +1,11 @@
 # 简介：冠军选择器。基于得分与策略兼容性为每个标的挑选“冠军”执行方案摘要。
 from __future__ import annotations
 
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Mapping
 from . import library as strat_lib
 
 
-def choose_champion(candidates: List[Dict[str, Any]]) -> Dict[str, Any]:
+def choose_champion(candidates: List[Dict[str, Any]], strategy_weights: Mapping[str, float] | None = None) -> Dict[str, Any]:
     """Select champion strategy for each symbol using per-strategy metrics.
 
     Inputs per candidate:
@@ -24,6 +24,7 @@ def choose_champion(candidates: List[Dict[str, Any]]) -> Dict[str, Any]:
 
     out: Dict[str, Any] = {}
     meta_map = getattr(strat_lib, "METADATA", {}) or {}
+    weights = dict(strategy_weights or {})
 
     for it in candidates:
         sym = it.get("symbol")
@@ -93,7 +94,12 @@ def choose_champion(candidates: List[Dict[str, Any]]) -> Dict[str, Any]:
             )
             cv_component = 0.10 * cv_wr + 0.05 * max(0.0, cv_mr) - 0.05 * abs(cv_dd)
             meta_penalty = pen + sample_boost
-            score = event_component + cv_component + meta_penalty + setup_penalty
+            try:
+                dyn_weight = float(weights.get(str(sid), 1.0))
+            except Exception:
+                dyn_weight = 1.0
+            dyn_component = max(-0.35, min(0.25, dyn_weight - 1.0))
+            score = event_component + cv_component + meta_penalty + setup_penalty + dyn_component
             if score > best_score:
                 best_score = score
                 best = {
@@ -101,6 +107,7 @@ def choose_champion(candidates: List[Dict[str, Any]]) -> Dict[str, Any]:
                     "cv": cv,
                     "event": ev,
                     "score": float(score),
+                    "strategy_weight": float(dyn_weight),
                     "meta_penalty": float(meta_penalty),
                     "setup_penalty": float(setup_penalty),
                     "freshness_state": freshness_state,
@@ -110,10 +117,11 @@ def choose_champion(candidates: List[Dict[str, Any]]) -> Dict[str, Any]:
                         "cv_component": float(cv_component),
                         "meta_penalty": float(meta_penalty),
                         "setup_penalty": float(setup_penalty),
+                        "strategy_weight_component": float(dyn_component),
                         "total": float(score),
                     },
                 }
         if best is None:
-            best = {"strategy": "NA", "cv": {}, "event": {}, "score": 0.0, "reasons": ["no_strategies"], "setup_penalty": -0.5, "freshness_state": "missing", "score_breakdown": {"event_component": 0.0, "cv_component": 0.0, "meta_penalty": 0.0, "setup_penalty": -0.5, "total": -0.5}}
+            best = {"strategy": "NA", "cv": {}, "event": {}, "score": 0.0, "strategy_weight": 1.0, "reasons": ["no_strategies"], "setup_penalty": -0.5, "freshness_state": "missing", "score_breakdown": {"event_component": 0.0, "cv_component": 0.0, "meta_penalty": 0.0, "setup_penalty": -0.5, "strategy_weight_component": 0.0, "total": -0.5}}
         out[sym] = best
     return out

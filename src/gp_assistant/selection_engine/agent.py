@@ -36,6 +36,10 @@ from ..core.strict import is_strict
 from .candidate_gen import generate_candidates
 from ..providers.boards import is_mainboard
 from ..providers.factory import get_provider
+from .hot_boards import build_hot_board_snapshot, score_symbols_for_hot_boards, summarize_hot_board_snapshot
+from .market_context import annotate_tail_confirmation, build_market_context
+from .strategy_weights import load_tail_strategy_weights, weight_map
+from .tail_risk import effective_reward_risk
 
 # ---- Execution semantics thresholds (centralized constants) ----
 # Gap thresholds between last_close and S1 for execution state decisions
@@ -235,6 +239,7 @@ def run(date: Optional[str] = None, topk: int = 3, universe: str = "auto", symbo
         env = score_regime(hub, snapshot=snapshot_df)
         themes = []
         mainline = {"indicator": "今日", "sectors": [], "errors": ["pending_derived"], "source": "derived:unavailable"}
+    market_context = build_market_context(snapshot_df, snap_meta)
 
     # Base selection
     if universe == "symbols" and symbols:
@@ -437,6 +442,9 @@ def run(date: Optional[str] = None, topk: int = 3, universe: str = "auto", symbo
             entry_gap_abs = None
             signed_entry_gap = None
             reward_risk = None
+            reward_risk_raw = None
+            rr_capped = False
+            rr_risk_floor = None
             actionable = None
             state = None
             try:
@@ -446,7 +454,16 @@ def run(date: Optional[str] = None, topk: int = 3, universe: str = "auto", symbo
                     signed_entry_gap = (last_close - s1v) / last_close
                     entry_gap_abs = abs(signed_entry_gap)
                 if last_close and s1v and r1v and last_close > s1v:
-                    reward_risk = float((r1v - last_close) / max(1e-6, (last_close - s1v)))
+                    atr_abs = None
+                    try:
+                        atr_abs = float(df_feat["atr14"].iloc[-1]) if "atr14" in df_feat.columns else None
+                    except Exception:
+                        atr_abs = None
+                    rr_info = effective_reward_risk(price=last_close, support=s1v, target=r1v, atr=atr_abs)
+                    reward_risk = rr_info.get("effective")
+                    reward_risk_raw = rr_info.get("raw")
+                    rr_capped = bool(rr_info.get("capped") is True)
+                    rr_risk_floor = rr_info.get("risk_floor")
                 # decide state using signed gap and RR
                 if signed_entry_gap is None:
                     actionable = False; state = "observe_only"
@@ -473,6 +490,9 @@ def run(date: Optional[str] = None, topk: int = 3, universe: str = "auto", symbo
                     "entry_gap_pct": entry_gap_abs,
                     "signed_entry_gap_pct": signed_entry_gap,
                     "reward_risk": reward_risk,
+                    "reward_risk_raw": reward_risk_raw,
+                    "rr_capped": rr_capped,
+                    "rr_risk_floor": rr_risk_floor,
                     "actionable": actionable,
                 })
             # Explain divergence between structural and execution bands
@@ -634,7 +654,12 @@ def run(date: Optional[str] = None, topk: int = 3, universe: str = "auto", symbo
     # attach strategies for champion selection
     for cand in pool:
         cand["strategies"] = strategies_by_symbol.get(str(cand.get("symbol")), {})
-    champions = choose_champion(pool)
+    strategy_weight_state = load_tail_strategy_weights()
+    strategy_weights = weight_map(strategy_weight_state, strategies=getattr(strat_lib, "REGISTRY", {}).keys())
+    try:
+        champions = choose_champion(pool, strategy_weights=strategy_weights)
+    except TypeError:
+        champions = choose_champion(pool)
 
     # Build picks with champion and trade_plan
     picks: List[Dict[str, Any]] = []
@@ -661,10 +686,19 @@ def run(date: Optional[str] = None, topk: int = 3, universe: str = "auto", symbo
         champ = champions.get(sym) if isinstance(champions, dict) else None
         if champ:
             it["champion"] = champ
+            try:
+                it["strategy_weight"] = float(champ.get("strategy_weight", strategy_weights.get(str(champ.get("strategy")), 1.0)))
+            except Exception:
+                it["strategy_weight"] = 1.0
             mod = (strat_lib.REGISTRY or {}).get(str(champ.get("strategy")))
             feat = feats_by_symbol.get(sym)
             if mod is not None and feat is not None:
                 it["trade_plan"] = _trade_plan_from_strategy(mod, feat, cand, q_grade=(cand.get("q_grade") or cand.get("indicators", {}).get("q_grade")))
+                diag = (it.get("trade_plan") or {}).get("diagnostics") or {}
+                it["rr_capped"] = bool(diag.get("rr_capped") is True)
+        else:
+            it["strategy_weight"] = 1.0
+            it["rr_capped"] = False
         # attach last_close/last_date if available
         try:
             feat = feats_by_symbol.get(sym)
@@ -772,6 +806,31 @@ def run(date: Optional[str] = None, topk: int = 3, universe: str = "auto", symbo
     mainline_available = bool(isinstance(mainline, dict) and (mainline.get("sectors") or []))
     mainline_errors = (list(mainline.get("errors") or []) if isinstance(mainline, dict) else [])
 
+    hot_board_snapshot = build_hot_board_snapshot(
+        enabled=bool(market_context.get("used_for_tail_confirmation") is True and not symbols_mode),
+        topn=5,
+    )
+    hot_scores = score_symbols_for_hot_boards([str(item.get("symbol")) for item in picks], hot_board_snapshot)
+    for item in picks:
+        sym = str(item.get("symbol") or "")
+        hb = hot_scores.get(sym) or hot_scores.get(sym[-6:]) or {"score": 0.0, "reason_codes": ["hot_board_unavailable"], "boards": []}
+        item["hot_board_score"] = float(hb.get("score") or 0.0)
+        item["hot_boards"] = list(hb.get("boards") or [])
+        existing_codes = list(item.get("midday_adjustment_reason_codes") or [])
+        existing_codes.extend(str(x) for x in (hb.get("reason_codes") or []) if isinstance(x, str))
+        item["midday_adjustment_reason_codes"] = existing_codes
+
+    annotate_tail_confirmation(picks, market_context, env=env)
+    for item in picks:
+        try:
+            codes = list(item.get("midday_adjustment_reason_codes") or [])
+            for code in [str(x) for x in (hot_scores.get(str(item.get("symbol"))[-6:], {}) or {}).get("reason_codes", [])]:
+                if code not in codes:
+                    codes.append(code)
+            item["midday_adjustment_reason_codes"] = codes
+        except Exception:
+            pass
+
     # Second-stage rerank by candidate/thematic/champion with execution penalties and breakdown
     def _score_components(item: Dict[str, Any]) -> Dict[str, float]:
         champ = item.get("champion", {}) or {}
@@ -788,6 +847,12 @@ def run(date: Optional[str] = None, topk: int = 3, universe: str = "auto", symbo
         industry_strength = float(item.get("industry_strength_score", 0.0) or 0.0)
         peer_consensus = float(item.get("peer_consensus_score", 0.0) or 0.0)
         mainline_soft = float(item.get("mainline_soft_score", 0.0) or 0.0)
+        hot_board_score = float(item.get("hot_board_score", 0.0) or 0.0)
+        tail_score = float(item.get("tail_confirmation_score", 0.5) or 0.5)
+        breakdown_penalty = float(item.get("breakdown_penalty", 0.0) or 0.0)
+        strategy_weight = float(item.get("strategy_weight", champ.get("strategy_weight", 1.0)) or 1.0)
+        env_grade = str((env or {}).get("grade") or "").upper()
+        market_env_component = {"A": 0.15, "B": -0.35, "C": 0.0, "D": -0.65}.get(env_grade, 0.0)
         # soft overextension penalty if extension metrics available
         ext_pen = 0.0
         try:
@@ -814,9 +879,14 @@ def run(date: Optional[str] = None, topk: int = 3, universe: str = "auto", symbo
             "industry_strength_component": 0.15 * industry_strength,
             "peer_consensus_component": 0.10 * peer_consensus,
             "mainline_soft_component": mainline_soft,
-            "reward_risk_component": 0.2 * rr,
+            "hot_board_component": 0.18 * hot_board_score,
+            "tail_confirmation_component": 0.45 * (tail_score - 0.5),
+            "strategy_weight_component": 0.8 * max(-0.35, min(0.25, strategy_weight - 1.0)),
+            "market_env_component": market_env_component,
+            "reward_risk_component": 0.08 * min(8.0, max(0.0, rr)),
             "entry_gap_penalty": -0.3 * entry_gap,
             "execution_state_penalty": pen,
+            "breakdown_penalty": breakdown_penalty,
             "extension_penalty": float(ext_pen),
             "freshness_penalty": fresh_pen,
         }
@@ -878,6 +948,10 @@ def run(date: Optional[str] = None, topk: int = 3, universe: str = "auto", symbo
     for it in picks:
         it["final_score"] = _final_score(it)
     picks.sort(key=lambda x: float(x.get("final_score", 0.0)), reverse=True)
+    tail_blocked_symbols: List[str] = []
+    if bool(market_context.get("used_for_tail_confirmation") is True):
+        tail_blocked_symbols = [str(it.get("symbol")) for it in picks if bool(it.get("tail_entry_blocked") is True)]
+        picks = [it for it in picks if bool(it.get("tail_entry_blocked") is not True)]
     picks = picks[: topk or 3]
     # Champion availability advisory (soft warning, not affecting tradeable)
     champion_missing_syms: List[str] = []
@@ -900,6 +974,11 @@ def run(date: Optional[str] = None, topk: int = 3, universe: str = "auto", symbo
         "env": env,
         "themes": themes,
         "mainline": mainline,
+        "market_context": {
+            **{k: v for k, v in market_context.items() if k != "symbols"},
+            "symbol_count": len((market_context.get("symbols") or {}) if isinstance(market_context.get("symbols"), dict) else {}),
+            "hot_boards": summarize_hot_board_snapshot(hot_board_snapshot),
+        },
         "candidate_pool": pool,
         "picks": picks,
         "execution_checklist": [
@@ -931,6 +1010,10 @@ def run(date: Optional[str] = None, topk: int = 3, universe: str = "auto", symbo
     if empty_reason:
         degrade_record(dbg, empty_reason.upper(), {})
     dbg["candidate_stats"] = cand_stats
+    dbg["strategy_weight_state"] = strategy_weight_state
+    if tail_blocked_symbols:
+        dbg["tail_blocked_symbols"] = tail_blocked_symbols
+        degrade_record(dbg, "TAIL_ENTRY_BLOCKED", {"count": len(tail_blocked_symbols), "symbols": tail_blocked_symbols[:10]}, severity="warn")
     # snapshot mainboard counts
     try:
         if snapshot_df is not None:
@@ -1153,7 +1236,14 @@ def run(date: Optional[str] = None, topk: int = 3, universe: str = "auto", symbo
         })
     except Exception:
         pass
-    payload["data_status"] = {"snapshot": ds_snapshot, "themes": ds_themes, "daily": ds_daily, "mainline": ds_mainline}
+    ds_market_context = {
+        "status": (payload.get("market_context") or {}).get("status"),
+        "phase": (payload.get("market_context") or {}).get("phase"),
+        "used_for_tail_confirmation": bool((payload.get("market_context") or {}).get("used_for_tail_confirmation") is True),
+        "reason": (payload.get("market_context") or {}).get("reason"),
+        "hot_boards": ((payload.get("market_context") or {}).get("hot_boards") or {}),
+    }
+    payload["data_status"] = {"snapshot": ds_snapshot, "themes": ds_themes, "daily": ds_daily, "mainline": ds_mainline, "market_context": ds_market_context}
 
     _write_outputs(as_of, payload)
     return payload

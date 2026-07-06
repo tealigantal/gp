@@ -67,6 +67,23 @@ def calibrate_item_scores(item: Dict[str, Any], *, degraded: bool = False) -> Di
         rr = float(item.get("reward_risk") if item.get("reward_risk") is not None else (basis.get("reward_risk_raw") or 0.0))
     except Exception:
         rr = 0.0
+    rr = min(8.0, max(0.0, rr))
+    try:
+        tail_score = float(item.get("tail_confirmation_score") if item.get("tail_confirmation_score") is not None else basis.get("tail_confirmation_score", 0.5))
+    except Exception:
+        tail_score = 0.5
+    try:
+        breakdown_penalty = float(item.get("breakdown_penalty") if item.get("breakdown_penalty") is not None else basis.get("breakdown_penalty", 0.0))
+    except Exception:
+        breakdown_penalty = 0.0
+    try:
+        hot_board_score = float(item.get("hot_board_score") if item.get("hot_board_score") is not None else basis.get("hot_board_score", 0.0))
+    except Exception:
+        hot_board_score = 0.0
+    try:
+        strategy_weight = float(item.get("strategy_weight") if item.get("strategy_weight") is not None else basis.get("strategy_weight", 1.0))
+    except Exception:
+        strategy_weight = 1.0
     # Reward/risk contributes headroom without saturating actionable items
     rr_contrib = min(0.4, max(0.0, rr / EXEC_RR_SATURATE))
     base = EXEC_OBSERVE_BASE
@@ -78,7 +95,8 @@ def calibrate_item_scores(item: Dict[str, Any], *, degraded: bool = False) -> Di
         base = min(EXEC_WAITING_BASE, 0.45)
     elif state in {"below_support", "breakdown_risk"}:
         base = EXEC_BELOW_BASE
-    exec_score = _clamp01(base + rr_contrib)
+    exec_score = _clamp01(base + rr_contrib + 0.15 * (tail_score - 0.5) + 0.12 * max(-1.0, breakdown_penalty))
+    alpha = _clamp01(alpha + 0.08 * max(0.0, min(1.0, hot_board_score)) + 0.10 * max(-0.35, min(0.25, strategy_weight - 1.0)))
 
     # reliability: degraded penalty + liquidity floor
     liq = str(item.get("liquidity_grade") or "")
