@@ -100,6 +100,10 @@ def _tool_step(name: str, args: dict) -> dict:
     }
 
 
+def _mock_final_narration(monkeypatch, text: str = "LLM自然语言回复"):
+    monkeypatch.setattr("gp_assistant.runtime.narrator.render_reply", lambda payload: text)
+
+
 def test_agent_tool_schema_is_strict_and_uses_required_tool_choice():
     tools = turn_loop._agent_tool_schemas()
     compare_tool = next(tool for tool in tools if tool["function"]["name"] == "compare_candidates")
@@ -158,6 +162,7 @@ def test_agent_selects_compare_candidates_for_technology_request(monkeypatch):
     monkeypatch.setattr(turn_loop, "load_current_book", _book)
     monkeypatch.setattr(turn_loop, "load_run", lambda run_id: run)
     monkeypatch.setattr(context_engine, "load_run", lambda run_id: run)
+    _mock_final_narration(monkeypatch, "LLM自然话：中兴通讯更符合科技股约束。")
     committed = {}
     monkeypatch.setattr(turn_loop, "commit_turn", lambda **kwargs: committed.setdefault("reply", kwargs["reply"]))
 
@@ -205,6 +210,7 @@ def test_agent_exit_question_uses_exit_decision_workflow(monkeypatch):
     monkeypatch.setattr(turn_loop, "load_current_book", lambda: book)
     monkeypatch.setattr(turn_loop, "load_run", lambda run_id: run)
     monkeypatch.setattr(context_engine, "load_run", lambda run_id: run)
+    _mock_final_narration(monkeypatch, "LLM自然话：先看风控位，再看止盈卖点。")
     monkeypatch.setattr(turn_loop, "commit_turn", lambda **kwargs: None)
 
     out = turn_loop.run_turn_sync("s1", "我已经持有600519，成本1150，给出卖点")
@@ -241,6 +247,7 @@ def test_agent_symbol_tool_compare_phrase_normalizes_to_compare(monkeypatch):
     monkeypatch.setattr(turn_loop, "load_current_book", lambda: book)
     monkeypatch.setattr(turn_loop, "load_run", lambda run_id: run)
     monkeypatch.setattr(context_engine, "load_run", lambda run_id: run)
+    _mock_final_narration(monkeypatch, "LLM自然话：600519 和第一只一起比较。")
     monkeypatch.setattr(turn_loop, "commit_turn", lambda **kwargs: None)
 
     out = turn_loop.run_turn_sync("s1", "600519现在还能买吗，为什么不如第一只")
@@ -288,6 +295,7 @@ def test_agent_candidate_compare_merges_explicit_symbol_and_rank(monkeypatch):
     monkeypatch.setattr(turn_loop, "load_current_book", lambda: book)
     monkeypatch.setattr(turn_loop, "load_run", lambda run_id: run)
     monkeypatch.setattr(context_engine, "load_run", lambda run_id: run)
+    _mock_final_narration(monkeypatch, "LLM自然话：000063 当前优先，600519 暂不如第一只。")
     monkeypatch.setattr(turn_loop, "commit_turn", lambda **kwargs: None)
 
     out = turn_loop.run_turn_sync("s1", "600519现在还能买吗，为什么不如第一只")
@@ -379,6 +387,7 @@ def test_agent_intraday_situation_discloses_unverified_user_input(monkeypatch):
     monkeypatch.setattr(turn_loop, "load_run", lambda run_id: run)
     monkeypatch.setattr(context_engine, "load_run", lambda run_id: run)
     monkeypatch.setattr("gp_assistant.judgment.workflow.build_live_quote_snapshot", _quote_snapshot)
+    _mock_final_narration(monkeypatch, "LLM自然话：按你提供的盘中价判断，盘中价未能验证。")
     monkeypatch.setattr(turn_loop, "commit_turn", lambda **kwargs: None)
 
     out = turn_loop.run_turn_sync("s1", "000063 现在冲到 38.2，最高 38.8，回落横住了还能进吗")

@@ -29,7 +29,7 @@ from .context_engine import _pick_plan_slice, build_context
 from .concern_parser import normalize_turn_frame
 from .evidence_planner import plan_evidence
 from .grounding import validate_reply
-from .narrator import build_default_text, build_structured_reply
+from .narrator import build_reply
 from .reference_resolver import inject_entity_hints, resolve_subject_and_compare
 from .repair import RepairStatusSnapshot, load_repair_status_snapshot
 from .utils import gen_id
@@ -878,9 +878,14 @@ def _execute_domain_agent_tool(
     invalidate_active_run = _should_invalidate_active_run(session, book, active_run)
     evidence = build_evidence_pack(frame, memory_ctx, book, plan, invalidate_active_run=invalidate_active_run)
     judgment = make_judgment(session_id=session_id, frame=frame, evidence=evidence)
-    text = build_default_text(judgment)
-    reply = build_structured_reply(session_id, evidence, judgment, text=text)
-    reply.tool_trace = {"frame": frame.model_dump(), "agent_tool": tool_name, "agent_args": args}
+    reply = build_reply(
+        session_id=session_id,
+        frame=frame,
+        evidence=evidence,
+        judgment=judgment,
+        recent_turns=list(memory_ctx.get("recent_turns") or []),
+    )
+    reply.tool_trace = {**dict(reply.tool_trace or {}), "agent_tool": tool_name, "agent_args": args}
     return reply, judgment, True
 
 
