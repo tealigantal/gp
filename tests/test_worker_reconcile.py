@@ -126,6 +126,11 @@ def test_auto_reconcile_builds_intraday_pulse_when_enabled(monkeypatch):
         intraday_benchmark_symbol="000300",
     ))
     monkeypatch.setattr(worker, "load_portfolio_snapshot", lambda: {"positions": []})
+    monkeypatch.setattr(
+        worker,
+        "_schedule_intraday_min5_refresh",
+        lambda **kwargs: {"scheduled": True, "running": True, "last_result": {"elapsed_sec": 0.0, "updated": [], "skipped": True}},
+    )
 
     def _pulse_package(**kwargs):
         calls.append(kwargs)
@@ -170,6 +175,128 @@ def test_auto_reconcile_builds_intraday_pulse_when_enabled(monkeypatch):
     assert book.pulse_trade_day == "20260512"
     assert book.pulse_slot_at == "2026-05-12 11:30:00"
     assert book.data_status == "ok"
+
+
+def test_intraday_artifact_ok_when_model_usable_with_stale_cache(monkeypatch):
+    temp_root = Path(tempfile.mkdtemp(prefix="gp-worker-usable-stale-"))
+    monkeypatch.setenv("GP_STORE_DIR", str(temp_root / "store"))
+    daybook = _daybook()
+    daybook.picks = [AdvicePick(symbol="600519", rank=1, name="贵州茅台")]
+    monkeypatch.setattr(worker, "load_portfolio_snapshot", lambda: {"positions": []})
+    monkeypatch.setattr(
+        worker,
+        "load_config",
+        lambda: SimpleNamespace(
+            intraday_runtime_enabled=True,
+            intraday_include_portfolio=False,
+            intraday_benchmark_symbol="000300",
+        ),
+    )
+    monkeypatch.setattr(
+        worker,
+        "_schedule_intraday_min5_refresh",
+        lambda **kwargs: {"scheduled": True, "running": True, "last_result": {"elapsed_sec": 0.2, "updated": [], "skipped": False}},
+    )
+
+    def _pulse_package(**kwargs):
+        return {
+            "pulses": {
+                "600519": SymbolPulse(
+                    symbol="600519",
+                    execution_state="wait_pullback",
+                    action="WATCH",
+                    can_open=False,
+                    live_score=68.0,
+                    slot_at="2026-05-12 11:25:00",
+                    trade_day="20260512",
+                    recommendation_state="TRIGGER_PLAN",
+                    feature_snapshot={
+                        "target_slot_at": "2026-05-12 11:30:00",
+                        "effective_slot_at": "2026-05-12 11:25:00",
+                        "freshness_state": "usable_stale",
+                        "data_age_sec": 300.0,
+                    },
+                )
+            },
+            "gate": SlotGate(state="DEGRADED", score=55.0, reasons=["usable_stale"]),
+            "bundle": {
+                "errors": [],
+                "snapshot_age_sec": 0.0,
+                "symbols_expected": 2,
+                "symbols_received": 1,
+                "benchmark_received": True,
+                "provider": "akshare",
+                "model_usable": True,
+                "target_slot_at": "2026-05-12 11:30:00",
+                "effective_slot_at": "2026-05-12 11:25:00",
+                "freshness_state": "usable_stale",
+                "data_age_sec": 300.0,
+                "fresh_symbols": [],
+                "usable_stale_symbols": ["600519"],
+                "missing_symbols": ["603019"],
+                "cache_hit_rate": 0.5,
+            },
+        }
+
+    monkeypatch.setattr(worker, "compute_slot_pulse_package", _pulse_package)
+
+    result = worker._build_and_save_runtime_artifact(
+        daybook=daybook,
+        trade_day="20260512",
+        market_phase="LUNCH_BREAK",
+        target_slot_at="2026-05-12 11:30:00",
+        enable_minutes=True,
+    )
+    current = repo.load_current_slot_artifact()
+
+    assert result["slot_status"] == "OK"
+    assert result["slot_at"] == "2026-05-12 11:25:00"
+    assert current is not None
+    assert current.data_quality.target_slot_at == "2026-05-12 11:30:00"
+    assert current.data_quality.effective_slot_at == "2026-05-12 11:25:00"
+    assert current.data_quality.freshness_state == "usable_stale"
+    assert current.data_quality.missing_symbols == ["603019"]
+
+
+def test_schedule_intraday_refresh_submits_background_job(monkeypatch):
+    class FakeFuture:
+        def __init__(self) -> None:
+            self.submitted = True
+
+        def done(self) -> bool:
+            return False
+
+    class FakeExecutor:
+        def __init__(self) -> None:
+            self.calls: list[dict[str, object]] = []
+
+        def submit(self, fn, **kwargs):  # noqa: ANN001
+            self.calls.append({"fn": fn, "kwargs": kwargs})
+            return FakeFuture()
+
+    fake_executor = FakeExecutor()
+    monkeypatch.setattr(worker, "_INTRADAY_REFRESH_EXECUTOR", fake_executor)
+    monkeypatch.setattr(worker, "_INTRADAY_REFRESH_FUTURE", None)
+    monkeypatch.setattr(worker, "_INTRADAY_REFRESH_LAST_RESULT", None)
+    monkeypatch.setattr(
+        worker,
+        "refresh_intraday_min5_cache",
+        lambda **kwargs: (_ for _ in ()).throw(AssertionError("refresh must be submitted, not run inline")),
+    )
+
+    report = worker._schedule_intraday_min5_refresh(
+        trading_day="20260512",
+        slot_at="2026-05-12 11:30:00",
+        symbols=["600519"],
+        benchmark_symbol="000300",
+        core_symbols=["600519"],
+        force=False,
+    )
+
+    assert report["scheduled"] is True
+    assert report["running"] is True
+    assert len(fake_executor.calls) == 1
+    assert fake_executor.calls[0]["kwargs"]["slot_at"] == "2026-05-12 11:30:00"
 
 
 def test_postclose_archive_builds_daily_plan_without_replay(monkeypatch):

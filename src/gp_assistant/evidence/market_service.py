@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError, as_completed
+import json
 from pathlib import Path
+import time
 from typing import Any, Dict, Iterable, Optional
 
 import pandas as pd
@@ -155,6 +157,33 @@ def _cache_path(symbol: str, trade_day: str, *, kind: str = "stock") -> Path:
     return _trade_day_path(trade_day) / f"symbol={_cache_symbol_name(symbol, kind=kind)}.parquet"
 
 
+def _fetch_state_path() -> Path:
+    return _cache_root() / "fetch_state.json"
+
+
+def _read_fetch_state() -> Dict[str, Any]:
+    p = _fetch_state_path()
+    if not p.exists():
+        return {"meta": {}, "symbols": {}}
+    try:
+        raw = json.loads(p.read_text(encoding="utf-8"))
+        if isinstance(raw, dict):
+            raw.setdefault("meta", {})
+            raw.setdefault("symbols", {})
+            return raw
+    except Exception:
+        pass
+    return {"meta": {}, "symbols": {}}
+
+
+def _write_fetch_state(state: Dict[str, Any]) -> None:
+    _fetch_state_path().write_text(json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def _fetch_state_key(symbol: str, trade_day: str, *, kind: str) -> str:
+    return f"{trade_day}:{kind}:{str(symbol).strip()}"
+
+
 def _baseline_path(symbol: str, trade_day: str) -> Path:
     p = _baseline_root() / f"trade_day={trade_day}"
     p.mkdir(parents=True, exist_ok=True)
@@ -176,6 +205,53 @@ def _read_cached_day(symbol: str, trade_day: str, *, kind: str = "stock") -> pd.
         return None
 
 
+def _read_cached_until(symbol: str, trade_day: str, slot_at: str, *, kind: str = "stock") -> pd.DataFrame | None:
+    cached = _read_cached_day(symbol, trade_day, kind=kind)
+    if cached is None or cached.empty:
+        return None
+    slot_dt = pd.to_datetime(slot_at)
+    scoped = cached[cached["trade_time"] <= slot_dt].reset_index(drop=True)
+    return scoped if not scoped.empty else None
+
+
+def _latest_trade_time(df: pd.DataFrame | None) -> pd.Timestamp | None:
+    if df is None or df.empty or "trade_time" not in df.columns:
+        return None
+    times = pd.to_datetime(df["trade_time"], errors="coerce").dropna()
+    if times.empty:
+        return None
+    return pd.Timestamp(times.max())
+
+
+def _format_ts(ts: pd.Timestamp | None) -> str | None:
+    if ts is None or pd.isna(ts):
+        return None
+    return pd.Timestamp(ts).strftime("%Y-%m-%d %H:%M:%S")
+
+
+def _symbol_freshness(latest: pd.Timestamp | None, target_dt: pd.Timestamp, *, max_stale_sec: int) -> Dict[str, Any]:
+    if latest is None:
+        return {
+            "source_status": "missing",
+            "freshness_state": "missing",
+            "effective_slot_at": None,
+            "data_age_sec": None,
+        }
+    age_sec = max(0.0, float((target_dt - latest).total_seconds()))
+    if age_sec <= 300.0:
+        freshness = "fresh"
+    elif age_sec <= float(max_stale_sec):
+        freshness = "usable_stale"
+    else:
+        freshness = "degraded"
+    return {
+        "source_status": freshness,
+        "freshness_state": freshness,
+        "effective_slot_at": _format_ts(latest),
+        "data_age_sec": age_sec,
+    }
+
+
 def _write_cached_day(symbol: str, trade_day: str, df: pd.DataFrame, *, kind: str = "stock") -> None:
     if df.empty:
         return
@@ -192,6 +268,138 @@ def _merge_day_frames(left: pd.DataFrame | None, right: pd.DataFrame | None) -> 
     out = pd.concat(parts, ignore_index=True)
     out["trade_time"] = pd.to_datetime(out["trade_time"], errors="coerce")
     return out.dropna(subset=["trade_time"]).sort_values("trade_time").drop_duplicates(subset=["trade_time"], keep="last").reset_index(drop=True)
+
+
+def _ordered_refresh_items(
+    symbols: Iterable[str],
+    *,
+    benchmark_symbol: str | None,
+    core_symbols: Iterable[str] | None,
+    core_first: bool,
+) -> list[tuple[str, str]]:
+    stock_symbols = [str(symbol).strip() for symbol in symbols if str(symbol).strip()]
+    core = [str(symbol).strip() for symbol in (core_symbols or []) if str(symbol).strip()]
+    items: list[tuple[str, str]] = []
+    seen: set[tuple[str, str]] = set()
+
+    def _add(symbol: str, kind: str) -> None:
+        key = (str(symbol).strip(), kind)
+        if key[0] and key not in seen:
+            seen.add(key)
+            items.append(key)
+
+    if benchmark_symbol:
+        _add(str(benchmark_symbol).strip(), "index")
+    if core_first:
+        for symbol in core:
+            _add(symbol, "stock")
+    for symbol in stock_symbols:
+        _add(symbol, "stock")
+    return items
+
+
+def refresh_intraday_min5_cache(
+    *,
+    trading_day: str,
+    slot_at: str,
+    symbols: Iterable[str],
+    benchmark_symbol: str | None = None,
+    core_symbols: Iterable[str] | None = None,
+    force: bool = False,
+) -> Dict[str, Any]:
+    cfg = load_config()
+    refresh_sec = max(1, int(getattr(cfg, "intraday_min5_refresh_sec", 120) or 120))
+    budget_sec = max(1, int(getattr(cfg, "intraday_fetch_budget_sec", 110) or 110))
+    cooldown_sec = max(0, int(getattr(cfg, "intraday_symbol_cooldown_sec", 90) or 90))
+    core_first = bool(getattr(cfg, "intraday_core_first", True))
+    state = _read_fetch_state()
+    meta = dict(state.get("meta") or {})
+    symbols_state = dict(state.get("symbols") or {})
+    target_key = f"{trading_day}:{slot_at}"
+    now_epoch = time.time()
+    last_attempt = float(meta.get("last_refresh_attempt_at") or 0.0)
+    elapsed_since_refresh = now_epoch - last_attempt
+    if not force and elapsed_since_refresh < refresh_sec:
+        return {
+            "skipped": True,
+            "reason": "refresh_interval",
+            "elapsed_sec": 0.0,
+            "next_refresh_after_sec": round(refresh_sec - elapsed_since_refresh, 3),
+        }
+    started = time.monotonic()
+    deadline = started + float(budget_sec)
+    start_date = f"{trading_day[:4]}-{trading_day[4:6]}-{trading_day[6:8]} 09:30:00"
+    end_date = str(pd.to_datetime(slot_at).strftime("%Y-%m-%d %H:%M:%S"))
+    items = _ordered_refresh_items(
+        symbols,
+        benchmark_symbol=benchmark_symbol,
+        core_symbols=core_symbols,
+        core_first=core_first,
+    )
+    report: Dict[str, Any] = {
+        "skipped": False,
+        "reason": "completed",
+        "target_slot_at": slot_at,
+        "attempted": [],
+        "updated": [],
+        "cache_complete": [],
+        "cooldown": [],
+        "short_circuit": [],
+        "failed": [],
+        "budget_exhausted": [],
+    }
+    target_dt = pd.to_datetime(slot_at)
+    for symbol, kind in items:
+        if time.monotonic() >= deadline:
+            report["reason"] = "budget_exhausted"
+            report["budget_exhausted"].append({"symbol": symbol, "kind": kind})
+            continue
+        cached = _read_cached_until(symbol, trading_day, slot_at, kind=kind)
+        latest = _latest_trade_time(cached)
+        if latest is not None and latest >= target_dt:
+            report["cache_complete"].append({"symbol": symbol, "kind": kind, "latest": _format_ts(latest)})
+            continue
+        key = _fetch_state_key(symbol, trading_day, kind=kind)
+        item_state = dict(symbols_state.get(key) or {})
+        last_fetch = float(item_state.get("last_fetch_at") or 0.0)
+        fail_count = int(item_state.get("fail_count") or 0)
+        if not force and fail_count >= 2 and now_epoch - last_fetch < refresh_sec:
+            report["short_circuit"].append({"symbol": symbol, "kind": kind, "fail_count": fail_count})
+            continue
+        if not force and cooldown_sec > 0 and now_epoch - last_fetch < cooldown_sec:
+            report["cooldown"].append({"symbol": symbol, "kind": kind})
+            continue
+        report["attempted"].append({"symbol": symbol, "kind": kind})
+        try:
+            df = _fetch_cached_or_live(symbol, trading_day, start_date, end_date, kind=kind)
+            latest_after = _latest_trade_time(df)
+            symbols_state[key] = {
+                "last_fetch_at": now_epoch,
+                "fail_count": 0,
+                "last_error": None,
+                "last_success_slot_at": _format_ts(latest_after),
+            }
+            report["updated"].append({"symbol": symbol, "kind": kind, "latest": _format_ts(latest_after)})
+        except Exception as ex:  # noqa: BLE001
+            symbols_state[key] = {
+                **item_state,
+                "last_fetch_at": now_epoch,
+                "fail_count": fail_count + 1,
+                "last_error": f"{type(ex).__name__}: {ex}",
+            }
+            report["failed"].append({"symbol": symbol, "kind": kind, "error": f"{type(ex).__name__}: {ex}"})
+    meta.update(
+        {
+            "last_refresh_attempt_at": now_epoch,
+            "last_refresh_target": target_key,
+            "last_refresh_elapsed_sec": round(time.monotonic() - started, 3),
+        }
+    )
+    state["meta"] = meta
+    state["symbols"] = symbols_state
+    _write_fetch_state(state)
+    report["elapsed_sec"] = round(time.monotonic() - started, 3)
+    return report
 
 
 def _provider_minute_bars(symbol: str, start_date: str, end_date: str) -> pd.DataFrame:
@@ -285,55 +493,152 @@ def fetch_intraday_bundle(
     slot_at: str,
     symbols: Iterable[str],
     benchmark_symbol: Optional[str] = None,
+    core_symbols: Optional[Iterable[str]] = None,
 ) -> Dict[str, Any]:
     cfg = load_config()
     benchmark_symbol = benchmark_symbol or getattr(cfg, "intraday_benchmark_symbol", "000300")
+    max_stale_sec = max(0, int(getattr(cfg, "intraday_model_max_stale_sec", 600) or 600))
     syms = [str(symbol).strip() for symbol in symbols if str(symbol).strip()]
-    bars = fetch_minute_bars_5m(syms, trading_day, slot_at=slot_at)
+    core = [str(symbol).strip() for symbol in (core_symbols or syms) if str(symbol).strip()]
+    target_dt = pd.to_datetime(slot_at)
+    bars: Dict[str, pd.DataFrame] = {}
+    symbol_statuses: Dict[str, Dict[str, Any]] = {}
+    fresh_symbols: list[str] = []
+    usable_stale_symbols: list[str] = []
+    missing_symbols: list[str] = []
+    degraded_symbols: list[str] = []
+    latest_by_symbol: Dict[str, pd.Timestamp] = {}
+    cache_hits = 0
+
+    for symbol in syms:
+        df = _read_cached_until(symbol, trading_day, slot_at, kind="stock")
+        latest = _latest_trade_time(df)
+        quality = _symbol_freshness(latest, target_dt, max_stale_sec=max_stale_sec)
+        quality["target_slot_at"] = slot_at
+        symbol_statuses[symbol] = quality
+        status = str(quality.get("freshness_state") or "missing")
+        if latest is not None:
+            cache_hits += 1
+            latest_by_symbol[symbol] = latest
+        if status == "fresh":
+            fresh_symbols.append(symbol)
+            bars[symbol] = df if df is not None else pd.DataFrame()
+        elif status == "usable_stale":
+            usable_stale_symbols.append(symbol)
+            bars[symbol] = df if df is not None else pd.DataFrame()
+        elif status == "degraded":
+            degraded_symbols.append(symbol)
+        else:
+            missing_symbols.append(symbol)
+
+    benchmark = _read_cached_until(benchmark_symbol, trading_day, slot_at, kind="index")
+    benchmark_latest = _latest_trade_time(benchmark)
+    benchmark_quality = _symbol_freshness(benchmark_latest, target_dt, max_stale_sec=max_stale_sec)
+    benchmark_quality["target_slot_at"] = slot_at
+    benchmark_received = str(benchmark_quality.get("freshness_state") or "missing") in {"fresh", "usable_stale"}
+    if benchmark_received and benchmark is not None:
+        cache_hits += 1
+    else:
+        benchmark = None
+
+    required_latest: list[pd.Timestamp] = []
+    required_symbols = [symbol for symbol in core if symbol in syms]
+    core_missing = [symbol for symbol in required_symbols if symbol not in bars]
+    for symbol in required_symbols:
+        if symbol in latest_by_symbol and symbol in bars:
+            required_latest.append(latest_by_symbol[symbol])
+    if benchmark_latest is not None and benchmark_received:
+        required_latest.append(benchmark_latest)
+    effective_ts = min(required_latest) if required_latest and not core_missing and benchmark_received else (max(latest_by_symbol.values()) if latest_by_symbol else None)
+    effective_slot_at = _format_ts(effective_ts)
+    if effective_ts is not None:
+        refreshed_bars: Dict[str, pd.DataFrame] = {}
+        fresh_symbols = []
+        usable_stale_symbols = []
+        missing_symbols = []
+        degraded_symbols = []
+        for symbol, df in list(bars.items()):
+            scoped = df[df["trade_time"] <= effective_ts].reset_index(drop=True)
+            latest = _latest_trade_time(scoped)
+            quality = _symbol_freshness(latest, target_dt, max_stale_sec=max_stale_sec)
+            quality["target_slot_at"] = slot_at
+            symbol_statuses[symbol] = quality
+            status = str(quality.get("freshness_state") or "missing")
+            if status == "fresh":
+                fresh_symbols.append(symbol)
+                refreshed_bars[symbol] = scoped
+            elif status == "usable_stale":
+                usable_stale_symbols.append(symbol)
+                refreshed_bars[symbol] = scoped
+            elif status == "degraded":
+                degraded_symbols.append(symbol)
+            else:
+                missing_symbols.append(symbol)
+        for symbol in syms:
+            if symbol not in symbol_statuses or symbol in refreshed_bars:
+                continue
+            status = str(symbol_statuses[symbol].get("freshness_state") or "missing")
+            if status == "degraded" and symbol not in degraded_symbols:
+                degraded_symbols.append(symbol)
+            elif status == "missing" and symbol not in missing_symbols:
+                missing_symbols.append(symbol)
+        bars = refreshed_bars
+        if benchmark is not None:
+            benchmark = benchmark[benchmark["trade_time"] <= effective_ts].reset_index(drop=True)
+            benchmark_quality = _symbol_freshness(_latest_trade_time(benchmark), target_dt, max_stale_sec=max_stale_sec)
+            benchmark_quality["target_slot_at"] = slot_at
+            benchmark_received = str(benchmark_quality.get("freshness_state") or "missing") in {"fresh", "usable_stale"}
+            if not benchmark_received:
+                benchmark = None
+    core_missing = [symbol for symbol in required_symbols if symbol not in bars]
+    model_usable = bool(benchmark_received and not core_missing and effective_ts is not None)
+    effective_age_sec = None if effective_ts is None else max(0.0, float((target_dt - effective_ts).total_seconds()))
+    if not model_usable:
+        freshness_state = "degraded"
+    elif any(symbol in usable_stale_symbols for symbol in required_symbols) or str(benchmark_quality.get("freshness_state")) == "usable_stale":
+        freshness_state = "usable_stale"
+    else:
+        freshness_state = "fresh"
+
     errors: list[str] = []
-    if len(bars) != len(syms):
-        missing = sorted(set(syms) - set(bars))
-        errors.append(f"symbols_missing:{','.join(missing)}")
-        return {
-            "bars": bars,
-            "benchmark": None,
-            "benchmark_symbol": benchmark_symbol,
-            "snapshot": None,
-            "requested_slot_at": slot_at,
-            "provider": "akshare",
-            "errors": errors + ["benchmark_skipped:incomplete_symbols", "snapshot_skipped:incomplete_symbols"],
-            "snapshot_age_sec": None,
-            "symbols_expected": len(syms),
-            "symbols_received": len(bars),
-            "benchmark_received": False,
-        }
-    benchmark = None
-    benchmark_error = None
-    try:
-        benchmark = fetch_benchmark_bars_5m(benchmark_symbol, trading_day, slot_at=slot_at)
-    except Exception as ex:  # noqa: BLE001
-        benchmark_error = f"{type(ex).__name__}: {ex}"
-        logger.warning("[min5] benchmark failure symbol=%s trade_day=%s slot=%s error=%s", benchmark_symbol, trading_day, slot_at, benchmark_error)
-    snapshot = build_slot_breadth_snapshot(bars, slot_at=slot_at)
+    if core_missing:
+        errors.append(f"core_symbols_missing:{','.join(sorted(core_missing))}")
+    if not benchmark_received:
+        errors.append(f"benchmark_missing:{benchmark_symbol}")
+    if model_usable and freshness_state == "degraded":
+        errors.append("data_too_stale")
+
+    snapshot = build_slot_breadth_snapshot(bars, slot_at=effective_slot_at or slot_at)
     snapshot_age_sec: Optional[float] = None
     if snapshot is not None and not snapshot.empty:
         snapshot_age_sec = 0.0
-    if benchmark is None or benchmark.empty:
-        errors.append(f"benchmark_missing:{benchmark_symbol}")
     if snapshot is None or snapshot.empty:
         errors.append("snapshot_missing")
+        model_usable = False
+        freshness_state = "degraded"
     return {
         "bars": bars,
         "benchmark": benchmark,
         "benchmark_symbol": benchmark_symbol,
+        "benchmark_status": benchmark_quality,
         "snapshot": snapshot,
         "requested_slot_at": slot_at,
+        "target_slot_at": slot_at,
+        "effective_slot_at": effective_slot_at,
+        "freshness_state": freshness_state,
+        "data_age_sec": effective_age_sec,
         "provider": "akshare",
-        "errors": errors + ([benchmark_error] if benchmark_error else []),
+        "errors": errors,
         "snapshot_age_sec": snapshot_age_sec,
+        "symbol_statuses": symbol_statuses,
+        "fresh_symbols": fresh_symbols,
+        "usable_stale_symbols": usable_stale_symbols,
+        "missing_symbols": sorted(set(missing_symbols + degraded_symbols)),
+        "model_usable": bool(model_usable),
         "symbols_expected": len(syms),
         "symbols_received": len(bars),
-        "benchmark_received": bool(benchmark is not None and not benchmark.empty),
+        "benchmark_received": bool(benchmark_received and benchmark is not None and not benchmark.empty),
+        "cache_hit_rate": float(cache_hits / max(1, len(syms) + 1)),
     }
 
 

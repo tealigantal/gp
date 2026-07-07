@@ -379,6 +379,11 @@ def _runtime_status(book, *, lock_error: str | None = None) -> RuntimeStatus:
         pulse_slot_at=(getattr(book, "pulse_slot_at", None) if book else None),
         last_closed_5m=(getattr(book, "last_closed_5m", None) if book else None),
         slot_status=(getattr(book, "slot_status", None) if book else None),
+        data_quality=(
+            book.data_quality.model_dump()
+            if book and getattr(book, "data_quality", None) is not None and hasattr(book.data_quality, "model_dump")
+            else {}
+        ),
         publish_allowed=bool(getattr(book, "publish_allowed", False) if book else False),
         repair_status=str(snapshot.repair_status if snapshot else "idle"),
         repair_stage=str(snapshot.repair_stage if snapshot else "idle"),

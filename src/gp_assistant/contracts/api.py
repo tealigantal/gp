@@ -57,6 +57,7 @@ class RuntimeStatus(BaseModel):
     pulse_slot_at: Optional[str] = None
     last_closed_5m: Optional[str] = None
     slot_status: Optional[str] = None
+    data_quality: Dict[str, Any] = Field(default_factory=dict)
     publish_allowed: bool = False
     repair_status: str = "idle"
     repair_stage: str = "idle"

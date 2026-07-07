@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from concurrent.futures import Future, ThreadPoolExecutor
 import time
 from typing import Any, Dict
 
@@ -28,6 +29,7 @@ from .evidence.daily_freshness import (
     resolve_daily_target,
 )
 from .evidence.portfolio_service import load_portfolio_snapshot
+from .evidence.market_service import refresh_intraday_min5_cache
 from .runtime.lanes import book_lane
 from .runtime.market_clock import (
     PHASE_CLOSING_AUCTION,
@@ -48,6 +50,10 @@ _INTRADAY_PHASES = {
     PHASE_INTRADAY_PM,
     PHASE_CLOSING_AUCTION,
 }
+
+_INTRADAY_REFRESH_EXECUTOR = ThreadPoolExecutor(max_workers=1, thread_name_prefix="gp-min5-refresh")
+_INTRADAY_REFRESH_FUTURE: Future | None = None
+_INTRADAY_REFRESH_LAST_RESULT: Dict[str, Any] | None = None
 
 
 def _portfolio_symbols(snapshot: Dict[str, Any]) -> list[str]:
@@ -188,6 +194,44 @@ def _daily_plan_meta_matches(provider_meta: Dict[str, Any], expected_meta: Dict[
     return all(key in provider_meta and provider_meta.get(key) == expected_meta.get(key) for key in _DAILY_PLAN_META_KEYS)
 
 
+def _schedule_intraday_min5_refresh(**kwargs: Any) -> Dict[str, Any]:
+    global _INTRADAY_REFRESH_FUTURE, _INTRADAY_REFRESH_LAST_RESULT
+
+    if _INTRADAY_REFRESH_FUTURE is not None and _INTRADAY_REFRESH_FUTURE.done():
+        try:
+            _INTRADAY_REFRESH_LAST_RESULT = dict(_INTRADAY_REFRESH_FUTURE.result() or {})
+        except Exception as ex:  # noqa: BLE001
+            _INTRADAY_REFRESH_LAST_RESULT = {"skipped": False, "reason": "background_refresh_failed", "error": f"{type(ex).__name__}: {ex}"}
+        _INTRADAY_REFRESH_FUTURE = None
+
+    if _INTRADAY_REFRESH_FUTURE is not None:
+        return {
+            "scheduled": False,
+            "running": True,
+            "reason": "refresh_already_running",
+            "last_result": _INTRADAY_REFRESH_LAST_RESULT,
+        }
+
+    _INTRADAY_REFRESH_FUTURE = _INTRADAY_REFRESH_EXECUTOR.submit(refresh_intraday_min5_cache, **kwargs)
+    return {
+        "scheduled": True,
+        "running": True,
+        "reason": "background_refresh_started",
+        "last_result": _INTRADAY_REFRESH_LAST_RESULT,
+    }
+
+
+def _refresh_elapsed_sec(refresh_report: Dict[str, Any] | None) -> Any:
+    if not refresh_report:
+        return None
+    if "elapsed_sec" in refresh_report:
+        return refresh_report.get("elapsed_sec")
+    last_result = refresh_report.get("last_result")
+    if isinstance(last_result, dict):
+        return last_result.get("elapsed_sec")
+    return None
+
+
 def _build_and_save_daily_plan(*, daybook: DayBook, trade_day: str, market_phase: str, force: bool = False) -> Dict[str, Any]:
     return _build_and_save_runtime_artifact(
         daybook=daybook,
@@ -249,6 +293,15 @@ def _build_and_save_runtime_artifact(
             for symbol, pulse in ((current.symbol_states or {}).items() if current is not None else [])
         }
         cfg = load_config()
+        core_symbols = [*tracked.reco, *tracked.portfolio]
+        refresh_report = _schedule_intraday_min5_refresh(
+            trading_day=trade_day,
+            slot_at=target_slot_at,
+            symbols=tracked.total,
+            benchmark_symbol=getattr(cfg, "intraday_benchmark_symbol", "000300"),
+            core_symbols=core_symbols,
+            force=force,
+        )
         try:
             pkg = compute_slot_pulse_package(
                 daybook=daybook,
@@ -276,14 +329,16 @@ def _build_and_save_runtime_artifact(
         pulses = dict(pkg.get("pulses") or {})
         gate = pkg["gate"]
         errors = list(bundle.get("errors") or [])
-        complete = (
+        legacy_complete = (
             int(bundle.get("symbols_received") or 0) == int(bundle.get("symbols_expected") or 0)
             and bool(bundle.get("benchmark_received"))
             and not errors
         )
+        complete = (bool(bundle.get("model_usable")) if "model_usable" in bundle else legacy_complete) and bool(bundle.get("benchmark_received")) and not errors
         slot_status = "OK" if complete else "DEGRADED"
         artifact_id = gen_id("slot")
-        slot_id = _slot_id(target_slot_at)
+        effective_slot_at = str(bundle.get("effective_slot_at") or target_slot_at)
+        slot_id = _slot_id(effective_slot_at)
         board = build_board(daybook, pulses, artifact_id=artifact_id, slot_id=slot_id)
         old_map = {symbol: pulse.execution_state for symbol, pulse in ((current.symbol_states or {}).items() if current is not None else [])}
         now = now_iso()
@@ -291,7 +346,7 @@ def _build_and_save_runtime_artifact(
             artifact_id=artifact_id,
             slot_id=slot_id,
             trade_day=trade_day,
-            slot_at=target_slot_at,
+            slot_at=effective_slot_at,
             market_phase=market_phase,
             slot_status=slot_status,
             publish_allowed=bool(daybook.tradeable and str(getattr(gate, "state", "")).upper() == "ALLOW"),
@@ -308,12 +363,22 @@ def _build_and_save_runtime_artifact(
                 provider=str(bundle.get("provider") or "akshare"),
                 complete=bool(complete),
                 errors=errors,
+                target_slot_at=str(bundle.get("target_slot_at") or target_slot_at),
+                effective_slot_at=effective_slot_at,
+                freshness_state=str(bundle.get("freshness_state") or ("fresh" if complete else "degraded")),
+                data_age_sec=bundle.get("data_age_sec"),
+                fresh_symbols=list(bundle.get("fresh_symbols") or []),
+                usable_stale_symbols=list(bundle.get("usable_stale_symbols") or []),
+                missing_symbols=list(bundle.get("missing_symbols") or []),
+                fetch_elapsed_sec=_refresh_elapsed_sec(refresh_report),
+                cache_hit_rate=bundle.get("cache_hit_rate"),
             ),
             portfolio_snapshot=portfolio_snapshot,
             provider_meta={
                 **expected_runtime_meta,
                 "reason": "intraday_pulse",
                 "data_status": "ok" if complete else "degraded",
+                "refresh_report": refresh_report,
             },
             side_results=detect_side_results(old_map, board),
             created_at=now,

@@ -97,7 +97,9 @@ def _missing_data_pulse(
     trade_day: str,
     slot_at: str | None,
     reason: str,
+    source_status: Optional[Dict[str, object]] = None,
 ) -> SymbolPulse:
+    source_status = dict(source_status or {})
     entry_zone = entry_zone_from_pick(pick)
     stop = stop_from_pick(pick)
     take = takes_from_pick(pick)
@@ -141,6 +143,11 @@ def _missing_data_pulse(
             "bars_complete": False,
             "data_quality_score": 0.0,
             "data_quality_warnings": [reason],
+            "target_slot_at": source_status.get("target_slot_at"),
+            "effective_slot_at": source_status.get("effective_slot_at"),
+            "data_age_sec": source_status.get("data_age_sec"),
+            "freshness_state": source_status.get("freshness_state") or "missing",
+            "source_status": source_status.get("source_status") or "missing",
         },
         strategy_candidates=[],
         champion_strategy="NO_TRADE_STRATEGY",
@@ -165,8 +172,10 @@ def evaluate_slot_pulses(
     previous_actions: Optional[Dict[str, str]] = None,
     market_phase: str | None = None,
     slot_status: str = "OK",
+    symbol_statuses: Optional[Dict[str, Dict[str, object]]] = None,
 ) -> Dict[str, SymbolPulse]:
     previous_actions = previous_actions or {}
+    symbol_statuses = symbol_statuses or {}
     pick_map = {pick.symbol: pick for pick in [*daybook.picks, *daybook.reserve_picks]}
     reco_symbols = [pick.symbol for pick in [*daybook.picks, *daybook.reserve_picks]]
     reco_rank = {symbol: idx + 1 for idx, symbol in enumerate(reco_symbols)}
@@ -180,6 +189,7 @@ def evaluate_slot_pulses(
         pick = pick_map.get(symbol)
         rank_score = _daily_rank_score(symbol, reco_rank, reco_size)
         df = bars.get(symbol)
+        source_status = dict(symbol_statuses.get(symbol) or {})
         if df is None or df.empty:
             pulses[symbol] = _missing_data_pulse(
                 symbol=symbol,
@@ -189,6 +199,7 @@ def evaluate_slot_pulses(
                 trade_day=trade_day,
                 slot_at=slot_at,
                 reason="symbol_data_missing",
+                source_status=source_status,
             )
             continue
 
@@ -207,6 +218,26 @@ def evaluate_slot_pulses(
             market_phase=inferred_phase,
             slot_status=slot_status,
         )
+        freshness_state = str(source_status.get("freshness_state") or "fresh")
+        if source_status:
+            feature_snapshot.update(
+                {
+                    "target_slot_at": source_status.get("target_slot_at"),
+                    "effective_slot_at": source_status.get("effective_slot_at") or slot_at,
+                    "data_age_sec": source_status.get("data_age_sec"),
+                    "freshness_state": freshness_state,
+                    "source_status": source_status.get("source_status") or freshness_state,
+                }
+            )
+        warnings = list(feature_snapshot.get("data_quality_warnings") or [])
+        if freshness_state == "usable_stale":
+            warnings.append("minute_data_usable_stale")
+            feature_snapshot["data_quality_score"] = max(0.0, finite_float(feature_snapshot.get("data_quality_score")) * 0.85)
+        elif freshness_state in {"degraded", "missing"}:
+            warnings.append("minute_data_degraded")
+            feature_snapshot["data_quality_score"] = 0.0
+            feature_snapshot["bars_complete"] = False
+        feature_snapshot["data_quality_warnings"] = warnings
         candidates = registry.run_all(feature_snapshot)
         champion = select_champion(candidates)
         recommendation_state = determine_recommendation_state(
@@ -437,16 +468,14 @@ def compute_slot_pulse_package(
         slot_at=slot_at,
         symbols=tracked_universe.total,
         benchmark_symbol=benchmark_symbol,
+        core_symbols=[*tracked_universe.reco, *tracked_universe.portfolio],
     )
-    data_complete = (
-        bundle["symbols_received"] == bundle["symbols_expected"]
-        and bool(bundle["benchmark_received"])
-        and bundle.get("snapshot") is not None
-        and not bundle["snapshot"].empty
-    )
-    inferred_phase = _market_phase_from_slot(slot_at)
+    effective_slot_at = str(bundle.get("effective_slot_at") or slot_at)
+    data_complete = bool(bundle.get("model_usable")) and bundle.get("snapshot") is not None and not bundle["snapshot"].empty
+    inferred_phase = _market_phase_from_slot(effective_slot_at)
     provisional_gate = SlotGate(state="ALLOW", score=100.0, reasons=["pre_gate"])
-    baselines = load_slot_volume_baselines(trade_day, tracked_universe.total) if data_complete else {}
+    available_symbols = list((bundle.get("bars") or {}).keys())
+    baselines = load_slot_volume_baselines(trade_day, available_symbols) if data_complete else {}
     provisional_pulses = evaluate_slot_pulses(
         daybook=daybook,
         tracked_universe=tracked_universe,
@@ -454,12 +483,13 @@ def compute_slot_pulse_package(
         benchmark=bundle["benchmark"],
         slot_baselines=baselines,
         gate=provisional_gate,
-        slot_at=slot_at,
+        slot_at=effective_slot_at,
         trade_day=trade_day,
         provider=str(bundle["provider"]),
         previous_actions=previous_actions,
         market_phase=inferred_phase,
         slot_status=("OK" if data_complete else "DEGRADED"),
+        symbol_statuses=dict(bundle.get("symbol_statuses") or {}),
     )
     gate = score_intraday_gate(
         snapshot=bundle["snapshot"],
@@ -475,12 +505,13 @@ def compute_slot_pulse_package(
         benchmark=bundle["benchmark"],
         slot_baselines=baselines,
         gate=gate,
-        slot_at=slot_at,
+        slot_at=effective_slot_at,
         trade_day=trade_day,
         provider=str(bundle["provider"]),
         previous_actions=previous_actions,
         market_phase=inferred_phase,
         slot_status=("OK" if data_complete else "DEGRADED"),
+        symbol_statuses=dict(bundle.get("symbol_statuses") or {}),
     )
     return {
         "pulses": pulses,

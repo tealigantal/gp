@@ -217,6 +217,15 @@ class SlotDataQuality(GPModel):
     provider: Optional[str] = None
     complete: bool = False
     errors: List[str] = Field(default_factory=list)
+    target_slot_at: Optional[str] = None
+    effective_slot_at: Optional[str] = None
+    freshness_state: str = "unknown"
+    data_age_sec: Optional[float] = None
+    fresh_symbols: List[str] = Field(default_factory=list)
+    usable_stale_symbols: List[str] = Field(default_factory=list)
+    missing_symbols: List[str] = Field(default_factory=list)
+    fetch_elapsed_sec: Optional[float] = None
+    cache_hit_rate: Optional[float] = None
 
 
 class TrackedUniverse(GPModel):
