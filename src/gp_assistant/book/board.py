@@ -67,8 +67,29 @@ def _take_from_pick(pick: AdvicePick) -> list:
 def _rr(entry_mid: float | None, stop: float | None, target: float | None) -> float:
     if entry_mid is None or stop is None or target is None:
         return 0.0
-    risk = max(float(entry_mid) - float(stop), 1e-6)
-    return max(0.0, (float(target) - float(entry_mid)) / risk)
+    risk = float(entry_mid) - float(stop)
+    reward = float(target) - float(entry_mid)
+    if risk <= 0.0 or reward <= 0.0:
+        return 0.0
+    return max(0.0, reward / risk)
+
+
+def _float_or_none(value) -> float | None:
+    if value is None:
+        return None
+    try:
+        return float(value)
+    except Exception:
+        return None
+
+
+def _daily_display_score(raw_score: float) -> float:
+    raw = finite_float(raw_score, 0.0)
+    if raw < 0.0:
+        return max(0.0, min(50.0, 50.0 + raw * 50.0))
+    if raw <= 1.0:
+        return max(0.0, min(100.0, raw * 100.0))
+    return max(0.0, min(100.0, raw))
 
 
 def _daily_execution_plan_from_pick(pick: AdvicePick) -> Dict[str, Any]:
@@ -87,18 +108,20 @@ def _daily_execution_plan_from_pick(pick: AdvicePick) -> Dict[str, Any]:
     take1 = take[0] if take else None
     take2 = take[1] if len(take) > 1 else None
     trigger = entry_zone.get("trigger") or entry_zone.get("trigger_price") or high or mid
+    rr_entry = trigger or high or mid
     return {
         "trigger_price": trigger,
         "entry_low": low,
         "entry_high": high,
         "entry_mid": mid,
+        "rr_entry_price": rr_entry,
         "entry_type": "next_session_daily_plan",
         "stop_price": stop,
         "invalidation_reason": (pick.stop_plan or {}).get("text") or "Daily plan invalidation/stop is breached.",
         "take1": take1,
         "take2": take2,
-        "rr_to_take1": _rr(float(mid) if mid is not None else None, float(stop) if stop is not None else None, float(take1) if take1 is not None else None),
-        "rr_to_take2": _rr(float(mid) if mid is not None else None, float(stop) if stop is not None else None, float(take2) if take2 is not None else None),
+        "rr_to_take1": _rr(_float_or_none(rr_entry), _float_or_none(stop), _float_or_none(take1)),
+        "rr_to_take2": _rr(_float_or_none(rr_entry), _float_or_none(stop), _float_or_none(take2)),
         "signal_valid_until_slot": None,
         "triggered": False,
         "invalidation_rules": ["daily_stop_breached", "daily_setup_freshness_lost"],
@@ -115,14 +138,12 @@ def _daily_pulse_from_pick(pick: AdvicePick, rank: int, total: int) -> SymbolPul
     extended = state == "extended"
     plan = _daily_execution_plan_from_pick(pick)
     champion_strategy = str(pick.strategy_id or "TREND_CONTINUATION_5M")
-    day_score = finite_float(pick.scores.get("final"), 0.0)
-    if day_score <= 1.0:
-        day_score *= 100.0
+    raw_day_score = finite_float(pick.scores.get("final"), 0.0)
+    day_score = _daily_display_score(raw_day_score)
     rr_score = min(100.0, max(0.0, finite_float(plan.get("rr_to_take1")) / 2.4 * 100.0))
-    live_score = finite_float(pick.scores.get("final"), 0.0)
-    if live_score <= 1.0:
-        live_score *= 100.0
+    live_score = day_score
     score_breakdown = {
+        "raw_day_level_alpha_score": raw_day_score,
         "day_level_alpha_score": day_score,
         "champion_strategy_score": day_score,
         "intraday_exec_score": 45.0,
@@ -136,6 +157,7 @@ def _daily_pulse_from_pick(pick: AdvicePick, rank: int, total: int) -> SymbolPul
         "risk_penalty": 0.0,
         "data_quality_score": 65.0,
         "market_regime_fit_score": 50.0,
+        "score_scale": 100.0,
     }
     risk_pack = {
         "main_risks": list(pick.risk_flags or []),
@@ -187,6 +209,7 @@ def _daily_pulse_from_pick(pick: AdvicePick, rank: int, total: int) -> SymbolPul
         feature_snapshot={
             "symbol": pick.symbol,
             "slot_status": "DAILY_PLAN",
+            "raw_day_level_alpha_score": raw_day_score,
             "data_quality_score": 65.0,
             "bars_complete": False,
             "provider": "daily",

@@ -85,6 +85,29 @@ def inject_entity_hints(frame: TurnFrame, memory_ctx: Dict, book: MarketBook) ->
         entry = _entry_by_rank(active_entries, int(refs["rank"]))
         if entry:
             refs["symbol"] = entry.symbol
+    if frame.request in {"compare", "candidate_compare"}:
+        merged: list[str] = []
+        for value in refs.get("compare_symbols") or []:
+            symbol = str(value or "").strip()
+            if symbol and symbol not in merged:
+                merged.append(symbol)
+        for value in symbols:
+            symbol = str(value or "").strip()
+            if symbol and symbol not in merged:
+                merged.append(symbol)
+        for key in ("selected_symbol", "symbol"):
+            symbol = str(refs.get(key) or "").strip()
+            if symbol and symbol not in merged:
+                merged.append(symbol)
+        if refs.get("rank") is not None:
+            try:
+                entry = _entry_by_rank(active_entries, int(refs["rank"]))
+            except Exception:
+                entry = None
+            if entry and entry.symbol not in merged:
+                merged.append(entry.symbol)
+        if len(merged) >= 2:
+            refs["compare_symbols"] = merged[:10]
     frame.references = refs
     return frame
 

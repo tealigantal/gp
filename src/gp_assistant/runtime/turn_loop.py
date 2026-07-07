@@ -25,7 +25,8 @@ from ..llm.client import LLMClient
 from ..memory.service import commit_turn, load_memory_context
 from ..worker import reconcile_runtime_state
 from .dialogue_text import execution_state_label, intraday_runtime_enabled
-from .context_engine import build_context
+from .context_engine import _pick_plan_slice, build_context
+from .concern_parser import normalize_turn_frame
 from .evidence_planner import plan_evidence
 from .grounding import validate_reply
 from .narrator import build_default_text, build_structured_reply
@@ -631,8 +632,22 @@ def _agent_tool_schemas() -> List[Dict[str, Any]]:
             ),
         ),
         strict_tool(
+            name="analyze_exit_decision",
+            description=(
+                "Analyze whether an existing holding should hold, reduce or sell. Use this for 持有、成本、卖点、"
+                "止盈、止损、减仓、该不该卖、还能拿吗 questions."
+            ),
+            parameters=obj(
+                {
+                    "symbol": {"type": ["string", "null"], "description": "Six digit A-share symbol when known."},
+                    "rank": {"type": ["integer", "null"], "minimum": 1, "maximum": 10},
+                    "position_context": {"type": "string", "description": "User-provided holding, cost, profit/loss and sell-point context."},
+                },
+            ),
+        ),
+        strict_tool(
             name="analyze_intraday_situation",
-            description="Analyze user-provided intraday situation such as current price, high/low, volume, pullback, position cost or news.",
+            description="Analyze user-provided intraday situation such as current price, high/low, volume, pullback,盘口 or news.",
             parameters=obj(
                 {
                     "symbol": {"type": ["string", "null"], "description": "Six digit symbol when known."},
@@ -683,7 +698,9 @@ def _agent_system_prompt() -> str:
         "程序会校验工具白名单、候选范围、交易数据来源和会话落盘。"
         "如果用户说“聊天”“输出文字”，把它理解为输出形式偏好，不能覆盖市场任务。"
         "从前几个里挑科技股、防守股、更适合当前盘中情况的，都用 compare_candidates。"
-        "用户给出现价、最高价、横住、回落、量能、成本、盘口、消息等盘中事实时，用 analyze_intraday_situation。"
+        "问某只为什么不如第一只、和第几只比、谁更好、谁更适合买，都用 compare_candidates。"
+        "用户问持有、成本、卖点、止盈、止损、减仓、该不该卖、还能不能拿时，用 analyze_exit_decision。"
+        "用户给出现价、最高价、横住、回落、量能、盘口、消息等盘中事实时，用 analyze_intraday_situation。"
         "明确 6 位代码但不是盘中入场问题时，用 analyze_symbol。"
         "推荐当前机会用 recommend_current；解释本轮变化用 explain_run_change。"
         "只有问候、能力说明或非市场聊天才用 answer_chat。"
@@ -737,7 +754,7 @@ def _agent_context_result(memory_ctx: Dict[str, Any], book: MarketBook) -> Agent
 def _active_run_result(memory_ctx: Dict[str, Any], top_n: int = 6) -> AgentToolResult:
     session = memory_ctx["session"]
     run = load_run(session.active_run_id) if session.active_run_id else None
-    picks = list(run.picks[:top_n] if run else [])
+    picks = list(run.picks[: max(1, min(10, top_n))] if run else [])
     return AgentToolResult(
         tool_name="get_active_run",
         reply_text="已读取当前 active run。" if run else "当前会话没有 active run。",
@@ -745,14 +762,7 @@ def _active_run_result(memory_ctx: Dict[str, Any], top_n: int = 6) -> AgentToolR
             "message_kind": "active_run_context",
             "run_id": (run.run_id if run else None),
             "picks": [
-                {
-                    "symbol": entry.symbol,
-                    "name": entry.name,
-                    "rank": entry.rank,
-                    "summary": entry.summary,
-                    "execution_state": entry.execution_state,
-                    "recommendation_state": entry.recommendation_state,
-                }
+                _pick_plan_slice(entry)
                 for entry in picks
             ],
         },
@@ -775,6 +785,14 @@ def _frame_for_agent_tool(tool_name: str, args: Dict[str, Any], user_message: st
         request = "single_stock_query"
         subject = "symbol"
         refs["symbol"] = str(args.get("symbol") or "").strip()
+    elif tool_name == "analyze_exit_decision":
+        request = "exit_decision"
+        subject = "holding"
+        if args.get("symbol"):
+            refs["symbol"] = str(args.get("symbol")).strip()
+        if args.get("rank") is not None:
+            refs["rank"] = args.get("rank")
+        constraints["position_context"] = str(args.get("position_context") or user_message)
     elif tool_name == "analyze_intraday_situation":
         request = "intraday_situation"
         subject = "symbol"
@@ -813,6 +831,21 @@ def _frame_for_agent_tool(tool_name: str, args: Dict[str, Any], user_message: st
     )
 
 
+def _normalized_frame_for_agent_tool(
+    tool_name: str,
+    args: Dict[str, Any],
+    user_message: str,
+    memory_ctx: Dict[str, Any],
+    book: MarketBook,
+) -> TurnFrame:
+    frame = _frame_for_agent_tool(tool_name, args, user_message, memory_ctx)
+    if tool_name == "analyze_symbol":
+        frame = normalize_turn_frame(frame, book=book)
+        frame = inject_entity_hints(frame, memory_ctx, book)
+        return normalize_turn_frame(frame, book=book)
+    return inject_entity_hints(frame, memory_ctx, book)
+
+
 def _execute_domain_agent_tool(
     *,
     tool_name: str,
@@ -821,6 +854,7 @@ def _execute_domain_agent_tool(
     user_message: str,
     memory_ctx: Dict[str, Any],
     book: MarketBook,
+    frame: TurnFrame | None = None,
 ) -> tuple[ReplyBundle | AgentToolResult, Judgment, bool]:
     if tool_name == "get_market_context":
         return _agent_context_result(memory_ctx, book), judge_chat(), False
@@ -837,8 +871,7 @@ def _execute_domain_agent_tool(
         )
         return reply, judgment, True
 
-    frame = _frame_for_agent_tool(tool_name, args, user_message, memory_ctx)
-    frame = inject_entity_hints(frame, memory_ctx, book)
+    frame = frame or _normalized_frame_for_agent_tool(tool_name, args, user_message, memory_ctx, book)
     plan = plan_evidence(frame)
     session = memory_ctx["session"]
     active_run = load_run(session.active_run_id) if plan.get("need_active_run") and session.active_run_id else None
@@ -852,7 +885,11 @@ def _execute_domain_agent_tool(
 
 
 def _agent_tool_requires_market_ready(tool_name: str) -> bool:
-    return tool_name in {"recommend_current", "analyze_intraday_situation", "compare_candidates", "explain_run_change"}
+    return tool_name in {"recommend_current", "analyze_intraday_situation", "compare_candidates", "analyze_exit_decision", "explain_run_change"}
+
+
+def _agent_frame_requires_market_ready(frame: TurnFrame) -> bool:
+    return frame.request not in {"chat", "term_explain", "single_stock_query"}
 
 
 def _reconcile_before_turn(*, operation: str = "auto") -> str | None:
@@ -932,8 +969,9 @@ def run_turn_sync(session_id: str | None, user_message: str) -> Dict[str, Any]:
                 raise RuntimeError(f"DeepSeek agent selected unknown tool: {tool_name}")
             args = _json_load_arguments(tool_call)
             trace.selected_tools.append(tool_name)
+            frame = _normalized_frame_for_agent_tool(tool_name, args, user_message, memory_ctx, book)
 
-            if _agent_tool_requires_market_ready(tool_name):
+            if _agent_tool_requires_market_ready(tool_name) or _agent_frame_requires_market_ready(frame):
                 snapshot = load_repair_status_snapshot()
                 if _repair_blocks_market_answers(book, snapshot=snapshot, blocking_reason_override=repair_blocking_reason):
                     market_ready = _market_ready_result(book, snapshot=snapshot, blocking_reason_override=repair_blocking_reason)
@@ -950,6 +988,7 @@ def run_turn_sync(session_id: str | None, user_message: str) -> Dict[str, Any]:
                 user_message=user_message,
                 memory_ctx=memory_ctx,
                 book=book,
+                frame=frame,
             )
             _append_agent_tool_result(messages, step, tool_call, result)
             if terminal:

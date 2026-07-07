@@ -59,6 +59,25 @@ def _execution_phrase(pick: CanonicalPick) -> str:
     return mapping.get(pick.execution_state, "继续检查")
 
 
+def _fmt_num(value: Any, digits: int = 2) -> str:
+    if value in {None, ""}:
+        return "-"
+    try:
+        return f"{float(value):.{digits}f}"
+    except Exception:
+        return str(value)
+
+
+def _fmt_rr(value: Any) -> str:
+    try:
+        rr = float(value)
+    except Exception:
+        return "-"
+    if rr <= 0.0:
+        return "-"
+    return f"{rr:.2f}"
+
+
 def _recommend_fallback_text(run: CanonicalRunArtifact) -> str:
     if not run.picks:
         return "今天不硬给票，当前没有足够清晰的可执行标的。"
@@ -281,11 +300,11 @@ def _recommend_fallback_text(run: CanonicalRunArtifact) -> str:
         lines.append(f"策略：{pick.champion_strategy or 'NA'}，分数 {pick.champion_strategy_score:.2f}。")
         lines.append(
             "计划："
-            f"trigger={plan.get('trigger_price') or ctx.get('trigger_price') or '-'}，"
-            f"entry={plan.get('entry_low') or ctx.get('entry_low') or '-'}-{plan.get('entry_high') or ctx.get('entry_high') or '-'}，"
-            f"stop={plan.get('stop_price') or ctx.get('stop_price') or '-'}，"
-            f"take={plan.get('take1') or ctx.get('take1') or '-'} / {plan.get('take2') or ctx.get('take2') or '-'}，"
-            f"RR={plan.get('rr_to_take1') or ctx.get('rr_to_take1') or '-'}。"
+            f"trigger={_fmt_num(plan.get('trigger_price') or ctx.get('trigger_price'))}，"
+            f"entry={_fmt_num(plan.get('entry_low') or ctx.get('entry_low'))}-{_fmt_num(plan.get('entry_high') or ctx.get('entry_high'))}，"
+            f"stop={_fmt_num(plan.get('stop_price') or ctx.get('stop_price'))}，"
+            f"take={_fmt_num(plan.get('take1') or ctx.get('take1'))} / {_fmt_num(plan.get('take2') or ctx.get('take2'))}，"
+            f"RR={_fmt_rr(plan.get('rr_to_take1') or ctx.get('rr_to_take1'))}。"
         )
         reasons = list(pick.strategy_reason_codes or ctx.get("strategy_reason_codes") or [])[:4]
         if reasons:

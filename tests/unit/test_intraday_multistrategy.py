@@ -380,3 +380,28 @@ def test_parser_promotes_explain_compare_and_plan_detail(monkeypatch):
         assert frame.request == expected
         if expected_rank is not None:
             assert frame.references.get("rank") == expected_rank
+
+
+def test_daily_plan_board_score_is_user_visible_non_negative():
+    pick = _pick("600519", 1).model_copy(update={"scores": {"final": -0.64}})
+    entry = build_board(_daybook([pick]), {}, artifact_id="daily_1", slot_id=None)[0]
+
+    assert 0.0 <= entry.final_score <= 100.0
+    assert 0.0 <= entry.live_score <= 100.0
+    assert entry.score_breakdown["raw_day_level_alpha_score"] == -0.64
+    assert entry.explain_context["score_breakdown"]["raw_day_level_alpha_score"] == -0.64
+
+
+def test_daily_plan_rr_uses_trigger_price_when_entry_low_equals_stop():
+    pick = _pick("000063", 1).model_copy(
+        update={
+            "entry_plan": {"low": 34.73, "high": 37.17},
+            "stop_plan": {"price": 34.73},
+            "take_profit_plan": {"targets": [40.52, 42.00]},
+        }
+    )
+    entry = build_board(_daybook([pick]), {}, artifact_id="daily_1", slot_id=None)[0]
+    plan = entry.execution_plan
+
+    assert plan["rr_entry_price"] == 37.17
+    assert 1.0 < plan["rr_to_take1"] < 2.0

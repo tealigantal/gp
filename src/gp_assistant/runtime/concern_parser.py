@@ -68,6 +68,19 @@ def _promote_explain_followups(frame: TurnFrame) -> TurnFrame:
         "谁更适合",
     ]
     live_phrases = ["现在能买吗", "能不能买", "现在买", "可以买", "能直接买", "能入吗"]
+    exit_phrases = [
+        "该不该卖",
+        "要不要卖",
+        "能不能卖",
+        "卖点",
+        "减仓",
+        "清仓",
+        "止盈",
+        "止损",
+        "还能拿",
+        "持有",
+        "成本",
+    ]
     detail_phrases = [
         "为什么第一只",
         "第二只为什么",
@@ -80,9 +93,13 @@ def _promote_explain_followups(frame: TurnFrame) -> TurnFrame:
         "风险在哪",
         "策略为什么",
     ]
+    term_question_phrases = ["怎么算", "怎么计算", "是什么", "什么意思", "啥意思", "定义", "解释"]
     if any(phrase in raw for phrase in compare_phrases):
         frame.request = "compare"
         frame.subject = "compare_set"
+    elif any(phrase in raw for phrase in exit_phrases) and not any(phrase in raw for phrase in term_question_phrases):
+        frame.request = "exit_decision"
+        frame.subject = "holding"
     elif any(phrase in raw for phrase in live_phrases):
         frame.request = "live_entry_check"
         frame.subject = "symbol"

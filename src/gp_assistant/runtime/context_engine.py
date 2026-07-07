@@ -16,6 +16,10 @@ def _pick_plan_slice(entry) -> Dict[str, Any]:
         "execution_state": getattr(entry, "execution_state", None),
         "recommendation_state": getattr(entry, "recommendation_state", None),
         "action": getattr(entry, "action", None),
+        "final_score": getattr(entry, "final_score", None),
+        "live_score": getattr(entry, "live_score", None),
+        "daily_rank_score": getattr(entry, "daily_rank_score", None),
+        "exec_score": getattr(entry, "exec_score", None),
         "entry_zone": getattr(entry, "entry_zone", None),
         "stop": getattr(entry, "stop", None),
         "take": getattr(entry, "take", None),
@@ -46,7 +50,7 @@ def _run_slice(run) -> Dict[str, Any]:
         "run_action": run.run_action,
         "recommendation_state": getattr(run, "recommendation_state", None),
         "decision_evidence_pack": getattr(run, "decision_evidence_pack", {}),
-        "picks": [_pick_plan_slice(entry) for entry in run.picks[:6]],
+        "picks": [_pick_plan_slice(entry) for entry in run.picks[:10]],
     }
 
 
@@ -129,6 +133,10 @@ def build_context(memory_ctx: Dict[str, Any], book: MarketBook) -> Dict[str, Any
             "top_board": [
                 {**_pick_plan_slice(entry), "style_label": entry.style_label}
                 for entry in book.board[:6]
+            ],
+            "ranked_board_full_context": [
+                {**_pick_plan_slice(entry), "style_label": entry.style_label}
+                for entry in list(book.board or [])
             ],
         },
     }

@@ -169,6 +169,147 @@ def test_agent_selects_compare_candidates_for_technology_request(monkeypatch):
     assert committed["reply"].kind == "candidate_compare"
 
 
+def test_agent_exit_question_uses_exit_decision_workflow(monkeypatch):
+    book = _book()
+    book.board = [_entry("000063", 1, "中兴通讯"), _entry("600519", 2, "贵州茅台")]
+    run = AdviceRun(
+        run_id="run_holding",
+        session_id="s1",
+        book_version="book_now",
+        created_at=now_iso(),
+        trading_day="20260429",
+        picks=book.board,
+        artifact_id="artifact_now",
+        market_phase="INTRADAY_PM",
+    )
+    session = _session()
+
+    class _LLM:
+        def available(self):
+            return True, "ok"
+
+        def agent_tool_step(self, messages, tools, tool_choice="required", temperature=0.0):
+            tool_names = {tool["function"]["name"] for tool in tools}
+            assert "analyze_exit_decision" in tool_names
+            return _tool_step(
+                "analyze_exit_decision",
+                {
+                    "symbol": "600519",
+                    "rank": None,
+                    "position_context": "我已经持有600519，成本1150，给出卖点",
+                },
+            )
+
+    monkeypatch.setattr(turn_loop, "LLMClient", _LLM)
+    monkeypatch.setattr(turn_loop, "load_memory_context", lambda session_id: {"session": session, "recent_turns": [], "recent_claims": []})
+    monkeypatch.setattr(turn_loop, "load_current_book", lambda: book)
+    monkeypatch.setattr(turn_loop, "load_run", lambda run_id: run)
+    monkeypatch.setattr(context_engine, "load_run", lambda run_id: run)
+    monkeypatch.setattr(turn_loop, "commit_turn", lambda **kwargs: None)
+
+    out = turn_loop.run_turn_sync("s1", "我已经持有600519，成本1150，给出卖点")
+
+    assert out["message"]["message_kind"] == "exit_decision"
+    assert out["message"]["exit_decision"]["symbol"] == "600519"
+    assert "风控位" in out["reply"]
+
+
+def test_agent_symbol_tool_compare_phrase_normalizes_to_compare(monkeypatch):
+    book = _book()
+    book.board = [_entry("000063", 1, "中兴通讯"), _entry("600519", 2, "贵州茅台")]
+    run = AdviceRun(
+        run_id="run_compare",
+        session_id="s1",
+        book_version="book_now",
+        created_at=now_iso(),
+        trading_day="20260429",
+        picks=book.board,
+        artifact_id="artifact_now",
+        market_phase="INTRADAY_PM",
+    )
+    session = _session()
+
+    class _LLM:
+        def available(self):
+            return True, "ok"
+
+        def agent_tool_step(self, messages, tools, tool_choice="required", temperature=0.0):
+            return _tool_step("analyze_symbol", {"symbol": "600519", "question": "600519现在还能买吗，为什么不如第一只"})
+
+    monkeypatch.setattr(turn_loop, "LLMClient", _LLM)
+    monkeypatch.setattr(turn_loop, "load_memory_context", lambda session_id: {"session": session, "recent_turns": [], "recent_claims": []})
+    monkeypatch.setattr(turn_loop, "load_current_book", lambda: book)
+    monkeypatch.setattr(turn_loop, "load_run", lambda run_id: run)
+    monkeypatch.setattr(context_engine, "load_run", lambda run_id: run)
+    monkeypatch.setattr(turn_loop, "commit_turn", lambda **kwargs: None)
+
+    out = turn_loop.run_turn_sync("s1", "600519现在还能买吗，为什么不如第一只")
+
+    assert out["message"]["message_kind"] == "compare"
+    assert set(out["message"]["symbols"]) == {"000063", "600519"}
+
+
+def test_agent_candidate_compare_merges_explicit_symbol_and_rank(monkeypatch):
+    book = _book()
+    book.board = [_entry("000063", 1, "中兴通讯"), _entry("600519", 2, "贵州茅台")]
+    run = AdviceRun(
+        run_id="run_compare",
+        session_id="s1",
+        book_version="book_now",
+        created_at=now_iso(),
+        trading_day="20260429",
+        picks=book.board,
+        artifact_id="artifact_now",
+        market_phase="INTRADAY_PM",
+    )
+    session = _session()
+
+    class _LLM:
+        def available(self):
+            return True, "ok"
+
+        def agent_tool_step(self, messages, tools, tool_choice="required", temperature=0.0):
+            return _tool_step(
+                "compare_candidates",
+                {
+                    "symbols": ["000063"],
+                    "top_n": 10,
+                    "selected_symbol": "000063",
+                    "selected_rank": 1,
+                    "selection_reason": "用户问600519为什么不如第一只，需要对比两者。",
+                    "confidence": 0.8,
+                    "user_constraint": "600519 vs 第一只",
+                    "model_reasoning_summary": "比较用户显式标的和排名第一标的。",
+                },
+            )
+
+    monkeypatch.setattr(turn_loop, "LLMClient", _LLM)
+    monkeypatch.setattr(turn_loop, "load_memory_context", lambda session_id: {"session": session, "recent_turns": [], "recent_claims": []})
+    monkeypatch.setattr(turn_loop, "load_current_book", lambda: book)
+    monkeypatch.setattr(turn_loop, "load_run", lambda run_id: run)
+    monkeypatch.setattr(context_engine, "load_run", lambda run_id: run)
+    monkeypatch.setattr(turn_loop, "commit_turn", lambda **kwargs: None)
+
+    out = turn_loop.run_turn_sync("s1", "600519现在还能买吗，为什么不如第一只")
+
+    assert out["message"]["message_kind"] == "candidate_compare"
+    assert set(out["message"]["symbols"]) == {"000063", "600519"}
+    assert "600519" in out["reply"]
+
+
+def test_agent_context_includes_full_ranked_board(monkeypatch):
+    book = _book()
+    book.board = [_entry(f"600{i:03d}", i, f"候选{i}") for i in range(1, 11)]
+    session = _session()
+    monkeypatch.setattr(context_engine, "load_run", lambda run_id: None)
+    ctx = context_engine.build_context({"session": session, "recent_turns": [], "recent_claims": []}, book)
+
+    assert len(ctx["book"]["top_board"]) == 6
+    assert len(ctx["book"]["ranked_board_full_context"]) == 10
+    assert ctx["book"]["ranked_board_full_context"][9]["symbol"] == "600010"
+    assert "score_breakdown" in ctx["book"]["ranked_board_full_context"][0]
+
+
 def test_candidate_compare_rejects_selection_outside_requested_scope():
     book = _book()
     run = _run()
