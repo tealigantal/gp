@@ -2,9 +2,11 @@ from __future__ import annotations
 
 from typing import Any, Iterable, List, Optional
 
+from ..core.config import load_config
+
 
 def intraday_runtime_enabled() -> bool:
-    return False
+    return bool(getattr(load_config(), "intraday_runtime_enabled", False))
 
 
 def _as_text(value: Any) -> Optional[str]:
@@ -36,7 +38,7 @@ def clean_user_reason(value: Any) -> Optional[str]:
     if not text:
         return None
     if text.lower() == "intraday_runtime_disabled":
-        return "当前只使用日线计划模块。"
+        return "盘中运行链已关闭，仅使用日线计划模块。"
     if _looks_like_internal_marker(text):
         return None
     return text

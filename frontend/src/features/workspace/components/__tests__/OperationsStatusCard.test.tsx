@@ -30,7 +30,7 @@ function runtime(overrides: Partial<RuntimeStatus> = {}): RuntimeStatus {
       {
         service: 'gp-worker',
         mode: 'always_on',
-        command: 'python -m gp_assistant.cli daily-loop',
+        command: 'python -m gp_assistant.cli runtime-loop',
         description: 'worker',
       },
       {

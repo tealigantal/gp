@@ -56,7 +56,6 @@ def _book() -> MarketBook:
 def test_term_explain_request_uses_llm_parse(monkeypatch):
     from gp_assistant.runtime import concern_parser
 
-    monkeypatch.setattr(concern_parser, "load_config", lambda: SimpleNamespace(intraday_runtime_enabled=True))
     monkeypatch.setattr(
         concern_parser,
         "parse_turn_frame",
@@ -78,10 +77,9 @@ def test_term_explain_request_uses_llm_parse(monkeypatch):
     assert frame.request == "term_explain"
 
 
-def test_live_request_downgrades_when_intraday_disabled(monkeypatch):
+def test_live_request_normalizes_latest_5m_to_active_run(monkeypatch):
     from gp_assistant.runtime import concern_parser
 
-    monkeypatch.setattr(concern_parser, "load_config", lambda: SimpleNamespace(intraday_runtime_enabled=False))
     monkeypatch.setattr(
         concern_parser,
         "parse_turn_frame",
@@ -134,5 +132,5 @@ def test_assistant_context_mentions_daily_mode_when_intraday_disabled(monkeypatc
 
     monkeypatch.setattr(turn_loop, "intraday_runtime_enabled", lambda: False)
     result = _assistant_context_result(_book())
-    assert "盘中 5 分钟执行数据现在是停用的" in result.reply_text
+    assert "盘中运行链已关闭" in result.reply_text
     assert result.message["message_kind"] == "chat"

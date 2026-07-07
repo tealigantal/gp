@@ -444,9 +444,9 @@ def compute_slot_pulse_package(
         and bundle.get("snapshot") is not None
         and not bundle["snapshot"].empty
     )
-    baselines = load_slot_volume_baselines(trade_day, tracked_universe.total)
     inferred_phase = _market_phase_from_slot(slot_at)
     provisional_gate = SlotGate(state="ALLOW", score=100.0, reasons=["pre_gate"])
+    baselines = load_slot_volume_baselines(trade_day, tracked_universe.total) if data_complete else {}
     provisional_pulses = evaluate_slot_pulses(
         daybook=daybook,
         tracked_universe=tracked_universe,

@@ -1,6 +1,6 @@
 # Current Progress
 
-Last updated: 2026-05-05
+Last updated: 2026-07-07
 
 ## Snapshot
 
@@ -21,12 +21,20 @@ The current product direction is:
 
 ## Recent Changes
 
+### 2026-07-07
+
+- Reworked the worker/runtime market path into one configurable runtime chain:
+  - daily freshness and daybook resolution always run first
+  - when `GP_INTRADAY_RUNTIME_ENABLED=1`, intraday phases refresh the latest closed 5-minute slot, including the 11:30 lunch slot
+  - when `GP_INTRADAY_RUNTIME_ENABLED=0`, the same chain skips minute refresh and publishes a daily-plan artifact
+  - `gp-worker` now runs `runtime-loop`; `daily-loop` remains only as a compatibility alias
+  - `/api/health` reports intraday runtime from real config and current artifact state instead of a hard-coded disabled value
+
 ### 2026-05-05
 
-- Removed the 5-minute execution path from the production runtime:
-  - `pulse5m.py` is retained only as a commented historical archive
-  - `pulse-loop`, replay-today, slot replay, minute fetch, and 5-minute UI affordances are no longer production entrypoints
-  - canonical picks now use daily-plan states such as `PLAN_READY`, `WAIT_PULLBACK`, `RISK_HIGH`, `INVALIDATED`, and `WATCH_ONLY`
+- Removed the standalone 5-minute execution path from the production runtime:
+  - `pulse-loop`, replay-today, slot replay, and separate 5-minute UI affordances are no longer production entrypoints
+  - minute refresh now belongs inside the unified runtime chain when enabled
 - Removed theme/concept/industry ranking interfaces from the production recommendation path:
   - `theme_concept.py`, `theme_pool.py`, and `theme_pool_impl.py` are retained as commented archives
   - `agent.py` no longer imports or calls `build_themes` or `last_concept_status`
@@ -36,7 +44,7 @@ The current product direction is:
   - snapshot fallback derives full-market strong-line clues from leaders and turnover
   - `mainline.source` is now `derived:daily_universe`, `derived:market_snapshot`, or `derived:unavailable`
 - Updated Workspace and ops UI copy to remove 5-minute, slot replay, execution degradation, and observation wording from normal user-facing paths.
-- Updated Docker/CLI operational entrypoints so the worker runs `daily-loop`; manual ops now expose rebuild-daybook and postclose-archive only.
+- Updated Docker/CLI operational entrypoints so the worker runs one runtime loop; manual ops now expose rebuild-daybook and postclose-archive only.
 - Hardened the intent path so `/api/chat` now depends on the LLM router for market-facing requests instead of silently falling back to local semantic heuristics.
 - Added explicit API error mapping for intent failures:
   - `503` when the intent LLM is unavailable
@@ -56,10 +64,10 @@ The current product direction is:
 - Rewrote the user-facing fallback and assistant-context layer so replies sound like an assistant instead of an ops console.
 - Added `src/gp_assistant/runtime/dialogue_text.py` as the shared text-cleaning and state-labeling layer.
 - Kept the existing architecture shape; changes stay inside the current `parser -> judgment -> narrator -> frontend workspace` chain.
-- Finished the 5-minute shutdown alignment:
-  - when `GP_INTRADAY_RUNTIME_ENABLED=0`, live-entry requests no longer assume `latest_5m`
-  - freshness planning degrades to day-level / active-run-safe behavior
-  - user-facing answers and cards no longer pretend 5-minute execution data exists
+- Finished the runtime-toggle alignment:
+  - when `GP_INTRADAY_RUNTIME_ENABLED=0`, live-entry requests do not assume `latest_5m`
+  - when enabled, minute freshness is part of the same runtime artifact chain
+  - user-facing answers and cards reflect whether the minute stage is enabled
 - Stopped leaking internal markers such as `generated 10 picks`, `intraday_runtime_disabled`, and raw gate/debug strings into user replies.
 - Fixed term-explain follow-ups so questions like `什么是收盘有效跌破支撑带` and `为什么仅观察` are answered as explanations instead of being misrouted to single-pick detail.
 - Reworked the Workspace UI copy and presentation so it feels like a chat assistant rather than an internal control panel.
@@ -78,7 +86,7 @@ The current product direction is:
 - Main flow remains aligned around `gateway -> runtime -> judgment -> reply -> workspace`.
 - Intent parsing is now a hard LLM dependency for `/api/chat`; unavailable or malformed intent responses are surfaced as explicit API errors instead of hidden fallback behavior.
 - `kernel.facade` is the current cross-cutting service boundary for recommendation artifacts, validation, portfolio, execution preview, and workbench aggregation.
-- The production recommendation path is daily-plan only. It does not run 5-minute pulse evaluation and does not call AkShare theme/concept/industry ranking APIs.
+- The production recommendation path is one runtime chain. It always resolves daily freshness/daybook first, optionally runs 5-minute pulse evaluation when enabled, and does not call AkShare theme/concept/industry ranking APIs.
 - Mainline is derived from the full-market snapshot and daily candidate universe rather than external theme interfaces.
 - The Workspace page now presents:
   - a conversation-first left pane
@@ -117,7 +125,7 @@ The following checks passed locally during the daily-mainline shutdown pass:
 - `frontend: npm run typecheck`
 - `frontend: npm test`
 - `frontend: npm run build`
-- static scans for production `pulse5m`, theme ranking calls, and retired user-visible 5-minute/observation wording
+- static scans for theme ranking calls and retired user-visible degradation wording
 
 Real LLM-connected `/api/chat` acceptance was run from PowerShell after loading `.env`. The checked sequence covered recommendation, rank follow-up, term explanation, comparison, and sell-decision follow-up. All five turns returned HTTP 200; because local data freshness blocked publication, recommendation and subject-dependent follow-ups correctly returned user-facing `no_trade` replies.
 

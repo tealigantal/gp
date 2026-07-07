@@ -10,10 +10,6 @@ from ..evidence.live_quote_service import extract_user_quote
 from ..llm.interpret import parse_turn_frame
 
 
-def _intraday_runtime_enabled() -> bool:
-    return False
-
-
 def _clamp_topk(value: int) -> int:
     return max(1, min(value, 10))
 

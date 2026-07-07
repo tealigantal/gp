@@ -155,6 +155,13 @@ def load_current_slot_artifact() -> Optional[LiveSlotArtifact]:
 
 
 def compose_market_book(daybook: DayBook, artifact: LiveSlotArtifact) -> MarketBook:
+    reason = str((artifact.provider_meta or {}).get("reason") or "").strip()
+    data_status = str((artifact.provider_meta or {}).get("data_status") or "").strip()
+    if not data_status:
+        if reason == "intraday_pulse":
+            data_status = "ok" if str(artifact.slot_status or "").upper() == "OK" else "degraded"
+        else:
+            data_status = "daily_plan"
     return MarketBook(
         trading_day=artifact.trade_day,
         book_version=artifact.artifact_id,
@@ -165,17 +172,17 @@ def compose_market_book(daybook: DayBook, artifact: LiveSlotArtifact) -> MarketB
         watchset=list(artifact.tracked_universe.total),
         symbol_states=artifact.symbol_states,
         portfolio_snapshot=artifact.portfolio_snapshot,
-        last_closed_5m=None,
+        last_closed_5m=artifact.slot_at,
         side_results=artifact.side_results,
         artifact_id=artifact.artifact_id,
         slot_id=artifact.slot_id,
         slot_status=artifact.slot_status,
         publish_allowed=artifact.publish_allowed,
         daybook_effective_day=artifact.daybook_effective_day,
-        pulse_trade_day=None,
-        pulse_slot_at=None,
+        pulse_trade_day=(artifact.trade_day if artifact.slot_at else None),
+        pulse_slot_at=artifact.slot_at,
         market_phase=artifact.market_phase,
-        data_status="daily_plan",
+        data_status=data_status,
         gate=artifact.gate,
         data_quality=artifact.data_quality,
         tracked_universe=artifact.tracked_universe,

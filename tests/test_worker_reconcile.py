@@ -6,11 +6,13 @@ from types import SimpleNamespace
 
 from gp_assistant.book import repo
 from gp_assistant.contracts.objects import (
+    AdvicePick,
     CurrentSlotPointer,
     DayBook,
     LiveSlotArtifact,
     SlotDataQuality,
     SlotGate,
+    SymbolPulse,
     TrackedUniverse,
 )
 from gp_assistant import worker
@@ -77,48 +79,97 @@ def _artifact(
 def test_reconcile_runtime_state_uses_single_dispatch_path(monkeypatch):
     temp_root = Path(tempfile.mkdtemp(prefix="gp-worker-reconcile-"))
     monkeypatch.setenv("GP_STORE_DIR", str(temp_root / "store"))
-    preopen_state = SimpleNamespace(
-        market_phase=PHASE_PREOPEN,
-        target_daybook_effective_day="20240320",
-        target_pulse_trade_day="20240320",
-        target_pulse_slot_at=None,
+    calls: list[str] = []
+    monkeypatch.setattr(
+        worker,
+        "run_runtime_chain",
+        lambda now=None, operation="auto": calls.append(operation) or {"path": "runtime", "operation": operation},
     )
-    monkeypatch.setattr(worker, "compute_market_state", lambda now=None: preopen_state)
-    monkeypatch.setattr(worker, "run_preopen_init", lambda now=None, force=False: {"path": "preopen", "force": force})
 
     auto_result = worker.reconcile_runtime_state()
     manual_result = worker.reconcile_runtime_state(operation="rebuild_daybook")
 
-    assert auto_result["path"] == "preopen"
+    assert auto_result["path"] == "runtime"
     assert auto_result["operation"] == "auto"
-    assert manual_result["path"] == "preopen"
-    assert manual_result["force"] is True
+    assert manual_result["path"] == "runtime"
     assert manual_result["operation"] == "rebuild_daybook"
+    assert calls == ["auto", "rebuild_daybook"]
 
 
 def test_auto_reconcile_uses_postclose_archive_in_postclose_pending(monkeypatch):
-    state = SimpleNamespace(
-        market_phase=PHASE_POSTCLOSE_PENDING,
-        target_daybook_effective_day="20260512",
-        target_pulse_trade_day="20260512",
-        target_pulse_slot_at="2026-05-12 14:55:00",
-    )
-    calls: list[dict[str, object]] = []
-
-    monkeypatch.setattr(worker, "compute_market_state", lambda now=None: state)
-    monkeypatch.setattr(worker, "run_preopen_init", lambda **_: (_ for _ in ()).throw(AssertionError("preopen path should not run")))
-    monkeypatch.setattr(
-        worker,
-        "run_postclose_archive",
-        lambda now=None, force=False: calls.append({"force": force}) or {"path": "postclose", "force": force},
-    )
+    monkeypatch.setattr(worker, "run_runtime_chain", lambda now=None, operation="auto": {"path": "runtime", "operation": operation})
 
     result = worker.reconcile_runtime_state(operation="auto")
 
-    assert result["path"] == "postclose"
-    assert result["force"] is False
+    assert result["path"] == "runtime"
     assert result["operation"] == "auto"
-    assert calls == [{"force": False}]
+
+
+def test_auto_reconcile_builds_intraday_pulse_when_enabled(monkeypatch):
+    temp_root = Path(tempfile.mkdtemp(prefix="gp-worker-intraday-"))
+    monkeypatch.setenv("GP_STORE_DIR", str(temp_root / "store"))
+    state = SimpleNamespace(
+        market_phase="LUNCH_BREAK",
+        target_daybook_effective_day="20260512",
+        target_pulse_trade_day="20260512",
+        target_pulse_slot_at="2026-05-12 11:30:00",
+    )
+    daybook = _daybook()
+    daybook.picks = [AdvicePick(symbol="600519", rank=1, name="贵州茅台")]
+    calls: list[dict[str, object]] = []
+
+    monkeypatch.setattr(worker, "compute_market_state", lambda now=None: state)
+    monkeypatch.setattr(worker, "_load_or_build_daybook", lambda trade_day, force=False: daybook)
+    monkeypatch.setattr(worker, "load_config", lambda: SimpleNamespace(
+        intraday_runtime_enabled=True,
+        intraday_include_portfolio=False,
+        intraday_benchmark_symbol="000300",
+    ))
+    monkeypatch.setattr(worker, "load_portfolio_snapshot", lambda: {"positions": []})
+
+    def _pulse_package(**kwargs):
+        calls.append(kwargs)
+        return {
+            "pulses": {
+                "600519": SymbolPulse(
+                    symbol="600519",
+                    execution_state="trend_continuation_buy",
+                    action="BUY",
+                    can_open=True,
+                    live_score=88.0,
+                    slot_at="2026-05-12 11:30:00",
+                    trade_day="20260512",
+                    recommendation_state="TRADING_SIGNAL",
+                )
+            },
+            "gate": SlotGate(state="ALLOW", score=90.0, reasons=["ok"]),
+            "bundle": {
+                "errors": [],
+                "snapshot_age_sec": 1.0,
+                "symbols_expected": 1,
+                "symbols_received": 1,
+                "benchmark_received": True,
+                "provider": "akshare",
+            },
+        }
+
+    monkeypatch.setattr(worker, "compute_slot_pulse_package", _pulse_package)
+
+    result = worker.reconcile_runtime_state(operation="auto")
+    current = repo.load_current_slot_artifact()
+    book = repo.load_current_book()
+
+    assert result["intraday_pulse"] is True
+    assert result["daily_plan_only"] is False
+    assert result["slot_at"] == "2026-05-12 11:30:00"
+    assert calls[0]["slot_at"] == "2026-05-12 11:30:00"
+    assert current is not None
+    assert current.provider_meta["reason"] == "intraday_pulse"
+    assert current.slot_status == "OK"
+    assert book is not None
+    assert book.pulse_trade_day == "20260512"
+    assert book.pulse_slot_at == "2026-05-12 11:30:00"
+    assert book.data_status == "ok"
 
 
 def test_postclose_archive_builds_daily_plan_without_replay(monkeypatch):
@@ -199,7 +250,10 @@ def test_build_daily_plan_noops_only_when_freshness_meta_matches(monkeypatch):
     monkeypatch.setenv("GP_STORE_DIR", str(temp_root / "store"))
     daybook = _daybook()
     matching_meta = {
+        "chain": "runtime",
+        "runtime_stage": "daily",
         "reason": "daily_plan",
+        "data_status": "daily_plan",
         "daybook_generated_at": "2026-05-12T16:52:00+08:00",
         "daily_target_day": "2026-05-12",
         "daily_target_mode": "current_ready",

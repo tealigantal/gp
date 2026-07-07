@@ -445,7 +445,7 @@ def _assistant_context_result(book: MarketBook) -> AgentToolResult:
     reply_text = (
         "你好，我可以直接帮你看今天的候选、某只票还能不能买、止盈止损怎么设，或者解释上一条结论。"
         if intraday_enabled
-        else "你好，我可以直接帮你看今天的候选、解释某只票为什么入选，或者说明当前该看什么。当前只使用日线计划模块。"
+        else "你好，我可以直接帮你看今天的候选、解释某只票为什么入选，或者说明当前该看什么。盘中运行链已关闭，仅使用日线计划模块。"
     )
     summary = GroundingSummary(
         market_phase=book.market_phase,

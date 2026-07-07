@@ -24,7 +24,7 @@ GP 是一个面向 **A 股主板短线（1-3 个交易日）** 的 chat-first We
 推荐的容器拓扑如下：
 
 - `gp`：FastAPI API 服务
-- `gp-worker`：常驻 worker，负责 daybook 初始化、日线计划 artifact 刷新和 post-close 状态刷新
+- `gp-worker`：常驻 worker，负责统一运行链（日线 freshness、daybook、盘中分钟线、current artifact）刷新
 - `web`：前端单页 Workspace
 - `gp-rebuild-daybook`：按需手工重建 daybook
 - `gp-postclose-archive`：按需执行收盘后归档
@@ -263,7 +263,7 @@ python -m gp_assistant chat "今天给我 3 只"
 
 ```powershell
 $env:PYTHONPATH = "src"
-python -m gp_assistant daily-loop
+python -m gp_assistant runtime-loop
 ```
 
 ### 前端

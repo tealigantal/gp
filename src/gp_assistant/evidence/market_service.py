@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError, as_completed
 from pathlib import Path
 from typing import Any, Dict, Iterable, Optional
 
@@ -234,22 +234,26 @@ def fetch_minute_bars_5m(symbols: Iterable[str], trading_day: str, *, slot_at: s
     def _one(sym: str) -> tuple[str, pd.DataFrame]:
         return sym, _fetch_cached_or_live(sym, trading_day, start_date, end_date, kind="stock")
 
-    with ThreadPoolExecutor(max_workers=max_workers) as ex:
-        futures = {ex.submit(_one, sym): sym for sym in syms}
-        try:
-            for fut in as_completed(futures, timeout=timeout_sec):
-                sym = futures[fut]
-                try:
-                    key, df = fut.result(timeout=0)
-                    if not df.empty:
-                        out[key] = df
-                    else:
-                        errors[sym] = "empty"
-                except Exception as ex_item:  # noqa: BLE001
-                    errors[sym] = f"{type(ex_item).__name__}: {ex_item}"
-        except Exception as ex_timeout:  # noqa: BLE001
-            for sym in syms:
-                errors.setdefault(sym, f"{type(ex_timeout).__name__}: {ex_timeout}")
+    executor = ThreadPoolExecutor(max_workers=max_workers)
+    futures = {executor.submit(_one, sym): sym for sym in syms}
+    try:
+        for fut in as_completed(futures, timeout=timeout_sec):
+            sym = futures[fut]
+            try:
+                key, df = fut.result(timeout=0)
+                if not df.empty:
+                    out[key] = df
+                else:
+                    errors[sym] = "empty"
+            except Exception as ex_item:  # noqa: BLE001
+                errors[sym] = f"{type(ex_item).__name__}: {ex_item}"
+    except FuturesTimeoutError as ex_timeout:
+        for fut, sym in futures.items():
+            if not fut.done():
+                fut.cancel()
+                errors.setdefault(sym, f"TimeoutError: {ex_timeout}")
+    finally:
+        executor.shutdown(wait=False, cancel_futures=True)
     if errors:
         logger.warning("[min5] partial failure trade_day=%s slot=%s errors=%s", trading_day, slot_at, errors)
     return out
@@ -272,6 +276,23 @@ def fetch_intraday_bundle(
     benchmark_symbol = benchmark_symbol or getattr(cfg, "intraday_benchmark_symbol", "000300")
     syms = [str(symbol).strip() for symbol in symbols if str(symbol).strip()]
     bars = fetch_minute_bars_5m(syms, trading_day, slot_at=slot_at)
+    errors: list[str] = []
+    if len(bars) != len(syms):
+        missing = sorted(set(syms) - set(bars))
+        errors.append(f"symbols_missing:{','.join(missing)}")
+        return {
+            "bars": bars,
+            "benchmark": None,
+            "benchmark_symbol": benchmark_symbol,
+            "snapshot": None,
+            "requested_slot_at": slot_at,
+            "provider": "akshare",
+            "errors": errors + ["benchmark_skipped:incomplete_symbols", "snapshot_skipped:incomplete_symbols"],
+            "snapshot_age_sec": None,
+            "symbols_expected": len(syms),
+            "symbols_received": len(bars),
+            "benchmark_received": False,
+        }
     benchmark = None
     benchmark_error = None
     try:
@@ -290,10 +311,6 @@ def fetch_intraday_bundle(
                 snapshot_age_sec = 0.0
         except Exception:
             snapshot_age_sec = 0.0
-    errors: list[str] = []
-    if len(bars) != len(syms):
-        missing = sorted(set(syms) - set(bars))
-        errors.append(f"symbols_missing:{','.join(missing)}")
     if benchmark is None or benchmark.empty:
         errors.append(f"benchmark_missing:{benchmark_symbol}")
     if snapshot is None or snapshot.empty:

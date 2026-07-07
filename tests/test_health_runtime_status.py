@@ -1,5 +1,4 @@
 import os
-from contextlib import nullcontext
 from types import SimpleNamespace
 
 import pytest
@@ -16,8 +15,7 @@ client = TestClient(app)
 
 
 @pytest.fixture(autouse=True)
-def _skip_book_lane(monkeypatch):
-    monkeypatch.setattr(routes, "book_lane", nullcontext)
+def _stable_daily_target(monkeypatch):
     monkeypatch.setattr(
         routes,
         "resolve_daily_target",
@@ -117,7 +115,8 @@ def test_health_includes_runtime_tools(monkeypatch):
     assert response.status_code == 200, response.text
     runtime = response.json().get("runtime", {})
     assert runtime.get("auto_update_service") == "gp-worker"
-    assert runtime.get("book_freshness") == "daily_only"
+    assert runtime.get("intraday_runtime_enabled") is True
+    assert runtime.get("book_freshness") == "degraded"
     assert runtime.get("daily_status") == "eod_pending"
     assert runtime.get("daily_freshness_ready") is False
     assert runtime.get("daily_target_mode") == "current_pending"

@@ -28,7 +28,7 @@ from ..llm.client import LLMClient
 from ..memory._sqlite import gateway_stats
 from ..memory.session_store import list_sessions
 from ..memory.transcript_store import load_recent
-from ..runtime.lanes import book_lane, session_lane
+from ..runtime.lanes import session_lane
 from ..runtime.market_clock import (
     PHASE_CLOSING_AUCTION,
     PHASE_INTRADAY_AM,
@@ -77,8 +77,8 @@ def _runtime_services() -> list[RuntimeToolInfo]:
         RuntimeToolInfo(
             service="gp-worker",
             mode="always_on",
-            command="python -m gp_assistant.cli daily-loop",
-            description="后台 worker，按市场时段自动刷新日线计划和 current artifact。",
+            command="python -m gp_assistant.cli runtime-loop",
+            description="后台 worker，按统一运行链刷新日线、盘中分钟线和 current artifact。",
         ),
         RuntimeToolInfo(
             service="gp-rebuild-daybook",
@@ -167,7 +167,7 @@ def _artifact_lag_status(
         }
     )
     lag_fields: list[str] = []
-    if provider_meta.get("reason") != "daily_plan":
+    if provider_meta.get("reason") not in {"daily_plan", "intraday_pulse"}:
         lag_fields.append("reason")
     for key in _DAILY_PLAN_META_KEYS:
         if key not in provider_meta or provider_meta.get(key) != expected_meta.get(key):
@@ -198,7 +198,12 @@ def _book_freshness(
         return "postclose_ready"
     if market_phase == PHASE_NON_TRADING:
         return "non_trading"
-    return "daily_only"
+    if target_slot_at:
+        book_slot = getattr(book, "pulse_slot_at", None) or getattr(book, "last_closed_5m", None)
+        if book_slot and str(book_slot) >= str(target_slot_at):
+            return "intraday_ready"
+        return "intraday_lagging"
+    return "waiting_first_bar"
 
 
 def _daily_freshness_fields_from_report(freshness: dict[str, Any]) -> dict[str, Any]:
@@ -273,15 +278,14 @@ def _trade_day_iso(trade_day: Any) -> str:
 
 def _load_current_book_best_effort():
     try:
-        with book_lane():
-            return load_current_book(), None
-    except TimeoutError as ex:
+        return load_current_book(), None
+    except Exception as ex:  # noqa: BLE001
         return None, str(ex)
 
 
 def _runtime_status(book, *, lock_error: str | None = None) -> RuntimeStatus:
     cfg = load_config()
-    intraday_runtime_enabled = False
+    intraday_runtime_enabled = bool(getattr(cfg, "intraday_runtime_enabled", False))
     ms = compute_market_state()
     snapshot = load_repair_status_snapshot()
     auto_update_expected = ms.market_phase in {
@@ -389,7 +393,7 @@ def _runtime_status(book, *, lock_error: str | None = None) -> RuntimeStatus:
                 lock_error
                 if lock_error
                 else (
-                    "当前只使用日线计划模块。"
+                    "盘中运行链已关闭，仅使用日线计划模块。"
                     if not intraday_runtime_enabled
                     else None
                 )

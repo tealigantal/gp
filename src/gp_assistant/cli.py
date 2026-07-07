@@ -8,7 +8,7 @@ import uvicorn
 from .evidence.daily_freshness import audit_daily_freshness
 from .gateway.app import app
 from .runtime.turn_loop import run_turn_sync
-from .worker import reconcile_runtime_state, run_daily_loop
+from .worker import reconcile_runtime_state, run_runtime_loop
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -19,7 +19,8 @@ def main(argv: list[str] | None = None) -> int:
     p_serve.add_argument("--host", default="127.0.0.1")
     p_serve.add_argument("--port", type=int, default=8000)
 
-    sub.add_parser("daily-loop", help="run the daily plan worker loop")
+    sub.add_parser("runtime-loop", help="run the unified market runtime worker loop")
+    sub.add_parser("daily-loop", help="compatibility alias for runtime-loop")
     sub.add_parser("rebuild-daybook", help="generate today daily plan artifact")
     sub.add_parser("postclose-archive", help="archive post-close state")
     sub.add_parser("audit-daily-freshness", help="audit daily freshness and stale symbols")
@@ -32,8 +33,8 @@ def main(argv: list[str] | None = None) -> int:
     if args.cmd == "serve":
         uvicorn.run(app, host=args.host, port=args.port)
         return 0
-    if args.cmd == "daily-loop":
-        run_daily_loop()
+    if args.cmd in {"runtime-loop", "daily-loop"}:
+        run_runtime_loop()
         return 0
     if args.cmd == "rebuild-daybook":
         print(json.dumps(reconcile_runtime_state(operation="rebuild_daybook"), ensure_ascii=False, indent=2))

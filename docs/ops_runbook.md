@@ -16,9 +16,12 @@ This document covers the current service spine:
 
 It does not cover legacy chat adapters or the removed compatibility surface.
 
-The production market path is daily-plan only:
+The production market path is one unified runtime chain:
 
-- no 5-minute pulse loop or replay-today operation
+- day K freshness and daybook are always resolved first
+- when `GP_INTRADAY_RUNTIME_ENABLED=1`, trading-session phases also refresh the latest closed 5-minute slot
+- lunch break uses the same chain and targets the 11:30 closed slot
+- when `GP_INTRADAY_RUNTIME_ENABLED=0`, the same chain skips the minute stage and publishes a daily-plan artifact
 - no AkShare theme/concept/industry ranking calls
 - `themes` remains an empty compatibility field
 - mainline is derived from the market snapshot and daily candidate universe
@@ -75,11 +78,11 @@ set PYTHONPATH=src
 python -m gp_assistant rebuild-daybook
 ```
 
-### Run the daily-plan worker loop
+### Run the runtime worker loop
 
 ```bash
 set PYTHONPATH=src
-python -m gp_assistant daily-loop
+python -m gp_assistant runtime-loop
 ```
 
 ## Main Runtime Checks
@@ -148,11 +151,10 @@ npm run build
 Retired-path scans:
 
 ```bash
-rg "pulse5m|build_themes|theme_concept|stock_board_concept|stock_board_industry" src/gp_assistant frontend/src
-rg "5 分钟|5分钟|执行数据降级|观察|降级观察|观察中|回放今日执行态" src/gp_assistant frontend/src README.md docker-compose.yml
+rg "build_themes|theme_concept|stock_board_concept|stock_board_industry" src/gp_assistant frontend/src
 ```
 
-Expected result: no production-path hits outside archived commented modules.
+Expected result: no production-path theme ranking calls outside archived commented modules.
 
 ## Runtime Data
 
@@ -183,7 +185,7 @@ The generated `data/raw/trade_calendar.parquet` is local runtime data and should
 - The service is session-based. `session_id` is the stable handle for follow-up turns.
 - `run_id` is the stable handle for a published recommendation result.
 - `book/current.json` is runtime state, not the primary source code contract.
-- Freshness behavior is now daily-plan oriented. Historical 5-minute policy notes may still exist in archived docs but are not production entrypoints.
+- Freshness behavior is now one runtime chain: daily freshness first, optional 5-minute pulse second, then one current artifact.
 - `kernel.facade` is the active service boundary for recommendation v2, compare, pick detail, validation summary, portfolio state, execution preview, paper execution, and workbench aggregation.
 
 ## When Something Looks Wrong

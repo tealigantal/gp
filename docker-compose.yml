@@ -16,7 +16,7 @@ x-gp-env: &gp-env
   GP_RUN_MODE: ${GP_RUN_MODE:-prod}
   GP_DEV_MODE: ${GP_DEV_MODE:-0}
   GP_RECOMMEND_MODE: ${GP_RECOMMEND_MODE:-}
-  GP_INTRADAY_RUNTIME_ENABLED: ${GP_INTRADAY_RUNTIME_ENABLED:-0}
+  GP_INTRADAY_RUNTIME_ENABLED: ${GP_INTRADAY_RUNTIME_ENABLED:-1}
   GP_DEV_SYMBOLS: ${GP_DEV_SYMBOLS:-}
   GP_DEV_OHLCV_LEN: ${GP_DEV_OHLCV_LEN:-90}
   GP_CORS_ORIGINS: ${GP_CORS_ORIGINS:-}
@@ -68,7 +68,7 @@ services:
 
   gp-worker:
     <<: *gp-service
-    command: ["python", "-m", "gp_assistant.cli", "daily-loop"]
+    command: ["python", "-m", "gp_assistant.cli", "runtime-loop"]
     restart: unless-stopped
 
   gp-rebuild-daybook:
