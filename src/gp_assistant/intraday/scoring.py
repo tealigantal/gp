@@ -182,20 +182,70 @@ def _candidate_component(candidate: StrategyCandidate, name: str) -> float:
     return finite_float(getattr(candidate, name, 0.0))
 
 
+def _range_score(value: Any, low: float, high: float, *, default: float = 50.0) -> float:
+    parsed = maybe_float(value)
+    if parsed is None or high <= low:
+        return default
+    return max(0.0, min(100.0, 100.0 * (float(parsed) - low) / (high - low)))
+
+
+def _timing_quality_score(features: Dict[str, Any]) -> float:
+    if bool(features.get("no_new_entry_window")):
+        return 25.0
+    score = 55.0
+    if bool(features.get("is_first_30m")):
+        score += 8.0
+    if bool(features.get("is_lunch_reopen_window")):
+        score += 10.0
+        if finite_float(features.get("morning_rs_index")) > 0:
+            score += 8.0
+        close = maybe_float(features.get("close"))
+        afternoon_high = maybe_float(features.get("afternoon_open_range_high"))
+        if close is not None and afternoon_high is not None and close >= afternoon_high:
+            score += 10.0
+    if bool(features.get("is_late_session")):
+        score -= 18.0
+    return max(0.0, min(100.0, score))
+
+
 def build_score_breakdown(features: Dict[str, Any], champion: StrategyCandidate) -> Dict[str, float]:
     day_level_alpha_score = finite_float(features.get("day_level_alpha_score"))
     champion_strategy_score = finite_float(champion.raw_score)
     execution_quality_score = _candidate_component(champion, "execution_quality_score")
+    relative_strength_score = _candidate_component(champion, "relative_strength_score")
+    volume_confirmation_score = _candidate_component(champion, "volume_confirmation_score")
     rr_score = _candidate_component(champion, "rr_score")
     market_regime_fit_score = _candidate_component(champion, "regime_fit_score")
     data_quality_score = finite_float(features.get("data_quality_score"), 0.0)
+    momentum_score = (
+        0.35 * _range_score(features.get("ret_from_open"), -0.02, 0.04)
+        + 0.30 * _range_score(features.get("rs_index"), -0.015, 0.025)
+        + 0.20 * _range_score(features.get("rs_candidate_pool"), -0.015, 0.025)
+        + 0.15 * _range_score(features.get("morning_rs_index"), -0.015, 0.025)
+    )
+    vwap_alignment_score = (
+        0.55 * _range_score(features.get("price_vs_vwap"), -0.006, 0.018)
+        + 0.25 * _range_score(features.get("vwap_slope"), -0.002, 0.006)
+        + 0.20 * _range_score(features.get("bars_above_vwap_count"), 0.0, 18.0)
+    )
+    volume_flow_score = (
+        0.40 * _range_score(features.get("slot_rel_vol"), 0.6, 1.8)
+        + 0.25 * _range_score(features.get("volume_zscore_by_slot"), -1.0, 2.5)
+        + 0.20 * _range_score(features.get("volume_expansion_ratio"), 0.7, 2.0)
+        + 0.15 * (75.0 if finite_float(features.get("money_flow_proxy")) > 0 else 25.0)
+    )
+    timing_quality_score = _timing_quality_score(features)
     live_score = (
-        0.36 * day_level_alpha_score
-        + 0.24 * champion_strategy_score
-        + 0.16 * execution_quality_score
-        + 0.10 * rr_score
-        + 0.08 * market_regime_fit_score
-        + 0.06 * data_quality_score
+        0.24 * day_level_alpha_score
+        + 0.18 * champion_strategy_score
+        + 0.14 * execution_quality_score
+        + 0.12 * relative_strength_score
+        + 0.10 * volume_flow_score
+        + 0.08 * momentum_score
+        + 0.06 * vwap_alignment_score
+        + 0.04 * rr_score
+        + 0.02 * timing_quality_score
+        + 0.02 * data_quality_score
     )
     if bool(features.get("invalidated_flag")):
         live_score = 0.0
@@ -206,8 +256,12 @@ def build_score_breakdown(features: Dict[str, Any], champion: StrategyCandidate)
         "live_score": round(max(0.0, min(100.0, live_score)), 4),
         "strategy_score": round(champion_strategy_score, 4),
         "execution_quality_score": round(execution_quality_score, 4),
-        "relative_strength_score": round(_candidate_component(champion, "relative_strength_score"), 4),
-        "volume_confirmation_score": round(_candidate_component(champion, "volume_confirmation_score"), 4),
+        "relative_strength_score": round(relative_strength_score, 4),
+        "volume_confirmation_score": round(volume_confirmation_score, 4),
+        "momentum_score": round(momentum_score, 4),
+        "vwap_alignment_score": round(vwap_alignment_score, 4),
+        "volume_flow_score": round(volume_flow_score, 4),
+        "timing_quality_score": round(timing_quality_score, 4),
         "location_score": round(_candidate_component(champion, "location_score"), 4),
         "rr_score": round(rr_score, 4),
         "risk_penalty": round(_candidate_component(champion, "risk_penalty"), 4),

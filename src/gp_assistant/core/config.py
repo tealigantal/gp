@@ -44,7 +44,7 @@ class AppConfig:
     # Defaults / knobs
     default_universe: List[str] = field(default_factory=lambda: ["000001", "000002", "000333", "600519"])
 
-    request_timeout_sec: int = int(os.getenv("GP_REQUEST_TIMEOUT_SEC", "20"))
+    request_timeout_sec: int = int(os.getenv("GP_REQUEST_TIMEOUT_SEC", "30"))
     default_volume_unit: str = os.getenv("GP_DEFAULT_VOLUME_UNIT", "share").lower()
 
     # Timezone
@@ -101,8 +101,9 @@ class AppConfig:
 
     # Intraday pulse/worker
     intraday_runtime_enabled: bool = _truthy(os.getenv("GP_INTRADAY_RUNTIME_ENABLED", "1"))
-    intraday_fetch_workers: int = int(os.getenv("GP_INTRADAY_FETCH_WORKERS", "6"))
-    intraday_fetch_timeout_sec: int = int(os.getenv("GP_INTRADAY_FETCH_TIMEOUT_SEC", "20"))
+    intraday_fetch_workers: int = int(os.getenv("GP_INTRADAY_FETCH_WORKERS", "3"))
+    intraday_fetch_timeout_sec: int = int(os.getenv("GP_INTRADAY_FETCH_TIMEOUT_SEC", "180"))
+    intraday_fetch_retry_missing: bool = _truthy(os.getenv("GP_INTRADAY_FETCH_RETRY_MISSING", "1"))
     intraday_poll_interval_sec: int = int(os.getenv("GP_INTRADAY_POLL_INTERVAL_SEC", "15"))
     intraday_benchmark_symbol: str = os.getenv("GP_INTRADAY_BENCHMARK", "000300")
     intraday_include_portfolio: bool = _truthy(os.getenv("GP_INTRADAY_INCLUDE_PORTFOLIO", "1"))

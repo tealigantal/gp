@@ -708,11 +708,13 @@ class AkShareProvider(MarketDataProvider):
 
     def _standardize_minute_bars(self, df: pd.DataFrame, *, symbol: str) -> pd.DataFrame:
         rename_map = {
+            "day": "trade_time",
             "时间": "trade_time",
             "开盘": "open",
             "最高": "high",
             "最低": "low",
             "收盘": "close",
+            "volume": "vol",
             "成交量": "vol",
             "成交额": "amount",
             "均价": "vwap",
@@ -721,6 +723,8 @@ class AkShareProvider(MarketDataProvider):
         for raw, canonical in rename_map.items():
             if raw in src.columns and canonical not in src.columns:
                 src[canonical] = src[raw]
+        if "amount" not in src.columns and {"close", "vol"} <= set(src.columns):
+            src["amount"] = pd.to_numeric(src["close"], errors="coerce") * pd.to_numeric(src["vol"], errors="coerce")
         required = ["trade_time", "open", "high", "low", "close", "vol", "amount"]
         missing = [col for col in required if col not in src.columns]
         if missing:
@@ -733,8 +737,43 @@ class AkShareProvider(MarketDataProvider):
         src = src.dropna(subset=["trade_time", "open", "high", "low", "close"]).sort_values("trade_time").reset_index(drop=True)
         return src
 
+    @staticmethod
+    def _filter_minute_window(df: pd.DataFrame, start_date: str, end_date: str) -> pd.DataFrame:
+        if df.empty:
+            return df
+        start_dt = pd.to_datetime(start_date)
+        end_dt = pd.to_datetime(end_date)
+        return df[(df["trade_time"] >= start_dt) & (df["trade_time"] <= end_dt)].reset_index(drop=True)
+
+    @staticmethod
+    def _to_index_prefixed_symbol(symbol: str) -> str:
+        s = symbol.strip().lower()
+        if s.startswith(("sh", "sz")):
+            return s
+        if "." in s:
+            core, suf = s.split(".", 1)
+            return f"{suf.lower()}{core}" if suf.lower() in {"sh", "sz"} else f"sh{core}"
+        if s.startswith("399"):
+            return f"sz{s}"
+        return f"sh{s}"
+
     def get_minute_bars_5m(self, symbol: str, start_date: str, end_date: str) -> pd.DataFrame:
         ak = self._import()
+        primary_error: Exception | None = None
+        prefixed = self._to_prefixed_symbol(symbol)
+        try:
+            df = self._call_with_retry(
+                lambda: self._with_requests_timeout(
+                    lambda: ak.stock_zh_a_minute(symbol=prefixed, period="5", adjust="")
+                ),
+                retries=1,
+            )
+            out = self._filter_minute_window(self._standardize_minute_bars(df, symbol=symbol), start_date, end_date)
+            if not out.empty:
+                return out
+            raise DataProviderError("AkShare stock_zh_a_minute empty in requested window", symbol=symbol)
+        except Exception as ex:  # noqa: BLE001
+            primary_error = ex
         sym = self._to_em_symbol(symbol)
         try:
             df = self._call_with_retry(
@@ -747,17 +786,33 @@ class AkShareProvider(MarketDataProvider):
                         adjust="",
                     )
                 ),
-                retries=3,
+                retries=1,
             )
+            out = self._filter_minute_window(self._standardize_minute_bars(df, symbol=symbol), start_date, end_date)
+            if not out.empty:
+                return out
+            raise DataProviderError("AkShare stock_zh_a_hist_min_em empty in requested window", symbol=symbol)
         except Exception as ex:  # noqa: BLE001
-            raise DataProviderError(f"AkShare minute fetch failed: {ex}", symbol=symbol) from ex
-        if df is None or df.empty:
-            raise DataProviderError("AkShare minute fetch empty", symbol=symbol)
-        return self._standardize_minute_bars(df, symbol=symbol)
+            raise DataProviderError(f"AkShare minute fetch failed: primary={primary_error}; fallback={ex}", symbol=symbol) from ex
 
     def get_index_minute_bars_5m(self, symbol: str, start_date: str, end_date: str) -> pd.DataFrame:
         ak = self._import()
         idx = str(symbol).strip()
+        primary_error: Exception | None = None
+        prefixed = self._to_index_prefixed_symbol(idx)
+        try:
+            df = self._call_with_retry(
+                lambda: self._with_requests_timeout(
+                    lambda: ak.stock_zh_a_minute(symbol=prefixed, period="5", adjust="")
+                ),
+                retries=1,
+            )
+            out = self._filter_minute_window(self._standardize_minute_bars(df, symbol=idx), start_date, end_date)
+            if not out.empty:
+                return out
+            raise DataProviderError("AkShare index stock_zh_a_minute empty in requested window", symbol=idx)
+        except Exception as ex:  # noqa: BLE001
+            primary_error = ex
         try:
             df = self._call_with_retry(
                 lambda: self._with_requests_timeout(
@@ -768,13 +823,14 @@ class AkShareProvider(MarketDataProvider):
                         end_date=end_date,
                     )
                 ),
-                retries=3,
+                retries=1,
             )
+            out = self._filter_minute_window(self._standardize_minute_bars(df, symbol=idx), start_date, end_date)
+            if not out.empty:
+                return out
+            raise DataProviderError("AkShare index_zh_a_hist_min_em empty in requested window", symbol=idx)
         except Exception as ex:  # noqa: BLE001
-            raise DataProviderError(f"AkShare index minute fetch failed: {ex}", symbol=idx) from ex
-        if df is None or df.empty:
-            raise DataProviderError("AkShare index minute fetch empty", symbol=idx)
-        return self._standardize_minute_bars(df, symbol=idx)
+            raise DataProviderError(f"AkShare index minute fetch failed: primary={primary_error}; fallback={ex}", symbol=idx) from ex
 
     # ---- Internals: request patch + retry ----------------------------------
     def _with_requests_timeout(self, fn):  # noqa: ANN001

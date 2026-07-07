@@ -431,6 +431,11 @@ def _legacy_run_action(recommendation_state: str, *, degraded: bool) -> str:
 def _run_evidence_pack_from_picks(book: MarketBook, picks: List[CanonicalPick]) -> Dict[str, Any]:
     full = [pick.explain_context for pick in picks if pick.explain_context]
     pick_symbols = {pick.symbol for pick in picks}
+    ranked_board_full = [
+        dict(entry.explain_context)
+        for entry in list(book.board or [])
+        if getattr(entry, "explain_context", None)
+    ]
     rivals: List[Dict[str, Any]] = []
     for entry in list(book.board or []):
         if entry.symbol in pick_symbols:
@@ -441,10 +446,12 @@ def _run_evidence_pack_from_picks(book: MarketBook, picks: List[CanonicalPick]) 
             break
     return {
         "top_picks_full_context": full,
+        "ranked_board_full_context": ranked_board_full,
         "nearby_rivals_compact_context": rivals,
         "raw_bar_summary": {pick.symbol: list(pick.raw_bar_summary or [])[-8:] for pick in picks if pick.raw_bar_summary},
         "context_policy": {
             "top_picks": "full explain_context",
+            "ranked_board": "full explain_context for every ranked board entry",
             "nearby_rivals": "compact score and strategy fields",
             "bars": "last 6-12 five-minute summary bars only",
         },

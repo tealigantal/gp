@@ -254,6 +254,20 @@ def fetch_minute_bars_5m(symbols: Iterable[str], trading_day: str, *, slot_at: s
                 errors.setdefault(sym, f"TimeoutError: {ex_timeout}")
     finally:
         executor.shutdown(wait=False, cancel_futures=True)
+    if errors and bool(getattr(cfg, "intraday_fetch_retry_missing", False)):
+        retry_symbols = [sym for sym in syms if sym not in out]
+        if retry_symbols:
+            logger.warning("[min5] retry missing symbols trade_day=%s slot=%s symbols=%s", trading_day, slot_at, retry_symbols)
+        for sym in retry_symbols:
+            try:
+                key, df = _one(sym)
+                if not df.empty:
+                    out[key] = df
+                    errors.pop(sym, None)
+                else:
+                    errors[sym] = "empty"
+            except Exception as ex_item:  # noqa: BLE001
+                errors[sym] = f"{type(ex_item).__name__}: {ex_item}"
     if errors:
         logger.warning("[min5] partial failure trade_day=%s slot=%s errors=%s", trading_day, slot_at, errors)
     return out
@@ -300,17 +314,10 @@ def fetch_intraday_bundle(
     except Exception as ex:  # noqa: BLE001
         benchmark_error = f"{type(ex).__name__}: {ex}"
         logger.warning("[min5] benchmark failure symbol=%s trade_day=%s slot=%s error=%s", benchmark_symbol, trading_day, slot_at, benchmark_error)
-    snapshot = fetch_snapshot()
+    snapshot = build_slot_breadth_snapshot(bars, slot_at=slot_at)
     snapshot_age_sec: Optional[float] = None
     if snapshot is not None and not snapshot.empty:
-        try:
-            if "ts" in snapshot.columns and not snapshot["ts"].isna().all():
-                ts_value = pd.to_datetime(snapshot["ts"].dropna().iloc[-1])
-                snapshot_age_sec = float((pd.Timestamp.now(tz=ts_value.tz) - ts_value).total_seconds())
-            else:
-                snapshot_age_sec = 0.0
-        except Exception:
-            snapshot_age_sec = 0.0
+        snapshot_age_sec = 0.0
     if benchmark is None or benchmark.empty:
         errors.append(f"benchmark_missing:{benchmark_symbol}")
     if snapshot is None or snapshot.empty:

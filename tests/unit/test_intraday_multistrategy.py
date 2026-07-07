@@ -23,6 +23,7 @@ from gp_assistant.contracts.objects import (
 )
 from gp_assistant.intraday.features import build_feature_snapshot
 from gp_assistant.intraday.plans import NEXT_SESSION_PLAN, TRADING_SIGNAL, TRIGGER_PLAN, UNAVAILABLE
+from gp_assistant.intraday.scoring import build_score_breakdown
 from gp_assistant.intraday.strategies import STRATEGY_NAMES, StrategyRegistry, select_champion
 from gp_assistant.judgment.publish import publish_run
 from gp_assistant.llm.narrate import SYSTEM
@@ -289,7 +290,21 @@ def test_explain_context_survives_publish_and_reaches_narrator(monkeypatch):
     full = pack["top_picks_full_context"][0]
     for key in ["champion_strategy", "trigger_price", "entry_low", "stop_price", "score_breakdown", "competing_strategies", "data_quality_warnings"]:
         assert key in full or key in full.get("risk_pack", {})
+    assert pack["ranked_board_full_context"][0]["symbol"] == run.picks[0].symbol
+    assert pack["ranked_board_full_context"][0]["score_breakdown"]
     assert reply.message["decision_evidence_pack"]["top_picks_full_context"]
+
+
+def test_live_score_breakdown_includes_intraday_quality_components():
+    features = _feature_snapshot()
+    champion = select_champion(StrategyRegistry().run_all(features))
+
+    score = build_score_breakdown(features, champion)
+
+    for key in ["momentum_score", "vwap_alignment_score", "volume_flow_score", "timing_quality_score"]:
+        assert key in score
+        assert 0.0 <= score[key] <= 100.0
+    assert score["live_score"] > 0
 
 
 def test_llm_prompt_safety_contract_mentions_state_boundaries():
