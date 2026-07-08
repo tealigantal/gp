@@ -81,6 +81,12 @@ class AdvicePick(GPModel):
     style_label: Optional[str] = None
     explain_context: Dict[str, Any] = Field(default_factory=dict)
     meta: Dict[str, Any] = Field(default_factory=dict)
+    signal: Dict[str, Any] = Field(default_factory=dict)
+    probability: Dict[str, Any] = Field(default_factory=dict)
+    risk: Dict[str, Any] = Field(default_factory=dict)
+    ranking: Dict[str, Any] = Field(default_factory=dict)
+    historical_cases: List[Dict[str, Any]] = Field(default_factory=list)
+    decision_context_snapshot_id: Optional[str] = None
 
 
 class DayBook(GPModel):
@@ -323,6 +329,7 @@ class AdviceRun(GPModel):
     recommendation_state: str = "NO_TRADE"
     explain_context: Dict[str, Any] = Field(default_factory=dict)
     decision_evidence_pack: Dict[str, Any] = Field(default_factory=dict)
+    decision_context_snapshot_id: Optional[str] = None
 
 
 class CanonicalPick(GPModel):
@@ -374,6 +381,12 @@ class CanonicalPick(GPModel):
     execution_plan: Dict[str, Any] = Field(default_factory=dict)
     risk_pack: Dict[str, Any] = Field(default_factory=dict)
     explain_context: Dict[str, Any] = Field(default_factory=dict)
+    signal: Dict[str, Any] = Field(default_factory=dict)
+    probability: Dict[str, Any] = Field(default_factory=dict)
+    risk: Dict[str, Any] = Field(default_factory=dict)
+    ranking: Dict[str, Any] = Field(default_factory=dict)
+    historical_cases: List[Dict[str, Any]] = Field(default_factory=list)
+    decision_context_snapshot_id: Optional[str] = None
 
 
 class CanonicalRunArtifact(GPModel):
@@ -404,6 +417,7 @@ class CanonicalRunArtifact(GPModel):
     explain_context: Dict[str, Any] = Field(default_factory=dict)
     decision_evidence_pack: Dict[str, Any] = Field(default_factory=dict)
     tool_trace: Dict[str, Any] = Field(default_factory=dict)
+    decision_context_snapshot_id: Optional[str] = None
 
 
 class LiveEntryDecisionArtifact(GPModel):

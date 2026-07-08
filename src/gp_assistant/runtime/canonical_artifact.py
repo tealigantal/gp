@@ -290,6 +290,16 @@ def build_canonical_pick(entry: BoardEntry, book: MarketBook) -> CanonicalPick:
     execution_plan = dict(getattr(entry, "execution_plan", {}) or {})
     risk_pack = dict(getattr(entry, "risk_pack", {}) or {})
     strategy_context = dict(getattr(entry, "strategy_context", {}) or {})
+    signal = dict(getattr(entry.pick, "signal", {}) or feature_snapshot.get("signal") or {})
+    probability = dict(getattr(entry.pick, "probability", {}) or feature_snapshot.get("probability") or strategy_context.get("probability") or {})
+    risk = dict(getattr(entry.pick, "risk", {}) or {})
+    ranking = dict(getattr(entry.pick, "ranking", {}) or feature_snapshot.get("ranking") or strategy_context.get("ranking") or {})
+    historical_cases = list(getattr(entry.pick, "historical_cases", []) or strategy_context.get("historical_cases") or [])
+    decision_context_snapshot_id = (
+        getattr(entry.pick, "decision_context_snapshot_id", None)
+        or feature_snapshot.get("decision_context_snapshot_id")
+        or explain_context.get("decision_context_snapshot_id")
+    )
     champion_strategy = getattr(entry, "champion_strategy", None) or strategy_context.get("champion_strategy")
     champion_strategy_score = finite_float(getattr(entry, "champion_strategy_score", 0.0) or strategy_context.get("champion_strategy_score"))
     competing_strategies = list(strategy_context.get("competing_strategies") or [])
@@ -306,6 +316,10 @@ def build_canonical_pick(entry: BoardEntry, book: MarketBook) -> CanonicalPick:
             if isinstance(item, dict)
         ]
     technical_basis: List[str] = list(strategy_context.get("strategy_reason_codes") or [])[:6]
+    if probability:
+        technical_basis.append("market_memory_probability")
+    if historical_cases:
+        technical_basis.append("nearest_historical_cases")
 
     missing_fields: List[str] = []
     if not entry_text:
@@ -318,7 +332,12 @@ def build_canonical_pick(entry: BoardEntry, book: MarketBook) -> CanonicalPick:
     thesis = _as_text(entry.pick.thesis) or _as_text(entry.summary) or "计划仍在，等待更明确的执行信号。"
     why_selected = _as_text(entry.pick.why_selected) or _as_text(entry.summary) or thesis
     invalidation = stop_text
-    confidence = max(0.0, min(1.0, float(entry.final_score or 0.0) / 100.0 if entry.final_score > 1 else float(entry.final_score or 0.0)))
+    probability_confidence = _as_float(probability.get("confidence"))
+    confidence = (
+        max(0.0, min(1.0, probability_confidence))
+        if probability_confidence is not None
+        else max(0.0, min(1.0, float(entry.final_score or 0.0) / 100.0 if entry.final_score > 1 else float(entry.final_score or 0.0)))
+    )
     if confidence == 0.0:
         confidence = 0.5 if action == "WATCH" else 0.65
 
@@ -339,6 +358,9 @@ def build_canonical_pick(entry: BoardEntry, book: MarketBook) -> CanonicalPick:
     data_provenance["recommendation_state"] = recommendation_state
     if champion_strategy:
         data_provenance["champion_strategy"] = champion_strategy
+        data_provenance["signal_type"] = champion_strategy
+    if decision_context_snapshot_id:
+        data_provenance["decision_context_snapshot_id"] = decision_context_snapshot_id
     pick_meta = dict(entry.pick.meta or {})
     if pick_meta.get("daily_last_date"):
         data_provenance["daily_last_date"] = pick_meta.get("daily_last_date")
@@ -400,6 +422,12 @@ def build_canonical_pick(entry: BoardEntry, book: MarketBook) -> CanonicalPick:
         execution_plan=execution_plan,
         risk_pack=risk_pack,
         explain_context=explain_context,
+        signal=signal,
+        probability=probability,
+        risk=risk,
+        ranking=ranking,
+        historical_cases=historical_cases[:8],
+        decision_context_snapshot_id=decision_context_snapshot_id,
     )
 
 
@@ -468,6 +496,16 @@ def _run_evidence_pack_from_picks(book: MarketBook, picks: List[CanonicalPick]) 
 
 def build_canonical_run(*, book: MarketBook, run: AdviceRun, picks: Iterable[BoardEntry]) -> CanonicalRunArtifact:
     canonical_picks_all = [build_canonical_pick(entry, book) for entry in picks]
+    decision_context_snapshot_id = (
+        book.daybook.source_meta.get("decision_context_snapshot_id")
+        if isinstance(book.daybook.source_meta, dict)
+        else None
+    )
+    if not decision_context_snapshot_id:
+        decision_context_snapshot_id = next(
+            (pick.decision_context_snapshot_id for pick in canonical_picks_all if pick.decision_context_snapshot_id),
+            None,
+        )
     gate_state = str(book.gate.state or "").upper()
     has_plan = bool(canonical_picks_all)
     stale_daily_picks = [
@@ -522,6 +560,8 @@ def build_canonical_run(*, book: MarketBook, run: AdviceRun, picks: Iterable[Boa
         "book_version": book.book_version,
         "slot_status": book.slot_status,
     }
+    if decision_context_snapshot_id:
+        data_provenance["decision_context_snapshot_id"] = decision_context_snapshot_id
     if book.gate and book.gate.metrics:
         data_provenance["gate_metrics"] = dict(book.gate.metrics)
     daybook_freshness = active_freshness_for_current_target(
@@ -568,6 +608,7 @@ def build_canonical_run(*, book: MarketBook, run: AdviceRun, picks: Iterable[Boa
             "slot_id": book.slot_id,
             "as_of": book.updated_at,
             "market_phase": book.market_phase,
+            "decision_context_snapshot_id": decision_context_snapshot_id,
         },
         decision_evidence_pack=decision_evidence_pack,
         tool_trace={
@@ -575,6 +616,7 @@ def build_canonical_run(*, book: MarketBook, run: AdviceRun, picks: Iterable[Boa
             "gate_reasons": list(book.gate.reasons or []),
             "data_errors": list(book.data_quality.errors or []),
         },
+        decision_context_snapshot_id=decision_context_snapshot_id,
     )
 
 
@@ -850,8 +892,8 @@ def build_compare_view(run: CanonicalRunArtifact, picks: List[CanonicalPick]) ->
         key=lambda item: (
             0 if item.can_execute_now else 1,
             0 if item.execution_state != "INVALIDATED" else 1,
-            -float(item.final_score or 0.0),
-            -float(item.live_score or 0.0),
+            -float((item.ranking or {}).get("ranking_score") or item.final_score or 0.0),
+            -float((item.probability or {}).get("confidence") or 0.0),
         ),
     )
     comparison_points: List[str] = []
@@ -859,16 +901,18 @@ def build_compare_view(run: CanonicalRunArtifact, picks: List[CanonicalPick]) ->
         leader = ordered[0]
         runner = ordered[1]
         comparison_points.append(
-            "score_breakdown: "
-            f"live {leader.live_score:.2f}/{runner.live_score:.2f}, "
-            f"strategy {leader.champion_strategy_score:.2f}/{runner.champion_strategy_score:.2f}, "
+            "market_memory_evidence: "
+            f"ranking {finite_float((leader.ranking or {}).get('ranking_score')):.6f}/{finite_float((runner.ranking or {}).get('ranking_score')):.6f}, "
+            f"up_prob {finite_float((leader.probability or {}).get('up_probability_3d')):.2f}/{finite_float((runner.probability or {}).get('up_probability_3d')):.2f}, "
+            f"expected_return {finite_float((leader.probability or {}).get('expected_return_3d')):.4f}/{finite_float((runner.probability or {}).get('expected_return_3d')):.4f}, "
+            f"confidence {finite_float((leader.probability or {}).get('confidence')):.2f}/{finite_float((runner.probability or {}).get('confidence')):.2f}, "
+            f"effective_n {finite_float(((leader.probability or {}).get('evidence') or {}).get('effective_sample_size')):.1f}/{finite_float(((runner.probability or {}).get('evidence') or {}).get('effective_sample_size')):.1f}, "
             f"exec {finite_float(leader.score_breakdown.get('execution_quality_score')):.2f}/{finite_float(runner.score_breakdown.get('execution_quality_score')):.2f}, "
             f"RR {finite_float(leader.score_breakdown.get('rr_score')):.2f}/{finite_float(runner.score_breakdown.get('rr_score')):.2f}, "
-            f"RS {finite_float(leader.score_breakdown.get('relative_strength_score')):.2f}/{finite_float(runner.score_breakdown.get('relative_strength_score')):.2f}, "
             f"risk_penalty {finite_float(leader.score_breakdown.get('risk_penalty')):.2f}/{finite_float(runner.score_breakdown.get('risk_penalty')):.2f}, "
             f"data_quality {finite_float(leader.score_breakdown.get('data_quality_score')):.2f}/{finite_float(runner.score_breakdown.get('data_quality_score')):.2f}."
         )
-        comparison_points.append(f"{leader.symbol} 排在前面，主要因为执行状态 {leader.execution_state} 优于 {runner.execution_state}。")
+        comparison_points.append(f"{leader.symbol} 排在前面，主要因为风险调整后的市场记忆排名更高。")
         if float(leader.final_score or 0.0) != float(runner.final_score or 0.0):
             comparison_points.append(f"综合分 {leader.final_score:.2f} 对比 {runner.final_score:.2f}。")
         if leader.risk_level != runner.risk_level:
@@ -885,8 +929,10 @@ def build_compare_view(run: CanonicalRunArtifact, picks: List[CanonicalPick]) ->
                 "live_score": pick.live_score,
                 "risk_level": pick.risk_level,
                 "recommendation_state": pick.recommendation_state,
-                "champion_strategy": pick.champion_strategy,
-                "champion_strategy_score": pick.champion_strategy_score,
+                "signal_type": pick.champion_strategy,
+                "ranking": pick.ranking,
+                "probability": pick.probability,
+                "risk": pick.risk,
                 "execution_quality_score": finite_float(pick.score_breakdown.get("execution_quality_score")),
                 "rr_score": finite_float(pick.score_breakdown.get("rr_score")),
                 "relative_strength_score": finite_float(pick.score_breakdown.get("relative_strength_score")),

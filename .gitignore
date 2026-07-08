@@ -24,6 +24,7 @@ _tmp_gp/
 
 # store runtime layers
 store/cache/
+store/events/
 store/backtest/
 store/snapshots/
 store/sessions/
@@ -71,6 +72,7 @@ cache/
 _tmp_gp/
 EMQuantAPI_Python/
 store/cache/
+store/events/
 store/backtest/
 store/snapshots/
 store/sessions/

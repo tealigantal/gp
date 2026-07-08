@@ -9,10 +9,10 @@ from ..runtime.utils import now_iso
 
 def _pick_style(item: Dict[str, Any]) -> str:
     risk_flags = [str(x) for x in (item.get('risk_flags') or [])]
-    final_score = float(item.get('final_score') or 0.0)
-    if any('gap' in x.lower() or 'stretch' in x.lower() for x in risk_flags):
+    ranking_score = float((item.get('ranking') or {}).get('ranking_score') or item.get('ranking_score') or 0.0)
+    if any('uncertainty' in x.lower() or 'drawdown' in x.lower() for x in risk_flags):
         return 'aggressive'
-    if final_score >= 0.6:
+    if ranking_score >= 0.0008:
         return 'balanced'
     return 'stable'
 
@@ -20,8 +20,12 @@ def _pick_style(item: Dict[str, Any]) -> str:
 def _map_pick(rank: int, item: Dict[str, Any]) -> AdvicePick:
     trade_plan = item.get('trade_plan') or {}
     diag = trade_plan.get('diagnostics') or {}
-    champion = item.get('champion') or {}
     symbol = str(item.get('symbol') or item.get('code') or '').strip()
+    probability = dict(item.get('probability') or {})
+    risk = dict(item.get('risk') or {})
+    ranking = dict(item.get('ranking') or {})
+    signal = dict(item.get('signal') or {})
+    evidence = dict(probability.get('evidence') or {})
     # Prefer user-visible fields; do not leak debug explain
     user_thesis = item.get('user_thesis')
     why_selected_text = item.get('why_selected_text')
@@ -30,16 +34,19 @@ def _map_pick(rank: int, item: Dict[str, Any]) -> AdvicePick:
         symbol=symbol,
         name=item.get('name'),
         rank=rank,
-        strategy_id=str(champion.get('strategy') or item.get('strategy') or ''),
+        strategy_id=str(item.get('signal_type') or signal.get('signal_type') or ''),
         industry=str(item.get('industry') or item.get('theme') or '').strip() or None,
         thesis=str(user_thesis or thesis_fallback or ''),
         entry_plan=trade_plan.get('entry') or item.get('entry_plan') or {},
         stop_plan=trade_plan.get('stop') or item.get('stop_plan') or {},
         take_profit_plan=trade_plan.get('take_profit') or item.get('take_profit_plan') or {},
         scores={
-            'final': float(item.get('final_score') or 0.0),
-            'candidate': float(item.get('candidate_score') or 0.0),
-            'champion': float(champion.get('score') or 0.0),
+            'final': float(ranking.get('ranking_score') or item.get('ranking_score') or 0.0),
+            'ranking': float(ranking.get('ranking_score') or 0.0),
+            'probability': float(probability.get('up_probability_3d') or 0.0),
+            'expected_return': float(probability.get('expected_return_3d') or 0.0),
+            'execution_quality': float(risk.get('execution_quality') or 0.0),
+            'confidence': float(probability.get('confidence') or 0.0),
             'reward_risk': float(diag.get('reward_risk') or 0.0),
         },
         risk_flags=[str(x) for x in (item.get('risk_flags') or [])],
@@ -48,15 +55,25 @@ def _map_pick(rank: int, item: Dict[str, Any]) -> AdvicePick:
         evidence_refs=[symbol],
         style_label=_pick_style(item),
         meta={
-            'candidate_score': float(item.get('candidate_score') or 0.0),
-            'theme_overlap_score': float(item.get('theme_overlap_score') or 0.0),
-            'mainline_overlap_score': float(item.get('mainline_overlap_score') or 0.0),
             'execution_state': str(diag.get('execution_state') or ''),
             'actionable': bool(diag.get('actionable') is True),
             'reason_codes': [str(x) for x in (item.get('reason_codes') or [])],
             'daily_last_date': item.get('last_date'),
             'daily_freshness_state': item.get('daily_freshness_state'),
+            'signal_type': item.get('signal_type') or signal.get('signal_type'),
+            'sample_size': evidence.get('sample_size'),
+            'effective_sample_size': evidence.get('effective_sample_size'),
+            'mean_similarity': evidence.get('mean_similarity'),
+            'uncertainty': probability.get('uncertainty'),
+            'decision_context_snapshot_id': item.get('decision_context_snapshot_id'),
+            'rejected_reason': item.get('rejected_reason'),
         },
+        signal=signal,
+        probability=probability,
+        risk=risk,
+        ranking=ranking,
+        historical_cases=list(item.get('historical_cases') or []),
+        decision_context_snapshot_id=item.get('decision_context_snapshot_id'),
     )
 
 
@@ -90,5 +107,7 @@ def build_daybook(trading_day: str, *, topk: int = 10, reserve_count: int = 2, r
             'reserve_count': reserve_count,
             'risk_profile': risk_profile,
             'daily_freshness': freshness,
+            'decision_context_snapshot_id': raw.get('decision_context_snapshot_id'),
+            'decision': raw.get('decision'),
         },
     )

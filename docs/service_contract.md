@@ -11,9 +11,15 @@ Primary endpoints:
 - `POST /api/chat`
 - `GET /api/health`
 - `GET /api/book/current`
+- `GET /api/book/slot/{artifact_id}`
+- `GET /api/run/{run_id}`
+- `GET /api/recommend_v2`
+- `POST /api/compare`
+- `GET /api/pick`
+- `GET /api/validation/summary`
+- `GET /api/workbench`
 - `GET /api/session/{session_id}`
 - `GET /api/sessions`
-- `GET /api/run/{run_id}`
 - `GET /api/side-results`
 
 ## Chat Request
@@ -129,10 +135,45 @@ Current shape:
 
 The concrete `run` object is derived from `AdviceRun` in `src/gp_assistant/contracts/objects.py`.
 
+## DecisionContextSnapshot
+
+`DecisionContextSnapshot` is the core artifact for Market-Memory recommendations. It is persisted by `src/gp_assistant/market_memory/store.py` and produced by `src/gp_assistant/decision_engine/pipeline.py`.
+
+The snapshot must be treated as the source of truth for later questions such as why a stock was recommended, why another candidate was rejected, or why the system chose observe/no-trade.
+
+Required fields:
+
+```json
+{
+  "market_context": {},
+  "candidate_list": [],
+  "rejected_candidates": [],
+  "historical_cases": {},
+  "probability_output": {},
+  "risk_output": {},
+  "ranking_output": [],
+  "llm_decision_input": {},
+  "llm_decision_json": {},
+  "validator_result": {},
+  "narrator_input": {},
+  "final_response": "string"
+}
+```
+
+Contract rules:
+
+- probability fields must include evidence, not only a scalar probability
+- Market Memory historical cases must be retrieved by normalized feature-vector distance
+- the LLM decision JSON can downgrade or reject math-ranked candidates but cannot promote candidates outside the ranking
+- narrator output must be based on validated facts from the snapshot
+- rejected candidates and no-trade/observe decisions must remain available for counterfactual outcome tracking
+
 ## Stability Rules
 
 - Treat `src/gp_assistant/contracts/api.py` as the source of truth for HTTP response envelopes.
 - Treat `src/gp_assistant/contracts/objects.py` as the source of truth for internal structured domain models.
+- Treat `DecisionContextSnapshot` as the source of truth for recommendation evidence and post-hoc explanation.
 - Add new fields conservatively.
 - Do not reintroduce retired `chat` or `recommend` compatibility contracts.
+- Do not reintroduce old score-stack fields as ranking authority. `candidate_score`, champion, or `final_score` may appear only in legacy artifacts or migration references.
 - If a client needs stronger guarantees, document the exact field-level promise near the corresponding response model rather than in a historical compatibility shim.

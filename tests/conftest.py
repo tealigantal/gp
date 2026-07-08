@@ -91,6 +91,7 @@ def pytest_collection_modifyitems(config, items):
         "test_intraday_multistrategy.py",
         "test_live_entry_quote_plan.py",
         "test_tail_strategy_enhancements.py",
+        "test_market_memory_agent.py",
     )
     for item in items:
         fn = item.location[0]

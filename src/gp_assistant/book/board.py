@@ -31,11 +31,11 @@ def _summary_for_state(state: str) -> str:
 
 def _summary_for_recommendation_state(state: str, strategy: str | None) -> str:
     if state == TRADING_SIGNAL:
-        return f"Current executable signal from {strategy or 'champion strategy'}."
+        return f"Current executable signal from {strategy or 'market-memory signal'}."
     if state == TRIGGER_PLAN:
-        return f"No direct signal yet; waiting for the {strategy or 'champion'} trigger plan."
+        return f"No direct signal yet; waiting for the {strategy or 'market-memory'} trigger plan."
     if state == NEXT_SESSION_PLAN:
-        return f"Next trading-window plan from {strategy or 'champion strategy'}."
+        return f"Next trading-window plan from {strategy or 'market-memory signal'}."
     if state == NO_TRADE:
         return "No trade: strategy, RR, risk, or market gate does not support a plan."
     if state == UNAVAILABLE:
@@ -137,52 +137,69 @@ def _daily_pulse_from_pick(pick: AdvicePick, rank: int, total: int) -> SymbolPul
     invalidated = state in {"invalidated", "below_support", "breakdown_risk"}
     extended = state == "extended"
     plan = _daily_execution_plan_from_pick(pick)
-    champion_strategy = str(pick.strategy_id or "TREND_CONTINUATION_5M")
+    signal_type = str(pick.strategy_id or (pick.signal or {}).get("signal_type") or "market_memory_signal")
     raw_day_score = finite_float(pick.scores.get("final"), 0.0)
     day_score = _daily_display_score(raw_day_score)
     rr_score = min(100.0, max(0.0, finite_float(plan.get("rr_to_take1")) / 2.4 * 100.0))
     live_score = day_score
+    probability = dict(pick.probability or {})
+    evidence = dict(probability.get("evidence") or {})
+    risk = dict(pick.risk or {})
+    ranking = dict(pick.ranking or {})
+    execution_quality = finite_float(risk.get("execution_quality"), finite_float(pick.scores.get("execution_quality"), 0.0))
+    confidence = finite_float(probability.get("confidence"), finite_float(pick.scores.get("confidence"), 0.0))
     score_breakdown = {
+        "raw_market_memory_ranking_score": raw_day_score,
         "raw_day_level_alpha_score": raw_day_score,
         "day_level_alpha_score": day_score,
+        "market_memory_ranking_score": raw_day_score,
+        "probability_3d": finite_float(probability.get("up_probability_3d")),
+        "expected_return_3d": finite_float(probability.get("expected_return_3d")),
+        "confidence": confidence,
+        "uncertainty": finite_float(probability.get("uncertainty")),
+        "effective_sample_size": finite_float(evidence.get("effective_sample_size")),
+        "mean_similarity": finite_float(evidence.get("mean_similarity")),
         "champion_strategy_score": day_score,
         "intraday_exec_score": 45.0,
         "live_score": live_score,
         "strategy_score": day_score,
-        "execution_quality_score": 45.0,
+        "execution_quality_score": execution_quality * 100.0,
         "relative_strength_score": 50.0,
         "volume_confirmation_score": 0.0,
         "location_score": 50.0,
         "rr_score": rr_score,
-        "risk_penalty": 0.0,
+        "risk_penalty": (1.0 - finite_float(risk.get("risk_adjustment"), 0.0)) * 100.0,
         "data_quality_score": 65.0,
         "market_regime_fit_score": 50.0,
         "score_scale": 100.0,
     }
     risk_pack = {
-        "main_risks": list(pick.risk_flags or []),
+        "main_risks": list(pick.risk_flags or risk.get("risk_flags") or []),
         "do_not_chase_reason": "This is a next-session plan; wait for intraday trigger confirmation.",
-        "what_would_improve": ["intraday_VWAP_RS_volume_confirm_after_open"],
+        "what_would_improve": ["higher_similarity_evidence", "intraday_VWAP_RS_volume_confirm_after_open"],
         "what_would_cancel": list(plan.get("invalidation_rules") or []),
         "data_quality_warnings": ["intraday_features_not_available_in_daily_plan"],
         "market_gate_risks": [],
         "late_session_risk": False,
         "stop_too_far_risk": False,
         "rr_not_enough_risk": bool(finite_float(plan.get("rr_to_take1")) < 1.3),
+        "failure_modes": list(risk.get("failure_modes") or []),
+        "drawdown_probability": probability.get("drawdown_probability"),
+        "expected_max_drawdown": risk.get("expected_max_drawdown"),
     }
     candidate = {
-        "strategy_name": champion_strategy,
+        "strategy_name": signal_type,
         "eligible": bool(plan.get("trigger_price") and plan.get("stop_price")),
         "raw_score": day_score,
-        "confidence": min(1.0, day_score / 100.0),
+        "confidence": confidence,
         "expected_edge_score": day_score,
-        "execution_quality_score": 45.0,
+        "execution_quality_score": execution_quality * 100.0,
         "relative_strength_score": 50.0,
         "volume_confirmation_score": 0.0,
         "location_score": 50.0,
         "rr_score": rr_score,
         "regime_fit_score": 50.0,
-        "risk_penalty": 0.0,
+        "risk_penalty": score_breakdown["risk_penalty"],
         "data_quality_penalty": 12.0,
         "reason_codes": [*list((pick.meta or {}).get("reason_codes") or []), "daily_plan"],
         "reject_reasons": [] if plan.get("trigger_price") and plan.get("stop_price") else ["daily_plan_prices_missing"],
@@ -198,7 +215,7 @@ def _daily_pulse_from_pick(pick: AdvicePick, rank: int, total: int) -> SymbolPul
         live_score=live_score,
         daily_rank_score=rank_score,
         exec_score=45.0,
-        signal_type="daily_plan",
+        signal_type=signal_type,
         entry_zone=dict(pick.entry_plan or {}),
         stop=_stop_from_pick(pick),
         take=_take_from_pick(pick),
@@ -209,19 +226,27 @@ def _daily_pulse_from_pick(pick: AdvicePick, rank: int, total: int) -> SymbolPul
         feature_snapshot={
             "symbol": pick.symbol,
             "slot_status": "DAILY_PLAN",
+            "signal": dict(pick.signal or {}),
+            "probability": probability,
+            "ranking": ranking,
             "raw_day_level_alpha_score": raw_day_score,
             "data_quality_score": 65.0,
             "bars_complete": False,
             "provider": "daily",
+            "decision_context_snapshot_id": pick.decision_context_snapshot_id,
         },
         strategy_candidates=[candidate],
-        champion_strategy=champion_strategy,
+        champion_strategy=signal_type,
         champion_strategy_score=day_score,
         execution_plan=plan,
         score_breakdown=score_breakdown,
         strategy_context={
-            "champion_strategy": champion_strategy,
+            "champion_strategy": signal_type,
             "champion_strategy_score": day_score,
+            "signal_type": signal_type,
+            "probability": probability,
+            "ranking": ranking,
+            "historical_cases": list(pick.historical_cases or [])[:8],
             "strategy_reason_codes": list(candidate.get("reason_codes") or []),
             "strategy_reject_reasons": list(candidate.get("reject_reasons") or []),
             "competing_strategies": [compact_strategy(candidate)],
@@ -243,15 +268,15 @@ def _context_for_entry(entry: BoardEntry, *, previous_entry: BoardEntry | None, 
             for item in sorted(entry.strategy_candidates, key=lambda item: finite_float(item.get("raw_score")), reverse=True)[:3]
         ]
     why_ranked = (
-        f"rank={entry.rank}, live_score={finite_float(entry.live_score):.2f}, "
-        f"champion={entry.champion_strategy or strategy_context.get('champion_strategy') or 'NA'}"
+        f"rank={entry.rank}, ranking_score={finite_float(score.get('market_memory_ranking_score')):.6f}, "
+        f"signal={entry.champion_strategy or strategy_context.get('signal_type') or 'NA'}"
     )
     why_above = None
     if next_entry is not None:
         why_above = (
             f"{entry.symbol} live_score {finite_float(entry.live_score):.2f} vs "
             f"{next_entry.symbol} {finite_float(next_entry.live_score):.2f}; "
-            f"strategy {entry.champion_strategy or 'NA'} vs {next_entry.champion_strategy or 'NA'}."
+            f"signal {entry.champion_strategy or 'NA'} vs {next_entry.champion_strategy or 'NA'}."
         )
     why_below = None
     if previous_entry is not None:
@@ -289,6 +314,11 @@ def _context_for_entry(entry: BoardEntry, *, previous_entry: BoardEntry | None, 
         "rr_to_take2": plan.get("rr_to_take2"),
         "signal_valid_until_slot": plan.get("signal_valid_until_slot"),
         "champion_strategy": entry.champion_strategy or strategy_context.get("champion_strategy"),
+        "signal_type": strategy_context.get("signal_type") or entry.signal_type,
+        "probability": strategy_context.get("probability") or features.get("probability"),
+        "ranking": strategy_context.get("ranking") or features.get("ranking"),
+        "historical_cases": list(strategy_context.get("historical_cases") or []),
+        "decision_context_snapshot_id": features.get("decision_context_snapshot_id") or (entry.pick.decision_context_snapshot_id if entry.pick else None),
         "champion_strategy_score": entry.champion_strategy_score or finite_float(strategy_context.get("champion_strategy_score")),
         "strategy_reason_codes": list(strategy_context.get("strategy_reason_codes") or []),
         "strategy_reject_reasons": list(strategy_context.get("strategy_reject_reasons") or []),

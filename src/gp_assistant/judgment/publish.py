@@ -49,6 +49,11 @@ def publish_run(session_id: str, book: MarketBook, topk: int = 3) -> AdviceRun:
             "book_version": book.book_version,
             "slot_status": book.slot_status,
             "pulse_slot_at": book.pulse_slot_at,
+            "decision_context_snapshot_id": (
+                book.daybook.source_meta.get("decision_context_snapshot_id")
+                if isinstance(book.daybook.source_meta, dict)
+                else None
+            ),
         },
         gate_state=book.gate.state,
         gate_reasons=list(book.gate.reasons or []),
@@ -64,5 +69,6 @@ def publish_run(session_id: str, book: MarketBook, topk: int = 3) -> AdviceRun:
     run.data_provenance = dict(canonical.data_provenance)
     run.explain_context = dict(canonical.explain_context)
     run.decision_evidence_pack = dict(canonical.decision_evidence_pack)
+    run.decision_context_snapshot_id = canonical.decision_context_snapshot_id
     save_run(run)
     return run

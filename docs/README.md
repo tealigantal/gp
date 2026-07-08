@@ -8,13 +8,15 @@ This folder is split into:
 ## Current
 
 - [PROGRESS.md](./PROGRESS.md)
-  Latest project status, daily-plan runtime status, derived mainline behavior, and validation snapshot.
+  Latest project status, Market-Memory production path, and validation snapshot.
 - [ops_runbook.md](./ops_runbook.md)
-  Operational notes and routine commands.
+  Operational notes, Docker commands, validation commands, and routine checks.
 - [data_freshness_policy.md](./data_freshness_policy.md)
   Freshness rules for daybook and session reuse. Some historical pulse notes may remain as archived context, not production behavior.
 - [service_contract.md](./service_contract.md)
-  Output contract notes for recommendation artifacts.
+  Output contract notes for chat responses, recommendation artifacts, and `DecisionContextSnapshot`.
+- [historical_validation.md](./historical_validation.md)
+  Historical Replay, Legacy-vs-New AB validation, calibration, no-trade tracking, and current local replay results.
 
 ## Archive
 
@@ -29,4 +31,6 @@ This folder is split into:
 
 - The current service entrypoint is `src/gp_assistant/gateway/`.
 - The current turn loop is `src/gp_assistant/runtime/turn_loop.py`.
+- The current production recommendation path is `Market Data -> Signal Engine -> Market Memory -> Probability Engine -> Risk Engine -> Decision Engine`.
+- `src/gp_assistant/selection_engine/` is retained as legacy reference and low-level market-data support, not as the production ranking authority.
 - Legacy `gp_assistant.chat` and `gp_assistant.recommend` compatibility surfaces were removed on April 22, 2026.

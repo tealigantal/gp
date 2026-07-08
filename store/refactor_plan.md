@@ -1,4 +1,14 @@
-# Refactor Plan: Single-Entry Agent + Pluggable Providers (AkShare fallback)
+# Archived Refactor Plan: Single-Entry Agent + Pluggable Providers (AkShare fallback)
+
+Status: historical reference only. This document describes an earlier consolidation pass and is not the current production architecture.
+
+Current production recommendations use:
+
+```text
+Market Data -> Signal Engine -> Market Memory -> Probability Engine -> Risk Engine -> Decision Engine -> Recommendation
+```
+
+The old score-stack and single-entry-agent plan below must not be used as the current recommendation design.
 
 This document summarizes the repository refactor to a minimal, single-entry design where the Agent is the only orchestrator and all business logic is accessed as tools. Providers are pluggable with AkShare as default and Official as a future option.
 

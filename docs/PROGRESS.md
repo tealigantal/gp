@@ -1,25 +1,54 @@
 # Current Progress
 
-Last updated: 2026-07-07
+Last updated: 2026-07-08
 
 ## Snapshot
 
-The repository is currently centered on one active product surface:
+The repository is currently centered on one active product surface and one production recommendation path:
 
 - `gateway/` exposes the FastAPI API
 - `runtime/` owns concern parsing, turn orchestration, and user-safe reply assembly
 - `memory/` stores session, transcript, and follow-up context
 - `book/` builds the daybook and actionable board
 - `judgment/` produces recommendation, follow-up, compare, and exit decisions
+- `signal_engine/` emits structural daily signal events
+- `market_memory/` stores normalized feature-vector events and decision snapshots
+- `probability_engine/` infers evidence-backed probabilities from nearest historical cases
+- `risk_engine/` handles execution risk, drawdown risk, and mathematical ranking
+- `decision_engine/` runs the risk committee, validator, narrator, and snapshot persistence
+- `evaluation_engine/` owns historical replay, AB validation, calibration, counterfactuals, and error attribution
 - `frontend/` renders the chat-first Workspace with a right-side decision snapshot
 
 The current product direction is:
 
 - one Workspace page
 - one continuous assistant conversation
-- one shared decision source for recommendation, follow-up, comparison, exit, and run-change answers
+- one shared Market-Memory decision source for recommendation, follow-up, comparison, exit, and run-change answers
 
 ## Recent Changes
+
+### 2026-07-08
+
+- Completed the production-path migration from the old score stack to the Market-Memory Agent:
+  - production `build_day_selection()` now calls the new decision pipeline
+  - new decisions are built from signal events, normalized feature-vector similarity, probability evidence, risk ranking, risk-committee validation, and `DecisionContextSnapshot`
+  - the old `selection_engine` remains available only as migration reference and low-level data support, not as the recommendation ranking authority
+- Added Market Memory persistence:
+  - `market_events` with raw features, normalized feature vector, market context, and known outcomes
+  - `decision_snapshots` with complete market context, candidates, rejected candidates, historical cases, probability/risk/ranking outputs, LLM decision input/output, validator result, narrator input, and final response
+  - optional `GP_MARKET_MEMORY_DIR` for isolated replay stores
+- Added probability and risk evidence:
+  - nearest historical cases by normalized feature-vector distance
+  - similarity-weighted statistics
+  - Bayesian shrinkage toward broader priors
+  - evidence block with sample size, effective sample size, similarity, success/failure distribution, major failure modes, uncertainty, and confidence
+- Added Historical Replay / AB validation:
+  - cache-only replay runner for historical trading days
+  - no future outcome leakage in Market Memory retrieval
+  - selected, rejected, alternative, and no-trade outcome tracking
+  - calibration curve and Brier score
+  - prediction-error attribution and recommendation regret analysis
+- Latest local replay is documented in [historical_validation.md](./historical_validation.md). The result supports better selectivity and risk reduction on the tested sample, but also shows probability overconfidence and limited trade coverage.
 
 ### 2026-07-07
 
@@ -39,8 +68,9 @@ The current product direction is:
   - `theme_concept.py`, `theme_pool.py`, and `theme_pool_impl.py` are retained as commented archives
   - `agent.py` no longer imports or calls `build_themes` or `last_concept_status`
   - output keeps `themes: []` only for API compatibility
-- Rebuilt mainline calculation to use only local market/candidate data:
-  - candidate industry aggregation uses `candidate_score`, `industry_strength_score`, and `peer_consensus_score`
+- Rebuilt the then-current mainline calculation to use only local market/candidate data:
+  - this was part of the retired score-stack implementation; it no longer defines the production recommendation ranking authority
+  - historical candidate industry aggregation used `candidate_score`, `industry_strength_score`, and `peer_consensus_score`
   - snapshot fallback derives full-market strong-line clues from leaders and turnover
   - `mainline.source` is now `derived:daily_universe`, `derived:market_snapshot`, or `derived:unavailable`
 - Updated Workspace and ops UI copy to remove 5-minute, slot replay, execution degradation, and observation wording from normal user-facing paths.
@@ -84,10 +114,13 @@ The current product direction is:
 ## Current State
 
 - Main flow remains aligned around `gateway -> runtime -> judgment -> reply -> workspace`.
+- Production recommendations now flow through `Market Data -> Signal Engine -> Market Memory -> Probability Engine -> Risk Engine -> Decision Engine -> DecisionContextSnapshot`.
 - Intent parsing is now a hard LLM dependency for `/api/chat`; unavailable or malformed intent responses are surfaced as explicit API errors instead of hidden fallback behavior.
 - `kernel.facade` is the current cross-cutting service boundary for recommendation artifacts, validation, portfolio, execution preview, and workbench aggregation.
-- The production recommendation path is one runtime chain. It always resolves daily freshness/daybook first, optionally runs 5-minute pulse evaluation when enabled, and does not call AkShare theme/concept/industry ranking APIs.
+- The production recommendation path is one runtime chain. It always resolves daily freshness/daybook first, builds Market-Memory daily recommendations, optionally runs 5-minute pulse evaluation when enabled, and does not call AkShare theme/concept/industry ranking APIs.
 - Mainline is derived from the full-market snapshot and daily candidate universe rather than external theme interfaces.
+- The LLM is constrained to risk-committee review. It can downgrade/reject/observe/no-trade but cannot promote a candidate outside the math ranking or invent market facts.
+- Probability outputs are not scores. They include evidence and calibration must be monitored.
 - The Workspace page now presents:
   - a conversation-first left pane
   - a persistent decision snapshot on the right
@@ -129,6 +162,13 @@ The following checks passed locally during the daily-mainline shutdown pass:
 
 Real LLM-connected `/api/chat` acceptance was run from PowerShell after loading `.env`. The checked sequence covered recommendation, rank follow-up, term explanation, comparison, and sell-decision follow-up. All five turns returned HTTP 200; because local data freshness blocked publication, recommendation and subject-dependent follow-ups correctly returned user-facing `no_trade` replies.
 
+The following Market-Memory checks were run locally during the 2026-07-08 validation pass:
+
+- `python -m gp_assistant.evaluation_engine.historical_replay --days 20260105 ... 20260127 --topk 3 --max-symbols 12 --output-name historical_replay_ab_202601_top3`
+- replay result: 16 days, 4 recommend decisions, 12 observe decisions
+- new vs legacy baseline: better Top1 T+1/T+3 average return, Top3 T+3 average return, worst drawdown, max consecutive losses, and average regret; worse Top1 T+5 average return and lower trade coverage
+- calibration result: Brier score `0.2465254294485468`; probability buckets were materially overconfident on the tested sample
+
 ## Current Documentation Anchors
 
 Use these files first when resuming work on this area:
@@ -145,10 +185,16 @@ Use these files first when resuming work on this area:
   Strict JSON intent router prompt, one-shot repair, and parse error reporting.
 - `src/gp_assistant/kernel/facade.py`
   Public service facade for recommendation v2, compare, pick detail, validation, portfolio, execution preview, and workbench aggregation.
+- `src/gp_assistant/decision_engine/pipeline.py`
+  Production Market-Memory recommendation pipeline.
+- `src/gp_assistant/market_memory/`
+  Market Memory event store, vector retrieval, and decision snapshot storage.
+- `src/gp_assistant/probability_engine/`
+  Evidence-backed probability inference and shrinkage.
+- `src/gp_assistant/evaluation_engine/historical_replay.py`
+  Time-travel-safe historical replay and AB validation.
 - `src/gp_assistant/runtime/freshness_policy.py`
   Daily-plan freshness and active-run reuse behavior.
-- `src/gp_assistant/selection_engine/mainline.py`
-  Derived mainline calculation from daily candidate universe and market snapshot.
 - `frontend/src/features/workspace/`
   Active Workspace UI surface.
 - `frontend/src/features/workspace/presentation.ts`

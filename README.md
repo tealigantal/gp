@@ -1,6 +1,8 @@
 # GP
 
-GP 是一个面向 **A 股主板短线（1-3 个交易日）** 的 chat-first Web 股票推荐 AI 助手。
+GP 是一个面向 **A 股主板短线（1-3 个交易日）** 的 Market-Memory 投资决策 Agent。
+
+它的核心不是股票搜索，也不是固定规则打分，而是用真实日线数据、历史相似事件、概率校准、风险审查和 LLM 解释能力生成下一交易窗口计划。
 
 产品主线只有一个单页 Workspace：
 
@@ -10,9 +12,40 @@ GP 是一个面向 **A 股主板短线（1-3 个交易日）** 的 chat-first We
 
 它不是自动交易系统，也不接券商。系统只输出交易级决策建议，用户自行下单。
 
+## 当前决策架构
+
+生产推荐路径是：
+
+```text
+Market Data
+  -> Signal Engine
+  -> Market Memory
+  -> Probability Engine
+  -> Risk Engine
+  -> Ranking
+  -> LLM Risk Committee
+  -> Validator
+  -> Narrator
+  -> DecisionContextSnapshot
+```
+
+关键边界：
+
+- `signal_engine/` 只识别市场结构，不直接决定买入
+- `market_memory/` 用归一化 feature vector 距离检索历史相似事件，不允许退化成 `signal_type` 标签查询
+- `probability_engine/` 用相似案例加权统计和 Bayesian shrinkage 输出概率，同时输出 evidence block
+- `risk_engine/` 和 ranking 负责数学排序、风险调整和执行质量
+- `decision_engine/` 中的 LLM 是 risk committee，只能 downgrade / observe / no_trade，不能提升数学排名之外的候选
+- 每次决策都会保存 `DecisionContextSnapshot`，用于未来复盘“当时为什么这么推荐”
+
 ## 核心能力
 
 - 今天给我 3 只：返回 Top N 推荐，或明确空仓
+- 为什么推荐：返回相似历史案例、相似度、概率、不确定性、风险和排序证据
+- 为什么不推荐：返回被拒候选的风险、置信度、历史失败模式和机会成本
+- A 和 B 哪个更好：按数学排序和风险证据比较，不让 LLM 凭偏好改排名
+- 如果跌了怎么办：返回 stop / drawdown / failure mode / 执行条件
+- 这个策略历史靠谱吗：返回 Market Memory 样本、校准质量和历史结果
 - 日线计划判断：回答“现在还能买吗”“第二个还能冲吗”
 - 收盘后 / 非交易时段：返回日线计划，不会直接报“只读不可用”
 - 单票详情：返回 `entry / stop / take / thesis / why_selected / execution_state`
@@ -145,7 +178,9 @@ GP 的数据链不是“每次请求都整仓重抓”，而是分层更新。
 
 ### 推荐与盘中判断
 
-- `daybook`：日线交易计划
+- `Market Memory Agent`：日线候选、相似历史、概率、风险和最终推荐
+- `DecisionContextSnapshot`：每次决策的完整上下文和最终解释
+- `daybook`：日线交易计划与 Workspace 当前状态
 - `slot artifact`：盘中执行态
 - 聊天推荐、右侧 `DecisionSnapshot`、单票详情、盘中入场判断全部读取同一个 canonical run / artifact
 
@@ -170,7 +205,7 @@ GP 的数据链不是“每次请求都整仓重抓”，而是分层更新。
 - Live Entry Check：当前是否还能进
 - No Trade：今天为什么空仓，以及恢复条件
 - Pick Detail：单票细节
-- Compare：排序差异、执行态、风险、分数
+- Compare：排序差异、执行态、风险、概率和历史相似证据
 - Exit Decision：`HOLD / REDUCE / SELL / WATCH`
 - Run Change：本轮与上一轮推荐变化
 
@@ -307,8 +342,13 @@ src/gp_assistant/
   judgment/         recommend / detail / compare / exit / run_change
   evidence/         行情、验证、组合、股票池服务
   kernel/           跨推荐、验证、组合、执行预览的服务门面
-  selection_engine/ 底层选股与打分
-  strategy/         策略与 score 逻辑
+  signal_engine/    日线结构信号与 feature fingerprint
+  market_memory/    相似历史事件、决策快照、预测结果存储
+  probability_engine/ 相似案例统计、Bayesian shrinkage、evidence block
+  risk_engine/      执行风险、回撤风险、数学 ranking
+  decision_engine/  风险委员会、validator、narrator、决策流水线
+  evaluation_engine/ historical replay、AB validation、calibration、counterfactual
+  selection_engine/ 旧系统参考和低层行情工具；不再是生产推荐排序权威
 
 frontend/src/features/workspace/
   WorkspacePage.tsx       单页主入口
@@ -321,9 +361,23 @@ frontend/src/features/workspace/
 ### 后端
 
 ```powershell
-python -m compileall -q src
+python -m compileall -q src tests
 pytest -q
 ```
+
+### Historical Replay / AB Validation
+
+```powershell
+$env:GP_MARKET_MEMORY_DIR = "$env:TEMP\gp_market_memory_replay_events"
+$env:PYTHONPATH = "src"
+python -m gp_assistant.evaluation_engine.historical_replay `
+  --days 20260105 20260106 20260107 20260108 20260109 20260112 20260113 20260114 20260115 20260116 20260119 20260120 20260121 20260122 20260123 20260127 `
+  --topk 3 `
+  --max-symbols 12 `
+  --output-name historical_replay_ab_202601_top3
+```
+
+本地最新结果见 [docs/historical_validation.md](./docs/historical_validation.md)。
 
 ### 前端
 
@@ -341,6 +395,8 @@ npm run build
 - `/api/chat` 的意图解析依赖外部 LLM；LLM 不可用时会明确返回 503，LLM 返回无效 TurnFrame 且修复失败时返回 502
 - 默认依赖外部 LLM 和行情 provider；如果网络、代理或密钥异常，自然语言理解和实时数据会受影响
 - 前端运行状态卡能显示“应由 `gp-worker` 自动更新”，但不是 Docker 进程级探针
+- 当前概率系统已有 evidence block 和 calibration 评估，但 2026-01 本地 replay 显示概率偏乐观，不能把概率当黑盒分数使用
+- 旧 `selection_engine` 仍保留作迁移参考和低层数据工具，生产推荐排序不再依赖旧 `candidate_score` / champion / `final_score`
 
 ## 相关文档
 
@@ -349,6 +405,7 @@ npm run build
 - [docs/ops_runbook.md](./docs/ops_runbook.md)
 - [docs/data_freshness_policy.md](./docs/data_freshness_policy.md)
 - [docs/service_contract.md](./docs/service_contract.md)
+- [docs/historical_validation.md](./docs/historical_validation.md)
 
 ## 说明
 

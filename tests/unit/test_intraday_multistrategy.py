@@ -308,7 +308,7 @@ def test_live_score_breakdown_includes_intraday_quality_components():
 
 
 def test_llm_prompt_safety_contract_mentions_state_boundaries():
-    assert "Do not modify action, recommendation_state, rank, champion_strategy" in SYSTEM
+    assert "Do not modify action, recommendation_state, rank, signal_type, probability" in SYSTEM
     assert "Do not say TRIGGER_PLAN has already triggered" in SYSTEM
     assert "Do not say NEXT_SESSION_PLAN can be bought now" in SYSTEM
     assert "Do not say buy when gate is BLOCKED or UNAVAILABLE" in SYSTEM

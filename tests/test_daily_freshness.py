@@ -213,7 +213,7 @@ def test_audit_daily_freshness_focus_symbols(monkeypatch):
 def test_build_day_selection_blocks_when_daily_not_ready(monkeypatch):
     monkeypatch.setattr(
         market_service,
-        "run_selection",
+        "run_market_memory_selection",
         lambda **_: {
             "tradeable": True,
             "picks": [{"symbol": "002716", "score": 0.91}],
