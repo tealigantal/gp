@@ -1,7 +1,7 @@
 # GP Assistant Architecture
 
 GP is a market-memory investment decision agent for A-share short-term daily plans.
-The production recommendation path is no longer a rule score stack. It is:
+The production path is no longer centered on "which stock looks good". It is centered on whether a concrete user decision is reasonable under the current market, security, thesis, user, position, objective, and constraint context.
 
 ```text
 Market Data
@@ -10,10 +10,12 @@ Market Data
   -> Probability Engine
   -> Risk Engine
   -> Ranking
-  -> LLM Risk Committee
+  -> Decision Intelligence
+  -> Thesis Lifecycle
+  -> Decision Synthesizer
   -> Validator
-  -> Narrator
   -> DecisionContextSnapshot
+  -> Response
 ```
 
 ## Core Boundaries
@@ -22,7 +24,7 @@ Market Data
 - `market_memory/`: stores market-memory events and decision snapshots. Similarity retrieval is based on normalized feature-vector distance. Labels such as signal type or regime may adjust weights, but cannot replace vector distance.
 - `probability_engine/`: infers probability from nearest historical cases using similarity-weighted statistics and Bayesian shrinkage. Every output carries an evidence block with sample size, effective sample size, similarity, success/failure distribution, uncertainty, and failure modes.
 - `risk_engine/`: computes execution quality, stop/take levels, drawdown risk, and mathematical ranking. The ranking engine owns expected return, win probability, risk adjustment, and confidence.
-- `decision_engine/`: runs the complete decision pipeline. The LLM is a risk committee: it can downgrade, observe, or reject, but it cannot promote candidates outside the mathematical ranking or invent market facts.
+- `decision_engine/`: builds `DecisionContextModel`, evaluates thesis lifecycle, synthesizes the user-facing action, validates action boundaries, and attaches decision fields to all judgment artifacts. The synthesizer may output only `HOLD`, `ADD`, `REDUCE`, `EXIT`, `WAIT`, or `NO_TRADE`.
 - `evaluation_engine/`: runs historical replay, AB validation, calibration reports, outcome tracking, counterfactual analysis, regret analysis, and prediction-error attribution.
 
 ## Runtime Spine
@@ -33,6 +35,39 @@ Market Data
 - `judgment/`: user-facing workflows for recommend, detail, compare, exit, no-trade, and run-change answers.
 - `evidence/`: service-facing bridge into market facts, current recommendation, validation, portfolio, and universe state.
 - `kernel/`: facade for API-facing service calls.
+
+## DecisionContextModel
+
+Every market-facing turn is converted into one structured decision context instead of a keyword-specific answer path.
+
+The model contains:
+
+- `market_context`
+- `security_context`
+- `signal_thesis_context`
+- `user_context`
+- `position_context`
+- `objective`
+- `constraints`
+
+The same model is used for "can I buy", "I already bought", "what if it drops", "what if it is profitable", "why not another one", and "was the previous system judgment wrong".
+
+## Thesis Lifecycle
+
+Each recommendation or follow-up decision carries:
+
+```text
+Initial Thesis -> Current Thesis State -> Decision
+```
+
+Allowed thesis states:
+
+- `thesis_strengthened`
+- `thesis_unchanged`
+- `thesis_weakening`
+- `thesis_invalidated`
+
+The action is derived from the thesis state plus user objective and position context. For example, an invalidated thesis maps to `EXIT` for an existing position but to `NO_TRADE` for a new-entry question.
 
 ## DecisionContextSnapshot
 
@@ -55,12 +90,14 @@ Required snapshot fields include:
 
 ## LLM Permission Boundary
 
-The LLM is not the portfolio manager and not the ranking authority.
+The LLM is not a stock picker, not the ranking authority, and not allowed to invent explanation facts.
+
+For decision work, the LLM role is Decision Synthesizer. It consumes the structured `DecisionContextModel` and `ThesisLifecycle`, then emits a bounded action JSON that the validator checks.
 
 It may:
 
-- return `recommend`, `observe`, or `no_trade`
-- downgrade or reject a mathematically ranked candidate
+- return `HOLD`, `ADD`, `REDUCE`, `EXIT`, `WAIT`, or `NO_TRADE`
+- lower action intensity when evidence, user state, position state, or thesis lifecycle does not support the stronger action
 - point out evidence gaps, risk flags, low confidence, and abnormal context
 
 It must not:
@@ -73,11 +110,11 @@ It must not:
 The flow is:
 
 ```text
-Decision JSON -> Validator -> Narrator
+DecisionContextModel -> ThesisLifecycle -> Decision JSON -> Validator -> Response Renderer
 ```
 
 ## Historical Validation
 
-Historical replay simulates the full agent, not a single strategy. For each replay day, the runner freezes data available at that date, builds signals, retrieves market memory cases with `event.as_of < T`, estimates probabilities, ranks candidates, runs the risk committee, records the decision artifact, and then verifies T+1/T+3/T+5 outcomes.
+Historical replay simulates the full agent, not a single strategy. For each replay day, the runner freezes data available at that date, builds signals, retrieves market memory cases with `event.as_of < T`, estimates probabilities, ranks candidates, synthesizes a validated decision, records the decision artifact, and then verifies T+1/T+3/T+5 outcomes.
 
 See `docs/historical_validation.md` for commands and the latest local AB result.

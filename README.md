@@ -2,19 +2,19 @@
 
 GP 是一个面向 **A 股主板短线（1-3 个交易日）** 的 Market-Memory 投资决策 Agent。
 
-它的核心不是股票搜索，也不是固定规则打分，而是用真实日线数据、历史相似事件、概率校准、风险审查和 LLM 解释能力生成下一交易窗口计划。
+它的核心不是股票搜索，也不是固定规则打分，而是用真实日线数据、历史相似事件、概率校准、风险审查、用户状态和 thesis 生命周期判断“当前这个决策是否合理”。
 
 产品主线只有一个单页 Workspace：
 
 - 左侧是连续对话，用户直接用自然语言提问
 - 右侧是同源 `DecisionSnapshot`
-- 后端统一从同一个 active run / canonical artifact 输出推荐、日线计划判断、空仓解释、单票详情、比较、卖出建议和榜单变化
+- 后端统一从同一个 active run / canonical artifact 输出推荐、日线计划判断、空仓解释、单票详情、比较、持仓处理和榜单变化
 
 它不是自动交易系统，也不接券商。系统只输出交易级决策建议，用户自行下单。
 
 ## 当前决策架构
 
-生产推荐路径是：
+生产决策路径是：
 
 ```text
 Market Data
@@ -23,10 +23,12 @@ Market Data
   -> Probability Engine
   -> Risk Engine
   -> Ranking
-  -> LLM Risk Committee
+  -> Decision Intelligence
+  -> Thesis Lifecycle
+  -> Decision Synthesizer
   -> Validator
-  -> Narrator
   -> DecisionContextSnapshot
+  -> Response
 ```
 
 关键边界：
@@ -35,22 +37,25 @@ Market Data
 - `market_memory/` 用归一化 feature vector 距离检索历史相似事件，不允许退化成 `signal_type` 标签查询
 - `probability_engine/` 用相似案例加权统计和 Bayesian shrinkage 输出概率，同时输出 evidence block
 - `risk_engine/` 和 ranking 负责数学排序、风险调整和执行质量
-- `decision_engine/` 中的 LLM 是 risk committee，只能 downgrade / observe / no_trade，不能提升数学排名之外的候选
-- 每次决策都会保存 `DecisionContextSnapshot`，用于未来复盘“当时为什么这么推荐”
+- `decision_engine/` 构建 `DecisionContextModel`，统一包含 market/security/signal-thesis/user/position/objective/constraints
+- Thesis Lifecycle 判断 `thesis_strengthened / thesis_unchanged / thesis_weakening / thesis_invalidated`
+- Decision Synthesizer 输出 `HOLD / ADD / REDUCE / EXIT / WAIT / NO_TRADE`，不能编造价格、概率、样本或历史事实
+- 每次决策都会保存 `DecisionContextSnapshot`，用于未来复盘“当时为什么这么判断”
 
 ## 核心能力
 
-- 今天给我 3 只：返回 Top N 推荐，或明确空仓
+- 今天给我 3 只：返回 Top N 计划，或明确空仓 / 等待
 - 为什么推荐：返回相似历史案例、相似度、概率、不确定性、风险和排序证据
 - 为什么不推荐：返回被拒候选的风险、置信度、历史失败模式和机会成本
 - A 和 B 哪个更好：按数学排序和风险证据比较，不让 LLM 凭偏好改排名
 - 如果跌了怎么办：返回 stop / drawdown / failure mode / 执行条件
 - 这个策略历史靠谱吗：返回 Market Memory 样本、校准质量和历史结果
+- 用户状态决策：同一条链回答“能买吗”“我已经买了怎么办”“亏了怎么办”“赚了怎么办”
 - 日线计划判断：回答“现在还能买吗”“第二个还能冲吗”
 - 收盘后 / 非交易时段：返回日线计划，不会直接报“只读不可用”
 - 单票详情：返回 `entry / stop / take / thesis / why_selected / execution_state`
 - 比较与榜单变化：支持“第一只和第二只比呢”“之前那只怎么没了”
-- 卖出建议：返回 `HOLD / REDUCE / SELL / WATCH`
+- 持仓处理：返回 `HOLD / ADD / REDUCE / EXIT / WAIT / NO_TRADE`
 
 ## 当前运行结构
 
@@ -176,13 +181,15 @@ GP 的数据链不是“每次请求都整仓重抓”，而是分层更新。
 - bars、benchmark、breadth snapshot 会进入当前 artifact / current book
 - provider snapshot 缺失但 bars 足够时，会走派生逻辑，而不是直接整体 unavailable
 
-### 推荐与盘中判断
+### 决策与盘中判断
 
-- `Market Memory Agent`：日线候选、相似历史、概率、风险和最终推荐
-- `DecisionContextSnapshot`：每次决策的完整上下文和最终解释
+- `Market Memory Agent`：日线候选、相似历史、概率、风险和数学排序
+- `Decision Intelligence`：把市场、标的、thesis、用户、持仓、目标和约束合成一个决策上下文
+- `Thesis Lifecycle`：判断 thesis 增强、未变、转弱或失效
+- `DecisionContextSnapshot`：每次决策的完整上下文、动作、校验结果和最终解释
 - `daybook`：日线交易计划与 Workspace 当前状态
 - `slot artifact`：盘中执行态
-- 聊天推荐、右侧 `DecisionSnapshot`、单票详情、盘中入场判断全部读取同一个 canonical run / artifact
+- 聊天推荐、右侧 `DecisionSnapshot`、单票详情、盘中入场判断、持仓处理全部读取同一个 canonical run / artifact 和 Decision Intelligence 输出
 
 ### 非交易时段
 
@@ -201,12 +208,12 @@ GP 的数据链不是“每次请求都整仓重抓”，而是分层更新。
 
 ### 你会看到的主要卡片
 
-- Recommendation：推荐列表，含 `entry / stop / take / thesis / why_selected`
+- Recommendation：计划列表，含 `entry / stop / take / thesis / why_selected / decision_action`
 - Live Entry Check：当前是否还能进
 - No Trade：今天为什么空仓，以及恢复条件
 - Pick Detail：单票细节
 - Compare：排序差异、执行态、风险、概率和历史相似证据
-- Exit Decision：`HOLD / REDUCE / SELL / WATCH`
+- Exit Decision：`HOLD / ADD / REDUCE / EXIT / WAIT / NO_TRADE`
 - Run Change：本轮与上一轮推荐变化
 
 ### 右侧状态面板怎么看
@@ -346,7 +353,7 @@ src/gp_assistant/
   market_memory/    相似历史事件、决策快照、预测结果存储
   probability_engine/ 相似案例统计、Bayesian shrinkage、evidence block
   risk_engine/      执行风险、回撤风险、数学 ranking
-  decision_engine/  风险委员会、validator、narrator、决策流水线
+  decision_engine/  Decision Context、Thesis Lifecycle、Decision Synthesizer、validator
   evaluation_engine/ historical replay、AB validation、calibration、counterfactual
   selection_engine/ 旧系统参考和低层行情工具；不再是生产推荐排序权威
 
@@ -396,7 +403,7 @@ npm run build
 - 默认依赖外部 LLM 和行情 provider；如果网络、代理或密钥异常，自然语言理解和实时数据会受影响
 - 前端运行状态卡能显示“应由 `gp-worker` 自动更新”，但不是 Docker 进程级探针
 - 当前概率系统已有 evidence block 和 calibration 评估，但 2026-01 本地 replay 显示概率偏乐观，不能把概率当黑盒分数使用
-- 旧 `selection_engine` 仍保留作迁移参考和低层数据工具，生产推荐排序不再依赖旧 `candidate_score` / champion / `final_score`
+- 旧 `selection_engine` 仍保留作迁移参考和低层数据工具，生产决策和推荐排序不再依赖旧 `candidate_score` / champion / `final_score`
 
 ## 相关文档
 

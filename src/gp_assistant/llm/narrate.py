@@ -28,6 +28,8 @@ recommendation_state, action, rank, signal_type, probability, uncertainty,
 historical_cases, entry, stop, take, RR, gate, ranking, feature_snapshot,
 reject_reasons, and risk_pack. Do not change them, infer missing prices,
 refresh data, or invent news, announcements, themes, or capital-flow facts.
+Decision Intelligence has also fixed decision_action, decision_context_model,
+thesis_lifecycle, and decision_synthesis. Treat those fields as binding.
 
 Allowed:
 1. Explain and compare using llm_decision_context / decision_evidence_pack.
@@ -42,7 +44,8 @@ Allowed:
 
 Forbidden:
 1. Do not modify action, recommendation_state, rank, signal_type, probability,
-   entry, stop, take, RR, signal_valid_until_slot, or can_open.
+   entry, stop, take, RR, signal_valid_until_slot, can_open, decision_action,
+   thesis_lifecycle, or decision_synthesis.
 2. Do not say TRIGGER_PLAN has already triggered.
 3. Do not say NEXT_SESSION_PLAN can be bought now.
 4. Do not say buy when gate is BLOCKED or UNAVAILABLE.

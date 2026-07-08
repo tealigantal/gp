@@ -137,9 +137,9 @@ The concrete `run` object is derived from `AdviceRun` in `src/gp_assistant/contr
 
 ## DecisionContextSnapshot
 
-`DecisionContextSnapshot` is the core artifact for Market-Memory recommendations. It is persisted by `src/gp_assistant/market_memory/store.py` and produced by `src/gp_assistant/decision_engine/pipeline.py`.
+`DecisionContextSnapshot` is the core artifact for Market-Memory decisions. It is persisted by `src/gp_assistant/market_memory/store.py` and produced by the Market-Memory decision pipeline. Runtime judgments additionally attach `DecisionContextModel`, `ThesisLifecycle`, and `DecisionSynthesis` from `src/gp_assistant/decision_engine/intelligence.py`.
 
-The snapshot must be treated as the source of truth for later questions such as why a stock was recommended, why another candidate was rejected, or why the system chose observe/no-trade.
+The snapshot must be treated as the source of truth for later questions such as why a stock was recommended, why another candidate was rejected, whether a user should hold/add/reduce/exit, or why the system chose wait/no-trade.
 
 Required fields:
 
@@ -156,7 +156,33 @@ Required fields:
   "llm_decision_json": {},
   "validator_result": {},
   "narrator_input": {},
-  "final_response": "string"
+  "final_response": "string",
+  "decision_context_model": {
+    "market_context": {},
+    "security_context": {},
+    "signal_thesis_context": {},
+    "user_context": {},
+    "position_context": {},
+    "objective": "string",
+    "constraints": {}
+  },
+  "thesis_lifecycle": {
+    "initial_thesis": "string",
+    "current_thesis_state": "thesis_strengthened|thesis_unchanged|thesis_weakening|thesis_invalidated",
+    "current_thesis": "string",
+    "evidence_delta": [],
+    "invalidation_triggers": [],
+    "risk_flags": []
+  },
+  "decision_action": "HOLD|ADD|REDUCE|EXIT|WAIT|NO_TRADE",
+  "decision_synthesis": {
+    "action": "HOLD|ADD|REDUCE|EXIT|WAIT|NO_TRADE",
+    "confidence": 0.0,
+    "rationale": "string",
+    "thesis_state": "string",
+    "risk_controls": [],
+    "validator_result": {}
+  }
 }
 ```
 
@@ -164,15 +190,15 @@ Contract rules:
 
 - probability fields must include evidence, not only a scalar probability
 - Market Memory historical cases must be retrieved by normalized feature-vector distance
-- the LLM decision JSON can downgrade or reject math-ranked candidates but cannot promote candidates outside the ranking
-- narrator output must be based on validated facts from the snapshot
+- the Decision Synthesizer can lower action intensity but cannot promote candidates outside math ranking or invent facts
+- response text must be based on validated facts from the snapshot and decision synthesis
 - rejected candidates and no-trade/observe decisions must remain available for counterfactual outcome tracking
 
 ## Stability Rules
 
 - Treat `src/gp_assistant/contracts/api.py` as the source of truth for HTTP response envelopes.
 - Treat `src/gp_assistant/contracts/objects.py` as the source of truth for internal structured domain models.
-- Treat `DecisionContextSnapshot` as the source of truth for recommendation evidence and post-hoc explanation.
+- Treat `DecisionContextSnapshot` plus attached decision intelligence fields as the source of truth for recommendation evidence, user-state decisions, and post-hoc explanation.
 - Add new fields conservatively.
 - Do not reintroduce retired `chat` or `recommend` compatibility contracts.
 - Do not reintroduce old score-stack fields as ranking authority. `candidate_score`, champion, or `final_score` may appear only in legacy artifacts or migration references.

@@ -17,9 +17,11 @@ freeze T-visible daily data
   -> probability inference
   -> risk assessment
   -> mathematical ranking
-  -> LLM risk committee / deterministic fallback
+  -> DecisionContextModel
+  -> Thesis Lifecycle
+  -> Decision Synthesizer / deterministic fallback
   -> validator
-  -> recommendation artifact
+  -> decision artifact
   -> T+1/T+3/T+5 verification
 ```
 

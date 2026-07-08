@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import List, Optional
+from typing import Any, List, Optional
 
 from ..contracts.objects import (
     BoardEntry,
@@ -16,6 +16,7 @@ from ..contracts.objects import (
     PickDetailArtifact,
     RunChangeArtifact,
 )
+from ..decision_engine.intelligence import enrich_pick_with_synthesis, objective_from_frame, synthesize_decision
 from ..evidence.live_quote_service import build_live_quote_snapshot
 from ..evidence.single_stock_service import analyze_single_stock
 from ..runtime.canonical_artifact import (
@@ -140,11 +141,121 @@ def _stale_compare(run, picks: List[CanonicalPick], stale_points: List[str]) -> 
     )
 
 
+def _synthesis(
+    evidence: EvidencePack,
+    *,
+    run=None,
+    pick: CanonicalPick | None = None,
+    candidates: List[CanonicalPick] | None = None,
+    objective: str | None = None,
+    extra_constraints: dict | None = None,
+) -> dict:
+    return synthesize_decision(
+        evidence=evidence,
+        run=run,
+        pick=pick,
+        candidates=candidates or [],
+        objective=objective or objective_from_frame(evidence.frame),
+        extra_constraints=extra_constraints or {},
+    )
+
+
+def _artifact_with_synthesis(artifact, synthesis: dict):
+    return artifact.model_copy(
+        update={
+            "decision_context_model": dict(synthesis.get("decision_context_model") or {}),
+            "thesis_lifecycle": dict(synthesis.get("thesis_lifecycle") or {}),
+            "decision_synthesis": dict(synthesis.get("decision_synthesis") or {}),
+            "decision_action": str(synthesis.get("decision_action") or "WAIT"),
+        }
+    )
+
+
+def _judgment_with_synthesis(judgment: Judgment, synthesis: dict) -> Judgment:
+    return judgment.model_copy(
+        update={
+            "decision_context_model": dict(synthesis.get("decision_context_model") or {}),
+            "thesis_lifecycle": dict(synthesis.get("thesis_lifecycle") or {}),
+            "decision_synthesis": dict(synthesis.get("decision_synthesis") or {}),
+            "decision_action": str(synthesis.get("decision_action") or "WAIT"),
+        }
+    )
+
+
+def _enrich_run_decisions(evidence: EvidencePack, canonical_run, *, objective: str | None = None):
+    picks = list(getattr(canonical_run, "picks", []) or [])
+    enriched: List[CanonicalPick] = []
+    synthesis_rows: List[dict] = []
+    for pick in picks:
+        synthesis = _synthesis(evidence, run=canonical_run, pick=pick, candidates=picks, objective=objective or "open_or_add_position")
+        enriched_pick = enrich_pick_with_synthesis(pick, synthesis)
+        enriched.append(enriched_pick)
+        synthesis_rows.append(
+            {
+                "symbol": pick.symbol,
+                "action": synthesis.get("decision_action"),
+                "thesis_state": (synthesis.get("thesis_lifecycle") or {}).get("current_thesis_state"),
+                "confidence": (synthesis.get("decision_synthesis") or {}).get("confidence"),
+            }
+        )
+    pack = dict(getattr(canonical_run, "decision_evidence_pack", {}) or {})
+    if synthesis_rows:
+        pack["decision_intelligence"] = synthesis_rows
+    run_synthesis = _synthesis(evidence, run=canonical_run, pick=(enriched[0] if enriched else None), candidates=enriched, objective=objective or objective_from_frame(evidence.frame))
+    return canonical_run.model_copy(
+        update={
+            "picks": enriched,
+            "decision_evidence_pack": pack,
+            "decision_context_model": dict(run_synthesis.get("decision_context_model") or {}),
+            "thesis_lifecycle": dict(run_synthesis.get("thesis_lifecycle") or {}),
+            "decision_action": str(run_synthesis.get("decision_action") or "WAIT"),
+            "decision_synthesis": dict(run_synthesis.get("decision_synthesis") or {}),
+        }
+    )
+
+
+def _single_stock_proxy_pick(analysis) -> dict[str, Any]:
+    trade_plan = dict(getattr(analysis, "trade_plan", {}) or {})
+    diagnostics = dict(trade_plan.get("diagnostics") or {})
+    champion = dict(getattr(analysis, "champion", {}) or {})
+    state = str(getattr(analysis, "overall_state", "") or "UNAVAILABLE")
+    reason_codes = [str(item) for item in list(getattr(analysis, "reason_codes", []) or [])]
+    thesis = f"单票日线状态为 {state}。"
+    if champion:
+        thesis = f"单票日线状态为 {state}，候选策略 {champion.get('strategy') or 'NA'}。"
+    return {
+        "symbol": getattr(analysis, "symbol", None),
+        "name": getattr(analysis, "name", None),
+        "rank": None,
+        "action": "WATCH",
+        "execution_state": state,
+        "recommendation_state": state,
+        "can_execute_now": state == "PLAN_READY",
+        "thesis": thesis,
+        "why_selected": thesis,
+        "entry_text": trade_plan.get("entry_text") or diagnostics.get("entry_text"),
+        "stop_text": trade_plan.get("stop_text") or diagnostics.get("stop_text"),
+        "take_text": trade_plan.get("take_text") or diagnostics.get("take_text"),
+        "champion_strategy": champion.get("strategy"),
+        "champion_strategy_score": champion.get("score"),
+        "execution_plan": trade_plan,
+        "risk_flags": reason_codes,
+        "risk": {"risk_flags": reason_codes},
+        "probability": {},
+        "ranking": {},
+        "historical_cases": [],
+        "data_provenance": dict(getattr(analysis, "data_provenance", {}) or {}),
+    }
+
+
 def recommend_workflow(session_id: str, evidence: EvidencePack, *, topk: int) -> Judgment:
     run = publish_run(session_id=session_id, book=evidence.book, topk=topk)
     canonical_run = build_canonical_run(book=evidence.book, run=run, picks=run.picks)
+    canonical_run = _enrich_run_decisions(evidence, canonical_run, objective="open_or_add_position")
     if canonical_run.run_action == "NO_TRADE":
         no_trade = build_no_trade_view(canonical_run, evidence.book)
+        synthesis = _synthesis(evidence, run=canonical_run, pick=(canonical_run.picks[0] if canonical_run.picks else None), candidates=canonical_run.picks, objective="evaluate_no_trade_decision")
+        no_trade = _artifact_with_synthesis(no_trade, synthesis)
         return Judgment(
             kind="no_trade",
             summary=no_trade.status_reason,
@@ -153,15 +264,20 @@ def recommend_workflow(session_id: str, evidence: EvidencePack, *, topk: int) ->
             no_trade=no_trade,
             compare_entries=run.picks,
             evidence_refs=[evidence.book.book_version, run.run_id],
+            decision_context_model=dict(synthesis.get("decision_context_model") or {}),
+            thesis_lifecycle=dict(synthesis.get("thesis_lifecycle") or {}),
+            decision_synthesis=dict(synthesis.get("decision_synthesis") or {}),
+            decision_action=str(synthesis.get("decision_action") or "NO_TRADE"),
         )
-    return Judgment(
+    synthesis = _synthesis(evidence, run=canonical_run, pick=(canonical_run.picks[0] if canonical_run.picks else None), candidates=canonical_run.picks, objective="open_or_add_position")
+    return _judgment_with_synthesis(Judgment(
         kind="recommend",
         summary=canonical_run.status_reason or "已生成当前计划。",
         run=run,
         canonical_run=canonical_run,
         compare_entries=run.picks,
         evidence_refs=[evidence.book.book_version, run.run_id],
-    )
+    ), synthesis)
 
 
 def pick_detail_workflow(evidence: EvidencePack) -> Judgment:
@@ -176,7 +292,10 @@ def pick_detail_workflow(evidence: EvidencePack) -> Judgment:
         pick = build_canonical_pick(evidence.subject_entry, evidence.book)
     freshness_issue = _pick_freshness_issue(pick)
     detail = _stale_pick_detail(canonical_run, pick, freshness_issue) if freshness_issue else build_pick_detail_view(canonical_run, pick)
-    return Judgment(
+    synthesis = _synthesis(evidence, run=canonical_run, pick=pick, candidates=canonical_run.picks, objective="evaluate_security_decision")
+    pick = enrich_pick_with_synthesis(pick, synthesis)
+    detail = _artifact_with_synthesis(detail, synthesis)
+    return _judgment_with_synthesis(Judgment(
         kind="pick_detail",
         summary=detail.why_selected or detail.thesis,
         run=run,
@@ -184,7 +303,7 @@ def pick_detail_workflow(evidence: EvidencePack) -> Judgment:
         subject_entry=evidence.subject_entry,
         pick_detail=detail,
         evidence_refs=[evidence.book.book_version, evidence.subject_entry.symbol],
-    )
+    ), synthesis)
 
 
 def single_stock_workflow(evidence: EvidencePack) -> Judgment:
@@ -199,19 +318,30 @@ def single_stock_workflow(evidence: EvidencePack) -> Judgment:
         summary = f"{analysis.symbol} 只能基于未补齐到目标交易日的日线做结构观察。"
     else:
         summary = f"{analysis.symbol} 已完成日线与冠军策略分析，当前状态为 {analysis.overall_state}。"
-    return Judgment(
+    synthesis = _synthesis(evidence, pick=_single_stock_proxy_pick(analysis), candidates=[], objective="evaluate_security_decision")
+    analysis = analysis.model_copy(
+        update={
+            "decision_context_model": dict(synthesis.get("decision_context_model") or {}),
+            "thesis_lifecycle": dict(synthesis.get("thesis_lifecycle") or {}),
+            "decision_synthesis": dict(synthesis.get("decision_synthesis") or {}),
+            "decision_action": str(synthesis.get("decision_action") or "WAIT"),
+        }
+    )
+    return _judgment_with_synthesis(Judgment(
         kind="single_stock_query",
         summary=summary,
         single_stock_analysis=analysis,
         evidence_refs=[evidence.book.book_version, analysis.symbol],
-    )
+    ), synthesis)
 
 
 def no_trade_workflow(evidence: EvidencePack) -> Judgment:
     run = evidence.active_run or publish_run(session_id=evidence.session.session_id, book=evidence.book, topk=max(3, len(evidence.book.board)))
     canonical_run = build_canonical_run(book=evidence.book, run=run, picks=run.picks)
     no_trade = build_no_trade_view(canonical_run, evidence.book)
-    return Judgment(
+    synthesis = _synthesis(evidence, run=canonical_run, pick=(canonical_run.picks[0] if canonical_run.picks else None), candidates=canonical_run.picks, objective="evaluate_no_trade_decision")
+    no_trade = _artifact_with_synthesis(no_trade, synthesis)
+    return _judgment_with_synthesis(Judgment(
         kind="no_trade",
         summary=no_trade.status_reason,
         run=run,
@@ -219,7 +349,7 @@ def no_trade_workflow(evidence: EvidencePack) -> Judgment:
         subject_entry=evidence.subject_entry,
         no_trade=no_trade,
         evidence_refs=[evidence.book.book_version, run.run_id],
-    )
+    ), synthesis)
 
 
 def _missing_subject_message(evidence: EvidencePack) -> str:
@@ -280,7 +410,20 @@ def live_entry_workflow(evidence: EvidencePack) -> Judgment:
         if freshness_issue
         else build_live_entry_view(canonical_run, pick, quote_snapshot=quote_snapshot)
     )
-    return Judgment(
+    synthesis = _synthesis(
+        evidence,
+        run=canonical_run,
+        pick=pick,
+        candidates=canonical_run.picks,
+        objective="open_or_add_position",
+        extra_constraints={
+            "quote_snapshot": dict(live_entry.quote_snapshot or {}),
+            "plan_position": dict(live_entry.plan_position or {}),
+        },
+    )
+    pick = enrich_pick_with_synthesis(pick, synthesis)
+    live_entry = _artifact_with_synthesis(live_entry, synthesis)
+    return _judgment_with_synthesis(Judgment(
         kind="live_entry_check",
         summary=live_entry.summary,
         run=run,
@@ -288,7 +431,7 @@ def live_entry_workflow(evidence: EvidencePack) -> Judgment:
         subject_entry=evidence.subject_entry,
         live_entry=live_entry,
         evidence_refs=[evidence.book.book_version, evidence.subject_entry.symbol],
-    )
+    ), synthesis)
 
 
 def compare_workflow(evidence: EvidencePack) -> Judgment:
@@ -306,7 +449,9 @@ def compare_workflow(evidence: EvidencePack) -> Judgment:
         return _missing_subject_workflow(evidence)
     stale_points = [issue for issue in (_pick_freshness_issue(pick) for pick in picks) if issue]
     compare_view = _stale_compare(canonical_run, picks, stale_points) if stale_points else build_compare_view(canonical_run, picks)
-    return Judgment(
+    synthesis = _synthesis(evidence, run=canonical_run, pick=(picks[0] if picks else None), candidates=picks, objective="compare_alternatives")
+    compare_view = _artifact_with_synthesis(compare_view, synthesis)
+    return _judgment_with_synthesis(Judgment(
         kind="compare",
         summary=(compare_view.comparison_points[0] if compare_view.comparison_points else "已完成比较。"),
         run=run,
@@ -314,7 +459,7 @@ def compare_workflow(evidence: EvidencePack) -> Judgment:
         compare_entries=entries,
         compare_view=compare_view,
         evidence_refs=[evidence.book.book_version, run.run_id],
-    )
+    ), synthesis)
 
 
 def candidate_compare_workflow(evidence: EvidencePack) -> Judgment:
@@ -356,6 +501,13 @@ def candidate_compare_workflow(evidence: EvidencePack) -> Judgment:
     reason = str(constraints.get("selection_reason") or constraints.get("reason") or "").strip()
     if not reason:
         reason = "模型根据当前候选集合和用户约束完成了比较。"
+    synthesis = _synthesis(
+        evidence,
+        run=evidence.active_run,
+        pick=(build_canonical_pick(selected_entry, evidence.book) if selected_entry is not None else None),
+        candidates=[build_canonical_pick(entry, evidence.book) for entry in scoped_entries],
+        objective="compare_alternatives",
+    )
     artifact = CandidateComparisonArtifact(
         compared_symbols=scope_symbols,
         selected_symbol=selected_symbol,
@@ -367,9 +519,13 @@ def candidate_compare_workflow(evidence: EvidencePack) -> Judgment:
         confidence=max(0.0, min(1.0, confidence)),
         source_run_id=(evidence.active_run.run_id if evidence.active_run else None),
         model_reasoning_summary=str(constraints.get("model_reasoning_summary") or "").strip() or None,
+        decision_context_model=dict(synthesis.get("decision_context_model") or {}),
+        thesis_lifecycle=dict(synthesis.get("thesis_lifecycle") or {}),
+        decision_synthesis=dict(synthesis.get("decision_synthesis") or {}),
+        decision_action=str(synthesis.get("decision_action") or "WAIT"),
     )
     canonical_run = build_canonical_run(book=evidence.book, run=evidence.active_run, picks=evidence.active_run.picks) if evidence.active_run else None
-    return Judgment(
+    return _judgment_with_synthesis(Judgment(
         kind="candidate_compare",
         summary=artifact.selection_reason,
         run=evidence.active_run,
@@ -378,7 +534,7 @@ def candidate_compare_workflow(evidence: EvidencePack) -> Judgment:
         compare_entries=scoped_entries,
         candidate_comparison=artifact,
         evidence_refs=[evidence.book.book_version, *([evidence.active_run.run_id] if evidence.active_run else [])],
-    )
+    ), synthesis)
 
 
 def intraday_situation_workflow(evidence: EvidencePack) -> Judgment:
@@ -404,6 +560,10 @@ def intraday_situation_workflow(evidence: EvidencePack) -> Judgment:
         live_entry=live_entry,
         summary=summary,
         source_run_id=(base.run.run_id if base.run else None),
+        decision_context_model=dict(base.decision_context_model or {}),
+        thesis_lifecycle=dict(base.thesis_lifecycle or {}),
+        decision_synthesis=dict(base.decision_synthesis or {}),
+        decision_action=str(base.decision_action or "WAIT"),
     )
     return base.model_copy(
         update={
@@ -424,7 +584,10 @@ def exit_workflow(evidence: EvidencePack) -> Judgment:
         pick = build_canonical_pick(evidence.subject_entry, evidence.book)
     freshness_issue = _pick_freshness_issue(pick)
     exit_view = _stale_exit(canonical_run, pick, freshness_issue) if freshness_issue else build_exit_view(canonical_run, pick)
-    return Judgment(
+    synthesis = _synthesis(evidence, run=canonical_run, pick=pick, candidates=canonical_run.picks, objective="manage_existing_position")
+    pick = enrich_pick_with_synthesis(pick, synthesis)
+    exit_view = _artifact_with_synthesis(exit_view, synthesis)
+    return _judgment_with_synthesis(Judgment(
         kind="exit_decision",
         summary=exit_view.reason,
         run=run,
@@ -433,12 +596,21 @@ def exit_workflow(evidence: EvidencePack) -> Judgment:
         exit_decision=exit_view,
         exit_view=exit_view.model_dump(),
         evidence_refs=[evidence.book.book_version, evidence.subject_entry.symbol],
-    )
+    ), synthesis)
 
 
 def run_change_workflow(evidence: EvidencePack) -> Judgment:
     diff = build_run_change_view(evidence.active_run, evidence.previous_run)
-    return Judgment(
+    synthesis = _synthesis(evidence, run=evidence.active_run, pick=None, candidates=[], objective="audit_previous_decision")
+    diff = diff.model_copy(
+        update={
+            "decision_context_model": dict(synthesis.get("decision_context_model") or {}),
+            "thesis_lifecycle": dict(synthesis.get("thesis_lifecycle") or {}),
+            "decision_synthesis": dict(synthesis.get("decision_synthesis") or {}),
+            "decision_action": str(synthesis.get("decision_action") or "WAIT"),
+        }
+    )
+    return _judgment_with_synthesis(Judgment(
         kind="run_change",
         summary="已比较本轮与上轮推荐变化。",
         run=evidence.active_run,
@@ -446,4 +618,4 @@ def run_change_workflow(evidence: EvidencePack) -> Judgment:
         run_change_view=diff,
         diff=diff.model_dump(),
         evidence_refs=[evidence.book.book_version, *([evidence.active_run.run_id] if evidence.active_run else [])],
-    )
+    ), synthesis)

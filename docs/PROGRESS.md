@@ -4,7 +4,7 @@ Last updated: 2026-07-08
 
 ## Snapshot
 
-The repository is currently centered on one active product surface and one production recommendation path:
+The repository is currently centered on one active product surface and one production decision path:
 
 - `gateway/` exposes the FastAPI API
 - `runtime/` owns concern parsing, turn orchestration, and user-safe reply assembly
@@ -15,7 +15,7 @@ The repository is currently centered on one active product surface and one produ
 - `market_memory/` stores normalized feature-vector events and decision snapshots
 - `probability_engine/` infers evidence-backed probabilities from nearest historical cases
 - `risk_engine/` handles execution risk, drawdown risk, and mathematical ranking
-- `decision_engine/` runs the risk committee, validator, narrator, and snapshot persistence
+- `decision_engine/` runs Decision Context, Thesis Lifecycle, Decision Synthesizer, validator, and snapshot persistence
 - `evaluation_engine/` owns historical replay, AB validation, calibration, counterfactuals, and error attribution
 - `frontend/` renders the chat-first Workspace with a right-side decision snapshot
 
@@ -29,6 +29,13 @@ The current product direction is:
 
 ### 2026-07-08
 
+- Added the Decision Intelligence layer on top of Market Memory:
+  - every market-facing judgment now receives `DecisionContextModel` fields for market, security, signal/thesis, user, position, objective, and constraints
+  - every decision carries `ThesisLifecycle` with `thesis_strengthened`, `thesis_unchanged`, `thesis_weakening`, or `thesis_invalidated`
+  - Decision Synthesizer outputs only `HOLD / ADD / REDUCE / EXIT / WAIT / NO_TRADE`
+  - recommend, no-trade, pick detail, single-stock, live-entry, compare, candidate-compare, intraday, exit, and run-change workflows attach the same decision fields instead of using keyword-specific answer handlers
+  - response payloads and the right-side decision snapshot expose `decision_context_model`, `thesis_lifecycle`, `decision_action`, and `decision_synthesis`
+  - added unit coverage for strengthened thesis, invalidated holding, no-trade, and weak-probability rejection behavior
 - Completed the production-path migration from the old score stack to the Market-Memory Agent:
   - production `build_day_selection()` now calls the new decision pipeline
   - new decisions are built from signal events, normalized feature-vector similarity, probability evidence, risk ranking, risk-committee validation, and `DecisionContextSnapshot`
@@ -64,7 +71,7 @@ The current product direction is:
 - Removed the standalone 5-minute execution path from the production runtime:
   - `pulse-loop`, replay-today, slot replay, and separate 5-minute UI affordances are no longer production entrypoints
   - minute refresh now belongs inside the unified runtime chain when enabled
-- Removed theme/concept/industry ranking interfaces from the production recommendation path:
+- Removed theme/concept/industry ranking interfaces from the retired score-stack path:
   - `theme_concept.py`, `theme_pool.py`, and `theme_pool_impl.py` are retained as commented archives
   - `agent.py` no longer imports or calls `build_themes` or `last_concept_status`
   - output keeps `themes: []` only for API compatibility
@@ -114,12 +121,12 @@ The current product direction is:
 ## Current State
 
 - Main flow remains aligned around `gateway -> runtime -> judgment -> reply -> workspace`.
-- Production recommendations now flow through `Market Data -> Signal Engine -> Market Memory -> Probability Engine -> Risk Engine -> Decision Engine -> DecisionContextSnapshot`.
+- Production decisions now flow through `Market Data -> Signal Engine -> Market Memory -> Probability Engine -> Risk Engine -> Decision Intelligence -> Thesis Lifecycle -> DecisionContextSnapshot`.
 - Intent parsing is now a hard LLM dependency for `/api/chat`; unavailable or malformed intent responses are surfaced as explicit API errors instead of hidden fallback behavior.
 - `kernel.facade` is the current cross-cutting service boundary for recommendation artifacts, validation, portfolio, execution preview, and workbench aggregation.
-- The production recommendation path is one runtime chain. It always resolves daily freshness/daybook first, builds Market-Memory daily recommendations, optionally runs 5-minute pulse evaluation when enabled, and does not call AkShare theme/concept/industry ranking APIs.
+- The production decision path is one runtime chain. It always resolves daily freshness/daybook first, builds Market-Memory daily plans, runs Decision Intelligence for user-facing actions, optionally runs 5-minute pulse evaluation when enabled, and does not call AkShare theme/concept/industry ranking APIs.
 - Mainline is derived from the full-market snapshot and daily candidate universe rather than external theme interfaces.
-- The LLM is constrained to risk-committee review. It can downgrade/reject/observe/no-trade but cannot promote a candidate outside the math ranking or invent market facts.
+- The decision layer is constrained by `DecisionContextModel`, thesis lifecycle, and a validator. The Decision Synthesizer can output only `HOLD / ADD / REDUCE / EXIT / WAIT / NO_TRADE` and cannot promote a candidate outside math ranking or invent market facts.
 - Probability outputs are not scores. They include evidence and calibration must be monitored.
 - The Workspace page now presents:
   - a conversation-first left pane

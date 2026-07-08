@@ -63,6 +63,36 @@ class TurnFrame(GPModel):
     ambiguity: Dict[str, Any] = Field(default_factory=dict)
 
 
+class DecisionContextModel(GPModel):
+    market_context: Dict[str, Any] = Field(default_factory=dict)
+    security_context: Dict[str, Any] = Field(default_factory=dict)
+    signal_thesis_context: Dict[str, Any] = Field(default_factory=dict)
+    user_context: Dict[str, Any] = Field(default_factory=dict)
+    position_context: Dict[str, Any] = Field(default_factory=dict)
+    objective: str = "evaluate_decision"
+    constraints: Dict[str, Any] = Field(default_factory=dict)
+
+
+class ThesisLifecycle(GPModel):
+    initial_thesis: str = ""
+    current_thesis_state: str = "thesis_unchanged"
+    current_thesis: str = ""
+    evidence_delta: List[str] = Field(default_factory=list)
+    invalidation_triggers: List[str] = Field(default_factory=list)
+    risk_flags: List[str] = Field(default_factory=list)
+
+
+class DecisionSynthesis(GPModel):
+    action: str = "WAIT"
+    confidence: float = 0.0
+    rationale: str = ""
+    thesis_state: str = "thesis_unchanged"
+    risk_controls: List[str] = Field(default_factory=list)
+    evidence_refs: List[str] = Field(default_factory=list)
+    source: str = "deterministic_policy"
+    validator_result: Dict[str, Any] = Field(default_factory=dict)
+
+
 class AdvicePick(GPModel):
     symbol: str
     name: Optional[str] = None
@@ -387,6 +417,10 @@ class CanonicalPick(GPModel):
     ranking: Dict[str, Any] = Field(default_factory=dict)
     historical_cases: List[Dict[str, Any]] = Field(default_factory=list)
     decision_context_snapshot_id: Optional[str] = None
+    decision_context_model: Dict[str, Any] = Field(default_factory=dict)
+    thesis_lifecycle: Dict[str, Any] = Field(default_factory=dict)
+    decision_action: str = "WAIT"
+    decision_synthesis: Dict[str, Any] = Field(default_factory=dict)
 
 
 class CanonicalRunArtifact(GPModel):
@@ -418,6 +452,10 @@ class CanonicalRunArtifact(GPModel):
     decision_evidence_pack: Dict[str, Any] = Field(default_factory=dict)
     tool_trace: Dict[str, Any] = Field(default_factory=dict)
     decision_context_snapshot_id: Optional[str] = None
+    decision_context_model: Dict[str, Any] = Field(default_factory=dict)
+    thesis_lifecycle: Dict[str, Any] = Field(default_factory=dict)
+    decision_action: str = "WAIT"
+    decision_synthesis: Dict[str, Any] = Field(default_factory=dict)
 
 
 class LiveEntryDecisionArtifact(GPModel):
@@ -446,6 +484,10 @@ class LiveEntryDecisionArtifact(GPModel):
     quote_snapshot: Dict[str, Any] = Field(default_factory=dict)
     user_quote: Dict[str, Any] = Field(default_factory=dict)
     plan_position: Dict[str, Any] = Field(default_factory=dict)
+    decision_context_model: Dict[str, Any] = Field(default_factory=dict)
+    thesis_lifecycle: Dict[str, Any] = Field(default_factory=dict)
+    decision_action: str = "WAIT"
+    decision_synthesis: Dict[str, Any] = Field(default_factory=dict)
 
 
 class PickDetailArtifact(GPModel):
@@ -464,6 +506,10 @@ class PickDetailArtifact(GPModel):
     data_provenance: Dict[str, Any] = Field(default_factory=dict)
     source_run_id: Optional[str] = None
     explain_context: Dict[str, Any] = Field(default_factory=dict)
+    decision_context_model: Dict[str, Any] = Field(default_factory=dict)
+    thesis_lifecycle: Dict[str, Any] = Field(default_factory=dict)
+    decision_action: str = "WAIT"
+    decision_synthesis: Dict[str, Any] = Field(default_factory=dict)
 
 
 class SingleStockAnalysisArtifact(GPModel):
@@ -478,6 +524,10 @@ class SingleStockAnalysisArtifact(GPModel):
     overall_state: str = "UNAVAILABLE"
     reason_codes: List[str] = Field(default_factory=list)
     data_provenance: Dict[str, Any] = Field(default_factory=dict)
+    decision_context_model: Dict[str, Any] = Field(default_factory=dict)
+    thesis_lifecycle: Dict[str, Any] = Field(default_factory=dict)
+    decision_action: str = "WAIT"
+    decision_synthesis: Dict[str, Any] = Field(default_factory=dict)
 
 
 class NoTradeArtifact(GPModel):
@@ -488,6 +538,10 @@ class NoTradeArtifact(GPModel):
     recovery_conditions: List[str] = Field(default_factory=list)
     data_provenance: Dict[str, Any] = Field(default_factory=dict)
     source_run_id: Optional[str] = None
+    decision_context_model: Dict[str, Any] = Field(default_factory=dict)
+    thesis_lifecycle: Dict[str, Any] = Field(default_factory=dict)
+    decision_action: str = "NO_TRADE"
+    decision_synthesis: Dict[str, Any] = Field(default_factory=dict)
 
 
 class ExitDecisionArtifact(GPModel):
@@ -502,6 +556,10 @@ class ExitDecisionArtifact(GPModel):
     confidence: float = 0.0
     source_run_id: Optional[str] = None
     data_provenance: Dict[str, Any] = Field(default_factory=dict)
+    decision_context_model: Dict[str, Any] = Field(default_factory=dict)
+    thesis_lifecycle: Dict[str, Any] = Field(default_factory=dict)
+    decision_action: str = "WAIT"
+    decision_synthesis: Dict[str, Any] = Field(default_factory=dict)
 
 
 class CompareArtifact(GPModel):
@@ -512,6 +570,10 @@ class CompareArtifact(GPModel):
     source_run_id: Optional[str] = None
     data_provenance: Dict[str, Any] = Field(default_factory=dict)
     explain_context: Dict[str, Any] = Field(default_factory=dict)
+    decision_context_model: Dict[str, Any] = Field(default_factory=dict)
+    thesis_lifecycle: Dict[str, Any] = Field(default_factory=dict)
+    decision_action: str = "WAIT"
+    decision_synthesis: Dict[str, Any] = Field(default_factory=dict)
 
 
 class CandidateComparisonArtifact(GPModel):
@@ -525,6 +587,10 @@ class CandidateComparisonArtifact(GPModel):
     confidence: float = 0.0
     source_run_id: Optional[str] = None
     model_reasoning_summary: Optional[str] = None
+    decision_context_model: Dict[str, Any] = Field(default_factory=dict)
+    thesis_lifecycle: Dict[str, Any] = Field(default_factory=dict)
+    decision_action: str = "WAIT"
+    decision_synthesis: Dict[str, Any] = Field(default_factory=dict)
 
 
 class IntradaySituationArtifact(GPModel):
@@ -536,6 +602,10 @@ class IntradaySituationArtifact(GPModel):
     live_entry: Optional[LiveEntryDecisionArtifact] = None
     summary: str = ""
     source_run_id: Optional[str] = None
+    decision_context_model: Dict[str, Any] = Field(default_factory=dict)
+    thesis_lifecycle: Dict[str, Any] = Field(default_factory=dict)
+    decision_action: str = "WAIT"
+    decision_synthesis: Dict[str, Any] = Field(default_factory=dict)
 
 
 class RunChangeArtifact(GPModel):
@@ -546,6 +616,10 @@ class RunChangeArtifact(GPModel):
     rank_changes: List[Dict[str, Any]] = Field(default_factory=list)
     gating_change: Dict[str, Any] = Field(default_factory=dict)
     data_quality_change: Dict[str, Any] = Field(default_factory=dict)
+    decision_context_model: Dict[str, Any] = Field(default_factory=dict)
+    thesis_lifecycle: Dict[str, Any] = Field(default_factory=dict)
+    decision_action: str = "WAIT"
+    decision_synthesis: Dict[str, Any] = Field(default_factory=dict)
 
 
 class GroundingSummary(GPModel):
@@ -625,6 +699,10 @@ class Judgment(GPModel):
     side_results: List[SideResult] = Field(default_factory=list)
     evidence_refs: List[str] = Field(default_factory=list)
     diff: Dict[str, Any] = Field(default_factory=dict)
+    decision_context_model: Dict[str, Any] = Field(default_factory=dict)
+    thesis_lifecycle: Dict[str, Any] = Field(default_factory=dict)
+    decision_action: str = "WAIT"
+    decision_synthesis: Dict[str, Any] = Field(default_factory=dict)
 
 
 class ReplyBundle(GPModel):

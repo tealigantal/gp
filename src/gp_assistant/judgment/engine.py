@@ -17,6 +17,11 @@ from .workflow import (
 
 
 def make_judgment(session_id: str, frame: TurnFrame, evidence: EvidencePack) -> Judgment:
+    if getattr(evidence, "frame", None) is None:
+        try:
+            setattr(evidence, "frame", frame)
+        except Exception:
+            pass
     topk = int(frame.constraints.get("topk") or 3)
 
     if frame.request in {"chat", "term_explain"}:

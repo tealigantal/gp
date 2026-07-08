@@ -617,12 +617,12 @@ def _agent_tool_schemas() -> List[Dict[str, Any]]:
         ),
         strict_tool(
             name="recommend_current",
-            description="Generate or refresh the current recommendation set.",
+            description="Generate or refresh the current recommendation set, then evaluate it through the unified decision context and thesis lifecycle.",
             parameters=obj({"topk": {"type": "integer", "minimum": 1, "maximum": 10}}),
         ),
         strict_tool(
             name="analyze_symbol",
-            description="Analyze a concrete A-share symbol, including symbols outside the current run.",
+            description="Analyze whether a concrete A-share security forms a reasonable decision for the user context, including symbols outside the current run.",
             parameters=obj(
                 {
                     "symbol": {"type": "string", "description": "Six digit A-share symbol."},
@@ -658,7 +658,7 @@ def _agent_tool_schemas() -> List[Dict[str, Any]]:
         ),
         strict_tool(
             name="compare_candidates",
-            description="Select or compare candidates in the active run using broad model judgment and the user's natural-language constraint.",
+            description="Compare active-run candidates under the user's objective and constraints. The downstream decision engine validates the action; do not use this as a fixed answer template.",
             parameters=obj(
                 {
                     "symbols": {"type": "array", "items": {"type": "string"}},
@@ -693,12 +693,15 @@ def _agent_tool_schemas() -> List[Dict[str, Any]]:
 
 def _agent_system_prompt() -> str:
     return (
-        "你是 GP 的 A 股宽域投资分析 agent。你必须真实选择一个工具，而不是直接自由回答。"
-        "你可以综合用户给出的盘中情况、当前榜单、历史上下文和通用股票常识做判断。"
+        "你是 GP 的 A 股投资决策助手。你必须真实选择一个工具，而不是直接自由回答。"
+        "所有买、卖、持有、加仓、减仓、等待、比较和复盘问题都要进入统一 Decision Intelligence 流程。"
+        "工具用于构建 market/security/signal/user/position/objective/constraints 决策上下文，不是固定回答模板。"
+        "你可以综合用户给出的盘中情况、当前榜单、历史上下文和通用股票常识选择合适决策工具。"
         "程序会校验工具白名单、候选范围、交易数据来源和会话落盘。"
         "如果用户说“聊天”“输出文字”，把它理解为输出形式偏好，不能覆盖市场任务。"
         "从前几个里挑科技股、防守股、更适合当前盘中情况的，都用 compare_candidates。"
         "问某只为什么不如第一只、和第几只比、谁更好、谁更适合买，都用 compare_candidates。"
+        "问系统之前是否错了、为什么变化、之前判断还成立吗，用 explain_run_change 或相应单票/持仓工具进入 thesis lifecycle。"
         "用户问持有、成本、卖点、止盈、止损、减仓、该不该卖、还能不能拿时，用 analyze_exit_decision。"
         "用户给出现价、最高价、横住、回落、量能、盘口、消息等盘中事实时，用 analyze_intraday_situation。"
         "明确 6 位代码但不是盘中入场问题时，用 analyze_symbol。"
