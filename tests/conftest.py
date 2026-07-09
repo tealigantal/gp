@@ -85,6 +85,7 @@ def pytest_collection_modifyitems(config, items):
         "test_daily_freshness.py",
         "test_worker_reconcile.py",
         "test_health_runtime_status.py",
+        "test_slot_state.py",
         "test_akshare_request_timeout.py",
         "test_runtime_lanes.py",
         "test_market_clock_slots.py",

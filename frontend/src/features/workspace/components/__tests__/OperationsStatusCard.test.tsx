@@ -19,6 +19,8 @@ function runtime(overrides: Partial<RuntimeStatus> = {}): RuntimeStatus {
     last_closed_5m: null,
     slot_status: 'OK',
     publish_allowed: true,
+    daily_data_state: 'freshness_blocked',
+    daily_status: 'freshness_blocked',
     daily_freshness_ready: false,
     daily_target_day: '2026-01-01',
     daily_checked_count: 10,
@@ -26,6 +28,11 @@ function runtime(overrides: Partial<RuntimeStatus> = {}): RuntimeStatus {
     daily_last_reconcile_at: '2026-01-01T15:00:00',
     daily_blocking_reason: '今天日线还没补齐到 2026-01-01，当前不发布正式推荐。',
     daily_failed_symbols: ['002716'],
+    clock_data_status: 'close_pending',
+    artifact_stage: 'daily_plan',
+    artifact_freshness: 'blocked',
+    artifact_status: 'blocked',
+    tradeability_state: 'no_trade',
     services: [
       {
         service: 'gp-worker',
@@ -72,7 +79,10 @@ it.each([
   render(
     <OperationsStatusCard
       runtime={runtime({
+        daily_data_state: dailyStatus,
         daily_status: dailyStatus,
+        artifact_freshness: 'current',
+        artifact_status: 'current',
         daily_freshness_ready: mode !== 'current_pending',
         daily_target_mode: mode,
         daily_target_day: mode === 'previous_completed' ? '2026-04-29' : '2026-04-30',
@@ -89,7 +99,10 @@ it('does not show current-ready text when full daily freshness is blocked', () =
   render(
     <OperationsStatusCard
       runtime={runtime({
+        daily_data_state: 'freshness_blocked',
         daily_status: 'freshness_blocked',
+        artifact_freshness: 'blocked',
+        artifact_status: 'blocked',
         daily_freshness_ready: false,
         daily_target_mode: 'current_ready',
         daily_target_day: '2026-05-13',
@@ -132,10 +145,13 @@ it('shows publish lag and recommends postclose archive when daily data is ready 
     <OperationsStatusCard
       runtime={runtime({
         book_freshness: 'lagging',
-        daily_status: 'artifact_lagging',
+        daily_data_state: 'ready',
+        daily_status: 'ready',
         daily_freshness_ready: true,
         daily_target_mode: 'current_ready',
         daily_stale_count: 0,
+        artifact_freshness: 'lagging',
+        artifact_status: 'lagging',
         artifact_lag_reason: 'daily_ready_current_artifact_meta_mismatch:market_phase',
         artifact_lag_fields: ['market_phase'],
       })}
@@ -145,4 +161,25 @@ it('shows publish lag and recommends postclose archive when daily data is ready 
   expect(screen.getAllByText('日线已就绪，发布待归档').length).toBeGreaterThan(0)
   expect(screen.getByText('daily_ready_current_artifact_meta_mismatch:market_phase')).toBeInTheDocument()
   expect(container.querySelector('button[data-service="gp-postclose-archive"]')).toHaveClass('ant-btn-primary')
+})
+
+it('does not recommend manual archive when postclose daily artifact is current', () => {
+  const { container } = render(
+    <OperationsStatusCard
+      runtime={runtime({
+        book_freshness: 'postclose_ready',
+        daily_data_state: 'ready',
+        daily_status: 'ready',
+        daily_freshness_ready: true,
+        daily_target_mode: 'current_ready',
+        daily_stale_count: 0,
+        artifact_stage: 'daily_plan',
+        artifact_freshness: 'current',
+        artifact_status: 'current',
+      })}
+    />,
+  )
+
+  expect(screen.getAllByText('今日日线已就绪').length).toBeGreaterThan(0)
+  expect(container.querySelector('button[data-service="gp-postclose-archive"]')).not.toHaveClass('ant-btn-primary')
 })

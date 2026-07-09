@@ -227,15 +227,22 @@ The generated `data/raw/trade_calendar.parquet` is local runtime data and should
 - `DecisionContextSnapshot` is the primary artifact for explaining why a recommendation, hold/add/reduce/exit, wait, or no-trade decision was made.
 - Questions such as "能买吗", "我已经买了怎么办", "亏了怎么办", "赚了怎么办", "为什么不是另一只", and "系统之前判断错了吗" must enter the same Decision Intelligence path, not separate keyword handlers.
 - Freshness behavior is now one runtime chain: daily freshness first, optional 5-minute pulse second, then one current artifact.
+- Runtime status is normalized by `runtime.slot_state`. `market_phase` is only the clock phase; post-close readiness lives in `daily_data_state`, `artifact_stage`, `artifact_freshness`, and `book_freshness`.
 - `kernel.facade` is the active service boundary for recommendation v2, compare, pick detail, validation summary, portfolio state, execution preview, paper execution, and workbench aggregation.
 
 ## When Something Looks Wrong
 
-1. Check `/api/health`, especially `llm_ready`, `runtime.book_freshness`, and provider status.
+1. Check `/api/health`, especially `llm_ready`, `runtime.daily_data_state`, `runtime.artifact_stage`, `runtime.artifact_freshness`, `runtime.book_freshness`, and provider status.
 2. Run `python -m compileall -q src`.
 3. Run the server smoke tests listed above.
 4. If `/api/chat` returns 503, fix LLM configuration before debugging judgment logic.
 5. If `/api/chat` returns 502, inspect the intent parser raw-output detail and router prompt contract.
 6. Inspect `store/book/current.json` only as a debug artifact, not as a design reference.
 7. If decisions look wrong, inspect signal output, Market Memory evidence, probability confidence, `decision_context_model`, `thesis_lifecycle`, and validator output before changing thresholds.
-8. Use [PROGRESS.md](./PROGRESS.md) and [../src/gp_assistant/ARCHITECTURE.md](../src/gp_assistant/ARCHITECTURE.md) as the current structural references.
+8. For slot/daily freshness confusion, run:
+
+```bash
+PYTHONPATH=src python -m gp_assistant.cli diagnose-slot-state --trade-day YYYY-MM-DD
+```
+
+9. Use [PROGRESS.md](./PROGRESS.md) and [../src/gp_assistant/ARCHITECTURE.md](../src/gp_assistant/ARCHITECTURE.md) as the current structural references.

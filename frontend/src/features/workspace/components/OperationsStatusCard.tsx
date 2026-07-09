@@ -38,16 +38,20 @@ function summarizeResult(result?: Record<string, unknown>) {
 function recommendedTools(runtime?: RuntimeStatus | null, manualTools: RuntimeToolInfo[] = []) {
   const toolSet = new Set(manualTools.map((item) => item.service))
   const out: string[] = []
-  const dailyStatus = String(runtime?.daily_status || '').toLowerCase()
+  const dailyStatus = String(runtime?.daily_data_state || runtime?.daily_status || '').toLowerCase()
+  const artifactFreshness = String(runtime?.artifact_freshness || '').toLowerCase()
+  const repairStatus = String(runtime?.repair_status || '').toLowerCase()
   const eodPending = dailyStatus ? dailyStatus === 'eod_pending' : runtime?.daily_target_mode === 'current_pending'
   const previousCompleted = dailyStatus
     ? dailyStatus === 'previous_completed'
     : runtime?.daily_target_mode === 'previous_completed'
   const artifactLagging =
-    dailyStatus === 'artifact_lagging' ||
-    String(runtime?.book_freshness || '').toLowerCase() === 'lagging' || Boolean(runtime?.artifact_lag_reason)
+    artifactFreshness === 'lagging' ||
+    (!artifactFreshness && (dailyStatus === 'artifact_lagging' || String(runtime?.book_freshness || '').toLowerCase() === 'lagging')) ||
+    Boolean(runtime?.artifact_lag_reason)
   const dailyBlocked =
     dailyStatus === 'freshness_blocked' || (runtime?.daily_freshness_ready === false && !eodPending && !previousCompleted)
+  const repairBlocked = repairStatus === 'blocked' || repairStatus === 'failed'
   if (artifactLagging && runtime?.market_phase === 'POSTCLOSE_PENDING' && toolSet.has('gp-postclose-archive')) {
     out.push('gp-postclose-archive')
   }
@@ -57,8 +61,8 @@ function recommendedTools(runtime?: RuntimeStatus | null, manualTools: RuntimeTo
   if (dailyBlocked && toolSet.has('gp-rebuild-daybook')) {
     out.push('gp-rebuild-daybook')
   }
-  if (runtime?.market_phase === 'POSTCLOSE_PENDING' && !eodPending && toolSet.has('gp-postclose-archive')) {
-    out.push('gp-postclose-archive')
+  if (repairBlocked && out.length === 0 && toolSet.has('gp-rebuild-daybook')) {
+    out.push('gp-rebuild-daybook')
   }
   return [...new Set(out)]
 }
@@ -77,7 +81,8 @@ export function OperationsStatusCard({
   const manualTools = (runtime?.services || []).filter((item) => item.mode !== 'always_on')
   const suggestedTools = recommendedTools(runtime, manualTools)
   const opSummary = summarizeResult(opsResult?.result)
-  const dailyStatus = String(runtime?.daily_status || '').toLowerCase()
+  const dailyStatus = String(runtime?.daily_data_state || runtime?.daily_status || '').toLowerCase()
+  const artifactFreshness = String(runtime?.artifact_freshness || '').toLowerCase()
   const eodPending = dailyStatus ? dailyStatus === 'eod_pending' : runtime?.daily_target_mode === 'current_pending'
   const previousCompleted = dailyStatus
     ? dailyStatus === 'previous_completed'
@@ -85,8 +90,9 @@ export function OperationsStatusCard({
   const dailyBlocked =
     dailyStatus === 'freshness_blocked' || (runtime?.daily_freshness_ready === false && !eodPending && !previousCompleted)
   const artifactLagging =
-    dailyStatus === 'artifact_lagging' ||
-    String(runtime?.book_freshness || '').toLowerCase() === 'lagging' || Boolean(runtime?.artifact_lag_reason)
+    artifactFreshness === 'lagging' ||
+    (!artifactFreshness && (dailyStatus === 'artifact_lagging' || String(runtime?.book_freshness || '').toLowerCase() === 'lagging')) ||
+    Boolean(runtime?.artifact_lag_reason)
   const dailyStatusLabel = freshness.label
 
   return (

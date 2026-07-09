@@ -40,6 +40,12 @@ from .runtime.market_clock import (
     PHASE_POSTCLOSE_PENDING,
     compute_market_state,
 )
+from .runtime.slot_state import (
+    DAILY_EOD_PENDING,
+    DAILY_FRESHNESS_BLOCKED,
+    DAILY_RECONCILING,
+    daily_data_state_from_freshness,
+)
 from .runtime.utils import gen_id, now_iso
 
 
@@ -463,7 +469,8 @@ def run_runtime_chain(*, now=None, operation: str = "auto") -> Dict[str, Any]:
     if not freshness and daybook_symbols(daybook):
         freshness = reconcile_daily_freshness(daybook_symbols(daybook), as_of=ms.target_daybook_effective_day, strict=True)
         daybook.source_meta["daily_freshness"] = freshness
-    if freshness.get("target_mode") == TARGET_CURRENT_PENDING:
+    daily_data_state = daily_data_state_from_freshness(freshness) if freshness else "unavailable"
+    if daily_data_state == DAILY_EOD_PENDING:
         if ms.market_phase == PHASE_POSTCLOSE_PENDING or operation == "postclose_archive":
             return {
                 "trade_day": ms.target_daybook_effective_day,
@@ -474,12 +481,28 @@ def run_runtime_chain(*, now=None, operation: str = "auto") -> Dict[str, Any]:
                 "archived": False,
                 "pending": True,
                 "reason": "eod_daily_pending",
-                "daily_status": "eod_pending",
+                "daily_data_state": daily_data_state,
+                "daily_status": daily_data_state,
                 "daily_freshness": freshness,
                 "daily_plan_only": True,
                 "message": "今日收盘日线尚未就绪，后台会按探测 TTL 自动重试。",
             }
-    if freshness and not bool(freshness.get("ready", True)):
+    if daily_data_state == DAILY_RECONCILING:
+        return {
+            "trade_day": ms.target_daybook_effective_day,
+            "market_phase": ms.market_phase,
+            "operation": operation,
+            "runtime_chain": True,
+            "runtime_stage": "daily_reconciling",
+            "pending": True,
+            "reason": "daily_reconciling",
+            "daily_data_state": daily_data_state,
+            "daily_status": daily_data_state,
+            "daily_freshness": freshness,
+            "daily_plan_only": True,
+            "message": "今日收盘日线已进入确认流程，等待 freshness report 完成后再发布。",
+        }
+    if daily_data_state == DAILY_FRESHNESS_BLOCKED:
         return {
             "trade_day": ms.target_daybook_effective_day,
             "market_phase": ms.market_phase,
@@ -488,7 +511,8 @@ def run_runtime_chain(*, now=None, operation: str = "auto") -> Dict[str, Any]:
             "runtime_stage": "daily_blocked",
             "blocked": True,
             "reason": "daily_freshness_blocked",
-            "daily_status": "freshness_blocked",
+            "daily_data_state": daily_data_state,
+            "daily_status": daily_data_state,
             "daily_freshness": freshness,
             "daily_plan_only": True,
             "message": freshness.get("blocking_reason") or "日线数据未补齐到目标交易日，当前不刷新运行时链路。",
@@ -513,7 +537,8 @@ def run_runtime_chain(*, now=None, operation: str = "auto") -> Dict[str, Any]:
         )
     saved["operation"] = operation
     saved["daily_freshness"] = freshness
-    saved["daily_status"] = "ready"
+    saved["daily_data_state"] = daily_data_state
+    saved["daily_status"] = daily_data_state
     saved["capabilities"] = caps
     if operation == "postclose_archive" or (operation == "auto" and ms.market_phase == PHASE_POSTCLOSE_PENDING):
         saved["archived"] = True

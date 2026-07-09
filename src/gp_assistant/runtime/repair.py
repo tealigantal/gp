@@ -35,7 +35,7 @@ def _default_snapshot() -> RepairStatusSnapshot:
         daily_target_day=state.target_daybook_effective_day,
         pulse_target_trade_day=state.target_pulse_trade_day,
         pulse_target_slot_at=state.target_pulse_slot_at,
-        artifact_status=state.data_status,
+        artifact_status=None,
     )
 
 

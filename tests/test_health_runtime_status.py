@@ -485,9 +485,12 @@ def test_health_reports_lagging_when_latest_freshness_ready_but_artifact_is_old(
 
     assert response.status_code == 200, response.text
     runtime = response.json()["runtime"]
-    assert runtime["daily_status"] == "artifact_lagging"
+    assert runtime["daily_data_state"] == "ready"
+    assert runtime["daily_status"] == "ready"
     assert runtime["daily_freshness_ready"] is True
     assert runtime["book_freshness"] == "lagging"
+    assert runtime["artifact_freshness"] == "lagging"
+    assert runtime["artifact_status"] == "lagging"
     assert "daily_target_day" in runtime["artifact_lag_fields"]
 
 
@@ -527,11 +530,13 @@ def test_health_reports_lagging_when_daily_ready_but_current_artifact_meta_is_st
     assert response.status_code == 200, response.text
     runtime = response.json()["runtime"]
     assert runtime["daily_freshness_ready"] is True
-    assert runtime["daily_status"] == "artifact_lagging"
+    assert runtime["daily_data_state"] == "ready"
+    assert runtime["daily_status"] == "ready"
     assert runtime["daily_target_day"] == "2026-05-12"
     assert runtime["daily_target_mode"] == "current_ready"
     assert runtime["daily_stale_count"] == 0
     assert runtime["book_freshness"] == "lagging"
+    assert runtime["artifact_freshness"] == "lagging"
     assert runtime["artifact_status"] == "lagging"
     assert "daily_ready_current_artifact_meta_mismatch" in runtime["artifact_lag_reason"]
     assert "market_phase" in runtime["artifact_lag_fields"]

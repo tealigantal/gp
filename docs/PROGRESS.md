@@ -1,6 +1,6 @@
 # Current Progress
 
-Last updated: 2026-07-08
+Last updated: 2026-07-09
 
 ## Snapshot
 
@@ -26,6 +26,17 @@ The current product direction is:
 - one shared Market-Memory decision source for recommendation, follow-up, comparison, exit, and run-change answers
 
 ## Recent Changes
+
+### 2026-07-09
+
+- Consolidated slot and daily freshness runtime state:
+  - added `runtime.slot_state` as the single normalization layer for clock phase, daily data state, current artifact stage/freshness, and tradeability
+  - `/api/health` now derives `daily_data_state`, `artifact_stage`, `artifact_freshness`, `artifact_status`, `book_freshness`, and `tradeability_state` from that layer
+  - `artifact_status` no longer mirrors clock `close_pending`; clock data status is exposed separately as `clock_data_status`
+  - post-close ready is represented as `market_phase=POSTCLOSE_PENDING`, `daily_data_state=ready`, `artifact_stage=daily_plan`, `artifact_freshness=current`, and `book_freshness=postclose_ready`
+  - `gp-worker` uses the same daily data state classification before publishing or blocking runtime artifacts
+  - Workspace ops UI no longer suggests manual postclose archive when the daily artifact is already current
+  - added `python -m gp_assistant.cli diagnose-slot-state` for read-only inspection of pointer, artifact meta, daily freshness, EOD probe, and cache-only daily last dates
 
 ### 2026-07-08
 
@@ -125,6 +136,7 @@ The current product direction is:
 - Intent parsing is now a hard LLM dependency for `/api/chat`; unavailable or malformed intent responses are surfaced as explicit API errors instead of hidden fallback behavior.
 - `kernel.facade` is the current cross-cutting service boundary for recommendation artifacts, validation, portfolio, execution preview, and workbench aggregation.
 - The production decision path is one runtime chain. It always resolves daily freshness/daybook first, builds Market-Memory daily plans, runs Decision Intelligence for user-facing actions, optionally runs 5-minute pulse evaluation when enabled, and does not call AkShare theme/concept/industry ranking APIs.
+- Runtime state is normalized by `runtime.slot_state`. Clock phase, daily data state, artifact freshness, and tradeability are separate fields; post-close readiness is not encoded as `market_phase=POSTCLOSE_READY`.
 - Mainline is derived from the full-market snapshot and daily candidate universe rather than external theme interfaces.
 - The decision layer is constrained by `DecisionContextModel`, thesis lifecycle, and a validator. The Decision Synthesizer can output only `HOLD / ADD / REDUCE / EXIT / WAIT / NO_TRADE` and cannot promote a candidate outside math ranking or invent market facts.
 - Probability outputs are not scores. They include evidence and calibration must be monitored.

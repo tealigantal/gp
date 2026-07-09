@@ -61,6 +61,7 @@ class RuntimeStatus(BaseModel):
     publish_allowed: bool = False
     repair_status: str = "idle"
     repair_stage: str = "idle"
+    daily_data_state: Optional[str] = None
     daily_status: Optional[str] = None
     daily_freshness_ready: bool = False
     daily_target_day: Optional[str] = None
@@ -72,9 +73,13 @@ class RuntimeStatus(BaseModel):
     last_repair_started_at: Optional[str] = None
     last_repair_finished_at: Optional[str] = None
     blocking_reason: Optional[str] = None
+    clock_data_status: Optional[str] = None
+    artifact_stage: str = "none"
+    artifact_freshness: str = "unavailable"
     artifact_status: Optional[str] = None
     artifact_lag_reason: Optional[str] = None
     artifact_lag_fields: List[str] = Field(default_factory=list)
+    tradeability_state: str = "blocked"
     daily_checked_count: int = 0
     daily_stale_count: int = 0
     daily_last_reconcile_at: Optional[str] = None

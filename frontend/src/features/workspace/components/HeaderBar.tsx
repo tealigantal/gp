@@ -18,14 +18,15 @@ function fmtCount(value?: number) {
 }
 
 function currentBookState(book?: MarketBook, health?: HealthResponse) {
-  const dailyStatus = String(health?.runtime?.daily_status || '').toLowerCase()
+  const dailyStatus = String(health?.runtime?.daily_data_state || health?.runtime?.daily_status || '').toLowerCase()
+  const artifactFreshness = String(health?.runtime?.artifact_freshness || '').toLowerCase()
   if (dailyStatus === 'freshness_blocked') {
     return { color: 'volcano' as const, text: '日线未就绪' }
   }
   if (dailyStatus === 'eod_pending') {
     return { color: 'gold' as const, text: '等待收盘日线' }
   }
-  if (dailyStatus === 'artifact_lagging') {
+  if (artifactFreshness === 'lagging' || (!artifactFreshness && dailyStatus === 'artifact_lagging')) {
     return { color: 'volcano' as const, text: '等待日线更新' }
   }
   const slotStatus = String(book?.slot_status || '').toUpperCase()
@@ -35,7 +36,7 @@ function currentBookState(book?: MarketBook, health?: HealthResponse) {
   if (health?.runtime?.book_freshness === 'lagging') {
     return { color: 'volcano' as const, text: '等待日线更新' }
   }
-  if (book?.publish_allowed) {
+  if (health?.runtime?.tradeability_state === 'tradeable' || book?.publish_allowed) {
     return { color: 'green' as const, text: '日线计划' }
   }
   return { color: 'default' as const, text: '暂不入场' }

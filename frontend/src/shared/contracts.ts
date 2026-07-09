@@ -413,6 +413,7 @@ export interface RuntimeStatus {
   publish_allowed: boolean
   repair_status: string
   repair_stage: string
+  daily_data_state?: 'previous_completed' | 'eod_pending' | 'daily_reconciling' | 'freshness_blocked' | 'ready' | 'unavailable' | string | null
   daily_status?: 'eod_pending' | 'freshness_blocked' | 'artifact_lagging' | 'ready' | 'previous_completed' | 'unavailable' | string | null
   daily_freshness_ready?: boolean
   daily_target_day?: string | null
@@ -436,9 +437,13 @@ export interface RuntimeStatus {
   last_repair_started_at?: string | null
   last_repair_finished_at?: string | null
   blocking_reason?: string | null
+  clock_data_status?: string | null
+  artifact_stage?: 'none' | 'daily_plan' | 'intraday_pulse' | 'unknown' | string
+  artifact_freshness?: 'current' | 'lagging' | 'unavailable' | 'blocked' | string
   artifact_status: string
   artifact_lag_reason?: string | null
   artifact_lag_fields?: string[]
+  tradeability_state?: 'tradeable' | 'no_trade' | 'blocked' | string
   services: RuntimeToolInfo[]
 }
 

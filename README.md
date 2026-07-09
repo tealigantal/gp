@@ -162,7 +162,8 @@ docker compose --profile ops run --rm gp-postclose-archive
 
 用途：
 
-- 将当日收盘后的 current artifact 状态归档
+- 运维诊断或强制补跑收盘后日线链路
+- 正常情况下 `gp-worker` 会自动完成收盘后日线确认和 daily artifact 发布，不需要靠手工触发
 
 ## 数据和更新机制
 
@@ -188,6 +189,31 @@ GP 的数据链不是“每次请求都整仓重抓”，而是分层更新。
 - `Thesis Lifecycle`：判断 thesis 增强、未变、转弱或失效
 - `DecisionContextSnapshot`：每次决策的完整上下文、动作、校验结果和最终解释
 - `daybook`：日线交易计划与 Workspace 当前状态
+
+### Slot 与日线状态
+
+运行态状态由 `runtime.slot_state` 统一归一化，不再由 gateway、worker 和前端分别解释。
+
+- `market_phase` 只表示交易时钟，例如 `PREOPEN / INTRADAY_AM / LUNCH_BREAK / CLOSING_AUCTION / POSTCLOSE_PENDING / NON_TRADING`
+- 收盘后时钟仍是 `POSTCLOSE_PENDING`；日线是否就绪看 `daily_data_state`
+- `daily_data_state` 表示日线状态：`previous_completed / eod_pending / daily_reconciling / freshness_blocked / ready / unavailable`
+- `artifact_stage` 表示当前 artifact 类型：`daily_plan / intraday_pulse / none / unknown`
+- `artifact_freshness` 表示当前 artifact 是否跟上日线状态：`current / lagging / unavailable / blocked`
+- `tradeability_state` 表示是否可交易：`tradeable / no_trade / blocked`，不再和 freshness 混在一起
+- `artifact_status` 是 `artifact_freshness` 的兼容别名，不再使用 clock 的 `close_pending`
+
+收盘后完整就绪应表现为：
+
+```text
+market_phase=POSTCLOSE_PENDING
+daily_data_state=ready
+artifact_stage=daily_plan
+artifact_freshness=current
+artifact_status=current
+book_freshness=postclose_ready
+```
+
+如果 `publish_allowed=false`，只代表当前决策是 no-trade，不代表日线没有拉取完成。
 - `slot artifact`：盘中执行态
 - 聊天推荐、右侧 `DecisionSnapshot`、单票详情、盘中入场判断、持仓处理全部读取同一个 canonical run / artifact 和 Decision Intelligence 输出
 
@@ -251,7 +277,13 @@ Invoke-RestMethod http://127.0.0.1:8000/api/health | ConvertTo-Json -Depth 8
 - `auto_update_service`
 - `auto_update_expected`
 - `worker_poll_interval_sec`
+- `daily_data_state`
+- `clock_data_status`
 - `book_freshness`
+- `artifact_stage`
+- `artifact_freshness`
+- `artifact_status`
+- `tradeability_state`
 - `book_updated_at`
 - `artifact_id`
 - `pulse_trade_day`
@@ -278,9 +310,16 @@ Invoke-RestMethod http://127.0.0.1:8000/api/run/<run_id> | ConvertTo-Json -Depth
 按这个顺序查：
 
 1. `docker compose logs -f gp-worker`
-2. `GET /api/health` 看 `runtime.book_freshness`
+2. `GET /api/health` 看 `runtime.daily_data_state / artifact_stage / artifact_freshness / book_freshness`
 3. Workspace 右侧“运行与工具”卡
-4. 必要时手工执行 `gp-rebuild-daybook`
+4. 本地运行只读诊断：
+
+```powershell
+$env:PYTHONPATH = "src"
+python -m gp_assistant.cli diagnose-slot-state --trade-day 2026-07-09
+```
+
+5. 只有在 `artifact_freshness=lagging`、`daily_data_state=freshness_blocked` 或 repair 明确 blocked/failed 时，才考虑手工执行 `gp-rebuild-daybook` 或 `gp-postclose-archive`
 
 ## 本地开发
 

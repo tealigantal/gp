@@ -79,8 +79,39 @@ INTRADAY_AM
 LUNCH_BREAK
 INTRADAY_PM
 POSTCLOSE_PENDING
-POSTCLOSE_READY
-3.5 active_run_validity
+
+注意：`POSTCLOSE_READY` 不再作为当前 `/api/health.runtime.market_phase` 的目标状态。15:00 后 clock phase 仍保持 `POSTCLOSE_PENDING`；收盘日线是否已完成，由 runtime state 表达。
+
+3.5 runtime slot state
+
+`runtime.slot_state` 是当前运行态的唯一归一化层。它把时钟、日线 freshness、current artifact 和交易可执行性分开：
+
+market_phase
+纯交易时钟。
+
+daily_data_state
+日线数据状态：`previous_completed / eod_pending / daily_reconciling / freshness_blocked / ready / unavailable`。
+
+artifact_stage
+当前 artifact 类型：`none / daily_plan / intraday_pulse / unknown`。
+
+artifact_freshness
+当前 artifact 是否跟上目标状态：`current / lagging / unavailable / blocked`。
+
+tradeability_state
+当前决策是否可交易：`tradeable / no_trade / blocked`。它只来自 `publish_allowed`、gate 和 decision，不用于判断日线是否已拉取。
+
+收盘后完整 ready 的标准状态是：
+
+market_phase = POSTCLOSE_PENDING
+daily_data_state = ready
+artifact_stage = daily_plan
+artifact_freshness = current
+artifact_status = current
+book_freshness = postclose_ready
+
+若 `publish_allowed=false` 但上述状态成立，说明系统已完成收盘日线计划，只是当前决策为 no-trade。
+3.6 active_run_validity
 
 旧 run 是否还能当“当前默认结论”复用，必须同时满足：
 

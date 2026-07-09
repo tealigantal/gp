@@ -52,10 +52,10 @@ export function dailyTargetModeMeta(runtime?: RuntimeStatus | null) {
 }
 
 export function dailyStatusMeta(runtime?: RuntimeStatus | null) {
-  const explicit = String(runtime?.daily_status || '').toLowerCase()
+  const explicit = String(runtime?.daily_data_state || runtime?.daily_status || '').toLowerCase()
   const artifactLagging =
-    explicit === 'artifact_lagging' ||
-    String(runtime?.book_freshness || '').toLowerCase() === 'lagging' ||
+    String(runtime?.artifact_freshness || '').toLowerCase() === 'lagging' ||
+    (!runtime?.artifact_freshness && (explicit === 'artifact_lagging' || String(runtime?.book_freshness || '').toLowerCase() === 'lagging')) ||
     Boolean(runtime?.artifact_lag_reason)
   const eodPending = explicit === 'eod_pending' || runtime?.daily_target_mode === 'current_pending'
   const previousCompleted = explicit === 'previous_completed' || runtime?.daily_target_mode === 'previous_completed'
@@ -109,6 +109,21 @@ export function dailyStatusMeta(runtime?: RuntimeStatus | null) {
 }
 
 export function runtimeFreshnessMeta(runtime?: RuntimeStatus | null) {
+  const artifactFreshness = String(runtime?.artifact_freshness || '').toLowerCase()
+  if (artifactFreshness === 'lagging') {
+    return {
+      label: runtime?.market_phase === 'POSTCLOSE_PENDING' ? '日线已就绪，发布待归档' : '发布待刷新',
+      color: 'volcano',
+      note: runtime?.artifact_lag_reason || '当前 artifact 落后于已确认的日线状态。',
+    }
+  }
+  if (artifactFreshness === 'blocked') {
+    return {
+      label: '日线未就绪',
+      color: 'volcano',
+      note: runtime?.daily_blocking_reason || '日线 freshness 校验未通过。',
+    }
+  }
   const dailyStatus = dailyStatusMeta(runtime)
   if (dailyStatus) return dailyStatus
   const dailyMode = dailyTargetModeMeta(runtime)
