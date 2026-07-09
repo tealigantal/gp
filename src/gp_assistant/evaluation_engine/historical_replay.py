@@ -8,6 +8,7 @@ from typing import Any, Dict, Iterable, List, Sequence
 import pandas as pd
 
 from ..core.paths import results_dir, universe_dir
+from ..decision_engine.adaptive_policy import load_policy_state, save_policy_state, update_policy_state_from_outcomes
 from ..decision_engine.pipeline import run_market_memory_selection
 from ..providers.boards import is_mainboard
 from ..providers.universe_provider import UniverseProvider
@@ -167,11 +168,22 @@ def _rejected_candidates(payload: Dict[str, Any], *, selected_symbols: set[str],
 
 def _prediction_for_new(pick: Dict[str, Any]) -> Dict[str, Any]:
     probability = dict(pick.get("probability") or {})
+    adaptive = dict(pick.get("adaptive_policy") or {})
+    calibrated = adaptive.get("calibrated_probability") if adaptive.get("calibrated_probability") is not None else pick.get("calibrated_probability")
+    raw_probability = probability.get("up_probability_3d")
+    probability_value = calibrated if calibrated is not None else raw_probability
     return {
-        "up_probability_3d": probability.get("up_probability_3d"),
+        "probability": probability_value,
+        "raw_probability": raw_probability,
+        "up_probability_3d": probability_value,
+        "calibrated_probability": calibrated,
         "expected_return_3d": probability.get("expected_return_3d"),
         "drawdown_probability": probability.get("drawdown_probability"),
         "evidence": probability.get("evidence") or {},
+        "adaptive_score": adaptive.get("adaptive_score") if adaptive else pick.get("adaptive_score"),
+        "recommendation_strength": adaptive.get("recommendation_strength") if adaptive else pick.get("recommendation_strength"),
+        "expert_contributions": adaptive.get("expert_contributions") if adaptive else pick.get("expert_contributions"),
+        "feature_coverage": adaptive.get("feature_coverage") if adaptive else pick.get("feature_coverage"),
     }
 
 
@@ -238,7 +250,11 @@ def _failure_analysis(*, pipeline: str, pick: Dict[str, Any], outcome: Dict[str,
             "pipeline": pipeline,
             "symbol": pick.get("symbol") or pick.get("code"),
             "rank_score": (pick.get("ranking") or {}).get("ranking_score") if pipeline == "new" else pick.get("final_score"),
-            "probability": (pick.get("probability") or {}).get("up_probability_3d") if pipeline == "new" else None,
+            "probability": (_prediction_for_new(pick).get("probability") if pipeline == "new" else None),
+            "raw_probability": (_prediction_for_new(pick).get("raw_probability") if pipeline == "new" else None),
+            "adaptive_score": (_prediction_for_new(pick).get("adaptive_score") if pipeline == "new" else None),
+            "recommendation_strength": (_prediction_for_new(pick).get("recommendation_strength") if pipeline == "new" else None),
+            "feature_coverage": (_prediction_for_new(pick).get("feature_coverage") if pipeline == "new" else None),
         },
         "actual": outcome,
         "error_type": sorted(set(errors)),
@@ -261,13 +277,19 @@ def _evaluate_items(
         if pipeline == "new" and outcome.get("complete"):
             probability = pick.get("probability") or {}
             evidence = probability.get("evidence") or {}
+            prediction = _prediction_for_new(pick)
             predictions.append(
                 {
-                    "probability": probability.get("up_probability_3d"),
+                    "probability": prediction.get("probability"),
+                    "raw_probability": prediction.get("raw_probability"),
                     "success": bool(outcome.get("success") is True),
                     "effective_sample_size": evidence.get("effective_sample_size"),
                     "uncertainty": probability.get("uncertainty"),
                     "role": role,
+                    "adaptive_score": prediction.get("adaptive_score"),
+                    "recommendation_strength": prediction.get("recommendation_strength"),
+                    "feature_coverage": prediction.get("feature_coverage"),
+                    "expert_contributions": prediction.get("expert_contributions"),
                 }
             )
         evaluated.append({"rank": rank, "role": role, "pick": pick, "outcome": outcome, "failure_analysis": failure})
@@ -340,6 +362,49 @@ def _max_consecutive_losses(day_returns: Sequence[float]) -> int:
     return longest
 
 
+def _adaptive_score_bucket(value: Any) -> str:
+    score = _safe_float(value, -1.0)
+    if score < 0.0:
+        return "missing"
+    if score < 0.40:
+        return "lt_0.40"
+    if score < 0.55:
+        return "0.40_0.55"
+    if score < 0.70:
+        return "0.55_0.70"
+    return "gte_0.70"
+
+
+def _performance_rows(items: List[Dict[str, Any]], *, key: str) -> List[Dict[str, Any]]:
+    groups: Dict[str, List[Dict[str, Any]]] = {}
+    for item in items:
+        outcome = item.get("outcome") or {}
+        if not outcome.get("complete"):
+            continue
+        pick = item.get("pick") or {}
+        adaptive = dict(pick.get("adaptive_policy") or {})
+        if key == "adaptive_score_bucket":
+            group = _adaptive_score_bucket(adaptive.get("adaptive_score") or pick.get("adaptive_score"))
+        else:
+            group = str(adaptive.get("recommendation_strength") or pick.get("recommendation_strength") or "missing")
+        groups.setdefault(group, []).append(item)
+    rows: List[Dict[str, Any]] = []
+    for group, scoped in sorted(groups.items()):
+        returns = [_safe_float((item.get("outcome") or {}).get("return_3d")) for item in scoped]
+        drawdowns = [_safe_float((item.get("outcome") or {}).get("max_drawdown")) for item in scoped]
+        wins = sum(1 for item in scoped if (item.get("outcome") or {}).get("success") is True)
+        rows.append(
+            {
+                "group": group,
+                "count": len(scoped),
+                "return_3d_avg": _mean(returns),
+                "max_drawdown_avg": _mean(drawdowns),
+                "win_rate": float(wins / max(1, len(scoped))),
+            }
+        )
+    return rows
+
+
 def _summary(rows: List[Dict[str, Any]], *, pipeline: str) -> Dict[str, Any]:
     by_day_top1: List[float] = []
     top1_1d: List[float] = []
@@ -350,6 +415,7 @@ def _summary(rows: List[Dict[str, Any]], *, pipeline: str) -> Dict[str, Any]:
     wins = 0
     complete = 0
     predictions: List[Dict[str, Any]] = []
+    adaptive_evaluated: List[Dict[str, Any]] = []
     decision_counts: Dict[str, int] = {}
     rejected_returns: List[float] = []
     rejected_wins = 0
@@ -370,6 +436,7 @@ def _summary(rows: List[Dict[str, Any]], *, pipeline: str) -> Dict[str, Any]:
             pass
         else:
             first = complete_picks[0]["outcome"]
+            adaptive_evaluated.extend(complete_picks)
             top1_1d.append(_safe_float(first.get("return_1d")))
             top1_3d.append(_safe_float(first.get("return_3d")))
             top1_5d.append(_safe_float(first.get("return_5d")))
@@ -425,6 +492,14 @@ def _summary(rows: List[Dict[str, Any]], *, pipeline: str) -> Dict[str, Any]:
         "no_trade_missed_opportunity_days": missed_opportunity_count,
         "no_trade_best_alternative_3d_avg": _mean(no_trade_best_alt),
         "calibration": calibration_report(predictions) if predictions else {"sample_size": 0, "brier_score": None, "buckets": []},
+        "adaptive_score_bucket_performance": _performance_rows(adaptive_evaluated, key="adaptive_score_bucket"),
+        "recommendation_strength_performance": _performance_rows(adaptive_evaluated, key="recommendation_strength"),
+        "exploratory_picks_performance": [
+            row for row in _performance_rows(adaptive_evaluated, key="recommendation_strength") if row.get("group") == "exploratory"
+        ],
+        "cautious_picks_performance": [
+            row for row in _performance_rows(adaptive_evaluated, key="recommendation_strength") if row.get("group") == "cautious"
+        ],
     }
 
 
@@ -435,8 +510,10 @@ def run_historical_replay_ab(
     max_symbols: int = 30,
     risk_profile: str = "normal",
     allow_legacy_network: bool = False,
+    update_policy_state: bool = False,
 ) -> Dict[str, Any]:
     rows: List[Dict[str, Any]] = []
+    policy_state = load_policy_state() if update_policy_state else None
     for day in days:
         as_of = _date_iso(day)
         universe = load_replay_universe(as_of, max_symbols=max_symbols)
@@ -459,12 +536,21 @@ def run_historical_replay_ab(
             symbols=symbols,
             prefer_cache_only=True,
         )
+        new_evaluated = _evaluate_payload(new_payload, as_of=as_of, pipeline="new", topn=topk)
+        if update_policy_state and policy_state is not None:
+            records = [
+                *list(new_evaluated.get("evaluated_picks") or []),
+                *list(new_evaluated.get("evaluated_rejected") or []),
+                *list(new_evaluated.get("evaluated_alternatives") or []),
+            ]
+            policy_state = update_policy_state_from_outcomes(policy_state, records)
+            save_policy_state(policy_state)
         rows.append(
             {
                 "day": as_of,
                 "universe": universe,
                 "legacy": _evaluate_payload(legacy_payload, as_of=as_of, pipeline="legacy", topn=topk),
-                "new": _evaluate_payload(new_payload, as_of=as_of, pipeline="new", topn=topk),
+                "new": new_evaluated,
                 "time_travel_policy": {
                     "daily_bars": "MarketDataHub.daily_ohlcv(as_of=T)",
                     "new_market_memory": "retrieve events with event.as_of < T only",
@@ -482,6 +568,7 @@ def run_historical_replay_ab(
         "topk": topk,
         "max_symbols": max_symbols,
         "allow_legacy_network": allow_legacy_network,
+        "update_policy_state": update_policy_state,
         "rows": rows,
         "metrics": {
             "legacy": _summary(rows, pipeline="legacy"),
@@ -491,6 +578,7 @@ def run_historical_replay_ab(
             "Universe comes from checked-in historical candidate_pool files when available; otherwise the local universe file is used.",
             "Default legacy baseline uses candidate_pool order without fabricating old candidate_score/final_score because rerunning the old engine can require provider/network data.",
             "Use --allow-legacy-network only when provider access is available and legacy network fetches are acceptable.",
+            "Use --update-policy-state only when replay should update adaptive policy after each day's outcomes are evaluated.",
             "Replay quality depends on cached daily bars covering T through T+5.",
         ],
     }
@@ -517,6 +605,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         action="store_true",
         help="Rerun the old selection engine; disabled by default to keep replay cache-only and time-travel safe.",
     )
+    parser.add_argument(
+        "--update-policy-state",
+        action="store_true",
+        help="After each day's outcomes are evaluated, update and save the adaptive policy state.",
+    )
     args = parser.parse_args(argv)
     report = run_historical_replay_ab(
         args.days,
@@ -524,6 +617,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         max_symbols=args.max_symbols,
         risk_profile=args.risk_profile,
         allow_legacy_network=args.allow_legacy_network,
+        update_policy_state=args.update_policy_state,
     )
     path = save_replay_report(report, name=args.output_name)
     print(json.dumps({"ok": True, "path": str(path), "metrics": report.get("metrics")}, ensure_ascii=False, indent=2))

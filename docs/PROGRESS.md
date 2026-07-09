@@ -15,7 +15,7 @@ The repository is currently centered on one active product surface and one produ
 - `market_memory/` stores normalized feature-vector events and decision snapshots
 - `probability_engine/` infers evidence-backed probabilities from nearest historical cases
 - `risk_engine/` handles execution risk, drawdown risk, and mathematical ranking
-- `decision_engine/` runs Decision Context, Thesis Lifecycle, Decision Synthesizer, validator, and snapshot persistence
+- `decision_engine/` runs Adaptive Decision Engine selection, Decision Context, Thesis Lifecycle, Decision Synthesizer, validator, and snapshot persistence
 - `evaluation_engine/` owns historical replay, AB validation, calibration, counterfactuals, and error attribution
 - `frontend/` renders the chat-first Workspace with a right-side decision snapshot
 
@@ -29,6 +29,13 @@ The current product direction is:
 
 ### 2026-07-09
 
+- Replaced the old risk-gate decision layer with the Adaptive Decision Engine:
+  - `adaptive_policy.py` is now the only production selection authority after ranking
+  - low sample size, missing fields, high uncertainty, and ordinary risk flags lower confidence / recommendation strength instead of automatically producing no-trade
+  - risk is modeled as an adaptive score penalty, not a hard gate, unless an explicit hard block is present
+  - LLM decision payloads are retained for contract shape but marked `not_used_for_selection`
+  - decision snapshots now include adaptive policy input/output, policy state version, calibration output, and adaptive validator result
+  - historical replay exposes adaptive score, calibrated probability, recommendation strength, and optional post-outcome policy-state updates
 - Consolidated slot and daily freshness runtime state:
   - added `runtime.slot_state` as the single normalization layer for clock phase, daily data state, current artifact stage/freshness, and tradeability
   - `/api/health` now derives `daily_data_state`, `artifact_stage`, `artifact_freshness`, `artifact_status`, `book_freshness`, and `tradeability_state` from that layer
@@ -49,7 +56,7 @@ The current product direction is:
   - added unit coverage for strengthened thesis, invalidated holding, no-trade, and weak-probability rejection behavior
 - Completed the production-path migration from the old score stack to the Market-Memory Agent:
   - production `build_day_selection()` now calls the new decision pipeline
-  - new decisions are built from signal events, normalized feature-vector similarity, probability evidence, risk ranking, risk-committee validation, and `DecisionContextSnapshot`
+  - new decisions are built from signal events, normalized feature-vector similarity, probability evidence, risk ranking, Adaptive Decision Engine selection, and `DecisionContextSnapshot`
   - the old `selection_engine` remains available only as migration reference and low-level data support, not as the recommendation ranking authority
 - Added Market Memory persistence:
   - `market_events` with raw features, normalized feature vector, market context, and known outcomes
@@ -132,14 +139,15 @@ The current product direction is:
 ## Current State
 
 - Main flow remains aligned around `gateway -> runtime -> judgment -> reply -> workspace`.
-- Production decisions now flow through `Market Data -> Signal Engine -> Market Memory -> Probability Engine -> Risk Engine -> Decision Intelligence -> Thesis Lifecycle -> DecisionContextSnapshot`.
+- Production decisions now flow through `Market Data -> Signal Engine -> Market Memory -> Probability Engine -> Risk Engine -> Ranking -> Adaptive Decision Engine -> Decision Intelligence -> Thesis Lifecycle -> DecisionContextSnapshot`.
 - Intent parsing is now a hard LLM dependency for `/api/chat`; unavailable or malformed intent responses are surfaced as explicit API errors instead of hidden fallback behavior.
 - `kernel.facade` is the current cross-cutting service boundary for recommendation artifacts, validation, portfolio, execution preview, and workbench aggregation.
 - The production decision path is one runtime chain. It always resolves daily freshness/daybook first, builds Market-Memory daily plans, runs Decision Intelligence for user-facing actions, optionally runs 5-minute pulse evaluation when enabled, and does not call AkShare theme/concept/industry ranking APIs.
 - Runtime state is normalized by `runtime.slot_state`. Clock phase, daily data state, artifact freshness, and tradeability are separate fields; post-close readiness is not encoded as `market_phase=POSTCLOSE_READY`.
 - Mainline is derived from the full-market snapshot and daily candidate universe rather than external theme interfaces.
-- The decision layer is constrained by `DecisionContextModel`, thesis lifecycle, and a validator. The Decision Synthesizer can output only `HOLD / ADD / REDUCE / EXIT / WAIT / NO_TRADE` and cannot promote a candidate outside math ranking or invent market facts.
+- The decision layer is constrained by the Adaptive Decision Engine, `DecisionContextModel`, thesis lifecycle, and a validator. The Adaptive Decision Engine owns symbol selection; the Decision Synthesizer can output only `HOLD / ADD / REDUCE / EXIT / WAIT / NO_TRADE` and cannot select/promote/demote candidates or invent market facts.
 - Probability outputs are not scores. They include evidence and calibration must be monitored.
+- Missing data is an explicit adaptive feature. Risk flags are score penalties unless they represent hard blocks.
 - The Workspace page now presents:
   - a conversation-first left pane
   - a persistent decision snapshot on the right
@@ -181,12 +189,12 @@ The following checks passed locally during the daily-mainline shutdown pass:
 
 Real LLM-connected `/api/chat` acceptance was run from PowerShell after loading `.env`. The checked sequence covered recommendation, rank follow-up, term explanation, comparison, and sell-decision follow-up. All five turns returned HTTP 200; because local data freshness blocked publication, recommendation and subject-dependent follow-ups correctly returned user-facing `no_trade` replies.
 
-The following Market-Memory checks were run locally during the 2026-07-08 validation pass:
+The following Market-Memory checks were run locally during the 2026-07-08 validation pass before the Adaptive Decision Engine replacement:
 
 - `python -m gp_assistant.evaluation_engine.historical_replay --days 20260105 ... 20260127 --topk 3 --max-symbols 12 --output-name historical_replay_ab_202601_top3`
-- replay result: 16 days, 4 recommend decisions, 12 observe decisions
+- replay result: 16 days, 4 recommend decisions, 12 observe decisions under the retired gate behavior
 - new vs legacy baseline: better Top1 T+1/T+3 average return, Top3 T+3 average return, worst drawdown, max consecutive losses, and average regret; worse Top1 T+5 average return and lower trade coverage
-- calibration result: Brier score `0.2465254294485468`; probability buckets were materially overconfident on the tested sample
+- calibration result: Brier score `0.2465254294485468`; probability buckets were materially overconfident on the tested sample. Current adaptive replay should also inspect adaptive score buckets and recommendation-strength groups.
 
 ## Current Documentation Anchors
 

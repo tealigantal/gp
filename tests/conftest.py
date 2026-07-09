@@ -94,6 +94,7 @@ def pytest_collection_modifyitems(config, items):
         "test_tail_strategy_enhancements.py",
         "test_market_memory_agent.py",
         "test_decision_intelligence.py",
+        "test_adaptive_policy.py",
     )
     for item in items:
         fn = item.location[0]

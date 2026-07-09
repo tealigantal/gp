@@ -16,10 +16,11 @@ freeze T-visible daily data
   -> Market Memory nearest-case retrieval
   -> probability inference
   -> risk assessment
-  -> mathematical ranking
+  -> ranking
+  -> Adaptive Decision Engine
   -> DecisionContextModel
   -> Thesis Lifecycle
-  -> Decision Synthesizer / deterministic fallback
+  -> Decision Synthesizer
   -> validator
   -> decision artifact
   -> T+1/T+3/T+5 verification
@@ -32,6 +33,8 @@ Time-travel controls:
 - historical signal outcomes are inserted only when their forward window would already be knowable by `T`
 - future T+1/T+3/T+5 outcomes are loaded only after the recommendation artifact is generated
 - replay can set `GP_MARKET_MEMORY_DIR` to isolate event memory and snapshots from production runtime state
+- default replay does not update adaptive policy state
+- with `--update-policy-state`, policy updates happen only after that day's payload is generated and its outcomes are evaluated
 
 ## Command
 
@@ -45,9 +48,21 @@ python -m gp_assistant.evaluation_engine.historical_replay `
   --output-name historical_replay_ab_202601_top3
 ```
 
+Optional adaptive policy update mode:
+
+```powershell
+python -m gp_assistant.evaluation_engine.historical_replay `
+  --days 20260105 20260106 `
+  --topk 3 `
+  --max-symbols 12 `
+  --update-policy-state
+```
+
 Generated JSON is written under `results/market_memory_validation/` and is treated as a local runtime artifact.
 
 ## Latest Local Result
+
+The following result predates the Adaptive Decision Engine replacement and reflects the retired gate behavior. New replay reports should additionally inspect adaptive score buckets, recommendation-strength groups, exploratory picks, and cautious picks.
 
 Dataset:
 
@@ -61,7 +76,7 @@ The old selection engine was not rerun by default because it can request provide
 
 | Metric | Legacy candidate-pool baseline | Market-Memory Agent |
 | --- | ---: | ---: |
-| decision counts | 16 recommend | 4 recommend, 12 observe |
+| decision counts | 16 recommend | 4 recommend, 12 observe under retired gate behavior |
 | recommendation coverage | 100.00% | 25.00% |
 | evaluated recommended picks | 48 | 4 |
 | Top1 T+1 average return | -0.9527% | 0.1197% |
@@ -74,7 +89,7 @@ The old selection engine was not rerun by default because it can request provide
 | average regret T+3 | 1.5988% | 1.1325% |
 | rejected candidate T+3 average return | -0.8438% | -1.1850% |
 | alternative candidate T+3 average return | -0.8531% | -1.3006% |
-| no-trade / observe days | 0 | 12 |
+| no-trade / observe days | 0 | 12 under retired gate behavior |
 | no-trade avoided-loss days | 0 | 5 |
 | no-trade missed-opportunity days | 0 | 7 |
 | no-trade best alternative T+3 average | n/a | 0.2875% |
@@ -83,8 +98,8 @@ Interpretation:
 
 - The new system traded less often and avoided many weak days.
 - On this small sample, it improved Top1 T+1/T+3 return, Top3 T+3 return, worst drawdown, consecutive losses, win rate, and regret.
-- It underperformed on Top1 T+5 average return and missed opportunities on 7 observe days.
-- This is not enough to claim universal superiority. It is evidence that the new risk-committee behavior is more selective and may reduce bad trades, while probability calibration still needs improvement.
+- It underperformed on Top1 T+5 average return and missed opportunities on 7 observe days under the retired gate behavior.
+- This is not enough to claim universal superiority. It is evidence from the pre-adaptive system that selectivity affected risk and missed opportunities; the current system should be judged by adaptive score and recommendation-strength performance as well as calibration.
 
 ## Calibration
 
@@ -101,6 +116,7 @@ Current conclusion:
 - probabilities are evidence-backed but overconfident on this sample
 - all evaluated candidates fell into the 30-80 effective-sample bucket
 - calibration quality must be monitored before treating predicted probability as a standalone trading edge
+- adaptive reports should compare calibrated probability, adaptive score buckets, exploratory picks, and cautious picks against realized outcomes
 
 ## Failure Attribution
 
@@ -119,12 +135,12 @@ Example evidence block fields available per candidate:
 - `success_distribution`
 - `major_failure_modes`
 
-The system must use these fields when explaining why it recommends, rejects, observes, or chooses no trade.
+The system must use these fields when explaining adaptive recommendation strength, rejected candidates, legacy observe payloads, or true no-trade hard blocks.
 
 ## Limitations
 
 - This run is a local historical replay, not live trading proof.
 - The sample is small and concentrated in January 2026.
 - The legacy comparison is a local candidate-pool baseline because rerunning old selection logic can pull current/provider data.
-- The new system's low trade coverage means return metrics should be read alongside no-trade avoided-loss and missed-opportunity statistics.
+- Pre-adaptive low trade coverage should not be projected onto the current system; current reports should read return metrics alongside adaptive-strength buckets and true no-trade hard-block counts.
 - Calibration is currently imperfect and should remain visible in every probability-backed decision.

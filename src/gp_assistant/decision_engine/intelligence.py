@@ -103,6 +103,11 @@ def _security_context(pick: Any, candidates: Iterable[Any] | None = None) -> Dic
     probability = dict(_pick_field(pick, "probability", {}) or {})
     risk = dict(_pick_field(pick, "risk", {}) or {})
     ranking = dict(_pick_field(pick, "ranking", {}) or {})
+    meta = dict(_pick_field(pick, "meta", {}) or {})
+    explain_context = dict(_pick_field(pick, "explain_context", {}) or {})
+    adaptive_policy = dict(
+        _pick_field(pick, "adaptive_policy", {}) or meta.get("adaptive_policy") or explain_context.get("adaptive_policy") or {}
+    )
     evidence = dict(probability.get("evidence") or {})
     plan = dict(_pick_field(pick, "execution_plan", {}) or {})
     if not plan:
@@ -149,6 +154,16 @@ def _security_context(pick: Any, candidates: Iterable[Any] | None = None) -> Dic
         },
         "execution_plan": plan,
         "risk_flags": list(_pick_field(pick, "risk_flags", []) or []),
+        "adaptive_policy": adaptive_policy,
+        "adaptive_score": _pick_field(pick, "adaptive_score", meta.get("adaptive_score") or explain_context.get("adaptive_score") or adaptive_policy.get("adaptive_score")),
+        "calibrated_probability": _pick_field(pick, "calibrated_probability", meta.get("calibrated_probability") or adaptive_policy.get("calibrated_probability")),
+        "recommendation_strength": _pick_field(pick, "recommendation_strength", meta.get("recommendation_strength") or adaptive_policy.get("recommendation_strength")),
+        "adaptive_action": _pick_field(pick, "adaptive_action", meta.get("adaptive_action") or adaptive_policy.get("action")),
+        "feature_coverage": _pick_field(pick, "feature_coverage", meta.get("feature_coverage") or adaptive_policy.get("feature_coverage")),
+        "expert_scores": dict(_pick_field(pick, "expert_scores", {}) or meta.get("expert_scores") or adaptive_policy.get("expert_scores") or {}),
+        "expert_contributions": dict(_pick_field(pick, "expert_contributions", {}) or meta.get("expert_contributions") or adaptive_policy.get("expert_contributions") or {}),
+        "missing_features": list(_pick_field(pick, "missing_features", []) or meta.get("missing_features") or adaptive_policy.get("missing_features") or []),
+        "hard_block": bool(_pick_field(pick, "hard_block", False) or risk.get("hard_block") is True or meta.get("hard_block") is True or explain_context.get("hard_block") is True),
         "peer_candidates": peers,
         "decision_context_snapshot_id": _pick_field(pick, "decision_context_snapshot_id"),
     }
@@ -247,6 +262,8 @@ def evaluate_thesis_lifecycle(context: DecisionContextModel) -> ThesisLifecycle:
     execution_state = str(security.get("execution_state") or "").upper()
     recommendation_state = str(security.get("recommendation_state") or "").upper()
     risk_flags = [str(item) for item in (security.get("risk_flags") or risk.get("risk_flags") or [])]
+    adaptive_action = str(security.get("adaptive_action") or "").upper()
+    recommendation_strength = str(security.get("recommendation_strength") or "").lower()
     delta: List[str] = []
     invalidations: List[str] = []
 
@@ -256,14 +273,21 @@ def evaluate_thesis_lifecycle(context: DecisionContextModel) -> ThesisLifecycle:
     uncertainty = _safe_float(probability.get("uncertainty"), 0.5) or 0.5
     drawdown = _safe_float(probability.get("drawdown_probability") or risk.get("drawdown_probability"), 0.5) or 0.5
 
+    hard_risk_flags = [
+        item
+        for item in risk_flags
+        if any(token in item.lower() for token in ("hard_block", "invalidated", "below_stop", "data_integrity"))
+    ]
     if execution_state == "INVALIDATED" or recommendation_state == "INVALIDATED":
         invalidations.append("execution_state_invalidated")
     if bool(plan_position.get("below_stop")):
         invalidations.append("price_below_stop")
+    if bool(security.get("hard_block")):
+        invalidations.append("security_hard_block")
     if invalidations:
         state = "thesis_invalidated"
         delta.extend(invalidations)
-    elif drawdown >= 0.45 or up_prob < 0.48 or expected < 0 or any("risk" in item.lower() for item in risk_flags):
+    elif drawdown >= 0.45 or up_prob < 0.48 or expected < 0 or hard_risk_flags:
         state = "thesis_weakening"
         if drawdown >= 0.45:
             delta.append("drawdown_probability_high")
@@ -271,10 +295,9 @@ def evaluate_thesis_lifecycle(context: DecisionContextModel) -> ThesisLifecycle:
             delta.append("win_probability_below_neutral")
         if expected < 0:
             delta.append("expected_return_negative")
-        if risk_flags:
-            delta.extend(risk_flags[:4])
+        delta.extend(hard_risk_flags[:4])
     elif (
-        up_prob >= 0.55
+        (adaptive_action == "ENTRY" or up_prob >= 0.55)
         and expected > 0
         and confidence >= 0.35
         and uncertainty <= 0.25
@@ -285,6 +308,10 @@ def evaluate_thesis_lifecycle(context: DecisionContextModel) -> ThesisLifecycle:
     else:
         state = "thesis_unchanged"
         delta.append("no_material_change_against_initial_thesis")
+    if risk_flags:
+        delta.extend([f"risk_flag_observed:{item}" for item in risk_flags[:4]])
+    if recommendation_strength in {"cautious", "exploratory"}:
+        delta.append(f"adaptive_strength_{recommendation_strength}")
 
     initial = str(thesis_ctx.get("initial_thesis") or thesis_ctx.get("why_selected") or "").strip()
     current = {
@@ -308,10 +335,13 @@ def _deterministic_action(context: DecisionContextModel, lifecycle: ThesisLifecy
     state = lifecycle.current_thesis_state
     security = dict(context.security_context or {})
     position = dict(context.position_context or {})
-    if not security.get("symbol") and objective == "evaluate_no_trade_decision":
+    if not security.get("symbol") and objective in {"evaluate_no_trade_decision", "open_or_add_position"}:
         return "NO_TRADE"
     has_position = bool(position.get("provided")) or objective == "manage_existing_position"
     can_execute = bool(security.get("can_execute_now"))
+    adaptive_action = str(security.get("adaptive_action") or "").upper()
+    if bool(security.get("hard_block")) and objective in {"evaluate_no_trade_decision", "open_or_add_position"}:
+        return "NO_TRADE"
     if state == "thesis_invalidated":
         return "EXIT" if has_position else "NO_TRADE"
     if objective == "manage_existing_position":
@@ -319,13 +349,17 @@ def _deterministic_action(context: DecisionContextModel, lifecycle: ThesisLifecy
             return "REDUCE"
         return "HOLD"
     if objective == "open_or_add_position":
+        if adaptive_action == "ENTRY":
+            return "ADD"
+        if adaptive_action in {"WATCH", "WAIT"}:
+            return "WAIT"
         if state == "thesis_strengthened" and can_execute:
             return "ADD"
-        if state == "thesis_weakening":
-            return "NO_TRADE"
         return "WAIT"
     if objective == "evaluate_no_trade_decision":
-        return "NO_TRADE" if state in {"thesis_weakening", "thesis_invalidated"} else "WAIT"
+        if state == "thesis_invalidated" or bool(security.get("hard_block")):
+            return "NO_TRADE"
+        return "WAIT"
     return "WAIT"
 
 
@@ -357,8 +391,8 @@ def deterministic_synthesis(context: DecisionContextModel, lifecycle: ThesisLife
         "ADD": "thesis 增强且执行条件支持，可以考虑按计划加/开仓。",
         "REDUCE": "thesis 正在削弱，先降低风险暴露。",
         "EXIT": "thesis 已失效，优先退出而不是等待修复。",
-        "WAIT": "证据不足以支持更强动作，等待触发或新证据。",
-        "NO_TRADE": "风险收益或 thesis 状态不支持交易。",
+        "WAIT": "adaptive policy 仍保留候选，但当前动作强度以等待和跟踪为主。",
+        "NO_TRADE": "缺少可决策标的、出现 hard block，或 thesis 已失效。",
     }[action]
     return DecisionSynthesis(
         action=action,

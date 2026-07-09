@@ -19,7 +19,7 @@ from ..runtime.utils import now_iso
 from ..selection_engine.datahub import MarketDataHub
 from ..selection_engine.market_env import score_regime
 from ..signal_engine.daily import build_signal_events_for_symbol
-from .risk_committee import render_narrative_from_validated_decision, run_risk_committee
+from .adaptive_policy import select_candidates
 
 
 def _safe_float(value: Any, default: float = 0.0) -> float:
@@ -158,6 +158,7 @@ def _compact_candidate(candidate: Dict[str, Any]) -> Dict[str, Any]:
     evidence = prob.get("evidence") or {}
     risk = candidate.get("risk") or {}
     ranking = candidate.get("ranking") or {}
+    adaptive = candidate.get("adaptive_policy") or {}
     return {
         "symbol": candidate.get("symbol"),
         "name": candidate.get("name"),
@@ -173,6 +174,16 @@ def _compact_candidate(candidate: Dict[str, Any]) -> Dict[str, Any]:
         "mean_similarity": evidence.get("mean_similarity"),
         "sample_size": evidence.get("sample_size"),
         "risk_flags": list(risk.get("risk_flags") or []),
+        "adaptive_score": adaptive.get("adaptive_score") or candidate.get("adaptive_score"),
+        "calibrated_probability": adaptive.get("calibrated_probability") or candidate.get("calibrated_probability"),
+        "recommendation_strength": adaptive.get("recommendation_strength") or candidate.get("recommendation_strength"),
+        "adaptive_action": adaptive.get("action") or candidate.get("adaptive_action"),
+        "feature_coverage": adaptive.get("feature_coverage") or candidate.get("feature_coverage"),
+        "expert_scores": dict(adaptive.get("expert_scores") or candidate.get("expert_scores") or {}),
+        "expert_contributions": dict(adaptive.get("expert_contributions") or candidate.get("expert_contributions") or {}),
+        "missing_features": list(adaptive.get("missing_features") or candidate.get("missing_features") or []),
+        "reason_codes": list(candidate.get("reason_codes") or []),
+        "rejected_reason": candidate.get("rejected_reason"),
     }
 
 
@@ -193,6 +204,35 @@ def _candidate_text(candidate: Dict[str, Any]) -> str:
         f"有效样本 {float(evidence.get('effective_sample_size') or 0.0):.1f}，"
         f"3日上涨概率 {float(prob.get('up_probability_3d') or 0.0) * 100:.1f}%，"
         f"期望收益 {float(prob.get('expected_return_3d') or 0.0) * 100:.2f}%。"
+    )
+
+
+def _render_adaptive_narrative(snapshot: Dict[str, Any]) -> str:
+    decision = str(snapshot.get("final_decision") or "no_trade")
+    selected = [str(symbol) for symbol in (snapshot.get("selected_symbols") or [])]
+    adaptive = dict(snapshot.get("adaptive_policy_output") or {})
+    candidates = list(adaptive.get("adaptive_candidates") or [])
+    if decision != "recommend" or not selected:
+        debug = dict(adaptive.get("policy_debug") or {})
+        reason = str(debug.get("reason") or "no_ranked_candidates")
+        return f"当前没有生成可发布推荐：{reason}。"
+    top = next((item for item in candidates if str(item.get("symbol")) in selected), candidates[0] if candidates else {})
+    symbol = str(top.get("symbol") or selected[0])
+    contributions = dict(top.get("expert_contributions") or {})
+    ranked_contrib = sorted(contributions.items(), key=lambda kv: abs(float(kv[1] or 0.0)), reverse=True)[:3]
+    contribution_text = "、".join(f"{key}:{float(value):+.3f}" for key, value in ranked_contrib) or "adaptive_policy"
+    missing = list(top.get("missing_features") or [])[:3]
+    reasons = list(top.get("reason_codes") or [])[:4]
+    missing_text = "；缺失特征 " + "、".join(missing) if missing else ""
+    reason_text = "；原因码 " + "、".join(reasons) if reasons else ""
+    strength = str(top.get("recommendation_strength") or "normal")
+    action_text = "探索性推荐/谨慎跟踪" if strength in {"cautious", "exploratory"} else "进入推荐"
+    return (
+        f"{symbol} {action_text}：adaptive_score {float(top.get('adaptive_score') or 0.0):.3f}，"
+        f"strength {strength}，校准上涨概率 {float(top.get('calibrated_probability') or 0.0) * 100:.1f}%，"
+        f"confidence {float(top.get('confidence') or 0.0):.2f}，"
+        f"uncertainty {float(top.get('uncertainty') or 0.0):.2f}，"
+        f"主要贡献 {contribution_text}{missing_text}{reason_text}。"
     )
 
 
@@ -305,27 +345,52 @@ def run_market_memory_selection(
 
     candidates.sort(key=lambda item: float((item.get("ranking") or {}).get("ranking_score") or 0.0), reverse=True)
     ranked = candidates[: max(int(topk) * 3, int(topk))]
-    decision_input = {
+    adaptive_input = {
         "as_of": date,
         "risk_profile": risk_profile,
         "market_context": market_context,
         "ranked_candidates": [_compact_candidate(item) for item in ranked[: max(10, int(topk))]],
         "permission_boundary": {
-            "llm_role": "risk_committee",
-            "allowed_decisions": ["recommend", "observe", "no_trade"],
-            "can_only_downgrade": True,
+            "selection_authority": "adaptive_policy",
+            "llm_role": "not_used_for_selection",
+            "allowed_decisions": ["recommend", "no_trade"],
+            "risk_is_penalty_not_gate": True,
+            "missing_data_is_feature": True,
             "cannot_promote_outside_math_ranking": True,
         },
     }
-    validator = run_risk_committee(decision_input, ranked)
-    selected_symbols = set(str(symbol) for symbol in (validator.get("selected_symbols") or []))
-    final_decision = str(validator.get("final_decision") or "no_trade")
-    if final_decision != "recommend":
-        selected_symbols = set()
-    picks = [item for item in ranked if str(item.get("symbol")) in selected_symbols][:topk]
+    adaptive = select_candidates(
+        ranked,
+        topk=topk,
+        market_context=market_context,
+        risk_profile=risk_profile,
+    )
+    adaptive_by_symbol = {str(item.get("symbol")): item for item in (adaptive.get("adaptive_candidates") or [])}
+    for item in ranked:
+        symbol = str(item.get("symbol") or item.get("code") or "")
+        scored = dict(adaptive_by_symbol.get(symbol) or {})
+        if not scored:
+            continue
+        item["adaptive_policy"] = scored
+        item["adaptive_score"] = float(scored.get("adaptive_score") or 0.0)
+        item["calibrated_probability"] = float(scored.get("calibrated_probability") or 0.0)
+        item["recommendation_strength"] = str(scored.get("recommendation_strength") or "")
+        item["adaptive_action"] = str(scored.get("action") or "")
+        item["feature_coverage"] = float(scored.get("feature_coverage") or 0.0)
+        item["expert_scores"] = dict(scored.get("expert_scores") or {})
+        item["expert_contributions"] = dict(scored.get("expert_contributions") or {})
+        item["missing_features"] = list(scored.get("missing_features") or [])
+        merged_reasons = [*list(item.get("reason_codes") or []), *list(scored.get("reason_codes") or [])]
+        item["reason_codes"] = list(dict.fromkeys(str(reason) for reason in merged_reasons if str(reason)))
+        item["final_score"] = float(scored.get("adaptive_score") or item.get("final_score") or 0.0)
+    selected_symbols_ordered = [str(symbol) for symbol in (adaptive.get("selected_symbols") or []) if str(symbol)]
+    selected_symbols = set(selected_symbols_ordered)
+    final_decision = str(adaptive.get("final_decision") or "no_trade")
+    ranked_by_symbol = {str(item.get("symbol")): item for item in ranked}
+    picks = [ranked_by_symbol[symbol] for symbol in selected_symbols_ordered if symbol in ranked_by_symbol][:topk]
     rejected = [item for item in ranked if str(item.get("symbol")) not in selected_symbols][: max(20, topk * 3)]
     for item in rejected:
-        item["rejected_reason"] = "risk_committee_not_selected" if final_decision == "recommend" else f"decision_{final_decision}"
+        item["rejected_reason"] = "not_in_adaptive_topk" if final_decision == "recommend" else f"decision_{final_decision}"
 
     snapshot_payload = {
         "schema": "DecisionContextSnapshot.v1",
@@ -342,23 +407,30 @@ def run_market_memory_selection(
         "probability_output": {str(item.get("symbol")): item.get("probability") for item in ranked[: max(10, topk)]},
         "risk_output": {str(item.get("symbol")): item.get("risk") for item in ranked[: max(10, topk)]},
         "ranking_output": {
-            "method": "expected_return_x_win_probability_x_execution_quality_x_confidence_x_risk_adjustment",
+            "method": "adaptive_score_topk_no_low_sample_gate",
             "ranked_symbols": [str(item.get("symbol")) for item in ranked],
             "details": {str(item.get("symbol")): item.get("ranking") for item in ranked[: max(10, topk)]},
         },
-        "llm_decision_input": decision_input,
-        "llm_input_context": decision_input,
-        "llm_decision_json": (validator.get("llm_decision") or {}),
-        "validator_result": validator,
+        "adaptive_policy_input": adaptive_input,
+        "adaptive_policy_output": adaptive,
+        "adaptive_policy_state_version": adaptive.get("policy_state_version"),
+        "calibration_output": {
+            str(item.get("symbol")): (item.get("adaptive_policy") or {}).get("calibration")
+            for item in ranked[: max(10, topk)]
+        },
+        "llm_decision_input": {"source": "not_used_for_selection", "reason": "selection_owned_by_adaptive_policy"},
+        "llm_input_context": {"source": "not_used_for_selection", "reason": "selection_owned_by_adaptive_policy"},
+        "llm_decision_json": {"source": "not_used_for_selection", "reason": "selection_owned_by_adaptive_policy"},
+        "validator_result": adaptive.get("validator_result") or {},
         "narrator_input": {
             "final_decision": final_decision,
-            "selected_symbols": list(selected_symbols),
+            "selected_symbols": selected_symbols_ordered,
             "candidate_count": len(ranked),
         },
         "final_decision": final_decision,
-        "selected_symbols": list(selected_symbols),
+        "selected_symbols": selected_symbols_ordered,
     }
-    snapshot_payload["final_response"] = render_narrative_from_validated_decision(snapshot_payload)
+    snapshot_payload["final_response"] = _render_adaptive_narrative(snapshot_payload)
     snapshot_id = save_decision_snapshot(snapshot_payload)
 
     for item in picks + rejected:
@@ -377,14 +449,16 @@ def run_market_memory_selection(
         "reason": final_decision,
         "message": snapshot_payload["final_response"],
         "decision_context_snapshot_id": snapshot_id,
+        "adaptive_policy": adaptive,
         "debug": {
-            "pipeline": "market_memory_v1",
+            "pipeline": "market_memory_adaptive_v1",
             "universe": universe_meta,
             "snapshot": snapshot_meta,
             "signals_count": len(signals),
             "candidate_count": len(candidates),
             "market_memory_events_upserted": upserted_events,
             "failures": failures[:50],
-            "old_scoring_disabled": True,
+            "adaptive_single_path": True,
+            "selection_policy": "adaptive_policy_single_path",
         },
     }

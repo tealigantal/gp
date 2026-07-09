@@ -25,7 +25,9 @@ def _map_pick(rank: int, item: Dict[str, Any]) -> AdvicePick:
     risk = dict(item.get('risk') or {})
     ranking = dict(item.get('ranking') or {})
     signal = dict(item.get('signal') or {})
+    adaptive = dict(item.get('adaptive_policy') or {})
     evidence = dict(probability.get('evidence') or {})
+    adaptive_score = float(adaptive.get('adaptive_score') or item.get('adaptive_score') or ranking.get('ranking_score') or item.get('ranking_score') or 0.0)
     # Prefer user-visible fields; do not leak debug explain
     user_thesis = item.get('user_thesis')
     why_selected_text = item.get('why_selected_text')
@@ -41,13 +43,16 @@ def _map_pick(rank: int, item: Dict[str, Any]) -> AdvicePick:
         stop_plan=trade_plan.get('stop') or item.get('stop_plan') or {},
         take_profit_plan=trade_plan.get('take_profit') or item.get('take_profit_plan') or {},
         scores={
-            'final': float(ranking.get('ranking_score') or item.get('ranking_score') or 0.0),
+            'final': adaptive_score,
+            'adaptive': adaptive_score,
             'ranking': float(ranking.get('ranking_score') or 0.0),
             'probability': float(probability.get('up_probability_3d') or 0.0),
+            'calibrated_probability': float(adaptive.get('calibrated_probability') or item.get('calibrated_probability') or 0.0),
             'expected_return': float(probability.get('expected_return_3d') or 0.0),
             'execution_quality': float(risk.get('execution_quality') or 0.0),
-            'confidence': float(probability.get('confidence') or 0.0),
+            'confidence': float(adaptive.get('confidence') or probability.get('confidence') or 0.0),
             'reward_risk': float(diag.get('reward_risk') or 0.0),
+            'feature_coverage': float(adaptive.get('feature_coverage') or item.get('feature_coverage') or 0.0),
         },
         risk_flags=[str(x) for x in (item.get('risk_flags') or [])],
         why_selected=str(why_selected_text or ''),
@@ -67,6 +72,15 @@ def _map_pick(rank: int, item: Dict[str, Any]) -> AdvicePick:
             'uncertainty': probability.get('uncertainty'),
             'decision_context_snapshot_id': item.get('decision_context_snapshot_id'),
             'rejected_reason': item.get('rejected_reason'),
+            'adaptive_policy': adaptive,
+            'adaptive_score': adaptive.get('adaptive_score') or item.get('adaptive_score'),
+            'calibrated_probability': adaptive.get('calibrated_probability') or item.get('calibrated_probability'),
+            'recommendation_strength': adaptive.get('recommendation_strength') or item.get('recommendation_strength'),
+            'adaptive_action': adaptive.get('action') or item.get('adaptive_action'),
+            'feature_coverage': adaptive.get('feature_coverage') or item.get('feature_coverage'),
+            'expert_scores': dict(adaptive.get('expert_scores') or item.get('expert_scores') or {}),
+            'expert_contributions': dict(adaptive.get('expert_contributions') or item.get('expert_contributions') or {}),
+            'missing_features': list(adaptive.get('missing_features') or item.get('missing_features') or []),
         },
         signal=signal,
         probability=probability,
