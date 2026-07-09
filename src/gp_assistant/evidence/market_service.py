@@ -24,10 +24,10 @@ def current_trading_day() -> str:
 
 def build_day_selection(trading_day: str, *, topk: int = 10, risk_profile: str = "normal") -> Dict[str, Any]:
     date = f"{trading_day[:4]}-{trading_day[4:6]}-{trading_day[6:8]}" if len(trading_day) == 8 else trading_day
-    raw = run_market_memory_selection(date=date, topk=topk, risk_profile=risk_profile)
+    raw = run_market_memory_selection(date=date, topk=topk, risk_profile=risk_profile, allow_snapshot=False)
     report = reconcile_daily_freshness(selection_symbols(raw), as_of=date, strict=True)
     if report["refreshed_symbols"]:
-        raw = run_market_memory_selection(date=date, topk=topk, risk_profile=risk_profile)
+        raw = run_market_memory_selection(date=date, topk=topk, risk_profile=risk_profile, allow_snapshot=False)
         report = reconcile_daily_freshness(selection_symbols(raw), as_of=date, strict=True)
     report_map = {item["symbol"]: item for item in report["symbol_reports"]}
     for bucket in ("picks", "candidate_pool"):

@@ -4,7 +4,9 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 
 import requests
+import pytest
 
+from gp_assistant.core.errors import DataProviderError
 from gp_assistant.providers.akshare_provider import AkShareProvider
 
 
@@ -30,3 +32,13 @@ def test_requests_timeout_patch_is_concurrency_safe(monkeypatch):
     assert requests.sessions.Session.request is fake_request
     assert all(value is not None and value >= 3 for value in calls)
     assert original is not fake_request
+
+
+def test_hard_timeout_does_not_wait_for_hung_snapshot_call():
+    provider = AkShareProvider(timeout_sec=1)
+    start = time.monotonic()
+
+    with pytest.raises(DataProviderError, match="timed out"):
+        provider._call_with_hard_timeout(lambda: time.sleep(1), timeout_sec=0.05, label="test snapshot")
+
+    assert time.monotonic() - start < 0.5

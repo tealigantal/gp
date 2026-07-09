@@ -180,6 +180,24 @@ def _probe_ttl_sec() -> int:
         return 300
 
 
+def _eod_probe_checks_ready(probe: dict[str, Any] | None) -> bool:
+    if not isinstance(probe, dict) or probe.get("ready") is not True:
+        return False
+    expected_symbols = set(_EOD_PROBE_SYMBOLS)
+    checks = probe.get("checks")
+    if isinstance(checks, list) and checks:
+        ready_by_symbol = {
+            str(item.get("symbol")): bool(item.get("ready"))
+            for item in checks
+            if isinstance(item, dict) and item.get("symbol") is not None
+        }
+        return all(ready_by_symbol.get(symbol) is True for symbol in expected_symbols)
+    try:
+        return int(probe.get("ok_count") or 0) >= len(expected_symbols)
+    except Exception:
+        return False
+
+
 def _read_eod_probe_cache(target_iso: str, ttl_sec: int) -> dict[str, Any] | None:
     path = _eod_probe_path()
     if not path.exists():
@@ -194,7 +212,7 @@ def _read_eod_probe_cache(target_iso: str, ttl_sec: int) -> dict[str, Any] | Non
     if not isinstance(checked_at, str) or not checked_at.strip():
         return None
     if cached.get("ready") is True:
-        return cached
+        return cached if _eod_probe_checks_ready(cached) else None
     try:
         checked = datetime.fromisoformat(checked_at)
         if checked.tzinfo is None:
@@ -236,7 +254,7 @@ def probe_eod_daily_ready(target_day: str, *, force: bool = False) -> dict[str, 
             msg = f"{type(ex).__name__}: {ex}"
             errors.append(f"{symbol}:{msg}")
             checks.append({"symbol": symbol, "ready": False, "error": msg})
-    ready = ok_count >= 2
+    ready = _eod_probe_checks_ready({"ready": True, "ok_count": ok_count, "checks": checks})
     probe = {
         "target_day": target_iso,
         "ready": ready,
@@ -302,7 +320,7 @@ def resolve_daily_target(
             probe = probe_eod_daily_ready(current_ymd, force=force_probe)
         else:
             probe = _read_eod_probe_cache(_iso_from_ymd(current_ymd), _probe_ttl_sec())
-        if bool((probe or {}).get("ready")):
+        if _eod_probe_checks_ready(probe):
             target_ymd = current_ymd
             mode = TARGET_CURRENT_READY
             pending = None

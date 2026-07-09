@@ -184,11 +184,19 @@ def _book_freshness(
     *,
     intraday_runtime_enabled: bool,
     artifact_lagging: bool = False,
+    daily_runtime: dict[str, Any] | None = None,
 ) -> str:
     if book is None:
         return "unavailable"
     if artifact_lagging:
         return "lagging"
+    daily_runtime = dict(daily_runtime or {})
+    daily_status = str(daily_runtime.get("daily_status") or "").lower()
+    if market_phase == PHASE_POSTCLOSE_PENDING:
+        if daily_status in {"eod_pending", "daily_reconciling", "freshness_blocked", "artifact_lagging"}:
+            return daily_status
+        if daily_status == "ready":
+            return "postclose_ready"
     if not intraday_runtime_enabled:
         return "daily_only"
     slot_status = str(getattr(book, "slot_status", "") or "").upper()
@@ -262,7 +270,18 @@ def _daily_status(daily_runtime: dict[str, Any], *, artifact_lagging: bool, book
     if mode == TARGET_PREVIOUS_COMPLETED:
         return "previous_completed"
     if mode == TARGET_CURRENT_READY:
-        return "ready" if ready else "freshness_blocked"
+        if ready:
+            return "ready"
+        has_evidence = any(
+            [
+                int(daily_runtime.get("daily_checked_count") or 0) > 0,
+                int(daily_runtime.get("daily_stale_count") or 0) > 0,
+                bool(daily_runtime.get("daily_blocking_reason")),
+                bool(daily_runtime.get("daily_stale_symbols")),
+                bool(daily_runtime.get("daily_failed_symbols")),
+            ]
+        )
+        return "freshness_blocked" if has_evidence else "daily_reconciling"
     if not ready and daily_runtime.get("daily_blocking_reason"):
         return "freshness_blocked"
     return "ready" if ready else "unavailable"
@@ -337,9 +356,14 @@ def _runtime_status(book, *, lock_error: str | None = None) -> RuntimeStatus:
         if latest_fields:
             daily_freshness = latest_fields
             daily_target_day = latest_fields.get("daily_target_day") or daily_target_day
-            daily_target_mode = latest_fields.get("daily_target_mode") or daily_target_mode
-            pending_eod_day = latest_fields.get("pending_eod_day")
-            eod_probe = latest_fields.get("eod_probe")
+            if str(daily_target_mode or "").lower() == TARGET_CURRENT_PENDING:
+                daily_freshness["daily_target_mode"] = TARGET_CURRENT_PENDING
+                daily_freshness["pending_eod_day"] = pending_eod_day
+                daily_freshness["eod_probe"] = eod_probe
+            else:
+                daily_target_mode = latest_fields.get("daily_target_mode") or daily_target_mode
+                pending_eod_day = latest_fields.get("pending_eod_day")
+                eod_probe = latest_fields.get("eod_probe")
     daily_runtime = {
         **daily_freshness,
         "daily_target_day": str(daily_target_day) if daily_target_day else (snapshot.daily_target_day if snapshot else None),
@@ -371,6 +395,7 @@ def _runtime_status(book, *, lock_error: str | None = None) -> RuntimeStatus:
             ms.target_pulse_slot_at,
             intraday_runtime_enabled=intraday_runtime_enabled,
             artifact_lagging=artifact_lagging,
+            daily_runtime=daily_runtime,
         ),
         book_updated_at=(getattr(book, "updated_at", None) if book else None),
         artifact_id=(getattr(book, "artifact_id", None) if book else None),

@@ -63,7 +63,7 @@ def test_resolve_daily_target_postclose_ready_uses_current_day(monkeypatch):
     monkeypatch.setattr(
         daily_freshness,
         "probe_eod_daily_ready",
-        lambda target_day, force=False: {"target_day": "2026-04-30", "ready": True, "ok_count": 2},
+        lambda target_day, force=False: {"target_day": "2026-04-30", "ready": True, "ok_count": 3},
     )
 
     target = daily_freshness.resolve_daily_target("2026-04-30")
@@ -71,6 +71,37 @@ def test_resolve_daily_target_postclose_ready_uses_current_day(monkeypatch):
     assert target["target_day"] == "2026-04-30"
     assert target["target_mode"] == "current_ready"
     assert target["pending_eod_day"] is None
+
+
+def test_resolve_daily_target_rejects_partial_positive_eod_probe(monkeypatch):
+    state = SimpleNamespace(
+        market_phase=PHASE_POSTCLOSE_PENDING,
+        target_daybook_effective_day="20260430",
+        target_pulse_trade_day="20260430",
+        target_pulse_slot_at="2026-04-30 14:55:00",
+    )
+    monkeypatch.setattr(daily_freshness, "compute_market_state", lambda now=None: state)
+    monkeypatch.setattr(daily_freshness, "_previous_open_day_ymd", lambda ymd: "20260429")
+    monkeypatch.setattr(
+        daily_freshness,
+        "probe_eod_daily_ready",
+        lambda target_day, force=False: {
+            "target_day": "2026-04-30",
+            "ready": True,
+            "ok_count": 2,
+            "checks": [
+                {"symbol": "000001", "last": "2026-04-29", "ready": False},
+                {"symbol": "600000", "last": "2026-04-30", "ready": True},
+                {"symbol": "600519", "last": "2026-04-30", "ready": True},
+            ],
+        },
+    )
+
+    target = daily_freshness.resolve_daily_target("2026-04-30")
+
+    assert target["target_day"] == "2026-04-29"
+    assert target["target_mode"] == "current_pending"
+    assert target["pending_eod_day"] == "2026-04-30"
 
 
 def test_resolve_daily_target_holiday_uses_previous_completed_day(monkeypatch):
@@ -157,6 +188,46 @@ def test_expired_positive_eod_probe_stays_ready_for_same_target(monkeypatch, tmp
     cached = daily_freshness._read_eod_probe_cache("2026-04-30", ttl_sec=30)
 
     assert cached == probe
+
+
+def test_eod_probe_cache_rejects_partial_positive_checks(monkeypatch, tmp_path):
+    probe_path = tmp_path / "eod_daily_probe.json"
+    probe = {
+        "target_day": "2026-04-30",
+        "ready": True,
+        "checked_at": datetime.now(timezone.utc).isoformat(),
+        "ok_count": 2,
+        "checks": [
+            {"symbol": "000001", "last": "2026-04-29", "ready": False},
+            {"symbol": "600000", "last": "2026-04-30", "ready": True},
+            {"symbol": "600519", "last": "2026-04-30", "ready": True},
+        ],
+    }
+    probe_path.write_text(json.dumps(probe), encoding="utf-8")
+    monkeypatch.setattr(daily_freshness, "_eod_probe_path", lambda: probe_path)
+
+    cached = daily_freshness._read_eod_probe_cache("2026-04-30", ttl_sec=300)
+
+    assert cached is None
+
+
+def test_probe_eod_daily_ready_requires_all_probe_symbols(monkeypatch, tmp_path):
+    probe_path = tmp_path / "eod_daily_probe.json"
+
+    class _Hub:
+        def daily_ohlcv(self, symbol, **kwargs):
+            last = "2026-04-29" if symbol == "000001" else "2026-04-30"
+            return pd.DataFrame({"date": [last], "open": [1], "high": [1], "low": [1], "close": [1], "volume": [1], "amount": [1]}), {}
+
+    monkeypatch.setattr(daily_freshness, "MarketDataHub", _Hub)
+    monkeypatch.setattr(daily_freshness, "_eod_probe_path", lambda: probe_path)
+
+    probe = daily_freshness.probe_eod_daily_ready("2026-04-30", force=True)
+
+    assert probe["ready"] is False
+    assert probe["ok_count"] == 2
+    assert probe["next_retry_after"]
+    assert any(item["symbol"] == "000001" and item["ready"] is False for item in probe["checks"])
 
 
 def test_reconcile_daily_freshness_marks_failed_refresh(monkeypatch):
@@ -251,3 +322,38 @@ def test_build_day_selection_blocks_when_daily_not_ready(monkeypatch):
     assert result["candidate_pool"] == []
     assert result["daily_freshness"]["ready"] is False
     assert "日线数据未补齐到目标交易日" in result["message"]
+
+
+def test_build_day_selection_disables_snapshot_universe(monkeypatch):
+    calls: list[dict] = []
+
+    def fake_selection(**kwargs):
+        calls.append(dict(kwargs))
+        return {
+            "tradeable": False,
+            "picks": [],
+            "candidate_pool": [],
+            "debug": {},
+        }
+
+    monkeypatch.setattr(market_service, "run_market_memory_selection", fake_selection)
+    monkeypatch.setattr(
+        market_service,
+        "reconcile_daily_freshness",
+        lambda symbols, **_: {
+            "ready": True,
+            "target_day": "2026-04-27",
+            "checked_symbols": list(symbols),
+            "fresh_symbols": [],
+            "stale_symbols": [],
+            "failed_symbols": [],
+            "refreshed_symbols": [],
+            "symbol_reports": [],
+            "blocking_reason": None,
+        },
+    )
+
+    market_service.build_day_selection("20260427", topk=3)
+
+    assert calls
+    assert calls[0]["allow_snapshot"] is False

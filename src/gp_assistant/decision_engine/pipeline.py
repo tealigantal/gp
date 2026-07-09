@@ -203,12 +203,18 @@ def run_market_memory_selection(
     risk_profile: str = "normal",
     symbols: List[str] | None = None,
     prefer_cache_only: bool = False,
+    allow_snapshot: bool = True,
 ) -> Dict[str, Any]:
     date = _normalize_date(date)
     hub = MarketDataHub()
     symbols = [_normalize_symbol(symbol) for symbol in (symbols or [])]
     symbols = [symbol for symbol in symbols if symbol and is_mainboard(symbol)]
-    snapshot, snapshot_meta = (None, {"ok": False, "reason": "historical_symbols_mode"}) if symbols else _load_snapshot()
+    if symbols:
+        snapshot, snapshot_meta = None, {"ok": False, "reason": "historical_symbols_mode"}
+    elif allow_snapshot:
+        snapshot, snapshot_meta = _load_snapshot()
+    else:
+        snapshot, snapshot_meta = None, {"ok": False, "reason": "snapshot_disabled_daily_mode", "time_travel_safe": True}
     market_context = _market_context(hub, snapshot, snapshot_meta)
     if symbols:
         universe = [{"code": symbol, "symbol": symbol, "name": None, "industry": None, "amount": 0.0} for symbol in symbols]

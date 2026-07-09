@@ -116,7 +116,7 @@ def test_health_includes_runtime_tools(monkeypatch):
     runtime = response.json().get("runtime", {})
     assert runtime.get("auto_update_service") == "gp-worker"
     assert runtime.get("intraday_runtime_enabled") is True
-    assert runtime.get("book_freshness") == "degraded"
+    assert runtime.get("book_freshness") == "eod_pending"
     assert runtime.get("daily_status") == "eod_pending"
     assert runtime.get("daily_freshness_ready") is False
     assert runtime.get("daily_target_mode") == "current_pending"
@@ -138,8 +138,108 @@ def test_health_reports_intraday_runtime_disabled(monkeypatch):
     assert response.status_code == 200, response.text
     runtime = response.json().get("runtime", {})
     assert runtime.get("intraday_runtime_enabled") is False
-    assert runtime.get("book_freshness") == "daily_only"
+    assert runtime.get("book_freshness") == "eod_pending"
     assert "日线计划" in str(runtime.get("blocking_reason") or "")
+
+
+def test_health_reports_daily_blocked_when_postclose_current_ready_but_freshness_missing(monkeypatch):
+    state = SimpleNamespace(
+        market_phase="POSTCLOSE_PENDING",
+        target_daybook_effective_day="20260101",
+        target_pulse_trade_day="20260101",
+        target_pulse_slot_at="2026-01-01 14:55:00",
+        calendar_source="official",
+        calendar_status="ok",
+        calendar_range_start="20250101",
+        calendar_range_end="20261231",
+        calendar_error=None,
+        next_trading_day="20260102",
+    )
+    monkeypatch.setattr(routes, "load_config", lambda: _config(True))
+    monkeypatch.setattr(routes, "load_current_book", lambda: _Book())
+    monkeypatch.setattr(routes, "compute_market_state", lambda now=None: state)
+    monkeypatch.setattr(
+        routes,
+        "resolve_daily_target",
+        lambda *_, **__: {
+            "target_day": "2026-01-01",
+            "target_mode": "current_ready",
+            "pending_eod_day": None,
+            "eod_probe": {"ready": True, "ok_count": 3},
+        },
+    )
+
+    response = client.get("/api/health")
+
+    assert response.status_code == 200, response.text
+    runtime = response.json().get("runtime", {})
+    assert runtime.get("book_freshness") == "freshness_blocked"
+    assert runtime.get("daily_status") == "freshness_blocked"
+
+
+def test_health_reports_daily_reconciling_after_eod_ready_before_report(monkeypatch):
+    state = SimpleNamespace(
+        market_phase="POSTCLOSE_PENDING",
+        target_daybook_effective_day="20260709",
+        target_pulse_trade_day="20260709",
+        target_pulse_slot_at="2026-07-09 14:55:00",
+        calendar_source="official",
+        calendar_status="ok",
+        calendar_range_start="20250101",
+        calendar_range_end="20261231",
+        calendar_error=None,
+        next_trading_day="20260710",
+    )
+    book = SimpleNamespace(
+        book_version="slot_20260709",
+        artifact_id="slot_20260709",
+        trading_day="20260709",
+        updated_at="2026-07-09T14:57:28+08:00",
+        daybook_effective_day="20260709",
+        pulse_trade_day="20260709",
+        pulse_slot_at="2026-07-09 14:55:00",
+        last_closed_5m="2026-07-09 14:55:00",
+        slot_status="OK",
+        publish_allowed=False,
+        board=[],
+        tracked_universe=SimpleNamespace(total=[]),
+        daybook=SimpleNamespace(
+            generated_at="2026-07-09T00:59:06+08:00",
+            source_meta={
+                "daily_freshness": {
+                    "ready": True,
+                    "target_day": "2026-07-08",
+                    "target_mode": "previous_completed",
+                    "checked_count": 30,
+                    "stale_count": 0,
+                }
+            },
+        ),
+    )
+    monkeypatch.setattr(routes, "load_config", lambda: _config(True))
+    monkeypatch.setattr(routes, "load_current_book", lambda: book)
+    monkeypatch.setattr(routes, "compute_market_state", lambda now=None: state)
+    monkeypatch.setattr(routes, "load_latest_daily_freshness_report", lambda: None)
+    monkeypatch.setattr(
+        routes,
+        "resolve_daily_target",
+        lambda *_, **__: {
+            "target_day": "2026-07-09",
+            "target_mode": "current_ready",
+            "pending_eod_day": None,
+            "eod_probe": {"ready": True, "ok_count": 3},
+        },
+    )
+
+    response = client.get("/api/health")
+
+    assert response.status_code == 200, response.text
+    runtime = response.json().get("runtime", {})
+    assert runtime.get("daily_status") == "daily_reconciling"
+    assert runtime.get("book_freshness") == "daily_reconciling"
+    assert runtime.get("daily_target_day") == "2026-07-09"
+    assert runtime.get("daily_target_mode") == "current_ready"
+    assert runtime.get("daily_checked_count") == 0
 
 
 def test_ops_endpoint_runs_rebuild_daybook(monkeypatch):
@@ -202,6 +302,78 @@ def test_runtime_daily_target_prefers_resolver_over_stale_book(monkeypatch):
     assert runtime["daily_stale_count"] == 0
     assert runtime["daily_blocking_reason"] is None
     assert runtime["daily_failed_symbols"] == []
+
+
+def test_health_preserves_postclose_current_pending_when_latest_report_is_previous_completed(monkeypatch):
+    state = SimpleNamespace(
+        market_phase="POSTCLOSE_PENDING",
+        target_daybook_effective_day="20260709",
+        target_pulse_trade_day="20260709",
+        target_pulse_slot_at="2026-07-09 14:55:00",
+        calendar_source="official",
+        calendar_status="ok",
+        calendar_range_start="20250101",
+        calendar_range_end="20261231",
+        calendar_error=None,
+        next_trading_day="20260710",
+    )
+    latest_previous_report = {
+        "ready": True,
+        "target_day": "2026-07-08",
+        "target_mode": "previous_completed",
+        "checked_count": 30,
+        "stale_count": 0,
+        "stale_symbols": [],
+        "failed_symbols": [],
+        "blocking_reason": None,
+        "last_reconcile_at": "2026-07-09T00:59:06+08:00",
+    }
+    book = SimpleNamespace(
+        book_version="slot_20260709",
+        artifact_id="slot_20260709",
+        trading_day="20260709",
+        updated_at="2026-07-09T14:57:28+08:00",
+        daybook_effective_day="20260709",
+        pulse_trade_day="20260709",
+        pulse_slot_at="2026-07-09 14:55:00",
+        last_closed_5m="2026-07-09 14:55:00",
+        slot_status="OK",
+        publish_allowed=False,
+        board=[],
+        tracked_universe=SimpleNamespace(total=[]),
+        daybook=SimpleNamespace(
+            generated_at="2026-07-09T00:59:06+08:00",
+            tradeable=True,
+            source_meta={"daily_freshness": dict(latest_previous_report)},
+        ),
+    )
+
+    monkeypatch.setattr(routes, "load_config", lambda: _config(True))
+    monkeypatch.setattr(routes, "load_current_book", lambda: book)
+    monkeypatch.setattr(routes, "compute_market_state", lambda now=None: state)
+    monkeypatch.setattr(routes, "load_latest_daily_freshness_report", lambda: latest_previous_report)
+    monkeypatch.setattr(
+        routes,
+        "resolve_daily_target",
+        lambda *_, **__: {
+            "target_day": "2026-07-08",
+            "target_mode": "current_pending",
+            "pending_eod_day": "2026-07-09",
+            "eod_probe": {"target_day": "2026-07-09", "ready": False, "ok_count": 0},
+        },
+    )
+
+    response = client.get("/api/health")
+
+    assert response.status_code == 200, response.text
+    runtime = response.json()["runtime"]
+    assert runtime["daily_target_day"] == "2026-07-08"
+    assert runtime["daily_target_mode"] == "current_pending"
+    assert runtime["daily_status"] == "eod_pending"
+    assert runtime["book_freshness"] == "eod_pending"
+    assert runtime["pending_eod_day"] == "2026-07-09"
+    assert runtime["eod_probe"]["ready"] is False
+    assert runtime["daily_checked_count"] == 30
 
 
 def test_health_uses_latest_current_target_freshness_report_when_book_is_stale(monkeypatch):

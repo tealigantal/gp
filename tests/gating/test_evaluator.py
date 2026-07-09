@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import shutil
+
 from fastapi.testclient import TestClient
 
 from gp_assistant.core.paths import store_dir
@@ -11,9 +13,7 @@ from gp_assistant.selection_engine.artifact_store import persist_artifact_v2
 
 
 def _rm_summary():
-    p = store_dir() / 'validation' / 'latest_summary.json'
-    if p.exists():
-        p.unlink()
+    shutil.rmtree(store_dir() / 'validation', ignore_errors=True)
 
 
 def _persist_art(run_id: str, items):

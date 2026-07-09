@@ -379,7 +379,14 @@ class AkShareProvider(MarketDataProvider):
                 except Exception:
                     pass
                 if route == "sina":
-                    df = self._call_with_retry(lambda: self._with_requests_timeout(lambda: ak.stock_zh_a_spot()), retries=3)
+                    df = self._call_with_retry(
+                        lambda: self._call_with_hard_timeout(
+                            lambda: self._with_requests_timeout(lambda: ak.stock_zh_a_spot()),
+                            timeout_sec=max(5.0, float(self.timeout_sec)),
+                            label="AkShare Sina snapshot",
+                        ),
+                        retries=1,
+                    )
                     if df is None or len(df) == 0:
                         raise DataProviderError("AkShare Sina snapshot empty")
                     # normalize
@@ -409,7 +416,14 @@ class AkShareProvider(MarketDataProvider):
                         pass
                     return df
                 if route == "em":
-                    df = self._call_with_retry(lambda: self._with_requests_timeout(lambda: ak.stock_zh_a_spot_em()), retries=1)
+                    df = self._call_with_retry(
+                        lambda: self._call_with_hard_timeout(
+                            lambda: self._with_requests_timeout(lambda: ak.stock_zh_a_spot_em()),
+                            timeout_sec=max(5.0, float(self.timeout_sec)),
+                            label="AkShare EM snapshot",
+                        ),
+                        retries=1,
+                    )
                     if df is None or len(df) == 0:
                         raise DataProviderError("AkShare EM snapshot empty")
                     # normalize
@@ -833,6 +847,28 @@ class AkShareProvider(MarketDataProvider):
             raise DataProviderError(f"AkShare index minute fetch failed: primary={primary_error}; fallback={ex}", symbol=idx) from ex
 
     # ---- Internals: request patch + retry ----------------------------------
+    def _call_with_hard_timeout(self, fn, *, timeout_sec: float, label: str):  # noqa: ANN001
+        result: list[tuple[bool, Any]] = []
+
+        def runner() -> None:
+            try:
+                result.append((True, fn()))
+            except BaseException as ex:  # noqa: BLE001
+                result.append((False, ex))
+
+        timeout = max(0.01, float(timeout_sec))
+        thread = threading.Thread(target=runner, name=f"gp-{label.replace(' ', '-').lower()}", daemon=True)
+        thread.start()
+        thread.join(timeout)
+        if thread.is_alive():
+            raise DataProviderError(f"{label} timed out after {timeout:.1f}s")
+        if not result:
+            raise DataProviderError(f"{label} returned no result")
+        ok, payload = result[0]
+        if ok:
+            return payload
+        raise payload
+
     def _with_requests_timeout(self, fn):  # noqa: ANN001
         import requests  # type: ignore
 
