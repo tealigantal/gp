@@ -23,6 +23,34 @@ class GPAssistantError(Exception):
     pass
 
 
+class LLMPayloadBudgetExceeded(GPAssistantError):
+    def __init__(
+        self,
+        *,
+        stage: str,
+        actual_bytes: int,
+        limit_bytes: int,
+        budget_report: Dict[str, Any],
+    ):
+        self.stage = str(stage or "llm_payload")
+        self.actual_bytes = int(actual_bytes)
+        self.limit_bytes = int(limit_bytes)
+        self.budget_report = dict(budget_report or {})
+        super().__init__(
+            f"LLM payload budget exceeded at {self.stage}: "
+            f"{self.actual_bytes} > {self.limit_bytes} bytes"
+        )
+
+    def detail(self) -> Dict[str, Any]:
+        return {
+            "code": "llm_payload_budget_exceeded",
+            "stage": self.stage,
+            "actual_bytes": self.actual_bytes,
+            "limit_bytes": self.limit_bytes,
+            "budget_report": self.budget_report,
+        }
+
+
 class IntentLLMUnavailable(GPAssistantError):
     def __init__(self, reason: str):
         self.reason = str(reason or "unknown")

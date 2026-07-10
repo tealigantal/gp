@@ -5,6 +5,7 @@ from typing import Any, Dict
 
 from .client import LLMClient
 from ..core.errors import APIError
+from ..runtime.context_budget import TOOL_EVIDENCE_PAYLOAD_LIMIT_BYTES
 
 
 SYSTEM = """
@@ -32,7 +33,8 @@ Decision Intelligence has also fixed decision_action, decision_context_model,
 thesis_lifecycle, and decision_synthesis. Treat those fields as binding.
 
 Allowed:
-1. Explain and compare using llm_decision_context / decision_evidence_pack.
+1. Explain and compare using tool_evidence_context.candidate_details and
+   tool_evidence_context.judgment_result.
 2. Select the most important 2-4 reasons instead of mechanically listing fields.
 3. Explain why the math-ranked market-memory signal was selected and why rejected candidates were not selected.
 4. Explain why the user should not chase and what trigger/confirmation is still needed.
@@ -114,7 +116,14 @@ def render_reply(payload: Dict[str, Any]) -> str:
         {"role": "system", "content": SYSTEM},
         {"role": "user", "content": json.dumps(payload, ensure_ascii=False)},
     ]
-    raw = client.chat(messages)
+    policy = dict((payload.get("tool_evidence_context") or {}).get("context_policy") or {})
+    raw = client.chat(
+        messages,
+        budget_stage="tool_evidence",
+        payload_limit_bytes=TOOL_EVIDENCE_PAYLOAD_LIMIT_BYTES,
+        payload_compressed=True,
+        compression_steps=list(policy.get("compression_steps") or []),
+    )
     content = (((raw or {}).get("choices") or [{}])[0].get("message") or {}).get("content")
     if not content:
         raise RuntimeError("LLM narrate returned empty content")

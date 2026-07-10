@@ -25,7 +25,11 @@ from ..llm.client import LLMClient
 from ..memory.service import commit_turn, load_memory_context
 from ..worker import reconcile_runtime_state
 from .dialogue_text import execution_state_label, intraday_runtime_enabled
-from .context_engine import _pick_plan_slice, build_context
+from .context_budget import ROUTING_PAYLOAD_LIMIT_BYTES, serialized_size_bytes
+from .context_engine import (
+    build_agent_routing_context,
+    compact_agent_routing_context,
+)
 from .concern_parser import normalize_turn_frame
 from .evidence_planner import plan_evidence
 from .grounding import validate_reply
@@ -745,32 +749,48 @@ def _append_agent_tool_result(messages: List[Dict[str, Any]], assistant_step: Di
 
 
 def _agent_context_result(memory_ctx: Dict[str, Any], book: MarketBook) -> AgentToolResult:
-    context = build_context(memory_ctx, book)
+    context = build_agent_routing_context(memory_ctx, book)
     return AgentToolResult(
         tool_name="get_market_context",
         reply_text="已读取当前市场、会话和候选上下文。",
-        message={"message_kind": "agent_context", "context": context},
+        message={
+            "message_kind": "agent_context",
+            "market": context.get("market") or {},
+            "session_focus": {
+                "session_focus_symbol": context.get("session_focus_symbol"),
+                "focus_subject": (context.get("session") or {}).get("focus_subject"),
+                "compare_set": (context.get("session") or {}).get("compare_set") or [],
+            },
+            "active_run": context.get("active_run") or {},
+            "context_refs": context.get("context_refs") or [],
+        },
         tool_trace={"context_keys": list(context.keys())},
     )
 
 
-def _active_run_result(memory_ctx: Dict[str, Any], top_n: int = 6) -> AgentToolResult:
-    session = memory_ctx["session"]
-    run = load_run(session.active_run_id) if session.active_run_id else None
-    picks = list(run.picks[: max(1, min(10, top_n))] if run else [])
+def _active_run_result(memory_ctx: Dict[str, Any], book: MarketBook, top_n: int = 6) -> AgentToolResult:
+    context = build_agent_routing_context(memory_ctx, book)
+    active_run = dict(context.get("active_run") or {})
+    candidates = list(active_run.pop("candidate_summary", []) or [])
+    if active_run.get("candidate_source") == "candidate_summary":
+        candidates = list(context.get("candidate_summary") or [])
+    candidates = candidates[: max(1, min(10, top_n))]
+    run_id = active_run.get("run_id")
     return AgentToolResult(
         tool_name="get_active_run",
-        reply_text="已读取当前 active run。" if run else "当前会话没有 active run。",
+        reply_text="已读取当前 active run。" if active_run.get("available") else "当前会话没有 active run。",
         message={
             "message_kind": "active_run_context",
-            "run_id": (run.run_id if run else None),
-            "picks": [
-                _pick_plan_slice(entry)
-                for entry in picks
+            "active_run": active_run,
+            "candidate_summary": candidates,
+            "context_refs": [
+                ref
+                for ref in list(context.get("context_refs") or [])
+                if ref.get("run_id") == run_id or ref.get("symbol") in {item.get("symbol") for item in candidates}
             ],
         },
-        run_id=(run.run_id if run else None),
-        symbols=[entry.symbol for entry in picks],
+        run_id=run_id,
+        symbols=[str(item.get("symbol")) for item in candidates if item.get("symbol")],
     )
 
 
@@ -862,7 +882,7 @@ def _execute_domain_agent_tool(
     if tool_name == "get_market_context":
         return _agent_context_result(memory_ctx, book), judge_chat(), False
     if tool_name == "get_active_run":
-        return _active_run_result(memory_ctx, int(args.get("top_n") or 6)), judge_chat(), False
+        return _active_run_result(memory_ctx, book, int(args.get("top_n") or 6)), judge_chat(), False
     if tool_name == "answer_chat":
         text = str(args.get("answer") or "").strip() or "可以直接问我今天的候选、某只票为什么入选、盘中还能不能进，或者当前该不该卖。"
         judgment = judge_chat()
@@ -943,7 +963,7 @@ def run_turn_sync(session_id: str | None, user_message: str) -> Dict[str, Any]:
     if not ok:
         raise IntentLLMUnavailable("LLM unavailable before agent tool selection")
 
-    context = build_context(memory_ctx, book)
+    context = build_agent_routing_context(memory_ctx, book)
     messages: List[Dict[str, Any]] = [
         {"role": "system", "content": _agent_system_prompt()},
         {
@@ -958,12 +978,50 @@ def run_turn_sync(session_id: str | None, user_message: str) -> Dict[str, Any]:
             ),
         },
     ]
+    agent_tools = _agent_tool_schemas()
+    routing_payload = {
+        "model": getattr(client, "agent_model", "agent"),
+        "messages": messages,
+        "temperature": 0.0,
+        "stream": False,
+        "tools": agent_tools,
+        "tool_choice": "required",
+    }
+    if serialized_size_bytes(routing_payload) > ROUTING_PAYLOAD_LIMIT_BYTES:
+        context = compact_agent_routing_context(context)
+        messages[1]["content"] = json.dumps(
+            {
+                "user_message": user_message,
+                "context": context,
+                "instruction": "Choose the next tool. Do not answer directly.",
+            },
+            ensure_ascii=False,
+        )
     trace = AgentActionTrace(max_tool_rounds=max(1, int(getattr(load_config(), "agent_max_tool_rounds", 3) or 3)))
     active_judgment = judge_chat()
     active_reply: ReplyBundle | None = None
     try:
         for _round in range(trace.max_tool_rounds):
-            step = client.agent_tool_step(messages, _agent_tool_schemas(), tool_choice="required", temperature=0.0)
+            if not (context.get("context_policy") or {}).get("secondary_compaction"):
+                routing_payload = {
+                    "model": getattr(client, "agent_model", "agent"),
+                    "messages": messages,
+                    "temperature": 0.0,
+                    "stream": False,
+                    "tools": agent_tools,
+                    "tool_choice": "required",
+                }
+                if serialized_size_bytes(routing_payload) > ROUTING_PAYLOAD_LIMIT_BYTES:
+                    context = compact_agent_routing_context(context)
+                    messages[1]["content"] = json.dumps(
+                        {
+                            "user_message": user_message,
+                            "context": context,
+                            "instruction": "Choose the next tool. Do not answer directly.",
+                        },
+                        ensure_ascii=False,
+                    )
+            step = client.agent_tool_step(messages, agent_tools, tool_choice="required", temperature=0.0)
             if step.get("reasoning_content"):
                 trace.reasoning_content_seen = True
             tool_calls = step.get("tool_calls") or []
@@ -972,7 +1030,7 @@ def run_turn_sync(session_id: str | None, user_message: str) -> Dict[str, Any]:
                 raise RuntimeError("DeepSeek agent did not select a tool")
             tool_call = tool_calls[0]
             tool_name = _tool_call_name(tool_call)
-            if tool_name not in {tool["function"]["name"] for tool in _agent_tool_schemas()}:
+            if tool_name not in {tool["function"]["name"] for tool in agent_tools}:
                 trace.stopped_reason = "unknown_tool"
                 raise RuntimeError(f"DeepSeek agent selected unknown tool: {tool_name}")
             args = _json_load_arguments(tool_call)

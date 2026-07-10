@@ -19,7 +19,7 @@ from ..contracts.api import (
     SessionResponse,
 )
 from ..core.config import load_config
-from ..core.errors import APIError, IntentLLMUnavailable, IntentParseFailed
+from ..core.errors import APIError, IntentLLMUnavailable, IntentParseFailed, LLMPayloadBudgetExceeded
 from ..evidence.market_service import current_trading_day
 from ..gateway.events import list_side_results
 from ..gateway.sessions import get_session_diagnostics, get_session_payload, sanitize_chat_payload
@@ -199,6 +199,12 @@ def chat(req: ChatRequest) -> ChatResponse:
         raise APIError(
             status_code=502,
             message="LLM 意图解析返回无效结果",
+            detail=ex.detail(),
+        ) from ex
+    except LLMPayloadBudgetExceeded as ex:
+        raise APIError(
+            status_code=500,
+            message="LLM 上下文超过预算",
             detail=ex.detail(),
         ) from ex
     return ChatResponse(**sanitize_chat_payload(out))

@@ -1,11 +1,14 @@
 from __future__ import annotations
 
-import json
 from typing import Any, Dict, List, Optional, Tuple
 
 import requests
 
 from ..core.config import load_config
+from ..runtime.context_budget import (
+    ROUTING_PAYLOAD_LIMIT_BYTES,
+    encode_llm_payload,
+)
 
 
 class LLMClient:
@@ -50,6 +53,31 @@ class LLMClient:
             return False, "LLM_API_KEY 未配置"
         return True, "ok"
 
+    def _post_payload(
+        self,
+        url: str,
+        payload: Dict[str, Any],
+        *,
+        budget_stage: str,
+        payload_limit_bytes: int | None,
+        payload_compressed: bool,
+        compression_steps: List[str] | None = None,
+    ):
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+        }
+        data, _ = encode_llm_payload(
+            payload,
+            stage=budget_stage,
+            limit_bytes=payload_limit_bytes,
+            compressed=payload_compressed,
+            compression_steps=compression_steps,
+        )
+        timeout = None if (isinstance(self.timeout, (int, float)) and self.timeout <= 0) else self.timeout
+        return requests.post(url, headers=headers, data=data, timeout=timeout)
+
     def chat(
         self,
         messages: List[Dict[str, Any]],
@@ -58,6 +86,10 @@ class LLMClient:
         stream: bool = False,
         json_mode: bool = False,
         extra: Optional[Dict[str, Any]] = None,
+        budget_stage: str = "llm_chat",
+        payload_limit_bytes: int | None = None,
+        payload_compressed: bool = False,
+        compression_steps: List[str] | None = None,
     ) -> Dict[str, Any]:
         ok, reason = self.available()
         if not ok:
@@ -73,14 +105,14 @@ class LLMClient:
             response_format=response_format,
             extra=extra,
         )
-        headers = {
-            "Authorization": f"Bearer {self.api_key}",
-            "Content-Type": "application/json",
-            "Accept": "application/json",
-        }
-        data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
-        timeout = None if (isinstance(self.timeout, (int, float)) and self.timeout <= 0) else self.timeout
-        resp = requests.post(url, headers=headers, data=data, timeout=timeout)
+        resp = self._post_payload(
+            url,
+            payload,
+            budget_stage=budget_stage,
+            payload_limit_bytes=payload_limit_bytes,
+            payload_compressed=payload_compressed,
+            compression_steps=compression_steps,
+        )
         resp.raise_for_status()
         return resp.json()
 
@@ -115,6 +147,10 @@ class LLMClient:
         tool_choice: Optional[Any] = None,
         thinking: Optional[Dict[str, Any]] = None,
         extra: Optional[Dict[str, Any]] = None,
+        budget_stage: str = "llm_tool_call",
+        payload_limit_bytes: int | None = None,
+        payload_compressed: bool = False,
+        compression_steps: List[str] | None = None,
     ) -> Dict[str, Any]:
         ok, reason = self.available()
         if not ok:
@@ -137,14 +173,14 @@ class LLMClient:
             for key, value in extra.items():
                 if key not in payload and value is not None:
                     payload[key] = value
-        headers = {
-            "Authorization": f"Bearer {self.api_key}",
-            "Content-Type": "application/json",
-            "Accept": "application/json",
-        }
-        data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
-        timeout = None if (isinstance(self.timeout, (int, float)) and self.timeout <= 0) else self.timeout
-        resp = requests.post(url, headers=headers, data=data, timeout=timeout)
+        resp = self._post_payload(
+            url,
+            payload,
+            budget_stage=budget_stage,
+            payload_limit_bytes=payload_limit_bytes,
+            payload_compressed=payload_compressed,
+            compression_steps=compression_steps,
+        )
         resp.raise_for_status()
         obj = resp.json()
         choice = ((obj or {}).get("choices") or [{}])[0]
@@ -172,4 +208,8 @@ class LLMClient:
             model=self.agent_model,
             tool_choice=tool_choice,
             thinking=thinking,
+            budget_stage="agent_routing",
+            payload_limit_bytes=ROUTING_PAYLOAD_LIMIT_BYTES,
+            payload_compressed=True,
+            compression_steps=["deduplicate", "summarize", "reference"],
         )

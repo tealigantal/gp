@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 from typing import Any, Dict
 
-from .context_engine import build_context
+from .context_engine import build_agent_routing_context
 from .reference_resolver import inject_entity_hints
 from ..contracts.objects import MarketBook, TurnFrame
 from ..evidence.live_quote_service import extract_user_quote
@@ -230,7 +230,7 @@ def validate_turn_frame(frame: TurnFrame) -> TurnFrame:
 
 
 def parse_concern(memory_ctx: Dict[str, Any], book: MarketBook, user_message: str) -> TurnFrame:
-    context = build_context(memory_ctx, book)
+    context = build_agent_routing_context(memory_ctx, book)
     frame = parse_turn_frame(context, user_message)
     frame = normalize_turn_frame(frame, book=book)
     frame = inject_entity_hints(frame, memory_ctx, book)

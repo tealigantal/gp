@@ -13,8 +13,9 @@ from ..contracts.objects import (
     TranscriptEvent,
     TurnFrame,
 )
-from ..core.errors import APIError
+from ..core.errors import APIError, LLMPayloadBudgetExceeded
 from ..llm.narrate import render_reply
+from .context_engine import build_tool_evidence_context
 from .dialogue_text import clean_user_reasons, execution_state_label, intraday_runtime_enabled
 from .repair import load_repair_status_snapshot
 
@@ -426,21 +427,6 @@ def _text_has_min_signal(text: str, judgment: Judgment) -> bool:
     return True
 
 
-def _dialogue_context(turns: List[TranscriptEvent] | None) -> List[Dict[str, Any]]:
-    if not turns:
-        return []
-    out: List[Dict[str, Any]] = []
-    for turn in turns[-6:]:
-        meta = turn.meta or {}
-        message = meta.get("message") if isinstance(meta, dict) else None
-        item: Dict[str, Any] = {"role": turn.role, "content": turn.content}
-        if isinstance(message, dict):
-            item["message_kind"] = message.get("message_kind")
-            item["symbols"] = message.get("symbols") or meta.get("symbols") or []
-        out.append(item)
-    return out
-
-
 def _message_for_recommend(judgment: Judgment, text: str) -> Dict[str, Any]:
     run = judgment.canonical_run
     assert run is not None
@@ -625,32 +611,12 @@ def _build_canonical_message(evidence: EvidencePack, judgment: Judgment, text: s
 
 def _message_payload(frame: TurnFrame, evidence: EvidencePack, judgment: Judgment, recent_turns: List[TranscriptEvent] | None) -> Dict[str, Any]:
     return {
-        "frame": frame.model_dump(),
-        "judgment": judgment.model_dump(),
-        "session_context": {
-            "active_run_id": evidence.session.active_run_id,
-            "previous_run_id": evidence.session.previous_run_id,
-            "focus_subject": evidence.session.focus_subject,
-            "compare_set": evidence.session.compare_set,
-            "last_focus_symbol": evidence.session.last_focus_symbol,
-        },
-        "recent_dialogue": _dialogue_context(recent_turns),
-        "evidence_summary": {
-            "book_version": evidence.book.book_version,
-            "artifact_id": evidence.book.artifact_id,
-            "slot_id": evidence.book.slot_id,
-            "board_symbols": [entry.symbol for entry in evidence.book.board[:6]],
-            "active_run_id": evidence.active_run.run_id if evidence.active_run else None,
-        },
-        "llm_decision_context": (
-            judgment.canonical_run.decision_evidence_pack
-            if judgment.canonical_run is not None
-            else (evidence.active_run.decision_evidence_pack if evidence.active_run is not None else {})
-        ),
-        "decision_context_model": dict(judgment.decision_context_model or {}),
-        "thesis_lifecycle": dict(judgment.thesis_lifecycle or {}),
-        "decision_action": str(judgment.decision_action or "WAIT"),
-        "decision_synthesis": dict(judgment.decision_synthesis or {}),
+        "tool_evidence_context": build_tool_evidence_context(
+            frame,
+            evidence,
+            judgment,
+            recent_turns,
+        )
     }
 
 
@@ -814,6 +780,8 @@ def build_reply(
     fallback_text = _fallback_text(judgment)
     try:
         text = render_reply(_message_payload(frame, evidence, judgment, recent_turns))
+    except LLMPayloadBudgetExceeded:
+        raise
     except (APIError, RuntimeError):
         text = fallback_text
 

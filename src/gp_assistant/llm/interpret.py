@@ -46,7 +46,7 @@ SYSTEM = """
 }
 
 规则：
-1. 先读 context.session、active_run、previous_run、recent_turns、book，再判断 user_message。
+1. 先读 context.session、active_run、previous_run、recent_dialogue、candidate_summary 和 market，再判断 user_message。
 2. 不要把追问误判成全新推荐；“继续 / 可以 / ？ / 这个怎么算 / 这是什么意思”通常是在追问最近业务结论。
 3. 解释上一轮术语、计划字段、止盈止损、目标价来源、买入区来源、短确认续问时，使用 request="term_explain"。
 4. 问某只标的逻辑、入选理由、止盈止损点、风控细节时，使用 request="pick_detail"，并尽量填 symbol 或 rank；如果只是问上一轮字段如何理解，则使用 term_explain。
@@ -56,7 +56,7 @@ SYSTEM = """
 8. 问这次和上次为什么不同、之前那只为什么没了时，使用 run_change。
 9. 问推荐、机会、节后选择、给几只、榜单时，使用 recommend；非交易时段或下一交易窗口语境下 freshness 使用 next_session_plan。
 10. 闲聊、问候、能力咨询使用 chat，不触发市场判断。
-11. 不确定 symbol 或 rank 时不要编造；可以使用 context.session.last_focus_symbol 或 recent_turns 中明确的 focus。
+11. 不确定 symbol 或 rank 时不要编造；可以使用 context.session.last_focus_symbol 或 recent_dialogue 中明确的 focus。
 12. 只输出 JSON，不要 Markdown，不要代码块，不要自然语言解释。
 """
 

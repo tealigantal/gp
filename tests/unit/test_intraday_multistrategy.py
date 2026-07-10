@@ -10,7 +10,6 @@ from gp_assistant.book.board import build_board
 from gp_assistant.book.pulse5m import evaluate_slot_pulses
 from gp_assistant.contracts.objects import (
     AdvicePick,
-    AdviceRun,
     DayBook,
     EvidencePack,
     Judgment,
@@ -286,12 +285,14 @@ def test_explain_context_survives_publish_and_reaches_narrator(monkeypatch):
     canonical_run = build_canonical_run(book=book, run=run, picks=run.picks)
     judgment = canonical.model_copy(update={"canonical_run": canonical_run, "compare_entries": run.picks})
     reply = build_reply(session_id="s", frame=frame, evidence=EvidencePack(frame=frame, session=session, book=book), judgment=judgment)
-    pack = captured["payload"]["llm_decision_context"]
-    full = pack["top_picks_full_context"][0]
+    tool_context = captured["payload"]["tool_evidence_context"]
+    detail = tool_context["candidate_details"][0]
+    full = detail["explain_context"]
     for key in ["champion_strategy", "trigger_price", "entry_low", "stop_price", "score_breakdown", "competing_strategies", "data_quality_warnings"]:
         assert key in full or key in full.get("risk_pack", {})
-    assert pack["ranked_board_full_context"][0]["symbol"] == run.picks[0].symbol
-    assert pack["ranked_board_full_context"][0]["score_breakdown"]
+    assert detail["identity"]["symbol"] == run.picks[0].symbol
+    assert detail["score_breakdown"]
+    assert "ranked_board_full_context" not in tool_context
     assert reply.message["decision_evidence_pack"]["top_picks_full_context"]
 
 

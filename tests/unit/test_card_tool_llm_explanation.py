@@ -305,17 +305,17 @@ def test_agent_candidate_compare_merges_explicit_symbol_and_rank(monkeypatch):
     assert "600519" in out["reply"]
 
 
-def test_agent_context_includes_full_ranked_board(monkeypatch):
+def test_agent_context_includes_compact_ranked_candidate_summary(monkeypatch):
     book = _book()
     book.board = [_entry(f"600{i:03d}", i, f"候选{i}") for i in range(1, 11)]
     session = _session()
     monkeypatch.setattr(context_engine, "load_run", lambda run_id: None)
-    ctx = context_engine.build_context({"session": session, "recent_turns": [], "recent_claims": []}, book)
+    ctx = context_engine.build_agent_routing_context({"session": session, "recent_turns": [], "recent_claims": []}, book)
 
-    assert len(ctx["book"]["top_board"]) == 6
-    assert len(ctx["book"]["ranked_board_full_context"]) == 10
-    assert ctx["book"]["ranked_board_full_context"][9]["symbol"] == "600010"
-    assert "score_breakdown" in ctx["book"]["ranked_board_full_context"][0]
+    assert len(ctx["candidate_summary"]) == 10
+    assert ctx["candidate_summary"][9]["symbol"] == "600010"
+    assert "score_breakdown" not in ctx["candidate_summary"][0]
+    assert "context_ref" in ctx["candidate_summary"][0]
 
 
 def test_candidate_compare_rejects_selection_outside_requested_scope():
