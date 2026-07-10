@@ -162,7 +162,7 @@ def test_daybook_mapping_carries_market_memory_evidence():
 
 
 def test_historical_replay_observe_is_not_counted_as_recommendation(monkeypatch):
-    def fake_outcome(symbol: str, *, as_of: str, horizon: int = 5):
+    def fake_outcome(symbol: str, *, as_of: str, horizon: int = 5, **kwargs):
         return {
             "complete": True,
             "symbol": symbol,

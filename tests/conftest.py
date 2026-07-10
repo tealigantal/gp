@@ -96,6 +96,7 @@ def pytest_collection_modifyitems(config, items):
         "test_decision_intelligence.py",
         "test_context_budget.py",
         "test_adaptive_policy.py",
+        "test_full_history_replay.py",
     )
     for item in items:
         fn = item.location[0]

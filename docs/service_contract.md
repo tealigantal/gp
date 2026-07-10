@@ -197,6 +197,8 @@ Contract rules:
 - Adaptive Decision Engine is the only production selection authority after ranking
 - low sample size, missing fields, high uncertainty, and ordinary risk flags must lower confidence, uncertainty, recommendation strength, or adaptive score rather than automatically causing no-trade
 - risk is a score penalty unless an explicit hard block is present
+- invalid symbols, fewer than 120 as-of daily bars, a missing target-day bar, stale/failed cache state, missing entry or stop plans, and non-finite ranking scores are explicit hard blocks
+- backtests must use read-only as-of market data; adaptive outcomes may update policy state only after their T+5 maturity date is visible to the replay clock
 - `llm_decision_input` and `llm_decision_json` may be retained for shape compatibility but must be marked `not_used_for_selection`
 - the Decision Synthesizer can lower action intensity but cannot select, promote, demote, replace candidates, or invent facts
 - response text must be based on validated facts from the snapshot and decision synthesis

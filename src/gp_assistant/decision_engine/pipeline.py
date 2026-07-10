@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import asdict
 import os
-from typing import Any, Dict, Iterable, List, Tuple
+from typing import Any, Callable, Dict, Iterable, List, Protocol, Tuple
 
 import pandas as pd
 
@@ -20,6 +20,18 @@ from ..selection_engine.datahub import MarketDataHub
 from ..selection_engine.market_env import score_regime
 from ..signal_engine.daily import build_signal_events_for_symbol
 from .adaptive_policy import select_candidates
+
+
+class DailyDataSource(Protocol):
+    def daily_ohlcv(
+        self,
+        symbol: str,
+        as_of: str | None = None,
+        min_len: int = 250,
+        *,
+        prefer_cache_only: bool = False,
+        force_network: bool = False,
+    ) -> Tuple[pd.DataFrame, Dict[str, Any]]: ...
 
 
 def _safe_float(value: Any, default: float = 0.0) -> float:
@@ -41,6 +53,48 @@ def _normalize_symbol(value: Any) -> str:
             raw = raw[len(prefix) :]
     digits = "".join(ch for ch in raw if ch.isdigit())
     return digits[:6] if len(digits) >= 6 else ""
+
+
+def _has_positive_price(value: Any) -> bool:
+    if isinstance(value, dict):
+        for key in ("price", "low", "high", "trigger_price", "stop_price"):
+            parsed = _safe_float(value.get(key), 0.0)
+            if parsed > 0.0:
+                return True
+        return any(_has_positive_price(item) for item in (value.get("targets") or []))
+    if isinstance(value, list):
+        return any(_has_positive_price(item) for item in value)
+    return _safe_float(value, 0.0) > 0.0
+
+
+def _critical_candidate_reasons(candidate: Dict[str, Any], *, as_of: str) -> List[str]:
+    reasons: List[str] = []
+    symbol = _normalize_symbol(candidate.get("symbol") or candidate.get("code"))
+    if len(symbol) != 6 or not symbol.isdigit():
+        reasons.append("symbol_invalid")
+
+    status = dict(candidate.get("data_status") or {})
+    daily_meta = dict(status.get("daily_meta") or {})
+    if status.get("ok") is not True:
+        reasons.append("daily_data_invalid")
+    rows = int(_safe_float(status.get("rows") or daily_meta.get("len"), 0.0))
+    if rows < 120:
+        reasons.append("daily_history_lt_120")
+    last_date = _normalize_date(str(candidate.get("last_date") or status.get("as_of") or ""))
+    if not last_date or last_date != _normalize_date(as_of):
+        reasons.append("daily_bar_not_at_as_of")
+    if daily_meta.get("strict_blocked") is True or str(daily_meta.get("freshness_state") or "") in {"missing", "stale", "failed_refresh"}:
+        reasons.append("daily_cache_not_current")
+
+    risk = dict(candidate.get("risk") or {})
+    if not _has_positive_price(risk.get("entry")):
+        reasons.append("entry_plan_missing")
+    if not _has_positive_price(risk.get("stop")):
+        reasons.append("stop_plan_missing")
+    ranking_score = _safe_float((candidate.get("ranking") or {}).get("ranking_score"), float("nan"))
+    if ranking_score != ranking_score or ranking_score in (float("inf"), float("-inf")):
+        reasons.append("ranking_score_non_finite")
+    return list(dict.fromkeys(reasons))
 
 
 def _normalize_date(value: str) -> str:
@@ -244,9 +298,14 @@ def run_market_memory_selection(
     symbols: List[str] | None = None,
     prefer_cache_only: bool = False,
     allow_snapshot: bool = True,
+    data_source: DailyDataSource | None = None,
+    market_context_override: Dict[str, Any] | None = None,
+    policy_state: Dict[str, Any] | None = None,
+    historical_market_context_resolver: Callable[[str], Dict[str, Any]] | None = None,
+    historical_event_mode: str = "window",
 ) -> Dict[str, Any]:
     date = _normalize_date(date)
-    hub = MarketDataHub()
+    hub: DailyDataSource = data_source or MarketDataHub()
     symbols = [_normalize_symbol(symbol) for symbol in (symbols or [])]
     symbols = [symbol for symbol in symbols if symbol and is_mainboard(symbol)]
     if symbols:
@@ -255,7 +314,10 @@ def run_market_memory_selection(
         snapshot, snapshot_meta = _load_snapshot()
     else:
         snapshot, snapshot_meta = None, {"ok": False, "reason": "snapshot_disabled_daily_mode", "time_travel_safe": True}
-    market_context = _market_context(hub, snapshot, snapshot_meta)
+    market_context = dict(market_context_override or _market_context(hub, snapshot, snapshot_meta))
+    market_context.setdefault("market_regime", str(market_context.get("grade") or "C"))
+    market_context.setdefault("grade", str(market_context.get("market_regime") or "C"))
+    market_context["as_of"] = date
     if symbols:
         universe = [{"code": symbol, "symbol": symbol, "name": None, "industry": None, "amount": 0.0} for symbol in symbols]
         universe_meta = {"source": "symbols:param", "output_count": len(universe), "time_travel_safe": True}
@@ -273,15 +335,20 @@ def run_market_memory_selection(
             continue
         try:
             df, data_meta = hub.daily_ohlcv(symbol, as_of=date, min_len=120, prefer_cache_only=prefer_cache_only)
-            signal_result = build_signal_events_for_symbol(
-                symbol=symbol,
-                df=df,
-                as_of=date,
-                name=item.get("name"),
-                industry=item.get("industry"),
-                market_context=market_context,
-                max_history=90,
-            )
+            signal_kwargs: Dict[str, Any] = {
+                "symbol": symbol,
+                "df": df,
+                "as_of": date,
+                "name": item.get("name"),
+                "industry": item.get("industry"),
+                "market_context": market_context,
+                "max_history": 90,
+            }
+            if historical_market_context_resolver is not None:
+                signal_kwargs["historical_market_context_resolver"] = historical_market_context_resolver
+            if historical_event_mode != "window":
+                signal_kwargs["historical_event_mode"] = historical_event_mode
+            signal_result = build_signal_events_for_symbol(**signal_kwargs)
             if signal_result.current_event is None:
                 failures.append({"symbol": symbol, "stage": "signal", "reason": signal_result.data_status.get("reason")})
                 continue
@@ -341,6 +408,11 @@ def run_market_memory_selection(
             "last_date": row.get("last_date"),
             "data_status": row.get("data_status") or {},
         }
+        critical_reasons = _critical_candidate_reasons(candidate, as_of=date)
+        if critical_reasons:
+            candidate["hard_block"] = True
+            candidate["hard_block_reasons"] = critical_reasons
+            candidate["reason_codes"] = [*candidate["reason_codes"], *critical_reasons]
         candidates.append(candidate)
 
     candidates.sort(key=lambda item: float((item.get("ranking") or {}).get("ranking_score") or 0.0), reverse=True)
@@ -364,6 +436,7 @@ def run_market_memory_selection(
         topk=topk,
         market_context=market_context,
         risk_profile=risk_profile,
+        state=policy_state,
     )
     adaptive_by_symbol = {str(item.get("symbol")): item for item in (adaptive.get("adaptive_candidates") or [])}
     for item in ranked:

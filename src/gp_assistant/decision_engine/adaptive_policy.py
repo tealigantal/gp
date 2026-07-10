@@ -4,7 +4,7 @@ import json
 import math
 import os
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Tuple
+from typing import Any, Dict, List, Tuple
 
 from ..core.paths import store_dir
 from ..runtime.utils import now_iso
@@ -526,12 +526,15 @@ def score_candidate(candidate: dict, market_context: dict, state: dict | None = 
 
 def _hard_block(candidate: dict, market_context: dict) -> str | None:
     if bool((market_context or {}).get("hard_block")):
-        return "market_context_hard_block"
+        reasons = list((market_context or {}).get("hard_block_reasons") or [])
+        return str(reasons[0]) if reasons else "market_context_hard_block"
     if bool((candidate or {}).get("hard_block")):
-        return "candidate_hard_block"
+        reasons = list((candidate or {}).get("hard_block_reasons") or [])
+        return str(reasons[0]) if reasons else "candidate_hard_block"
     risk = dict((candidate or {}).get("risk") or {})
     if bool(risk.get("hard_block")):
-        return "risk_hard_block"
+        reasons = list(risk.get("hard_block_reasons") or [])
+        return str(reasons[0]) if reasons else "risk_hard_block"
     return None
 
 

@@ -1,6 +1,6 @@
 # Historical Replay and AB Validation
 
-Last updated: 2026-07-08
+Last updated: 2026-07-11
 
 This document records the current validation method for the Market-Memory Agent.
 The goal is to evaluate the full decision system, including no-trade and rejected-candidate behavior, not only whether an endpoint returns symbols.
@@ -34,7 +34,7 @@ Time-travel controls:
 - future T+1/T+3/T+5 outcomes are loaded only after the recommendation artifact is generated
 - replay can set `GP_MARKET_MEMORY_DIR` to isolate event memory and snapshots from production runtime state
 - default replay does not update adaptive policy state
-- with `--update-policy-state`, policy updates happen only after that day's payload is generated and its outcomes are evaluated
+- with `--update-policy-state` or `--mode causal-adaptive`, policy updates remain queued until the replay clock reaches the outcome's T+5 `matured_at` date
 
 ## Command
 
@@ -60,7 +60,44 @@ python -m gp_assistant.evaluation_engine.historical_replay `
 
 Generated JSON is written under `results/market_memory_validation/` and is treated as a local runtime artifact.
 
+### Full local-history replay
+
+The full runner reads `store/search/history.db` through SQLite read-only mode, reconstructs the eligible main-board universe and market breadth at each historical date, never calls a provider, and writes all mutable state below an isolated checkpoint directory.
+
+```powershell
+$env:PYTHONPATH = "src"
+python -m gp_assistant.evaluation_engine.historical_replay `
+  --history-db store/search/history.db `
+  --start 2020-01-01 `
+  --end 2026-06-30 `
+  --topk 3 `
+  --full-max-symbols 200 `
+  --min-history 120 `
+  --min-universe 100 `
+  --friction-bps 30 `
+  --mode static `
+  --offline `
+  --checkpoint-dir results/market_memory_validation/full_static_checkpoint `
+  --output-name full_static_replay
+```
+
+Use `--resume` after interruption. Run `--mode causal-adaptive` into a different checkpoint directory; that mode is evaluation-only and does not enable production policy updates.
+
+Every eligible main-board symbol contributes to the historical breadth and liquidity ranking. The default then evaluates the top 200 causal liquidity candidates, matching the production dynamic-pool scale; use `--full-max-symbols 0` only for the substantially more expensive exhaustive scoring pass.
+
+The report splits valid dates chronologically into 60% development, 20% validation, and 20% holdout. Acceptance requires at least 250 holdout days and 500 filled picks, positive Top1/Top3 net T+3 returns after 30 bps friction, non-inferiority to the deterministic current-main baseline, bounded drawdown, Brier score at or below 0.25, and reasonable strength/data-quality cohort ordering.
+
 ## Latest Local Result
+
+### 2026-07-11 integration preflight
+
+- The real read-only history DB path completed an offline full-market smoke: 3,038 symbols were eligible on the checked day, breadth used all 3,038, and the causal liquidity prefilter sent 12 symbols to scoring.
+- Checkpoint resume completed without duplicate rows.
+- A 17-day engineering preflight did not satisfy the release metrics, but its holdout contained only four days and is not treated as a performance conclusion.
+- The Adaptive branch remains blocked from `main` until the full holdout reaches at least 250 valid days and every acceptance check passes.
+- Docker image validation was not run because the local Docker Desktop Linux engine was unavailable; no running production container was changed.
+
+### Pre-adaptive reference result
 
 The following result predates the Adaptive Decision Engine replacement and reflects the retired gate behavior. New replay reports should additionally inspect adaptive score buckets, recommendation-strength groups, exploratory picks, and cautious picks.
 

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Dict, List
+from typing import Any, Callable, Dict, List
 
 import pandas as pd
 
@@ -189,11 +189,14 @@ def build_signal_events_for_symbol(
     industry: str | None = None,
     market_context: Dict[str, Any] | None = None,
     max_history: int = 60,
+    historical_market_context_resolver: Callable[[str], Dict[str, Any]] | None = None,
+    historical_event_mode: str = "window",
 ) -> SignalBuildResult:
     market_context = dict(market_context or {})
     if df is None or len(df) < 80:
         return SignalBuildResult(None, [], None, None, {"ok": False, "reason": "insufficient_history"})
-    feat = compute_indicators(df)
+    indicator_columns = {"ma10", "ma20", "ma60", "slope20", "atr_pct", "volratio10", "amount_5d_avg"}
+    feat = df.copy() if indicator_columns.issubset(df.columns) else compute_indicators(df)
     feat = feat.dropna(subset=["close"]).reset_index(drop=True)
     if len(feat) < 80:
         return SignalBuildResult(None, [], None, None, {"ok": False, "reason": "insufficient_feature_history"})
@@ -217,18 +220,28 @@ def build_signal_events_for_symbol(
     )
     end = max(60, last_idx - 5)
     start = max(60, end - max(1, int(max_history)))
-    historical = [
-        _make_event(
-            df=feat,
-            idx=idx,
-            symbol=symbol,
-            name=name,
-            industry=industry,
-            market_context=market_context,
-            with_outcome=True,
+    if historical_event_mode not in {"window", "newly_matured"}:
+        raise ValueError("historical_event_mode must be window or newly_matured")
+    historical_indices = range(start, end) if historical_event_mode == "window" else range(max(start, end - 1), end)
+    historical: List[MarketMemoryEvent] = []
+    for idx in historical_indices:
+        historical_date = _date_at(feat, idx)
+        historical_context = (
+            dict(historical_market_context_resolver(historical_date) or {})
+            if historical_market_context_resolver is not None
+            else market_context
         )
-        for idx in range(start, end)
-    ]
+        historical.append(
+            _make_event(
+                df=feat,
+                idx=idx,
+                symbol=symbol,
+                name=name,
+                industry=industry,
+                market_context=historical_context,
+                with_outcome=True,
+            )
+        )
     return SignalBuildResult(
         current_event=current,
         historical_events=[event for event in historical if bool((event.outcome or {}).get("complete") is True)],

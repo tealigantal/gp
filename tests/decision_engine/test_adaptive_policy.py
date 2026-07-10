@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import math
-from dataclasses import asdict
 
 import pandas as pd
 
@@ -114,6 +113,17 @@ def test_missing_data_still_recommends(monkeypatch, tmp_path):
     assert result["selected_symbols"] == ["000001"]
 
 
+def test_missing_optional_probability_fields_only_reduce_strength(monkeypatch, tmp_path):
+    monkeypatch.setenv("GP_MARKET_MEMORY_DIR", str(tmp_path / "events"))
+    candidate = _candidate(probability={"evidence": {}})
+
+    result = select_candidates([candidate], topk=1, market_context={"grade": "C"})
+
+    assert result["final_decision"] == "recommend"
+    assert result["selected_symbols"] == ["000001"]
+    assert result["adaptive_candidates"][0]["recommendation_strength"] in {"cautious", "exploratory"}
+
+
 def test_risk_flags_penalize_without_gating(monkeypatch, tmp_path):
     monkeypatch.setenv("GP_MARKET_MEMORY_DIR", str(tmp_path / "events"))
     low_risk = _candidate("000001")
@@ -162,7 +172,12 @@ def test_pipeline_ranked_nonempty_yields_picks_and_adaptive_snapshot(monkeypatch
 
     class Hub:
         def daily_ohlcv(self, *args, **kwargs):
-            return pd.DataFrame({"date": ["2026-01-05"], "close": [10.0]}), {}
+            dates = pd.bdate_range(end="2026-01-05", periods=120)
+            return pd.DataFrame({"date": dates, "close": [10.0] * len(dates)}), {
+                "len": 120,
+                "freshness_state": "current",
+                "strict_blocked": False,
+            }
 
     def fake_signal(symbol, df, as_of, name=None, industry=None, market_context=None, max_history=90):
         event = make_market_event(
@@ -175,7 +190,7 @@ def test_pipeline_ranked_nonempty_yields_picks_and_adaptive_snapshot(monkeypatch
             outcome={"complete": False},
             data_provenance={"source": "test"},
         )
-        return SignalBuildResult(event, [], 10.0, as_of, {"ok": True})
+        return SignalBuildResult(event, [], 10.0, as_of, {"ok": True, "rows": 120, "as_of": as_of})
 
     def fake_probability(current_event, retrieval):
         return {
