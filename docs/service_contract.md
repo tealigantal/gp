@@ -152,6 +152,10 @@ Required fields:
   "probability_output": {},
   "risk_output": {},
   "ranking_output": [],
+  "adaptive_policy_input": {},
+  "adaptive_policy_output": {},
+  "adaptive_policy_state_version": 1,
+  "calibration_output": {},
   "llm_decision_input": {},
   "llm_decision_json": {},
   "validator_result": {},
@@ -190,9 +194,13 @@ Contract rules:
 
 - probability fields must include evidence, not only a scalar probability
 - Market Memory historical cases must be retrieved by normalized feature-vector distance
-- the Decision Synthesizer can lower action intensity but cannot promote candidates outside math ranking or invent facts
+- Adaptive Decision Engine is the only production selection authority after ranking
+- low sample size, missing fields, high uncertainty, and ordinary risk flags must lower confidence, uncertainty, recommendation strength, or adaptive score rather than automatically causing no-trade
+- risk is a score penalty unless an explicit hard block is present
+- `llm_decision_input` and `llm_decision_json` may be retained for shape compatibility but must be marked `not_used_for_selection`
+- the Decision Synthesizer can lower action intensity but cannot select, promote, demote, replace candidates, or invent facts
 - response text must be based on validated facts from the snapshot and decision synthesis
-- rejected candidates and no-trade/observe decisions must remain available for counterfactual outcome tracking
+- rejected candidates and no-trade/legacy observe decisions must remain available for counterfactual outcome tracking
 
 ## Stability Rules
 

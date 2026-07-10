@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 from gp_assistant.book.daybook import _map_pick
-from gp_assistant.decision_engine.risk_committee import validate_committee_decision
+from gp_assistant.decision_engine.adaptive_policy import select_candidates
 from gp_assistant.evaluation_engine.calibration import calibration_report
 from gp_assistant.evaluation_engine import historical_replay
 from gp_assistant.market_memory.retrieval import retrieve_similar_events
@@ -86,19 +88,24 @@ def test_probability_outputs_evidence_block_with_uncertainty():
     assert "uncertainty" in output
 
 
-def test_risk_committee_cannot_promote_outside_math_ranking():
+def test_adaptive_selection_owns_topk_without_llm_promotion():
     ranked = [
         {"symbol": "000001", "probability": {"up_probability_3d": 0.7, "expected_return_3d": 0.03, "evidence": {"effective_sample_size": 60}}, "risk": {"drawdown_probability": 0.1}, "ranking": {"ranking_score": 0.01}},
         {"symbol": "000002", "probability": {"up_probability_3d": 0.8, "expected_return_3d": 0.04, "evidence": {"effective_sample_size": 60}}, "risk": {"drawdown_probability": 0.1}, "ranking": {"ranking_score": 0.005}},
     ]
-    math = {"decision": "recommend", "selected_symbols": ["000001"], "reason": "math_rank_supports_top_candidate"}
-    llm = {"decision": "recommend", "selected_symbols": ["000002"], "reason": "prefer_b"}
 
-    result = validate_committee_decision(llm_decision=llm, math_decision=math, ranked_candidates=ranked)
+    result = select_candidates(ranked, topk=1, market_context={"grade": "B"})
 
-    assert result["final_decision"] == "observe"
-    assert result["selected_symbols"] == []
-    assert result["invalid_symbols"] == ["000002"]
+    assert result["final_decision"] == "recommend"
+    assert result["selected_symbols"] == [result["adaptive_candidates"][0]["symbol"]]
+    assert result["validator_result"]["policy"] == "adaptive_policy_single_path"
+
+
+def test_pipeline_does_not_import_or_call_risk_committee():
+    source = Path("src/gp_assistant/decision_engine/pipeline.py").read_text(encoding="utf-8")
+
+    assert "run_risk_committee" not in source
+    assert "from .risk_committee" not in source
 
 
 def test_calibration_report_includes_brier_and_effective_sample_buckets():
@@ -124,6 +131,16 @@ def test_daybook_mapping_carries_market_memory_evidence():
         "probability": {"up_probability_3d": 0.68, "expected_return_3d": 0.031, "confidence": 0.7, "evidence": {"sample_size": 326, "effective_sample_size": 87, "mean_similarity": 0.82}},
         "risk": {"execution_quality": 0.75, "risk_flags": [], "entry": {"price": 10.0}, "stop": {"price": 9.5}, "take_profit": {"targets": [10.8]}},
         "ranking": {"ranking_score": 0.008},
+        "adaptive_policy": {
+            "adaptive_score": 0.61,
+            "calibrated_probability": 0.59,
+            "recommendation_strength": "normal",
+            "action": "ENTRY",
+            "feature_coverage": 0.8,
+            "expert_scores": {"signal": 0.7},
+            "expert_contributions": {"signal": 0.11},
+            "missing_features": ["signal.features.support"],
+        },
         "historical_cases": [{"symbol": "000002", "similarity": 0.91}],
         "trade_plan": {"entry": {"price": 10.0}, "stop": {"price": 9.5}, "take_profit": {"targets": [10.8]}, "diagnostics": {"reward_risk": 2.0, "execution_state": "actionable", "actionable": True}},
         "decision_context_snapshot_id": "dcs_test",
@@ -135,6 +152,11 @@ def test_daybook_mapping_carries_market_memory_evidence():
     assert pick.probability["up_probability_3d"] == 0.68
     assert pick.historical_cases[0]["symbol"] == "000002"
     assert pick.decision_context_snapshot_id == "dcs_test"
+    assert pick.scores["adaptive"] == 0.61
+    assert pick.scores["calibrated_probability"] == 0.59
+    assert pick.meta["recommendation_strength"] == "normal"
+    assert pick.meta["adaptive_action"] == "ENTRY"
+    assert pick.meta["missing_features"] == ["signal.features.support"]
     assert "candidate" not in pick.scores
     assert "champion" not in pick.scores
 
