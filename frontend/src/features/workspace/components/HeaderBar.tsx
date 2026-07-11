@@ -39,6 +39,9 @@ function currentBookState(book?: MarketBook, health?: HealthResponse) {
   if (health?.runtime?.tradeability_state === 'tradeable' || book?.publish_allowed) {
     return { color: 'green' as const, text: '日线计划' }
   }
+  if (String(book?.market_phase || health?.runtime?.market_phase || '').toUpperCase() === 'NON_TRADING' && (book?.board || []).length > 0) {
+    return { color: 'blue' as const, text: '下个交易日计划' }
+  }
   return { color: 'default' as const, text: '暂不入场' }
 }
 

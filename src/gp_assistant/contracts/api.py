@@ -122,6 +122,8 @@ class RuntimeStatus(BaseModel):
     daily_failed_symbols: List[str] = Field(default_factory=list)
     services: List[RuntimeToolInfo] = Field(default_factory=list)
     serenity: SerenityRuntimeStatus = Field(default_factory=SerenityRuntimeStatus)
+    producer: Dict[str, str] = Field(default_factory=dict)
+    current_artifact_compatible: bool = False
 
 
 class OpsRunResponse(BaseModel):

@@ -11,6 +11,7 @@ from .runtime.diagnostics import diagnose_runtime_slot_state
 from .runtime.turn_loop import run_turn_sync
 from .worker import reconcile_runtime_state, run_runtime_loop
 from .serenity.worker import run_serenity_loop, run_serenity_once, serenity_status
+from .runtime.producer import producer_metadata, assert_deployed_producer
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -25,6 +26,8 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser("daily-loop", help="compatibility alias for runtime-loop")
     sub.add_parser("rebuild-daybook", help="generate today daily plan artifact")
     sub.add_parser("postclose-archive", help="archive post-close state")
+    p_ops = sub.add_parser("ops-run", help="run a revision-guarded operational task")
+    p_ops.add_argument("operation", choices=["rebuild-daybook", "postclose-archive"])
     sub.add_parser("audit-daily-freshness", help="audit daily freshness and stale symbols")
     sub.add_parser("serenity-loop", help="run the experimental official-announcement collector loop")
     sub.add_parser("serenity-once", help="run one bounded Serenity collection round")
@@ -53,6 +56,13 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     if args.cmd == "postclose-archive":
         print(json.dumps(reconcile_runtime_state(operation="postclose_archive"), ensure_ascii=False, indent=2))
+        return 0
+    if args.cmd == "ops-run":
+        producer = producer_metadata()
+        assert_deployed_producer()
+        operation = "rebuild_daybook" if args.operation == "rebuild-daybook" else "postclose_archive"
+        result = reconcile_runtime_state(operation=operation)
+        print(json.dumps({"producer": producer, "result": result}, ensure_ascii=False, indent=2))
         return 0
     if args.cmd == "audit-daily-freshness":
         print(json.dumps(audit_daily_freshness(), ensure_ascii=False, indent=2))

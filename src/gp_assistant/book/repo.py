@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import os
+import tempfile
+import math
 from pathlib import Path
 from typing import Optional
 
@@ -12,6 +14,22 @@ from ..contracts.objects import (
     MarketBook,
 )
 from ..core.paths import store_dir
+from ..runtime.producer import assert_producer_compatible, producer_is_compatible
+
+
+def _atomic_write_text(path: Path, text: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp_name = tempfile.mkstemp(prefix=f".{path.name}.", suffix=".tmp", dir=str(path.parent))
+    tmp = Path(tmp_name)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            handle.write(text)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(tmp, path)
+    finally:
+        if tmp.exists():
+            tmp.unlink()
 
 
 def _book_root() -> Path:
@@ -63,7 +81,8 @@ def slot_artifact_path(trade_day: str, artifact_id: str) -> Path:
 
 
 def save_daybook(daybook: DayBook) -> None:
-    daybook_path(daybook.trading_day).write_text(daybook.model_dump_json(indent=2), encoding="utf-8")
+    assert_producer_compatible(daybook.producer, stage="daybook")
+    _atomic_write_text(daybook_path(daybook.trading_day), daybook.model_dump_json(indent=2))
 
 
 def load_daybook(trading_day: str | None) -> Optional[DayBook]:
@@ -109,10 +128,8 @@ def load_latest_saved_book(trading_day: str | None = None) -> Optional[MarketBoo
 
 
 def save_slot_artifact(artifact: LiveSlotArtifact) -> None:
-    slot_artifact_path(artifact.trade_day, artifact.artifact_id).write_text(
-        artifact.model_dump_json(indent=2),
-        encoding="utf-8",
-    )
+    assert_producer_compatible(artifact.producer, stage="slot_artifact")
+    _atomic_write_text(slot_artifact_path(artifact.trade_day, artifact.artifact_id), artifact.model_dump_json(indent=2))
 
 
 def load_slot_artifact(artifact_id: str | None, trade_day: str | None = None) -> Optional[LiveSlotArtifact]:
@@ -134,7 +151,27 @@ def load_slot_artifact(artifact_id: str | None, trade_day: str | None = None) ->
 
 
 def save_current_pointer(pointer: CurrentSlotPointer) -> None:
-    current_pointer_path().write_text(pointer.model_dump_json(indent=2), encoding="utf-8")
+    assert_producer_compatible(pointer.producer, stage="current_pointer")
+    artifact = load_slot_artifact(pointer.artifact_id, trade_day=pointer.trade_day)
+    if artifact is None or not producer_is_compatible(artifact.producer):
+        raise RuntimeError("current_pointer_target_incompatible")
+    if artifact.trade_day != pointer.trade_day or artifact.slot_id != pointer.slot_id:
+        raise RuntimeError("current_pointer_target_mismatch")
+    book_version = str(pointer.book_version or pointer.artifact_id)
+    book_path = versioned_book_path(pointer.trade_day, book_version)
+    if not book_path.exists():
+        raise RuntimeError("current_pointer_book_missing")
+    try:
+        book = MarketBook.model_validate_json(book_path.read_text(encoding="utf-8"))
+    except Exception as ex:
+        raise RuntimeError("current_pointer_book_invalid") from ex
+    if (
+        not producer_is_compatible(book.producer)
+        or book.book_version != book_version
+        or book.artifact_id != pointer.artifact_id
+    ):
+        raise RuntimeError("current_pointer_book_incompatible")
+    _atomic_write_text(current_pointer_path(), pointer.model_dump_json(indent=2))
 
 
 def load_current_pointer() -> Optional[CurrentSlotPointer]:
@@ -151,7 +188,12 @@ def load_current_slot_artifact() -> Optional[LiveSlotArtifact]:
     pointer = load_current_pointer()
     if not pointer:
         return None
-    return load_slot_artifact(pointer.artifact_id, trade_day=pointer.trade_day)
+    if not producer_is_compatible(pointer.producer):
+        return None
+    artifact = load_slot_artifact(pointer.artifact_id, trade_day=pointer.trade_day)
+    if artifact is None or not producer_is_compatible(artifact.producer):
+        return None
+    return artifact
 
 
 def compose_market_book(daybook: DayBook, artifact: LiveSlotArtifact) -> MarketBook:
@@ -190,21 +232,81 @@ def compose_market_book(daybook: DayBook, artifact: LiveSlotArtifact) -> MarketB
 
 
 def load_current_book() -> Optional[MarketBook]:
-    artifact = load_current_slot_artifact()
-    if artifact is not None:
-        daybook = load_daybook(artifact.daybook_effective_day) or DayBook(
-            trading_day=artifact.daybook_effective_day,
-            generated_at=artifact.updated_at,
-            regime={},
-        )
-        return compose_market_book(daybook, artifact)
-    return None
+    pointer = load_current_pointer()
+    if pointer is None or not producer_is_compatible(pointer.producer):
+        return None
+    book_version = str(pointer.book_version or pointer.artifact_id)
+    path = versioned_book_path(pointer.trade_day, book_version)
+    if not path.exists():
+        return None
+    try:
+        book = MarketBook.model_validate_json(path.read_text(encoding="utf-8"))
+    except Exception:
+        return None
+    if (
+        not producer_is_compatible(book.producer)
+        or book.book_version != book_version
+        or book.artifact_id != pointer.artifact_id
+        or book.trading_day != pointer.trade_day
+    ):
+        return None
+    return book
 
 
 def save_book(book: MarketBook) -> None:
     txt = book.model_dump_json(indent=2)
-    current_book_path().write_text(txt, encoding="utf-8")
-    versioned_book_path(book.trading_day, book.book_version).write_text(txt, encoding="utf-8")
+    _atomic_write_text(current_book_path(), txt)
+    _atomic_write_text(versioned_book_path(book.trading_day, book.book_version), txt)
+
+
+def publish_current_bundle(daybook: DayBook, artifact: LiveSlotArtifact) -> MarketBook:
+    assert_producer_compatible(daybook.producer, stage="publish_daybook")
+    assert_producer_compatible(artifact.producer, stage="publish_slot")
+    if artifact.daybook_effective_day != daybook.trading_day:
+        raise RuntimeError("runtime_artifact_trade_day_mismatch")
+    allowed = {pick.symbol for pick in [*daybook.picks, *daybook.reserve_picks]}
+    if any(entry.symbol not in allowed for entry in artifact.board):
+        raise RuntimeError("runtime_artifact_board_outside_daybook")
+    pick_symbols = {pick.symbol for pick in daybook.picks}
+    if {entry.symbol for entry in artifact.board} != pick_symbols:
+        raise RuntimeError("runtime_artifact_board_pick_mismatch")
+    if not daybook.picks and str(daybook.source_meta.get("decision") or "") != "no_trade":
+        raise RuntimeError("runtime_artifact_empty_without_no_trade")
+    for pick in daybook.picks:
+        entry_values = [pick.entry_plan.get(key) for key in ("low", "high", "price")]
+        stop_values = [pick.stop_plan.get(key) for key in ("price", "stop_price", "low")]
+        if not pick.symbol or pick.rank < 1:
+            raise RuntimeError("runtime_artifact_pick_identity_invalid")
+        if not any(_finite_positive(value) for value in entry_values) or not any(_finite_positive(value) for value in stop_values):
+            raise RuntimeError(f"runtime_artifact_trade_plan_missing:{pick.symbol}")
+    if any(not math.isfinite(float(entry.final_score)) for entry in artifact.board):
+        raise RuntimeError("runtime_artifact_score_non_finite")
+    book = compose_market_book(daybook, artifact)
+    book.producer = dict(artifact.producer)
+    # Pointer is the commit point and therefore must be written last.
+    save_daybook(daybook)
+    save_slot_artifact(artifact)
+    save_book(book)
+    save_current_pointer(
+        CurrentSlotPointer(
+            artifact_id=artifact.artifact_id,
+            trade_day=artifact.trade_day,
+            slot_id=artifact.slot_id,
+            slot_at=artifact.slot_at,
+            updated_at=artifact.updated_at,
+            book_version=book.book_version,
+            producer=dict(artifact.producer),
+        )
+    )
+    return book
+
+
+def _finite_positive(value) -> bool:
+    try:
+        number = float(value)
+    except Exception:
+        return False
+    return math.isfinite(number) and number > 0.0
 
 
 def run_path(run_id: str) -> Path:

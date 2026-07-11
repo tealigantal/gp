@@ -8,20 +8,21 @@ from ..runtime.utils import now_iso
 from .readonly import build_daily_plan_market_book
 from .repo import load_current_book as _load_current_book
 from .repo import load_current_slot_artifact, load_daybook, load_latest_daybook, load_latest_saved_book
+from ..runtime.producer import producer_is_compatible, producer_metadata
 
 
 def _load_daybook_for_readonly(trading_day: str) -> DayBook:
     daybook = load_daybook(trading_day)
-    if daybook is not None:
+    if daybook is not None and producer_is_compatible(daybook.producer):
         return daybook
     saved = load_latest_saved_book(trading_day)
-    if saved is not None:
+    if saved is not None and producer_is_compatible(saved.producer):
         return saved.daybook
     latest_saved = load_latest_saved_book()
-    if latest_saved is not None:
+    if latest_saved is not None and producer_is_compatible(latest_saved.producer):
         return latest_saved.daybook
     latest = load_latest_daybook()
-    if latest is not None:
+    if latest is not None and producer_is_compatible(latest.producer):
         return latest
     return DayBook(
         trading_day=trading_day,
@@ -29,6 +30,7 @@ def _load_daybook_for_readonly(trading_day: str) -> DayBook:
         regime={},
         tradeable=False,
         reason="current_slot_unavailable",
+        producer=producer_metadata(),
     )
 
 
@@ -59,10 +61,9 @@ def ensure_book(refresh_plan) -> MarketBook:
 
 
 def load_current_book() -> MarketBook | None:
-    book = _load_current_book()
-    if book is not None:
-        return book
-    return _unavailable_book()
+    # Current authority is the validated pointer -> immutable versioned book.
+    # Callers that need a display-only fallback must use ensure_book explicitly.
+    return _load_current_book()
 
 
 def load_current_artifact_id() -> str | None:

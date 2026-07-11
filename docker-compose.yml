@@ -6,6 +6,7 @@ x-gp-build: &gp-build
     HTTP_PROXY: ${HTTP_PROXY:-}
     HTTPS_PROXY: ${HTTPS_PROXY:-}
     ALL_PROXY: ${ALL_PROXY:-}
+    GP_BUILD_REVISION: ${GP_BUILD_REVISION:-local}
 
 x-gp-env: &gp-env
   TZ: ${TZ:-Asia/Shanghai}
@@ -75,7 +76,8 @@ x-gp-volumes: &gp-volumes
   - ./configs:/app/configs
 
 x-gp-service: &gp-service
-  build: *gp-build
+  image: ${GP_BACKEND_IMAGE:-gp-backend}:${GP_BACKEND_TAG:-local}
+  pull_policy: never
   volumes: *gp-volumes
   env_file:
     - .env
@@ -84,6 +86,7 @@ x-gp-service: &gp-service
 services:
   gp:
     <<: *gp-service
+    build: *gp-build
     command: ["uvicorn", "gp_assistant.gateway.app:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "2", "--proxy-headers", "--forwarded-allow-ips", "*"]
     ports:
       - "8000:8000"
@@ -108,13 +111,13 @@ services:
 
   gp-rebuild-daybook:
     <<: *gp-service
-    command: ["python", "-m", "gp_assistant.cli", "rebuild-daybook"]
+    command: ["python", "-m", "gp_assistant.cli", "ops-run", "rebuild-daybook"]
     profiles: ["ops"]
     restart: "no"
 
   gp-postclose-archive:
     <<: *gp-service
-    command: ["python", "-m", "gp_assistant.cli", "postclose-archive"]
+    command: ["python", "-m", "gp_assistant.cli", "ops-run", "postclose-archive"]
     profiles: ["ops"]
     restart: "no"
 

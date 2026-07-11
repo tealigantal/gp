@@ -5,11 +5,11 @@ Last updated: 2026-07-11
 ## Active Delivery State
 
 - **Active Goal:** Implement the free official-announcement Serenity Alpha experiment with real bootstrap, immutable evidence, shadow counterfactuals, and gated automatic ranking promotion up to 8%.
-- **Active ExecPlan:** `docs/plans/2026-07-11-serenity-alpha.md`.
-- **Current Milestone:** Serenity vertical slice and local regression are complete; container smoke and forward shadow observation remain operational gates.
+- **Active ExecPlan:** `docs/plans/2026-07-11-recommendation-chain-recovery.md` (Serenity forward observation remains governed by its existing plan).
+- **Current Milestone:** Canonical recommendation-chain recovery is implemented and container-verified; Serenity forward observation remains an operational gate.
 - **Completed and Verified:** Governance, real source bootstrap gate, append-only evidence/metadata versions, per-symbol coverage and page/hydration resume, official verification boundary, independent add-on/counterfactual policy, T+6 causal evaluation, target-only narration, health/CLI/Compose integration, real zero-result and positive-fact CNINFO smokes, 119 targeted tests, and all 311 default tests.
 - **Implemented but Not Verified:** Live multi-day worker continuity and five consecutive forward shadow trading days.
-- **In Progress:** Documentation handoff and forward shadow data collection readiness.
+- **In Progress:** Recommendation-chain recovery handoff and forward Serenity observation readiness.
 - **Next Work:** Start the experiment worker when Docker Desktop is available, run the container/API smoke, and leave the experiment at shadow/0% until real forward gates mature.
 - **Blockers:** Free endpoints have no SLA; forward predictive performance cannot mature during implementation. Docker runtime validation is pending because the local Docker Desktop Linux engine was unavailable on 2026-07-11.
 - **Recent Decisions:** Serenity remains separate from the eight expert weights; backfill reference arms cannot bind/train; automatic promotion starts at 1%, active learning at 2%, and caps at 8%; replay forces Serenity off; integrity/persistence violations force 0%.

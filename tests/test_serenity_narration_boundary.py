@@ -148,6 +148,17 @@ def test_grounding_rejects_stale_as_no_bad_news():
         validate_reply(reply, judgment)
 
 
+def test_grounding_allows_general_risk_language_when_serenity_is_not_mentioned():
+    judgment = _grounding_objects(status="no_relevant_evidence")
+    reply = ReplyBundle(
+        session_id="session",
+        text="当前没有明显的结构性风险，但仍需遵守止损。",
+        symbols=["000001"],
+        evidence_refs=[],
+    )
+    validate_reply(reply, judgment)
+
+
 def test_grounding_rejects_non_target_fact_reference():
     judgment = _grounding_objects()
     reply = ReplyBundle(

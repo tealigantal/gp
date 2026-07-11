@@ -46,3 +46,6 @@ Broad-media news coverage, OCR of scanned filings, commercial redistribution of 
 ## Current Gaps
 
 Adaptive full-history acceptance is incomplete; existing probability samples show overconfidence; Docker validation depends on the local engine; free announcement sources lack an SLA; Serenity has no forward performance sample yet.
+## Non-trading daily plans
+
+When the latest completed trading day has valid Adaptive candidates, weekends and other non-trading periods continue to show the ranked daily plan, entry zone, stop and take-profit levels. The UI labels it as a recent-trading-day plan for next-session review; `publish_allowed=false` prevents it from being presented as immediately executable.

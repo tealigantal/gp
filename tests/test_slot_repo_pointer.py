@@ -9,6 +9,7 @@ from types import SimpleNamespace
 from gp_assistant.book import repo
 from gp_assistant.contracts.objects import CurrentSlotPointer, DayBook, LiveSlotArtifact, SlotDataQuality, SlotGate, TrackedUniverse
 from gp_assistant.worker import boot_replay_to_current_slot, run_preopen_init
+from gp_assistant.runtime.producer import producer_metadata
 
 
 def _artifact() -> LiveSlotArtifact:
@@ -29,26 +30,17 @@ def _artifact() -> LiveSlotArtifact:
         portfolio_snapshot={},
         created_at="2024-03-20T10:00:02+08:00",
         updated_at="2024-03-20T10:00:02+08:00",
+        producer=producer_metadata(),
     )
 
 
 def test_repo_current_pointer_round_trip(monkeypatch):
     temp_root = Path(tempfile.mkdtemp(prefix="slot_repo_", dir=str(Path.cwd())))
     monkeypatch.setenv("GP_STORE_DIR", str(temp_root / "store"))
-    daybook = DayBook(trading_day="20240320", generated_at="2024-03-20T09:00:00+08:00")
+    daybook = DayBook(trading_day="20240320", generated_at="2024-03-20T09:00:00+08:00", source_meta={"decision": "no_trade"}, producer=producer_metadata())
     artifact = _artifact()
     try:
-        repo.save_daybook(daybook)
-        repo.save_slot_artifact(artifact)
-        repo.save_current_pointer(
-            CurrentSlotPointer(
-                artifact_id=artifact.artifact_id,
-                trade_day=artifact.trade_day,
-                slot_id=artifact.slot_id,
-                slot_at=artifact.slot_at,
-                updated_at=artifact.updated_at,
-            )
-        )
+        repo.publish_current_bundle(daybook, artifact)
         loaded = repo.load_current_slot_artifact()
         assert loaded is not None
         assert loaded.artifact_id == artifact.artifact_id
@@ -96,6 +88,8 @@ def test_worker_preopen_writes_current_pointer(monkeypatch):
             picks=[],
             reserve_picks=[],
             reserve_symbols=[],
+            source_meta={"decision": "no_trade"},
+            producer=producer_metadata(),
         )
 
     monkeypatch.setattr(

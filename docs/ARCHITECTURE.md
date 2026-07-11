@@ -62,3 +62,8 @@ Shared Docker bind mounts require one Serenity writer, a renewable owner lease, 
 ## Target Direction
 
 Keep evidence collection isolated, preserve a permanent 0% baseline, and allow the Serenity add-on to move from shadow to bounded automatic weight only through immutable causal evaluations and automatic rollback.
+## Canonical current publication
+
+All Python Compose services run `gp-backend:<tag>`. The API publishes a producer contract containing revision, source digest, artifact schema, and selection policy. Operational jobs must match it before writing.
+
+The worker validates a daybook/slot bundle, atomically writes the daybook, slot and immutable versioned MarketBook, and updates `current_slot.json` last. Current readers follow the pointer to the immutable MarketBook; mutable daybook files are not current authority. Parameterless recommendation, compare, pick and workbench views adapt this same current book, while explicit run/date requests remain historical.

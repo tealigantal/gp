@@ -5,6 +5,7 @@ ARG PIP_INDEX_URL=https://pypi.org/simple
 ARG HTTP_PROXY=http://host.docker.internal:7890
 ARG HTTPS_PROXY=http://host.docker.internal:7890
 ARG ALL_PROXY=http://host.docker.internal:7890
+ARG GP_BUILD_REVISION=local
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
@@ -16,8 +17,13 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     HTTP_PROXY=${HTTP_PROXY} \
     HTTPS_PROXY=${HTTPS_PROXY} \
     ALL_PROXY=${ALL_PROXY} \
+    GP_BUILD_REVISION=${GP_BUILD_REVISION} \
     PYTHONPATH=/app/src \
     TZ=Asia/Shanghai
+
+LABEL org.opencontainers.image.revision=${GP_BUILD_REVISION} \
+      io.gp.artifact-schema="gp.runtime-artifact.v2" \
+      io.gp.selection-policy="adaptive_policy_single_path"
 
 WORKDIR /app
 

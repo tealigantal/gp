@@ -270,3 +270,8 @@ PYTHONPATH=src python -m gp_assistant.cli diagnose-slot-state --trade-day YYYY-M
 
 9. Use [PROGRESS.md](./PROGRESS.md) and [../src/gp_assistant/ARCHITECTURE.md](../src/gp_assistant/ARCHITECTURE.md) as the current structural references.
 10. For Serenity, inspect `runtime.serenity` in health and `serenity-status`. `bootstrap_ready=false`, `stale=true`, an open breaker, or `state=suspended` means its ranking contribution is zero; do not infer “no bad news.”
+## Rebuild and repair contract
+
+Build the backend once with `docker compose build gp`; every Python service references the resulting `gp-backend` tag. Start the experiment with `docker compose --profile experiments up -d gp gp-worker gp-serenity-worker web`.
+
+The supported manual repair is the Web/API repair action or `docker compose --profile ops run --rm gp-rebuild-daybook`. The guarded CLI compares its source identity with the running API contract and exits before touching store if they differ. After a rebuild, verify `/api/health.runtime.current_artifact_compatible`, `/api/book/current`, and parameterless `/api/recommend_v2`.

@@ -29,6 +29,7 @@ store/backtest/
 store/snapshots/
 store/sessions/
 store/search/
+store/runtime/
 store/serenity/
 store/book/
 store/runs/

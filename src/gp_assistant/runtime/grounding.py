@@ -114,7 +114,7 @@ def validate_reply(reply: ReplyBundle, judgment: Judgment) -> None:
         ) and any(
             token in reply_text for token in ('利空', '负面', '坏消息', '风险')
         )
-        if absence_claim or any(token in reply_text for token in ('公告面安全',)):
+        if mentions_serenity and (absence_claim or any(token in reply_text for token in ('公告面安全',))):
             raise RuntimeError('missing Serenity evidence cannot be asserted as positive evidence')
     if judgment.candidate_comparison is not None:
         view = judgment.candidate_comparison

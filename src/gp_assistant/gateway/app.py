@@ -1,15 +1,25 @@
 from __future__ import annotations
 
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 
 from ..core.errors import APIError
 from ..core.logging import setup_logging
 from .routes import router
+from ..runtime.producer import publish_producer_contract
 
 setup_logging()
 
-app = FastAPI(title='gp_assistant', version='2.0.0')
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    publish_producer_contract()
+    yield
+
+
+app = FastAPI(title='gp_assistant', version='2.0.0', lifespan=lifespan)
 app.include_router(router)
 
 

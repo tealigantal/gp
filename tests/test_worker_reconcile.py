@@ -17,6 +17,7 @@ from gp_assistant.contracts.objects import (
 )
 from gp_assistant import worker
 from gp_assistant.runtime.market_clock import PHASE_POSTCLOSE_PENDING, PHASE_PREOPEN
+from gp_assistant.runtime.producer import producer_metadata
 
 
 def _daybook(
@@ -31,6 +32,7 @@ def _daybook(
         generated_at=generated_at,
         tradeable=True,
         source_meta={
+            "decision": "no_trade",
             "daily_freshness": {
                 "ready": True,
                 "target_day": target_day,
@@ -40,6 +42,7 @@ def _daybook(
                 "last_reconcile_at": last_reconcile_at,
             }
         },
+        producer=producer_metadata(),
     )
 
 
@@ -73,6 +76,7 @@ def _artifact(
         provider_meta=provider_meta if provider_meta is not None else {"reason": "daily_plan"},
         created_at="2026-05-12T10:42:54+08:00",
         updated_at="2026-05-12T10:42:54+08:00",
+        producer=producer_metadata(),
     )
 
 
@@ -115,7 +119,8 @@ def test_auto_reconcile_builds_intraday_pulse_when_enabled(monkeypatch):
         target_pulse_slot_at="2026-05-12 11:30:00",
     )
     daybook = _daybook()
-    daybook.picks = [AdvicePick(symbol="600519", rank=1, name="贵州茅台")]
+    daybook.picks = [AdvicePick(symbol="600519", rank=1, name="贵州茅台", entry_plan={"low": 1400.0, "high": 1420.0}, stop_plan={"price": 1370.0})]
+    daybook.source_meta["decision"] = "recommend"
     calls: list[dict[str, object]] = []
 
     monkeypatch.setattr(worker, "compute_market_state", lambda now=None: state)
@@ -181,7 +186,8 @@ def test_intraday_artifact_ok_when_model_usable_with_stale_cache(monkeypatch):
     temp_root = Path(tempfile.mkdtemp(prefix="gp-worker-usable-stale-"))
     monkeypatch.setenv("GP_STORE_DIR", str(temp_root / "store"))
     daybook = _daybook()
-    daybook.picks = [AdvicePick(symbol="600519", rank=1, name="贵州茅台")]
+    daybook.picks = [AdvicePick(symbol="600519", rank=1, name="贵州茅台", entry_plan={"low": 1400.0, "high": 1420.0}, stop_plan={"price": 1370.0})]
+    daybook.source_meta["decision"] = "recommend"
     monkeypatch.setattr(worker, "load_portfolio_snapshot", lambda: {"positions": []})
     monkeypatch.setattr(
         worker,
@@ -337,17 +343,7 @@ def test_auto_postclose_rebuilds_current_artifact_when_old_artifact_lacks_freshn
     )
     daybook = _daybook()
     old_artifact = _artifact(artifact_id="daily_old", market_phase="INTRADAY_AM", provider_meta={"reason": "daily_plan"})
-    repo.save_daybook(daybook)
-    repo.save_slot_artifact(old_artifact)
-    repo.save_current_pointer(
-        CurrentSlotPointer(
-            artifact_id=old_artifact.artifact_id,
-            trade_day=old_artifact.trade_day,
-            slot_id=old_artifact.slot_id,
-            slot_at=old_artifact.slot_at,
-            updated_at=old_artifact.updated_at,
-        )
-    )
+    repo.publish_current_bundle(daybook, old_artifact)
 
     monkeypatch.setattr(worker, "compute_market_state", lambda now=None: state)
     monkeypatch.setattr(
@@ -388,17 +384,7 @@ def test_build_daily_plan_noops_only_when_freshness_meta_matches(monkeypatch):
         "market_phase": PHASE_POSTCLOSE_PENDING,
     }
     current_artifact = _artifact(artifact_id="daily_current", market_phase=PHASE_POSTCLOSE_PENDING, provider_meta=matching_meta)
-    repo.save_daybook(daybook)
-    repo.save_slot_artifact(current_artifact)
-    repo.save_current_pointer(
-        CurrentSlotPointer(
-            artifact_id=current_artifact.artifact_id,
-            trade_day=current_artifact.trade_day,
-            slot_id=current_artifact.slot_id,
-            slot_at=current_artifact.slot_at,
-            updated_at=current_artifact.updated_at,
-        )
-    )
+    repo.publish_current_bundle(daybook, current_artifact)
     monkeypatch.setattr(worker, "load_portfolio_snapshot", lambda: {"positions": []})
 
     result = worker._build_and_save_daily_plan(
@@ -449,7 +435,8 @@ def test_load_or_build_daybook_accepts_previous_completed_daily_target(monkeypat
                 "target_day": "2026-04-29",
                 "target_mode": "previous_completed",
             }
-        }
+        },
+        producer=producer_metadata(),
     )
     build_calls: list[str] = []
 

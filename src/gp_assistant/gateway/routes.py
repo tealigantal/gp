@@ -38,6 +38,7 @@ from ..runtime.turn_loop import run_turn_sync
 from ..runtime.utils import now_iso
 from ..worker import reconcile_runtime_state
 from ..serenity.store import status_snapshot as serenity_status_snapshot
+from ..runtime.producer import producer_is_compatible, producer_metadata
 
 router = APIRouter()
 
@@ -78,14 +79,14 @@ def _runtime_services() -> list[RuntimeToolInfo]:
             service="gp-rebuild-daybook",
             mode="manual",
             profile="ops",
-            command="python -m gp_assistant.cli rebuild-daybook",
+            command="python -m gp_assistant.cli ops-run rebuild-daybook",
             description="立即启动一次有边界的运行时修复。",
         ),
         RuntimeToolInfo(
             service="gp-postclose-archive",
             mode="manual",
             profile="ops",
-            command="python -m gp_assistant.cli postclose-archive",
+            command="python -m gp_assistant.cli ops-run postclose-archive",
             description="执行显式 daily freshness audit，用于运维诊断。",
         ),
     ]
@@ -192,6 +193,8 @@ def _runtime_status(book, *, lock_error: str | None = None) -> RuntimeStatus:
         tradeability_state=runtime_state.tradeability_state,
         services=_runtime_services(),
         serenity=serenity_runtime,
+        producer=producer_metadata(),
+        current_artifact_compatible=bool(book and producer_is_compatible(getattr(book, "producer", None))),
         **daily_runtime,
     )
 

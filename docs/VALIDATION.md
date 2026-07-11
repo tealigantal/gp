@@ -40,3 +40,17 @@ Historical replay methodology and prior results remain in `docs/historical_valid
 - Created a non-destructive clean database copy containing 3,077 queries and 12,242,184 items; the original `history.db` remains untouched.
 - Container cache probes for `000001`, `600000`, and `600519` now read through 2026-07-10 successfully.
 - Rebuilt daybook `daily_eb6f6ac1d239`; current book contains a candidate. Publication remains disabled as expected during `NON_TRADING`.
+## 2026-07-11 canonical recommendation recovery
+
+- Backend compile and complete default pytest passed.
+- Frontend lint, typecheck, 17 tests, and production build passed.
+- Compose config resolves all six Python services to one `gp-backend:local` image and only `gp` owns the build definition.
+- API, worker, and Serenity containers used the same image digest.
+- Guarded ops rebuild emitted matching producer identity and produced 10 current Adaptive picks for 2026-07-10.
+- `/api/book/current` and parameterless `/api/recommend_v2` returned the same 10 symbols; non-trading retained plans with execution disabled.
+- Browser verification loaded the workspace without overlay/blank state and displayed Top symbols with “最近交易日计划 / 下个交易日复核”.
+- Real two-turn chat passed after the final image rebuild: “今天给我3只” returned 600000/000651/000001 and “第一只为什么能进” reused the same run with grounded explanation.
+- Final browser verification confirmed the first symbol, non-trading plan label and header; no framework error overlay was present.
+- Serenity worker is running from the shared image at 0% weight. Its persisted policy remains safely suspended because earlier source failures triggered the documented circuit breaker; no promotion override was applied.
+- Independent final review found and resolved three P1 issues: canonical fallback masking, incomplete non-execution phase gating, and explicit-zero corruption in the V2 adapter. The complete backend suite passed again afterward.
+- Final-image two-turn chat passed with run `run_ddccc64eb9a5`; both turns retained symbols 600000/000651/000001 and reused the same run.

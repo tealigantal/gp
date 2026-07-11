@@ -246,3 +246,8 @@ Contract rules:
 - Do not reintroduce retired `chat` or `recommend` compatibility contracts.
 - Do not reintroduce old score-stack fields as ranking authority. `candidate_score`, champion, or `final_score` may appear only in legacy artifacts or migration references.
 - If a client needs stronger guarantees, document the exact field-level promise near the corresponding response model rather than in a historical compatibility shim.
+## Current recommendation authority
+
+`GET /api/recommend_v2` without `run_id` or `as_of` is an additive V2-compatible view of the canonical current book. Its `source` is `current_book`; symbols and ranks must match `/api/book/current`. Explicit `run_id` or `as_of` continues to query historical artifacts.
+
+During non-trading periods, current V2 retains items but reports `tradeable=false`, `publish_allowed=false`, `non_trading=true`, and every item is non-actionable.

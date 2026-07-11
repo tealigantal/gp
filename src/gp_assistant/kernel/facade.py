@@ -7,6 +7,8 @@ from ..execution.intent_builder import build_order_intents_from_gated_artifact
 from ..execution.paper_engine import run_paper_execution as _run_paper_execution
 from ..portfolio.store import read_portfolio_state, read_recent_events
 from ..selection_engine.artifact_store import read_artifact_v2
+from ..book.engine import load_current_book
+from ..runtime.current_v2 import current_book_to_v2
 from ..validation.event_stats import load_event_stats
 from ..validation.runner import build_validation_summary
 from ..validation.strategy_health import load_strategy_health
@@ -14,6 +16,8 @@ from ..validation.walkforward_stats import load_walkforward
 
 
 def get_artifact_v2(run_id: Optional[str] = None, as_of: Optional[str] = None) -> Dict[str, Any]:
+    if not run_id and not as_of:
+        return current_book_to_v2(load_current_book())
     return read_artifact_v2(run_id=run_id, as_of=as_of)
 
 

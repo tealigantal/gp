@@ -5,6 +5,7 @@ from typing import Any, Dict
 from ..contracts.objects import AdvicePick, DayBook
 from ..evidence.market_service import build_day_selection
 from ..runtime.utils import now_iso
+from ..runtime.producer import SELECTION_POLICY, producer_metadata
 
 
 def _pick_style(item: Dict[str, Any]) -> str:
@@ -108,6 +109,9 @@ def _map_pick(rank: int, item: Dict[str, Any]) -> AdvicePick:
 
 def build_daybook(trading_day: str, *, topk: int = 10, reserve_count: int = 2, risk_profile: str = 'normal') -> DayBook:
     raw = build_day_selection(trading_day, topk=topk, risk_profile=risk_profile)
+    selection_policy = str((raw.get('debug') or {}).get('selection_policy') or '')
+    if selection_policy != SELECTION_POLICY:
+        raise RuntimeError(f'incompatible_selection_policy:{selection_policy or "missing"}')
     freshness = raw.get('daily_freshness') or {}
     picks = [_map_pick(i + 1, item) for i, item in enumerate(raw.get('picks') or []) if str(item.get('symbol') or item.get('code') or '').strip()]
     reserve: list[str] = []
@@ -139,5 +143,7 @@ def build_daybook(trading_day: str, *, topk: int = 10, reserve_count: int = 2, r
             'decision_context_snapshot_id': raw.get('decision_context_snapshot_id'),
             'serenity_reference_snapshot_id': raw.get('serenity_reference_snapshot_id'),
             'decision': raw.get('decision'),
+            'selection_policy': selection_policy,
         },
+        producer=producer_metadata(),
     )

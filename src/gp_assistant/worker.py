@@ -9,16 +9,13 @@ from .book.daybook import build_daybook
 from .book.pulse5m import compute_slot_pulse_package
 from .book.readonly import build_daily_plan_artifact, tracked_universe_from_daybook
 from .book.repo import (
-    compose_market_book,
     load_current_slot_artifact,
     load_daybook,
-    save_book,
-    save_current_pointer,
+    publish_current_bundle,
     save_daybook,
-    save_slot_artifact,
 )
 from .book.side_results import detect_side_results
-from .contracts.objects import CurrentSlotPointer, DayBook, LiveSlotArtifact, SlotDataQuality, SlotGate, TrackedUniverse
+from .contracts.objects import DayBook, LiveSlotArtifact, SlotDataQuality, SlotGate, TrackedUniverse
 from .core.config import load_config
 from .core.logging import logger
 from .evidence.daily_freshness import (
@@ -47,6 +44,7 @@ from .runtime.slot_state import (
     daily_data_state_from_freshness,
 )
 from .runtime.utils import gen_id, now_iso
+from .runtime.producer import producer_is_compatible, producer_metadata
 
 
 _INTRADAY_PHASES = {
@@ -122,18 +120,14 @@ def _refresh_pending_freshness_meta(
 
 
 def _save_artifact(daybook: DayBook, artifact: LiveSlotArtifact) -> Dict[str, Any]:
-    save_daybook(daybook)
-    save_slot_artifact(artifact)
-    save_current_pointer(
-        CurrentSlotPointer(
-            artifact_id=artifact.artifact_id,
-            trade_day=artifact.trade_day,
-            slot_id=artifact.slot_id,
-            slot_at=artifact.slot_at,
-            updated_at=artifact.updated_at,
-        )
-    )
-    save_book(compose_market_book(daybook, artifact))
+    if daybook.trading_day != artifact.daybook_effective_day:
+        raise RuntimeError("runtime_artifact_trade_day_mismatch")
+    if not producer_is_compatible(daybook.producer) or not producer_is_compatible(artifact.producer):
+        raise RuntimeError("runtime_artifact_producer_incompatible")
+    daybook_symbols_set = {pick.symbol for pick in [*daybook.picks, *daybook.reserve_picks]}
+    if any(entry.symbol not in daybook_symbols_set for entry in artifact.board):
+        raise RuntimeError("runtime_artifact_board_outside_daybook")
+    publish_current_bundle(daybook, artifact)
     return {
         "artifact_id": artifact.artifact_id,
         "slot_id": artifact.slot_id,
@@ -146,6 +140,8 @@ def _save_artifact(daybook: DayBook, artifact: LiveSlotArtifact) -> Dict[str, An
 
 def _load_or_build_daybook(trade_day: str, *, force: bool = False) -> DayBook:
     daybook = None if force else load_daybook(trade_day)
+    if daybook is not None and not producer_is_compatible(getattr(daybook, "producer", None)):
+        daybook = None
     freshness = dict(daybook.source_meta.get("daily_freshness") or {}) if daybook is not None else {}
     target_info = resolve_daily_target(trade_day)
     target_day = str(target_info.get("target_day") or "")
@@ -161,6 +157,7 @@ def _load_or_build_daybook(trade_day: str, *, force: bool = False) -> DayBook:
         target_mode = str(freshness.get("target_mode") or "")
     should_rebuild = (
         daybook is None
+        or not producer_is_compatible(daybook.producer)
         or not freshness
         or freshness.get("target_day") != target_day
         or str(freshness.get("target_mode") or "") != target_mode
@@ -278,6 +275,7 @@ def _build_and_save_runtime_artifact(
         and current.provider_meta.get("runtime_stage") == runtime_stage
         and (current.slot_at or None) == (target_slot_at if runtime_stage == "minute" else None)
         and _daily_plan_meta_matches(current.provider_meta, expected_meta)
+        and producer_is_compatible(current.producer)
     ):
         return {
             "trade_day": trade_day,
@@ -389,6 +387,7 @@ def _build_and_save_runtime_artifact(
             side_results=detect_side_results(old_map, board),
             created_at=now,
             updated_at=now,
+            producer=producer_metadata(),
         )
     else:
         artifact = build_daily_plan_artifact(
