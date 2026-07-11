@@ -224,3 +224,29 @@ def test_pipeline_ranked_nonempty_yields_picks_and_adaptive_snapshot(monkeypatch
     assert "adaptive_policy_input" in snapshots[0]
     assert "adaptive_policy_output" in snapshots[0]
     assert snapshots[0]["llm_decision_json"]["source"] == "not_used_for_selection"
+
+    monkeypatch.setattr(
+        pipeline,
+        "load_serenity_policy_state",
+        lambda: (_ for _ in ()).throw(AssertionError("historical/off path read production Serenity state")),
+    )
+    monkeypatch.setattr(
+        pipeline,
+        "load_frozen_signals",
+        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("historical/off path read live Serenity evidence")),
+    )
+    monkeypatch.setattr(
+        pipeline,
+        "save_reference_and_enqueue_pending",
+        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("historical/off path wrote Serenity state")),
+    )
+    replay_safe = pipeline.run_market_memory_selection(
+        date="2026-01-05",
+        topk=1,
+        symbols=["000001"],
+        prefer_cache_only=True,
+        serenity_mode="off",
+        serenity_persist=False,
+    )
+    assert replay_safe["decision"] == "recommend"
+    assert replay_safe["adaptive_policy"]["serenity_policy"]["applied_weight"] == 0.0

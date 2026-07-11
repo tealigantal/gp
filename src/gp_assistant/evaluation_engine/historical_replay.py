@@ -730,6 +730,8 @@ def run_historical_replay_ab(
             symbols=symbols,
             prefer_cache_only=True,
             policy_state=policy_state,
+            serenity_mode="off",
+            serenity_persist=False,
         )
         new_evaluated = _evaluate_payload(new_payload, as_of=as_of, pipeline="new", topn=topk)
         if update_policy_state and policy_state is not None:
@@ -1048,6 +1050,8 @@ def run_full_history_replay(
                     policy_state=policy_state,
                     historical_market_context_resolver=historical_context,
                     historical_event_mode="newly_matured" if memory_seeded else "window",
+                    serenity_mode="off",
+                    serenity_persist=False,
                 )
                 memory_seeded = True
                 main_payload = _current_main_math_payload(adaptive_payload, topk=topk)

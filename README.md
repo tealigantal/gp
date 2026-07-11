@@ -66,12 +66,15 @@ Market Data
 - `web`：前端单页 Workspace
 - `gp-rebuild-daybook`：按需手工重建 daybook
 - `gp-postclose-archive`：按需执行收盘后归档
+- `gp-serenity-worker`：可选实验 worker，只读取当前 Top10、reserve 与持仓，采集免费官方公告并做前向影子验证
+- `gp-serenity-bootstrap`：一次性真实 30 日公告 bootstrap，与常驻实验 worker 使用不同 Compose profile
 
 说明：
 
 - `gp` 和 `gp-worker` 是常驻服务
 - `gp-rebuild-daybook`、`gp-postclose-archive` 放在 Compose `ops` profile 下，按需手工运行
 - 当前仓库没有引入额外 scheduler / cron / 队列系统
+- Serenity 默认配置为 `auto`，但初始状态固定为 `warming/shadow + 0%`；没有真实 bootstrap 与前向门槛时不会改变正式排序
 
 ## 环境要求
 
@@ -101,6 +104,8 @@ Copy-Item .env.example .env
 - `DATA_PROVIDER`：默认 `akshare`
 - `STRICT_REAL_DATA=1`：默认优先真实数据
 - `TZ=Asia/Shanghai`
+- `GP_SERENITY_MODE=auto`：`off / reference / auto`；只有 `auto` 且状态已自动晋升至 probation/active 时才允许非零权重
+- `GP_SERENITY_MAX_WEIGHT=0.08`：独立 add-on 的硬上限，不进入原八专家权重
 
 如果本机没有代理，记得把 `.env` 里的这些代理项清空或删除：
 
@@ -164,6 +169,29 @@ docker compose --profile ops run --rm gp-postclose-archive
 
 - 运维诊断或强制补跑收盘后日线链路
 - 正常情况下 `gp-worker` 会自动完成收盘后日线确认和 daily artifact 发布，不需要靠手工触发
+
+### 启用 Serenity Alpha 实验
+
+先运行一次真实 bootstrap；fixture 或普通两日轮询不能令实验 ready：
+
+```powershell
+docker compose --profile serenity-bootstrap run --rm gp-serenity-bootstrap
+```
+
+确认 bootstrap 成功后，再启动常驻 worker：
+
+```powershell
+docker compose --profile experiments up -d gp-serenity-worker
+docker compose logs -f gp-serenity-worker
+```
+
+查看状态：
+
+```powershell
+docker compose exec -T gp python -m gp_assistant.cli serenity-status
+```
+
+`shadow` 时官方事实、非绑定参考分数和反事实排名可用于解释，但正式 `adaptive_score`、候选、动作和交易参数不变。只有双源核验、未过期、非 backfill 的前向事实才进入自动学习；缺失、陈旧、源故障或无相关公告的贡献严格为零。
 
 ## 数据和更新机制
 

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Dict, List
+from typing import Any, Dict
 
 from ..contracts.objects import AdvicePick, DayBook
 from ..evidence.market_service import build_day_selection
@@ -28,6 +28,7 @@ def _map_pick(rank: int, item: Dict[str, Any]) -> AdvicePick:
     adaptive = dict(item.get('adaptive_policy') or {})
     evidence = dict(probability.get('evidence') or {})
     adaptive_score = float(adaptive.get('adaptive_score') or item.get('adaptive_score') or ranking.get('ranking_score') or item.get('ranking_score') or 0.0)
+    decision_score = float(adaptive.get('decision_score') if adaptive.get('decision_score') is not None else item.get('decision_score') if item.get('decision_score') is not None else adaptive_score)
     # Prefer user-visible fields; do not leak debug explain
     user_thesis = item.get('user_thesis')
     why_selected_text = item.get('why_selected_text')
@@ -43,8 +44,9 @@ def _map_pick(rank: int, item: Dict[str, Any]) -> AdvicePick:
         stop_plan=trade_plan.get('stop') or item.get('stop_plan') or {},
         take_profit_plan=trade_plan.get('take_profit') or item.get('take_profit_plan') or {},
         scores={
-            'final': adaptive_score,
+            'final': decision_score,
             'adaptive': adaptive_score,
+            'serenity_adjustment': float(adaptive.get('serenity_adjustment') or item.get('serenity_adjustment') or 0.0),
             'ranking': float(ranking.get('ranking_score') or 0.0),
             'probability': float(probability.get('up_probability_3d') or 0.0),
             'calibrated_probability': float(adaptive.get('calibrated_probability') or item.get('calibrated_probability') or 0.0),
@@ -81,6 +83,19 @@ def _map_pick(rank: int, item: Dict[str, Any]) -> AdvicePick:
             'expert_scores': dict(adaptive.get('expert_scores') or item.get('expert_scores') or {}),
             'expert_contributions': dict(adaptive.get('expert_contributions') or item.get('expert_contributions') or {}),
             'missing_features': list(adaptive.get('missing_features') or item.get('missing_features') or []),
+            'serenity': {
+                'status': adaptive.get('serenity_status') or item.get('serenity_status') or 'not_ready',
+                'policy_state': adaptive.get('serenity_policy_state') or item.get('serenity_policy_state') or 'warming',
+                'weight': adaptive.get('serenity_weight') if adaptive.get('serenity_weight') is not None else item.get('serenity_weight', 0.0),
+                'adjustment': adaptive.get('serenity_adjustment') if adaptive.get('serenity_adjustment') is not None else item.get('serenity_adjustment', 0.0),
+                'decision_score': decision_score,
+                'fact_ids': list(adaptive.get('serenity_fact_ids') or item.get('serenity_fact_ids') or []),
+                'learning_eligible': bool(adaptive.get('serenity_learning_eligible', item.get('serenity_learning_eligible', False))),
+                'reference_snapshot_id': item.get('serenity_reference_snapshot_id'),
+                'non_binding': bool(adaptive.get('serenity_non_binding', item.get('serenity_non_binding', True))),
+                'would_change_topk': bool(adaptive.get('serenity_would_change_topk', item.get('serenity_would_change_topk', False))),
+                'reference_would_change_topk': bool(adaptive.get('serenity_reference_would_change_topk', item.get('serenity_reference_would_change_topk', False))),
+            },
         },
         signal=signal,
         probability=probability,
@@ -122,6 +137,7 @@ def build_daybook(trading_day: str, *, topk: int = 10, reserve_count: int = 2, r
             'risk_profile': risk_profile,
             'daily_freshness': freshness,
             'decision_context_snapshot_id': raw.get('decision_context_snapshot_id'),
+            'serenity_reference_snapshot_id': raw.get('serenity_reference_snapshot_id'),
             'decision': raw.get('decision'),
         },
     )

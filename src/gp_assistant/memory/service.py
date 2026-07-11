@@ -50,6 +50,7 @@ def commit_turn(session_id: str, user_message: str, reply: ReplyBundle, judgment
             'narrative_text': reply.text,
             'right_panel': reply.right_panel,
             'planner_trace': reply.planner_trace,
+            'evidence_refs': reply.evidence_refs,
         },
     ))
     claims = [c.model_copy(update={'turn_id': turn_id, 'session_id': session_id}) for c in judgment.claims]

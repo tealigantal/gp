@@ -20,6 +20,14 @@ from ..selection_engine.datahub import MarketDataHub
 from ..selection_engine.market_env import score_regime
 from ..signal_engine.daily import build_signal_events_for_symbol
 from .adaptive_policy import select_candidates
+from .serenity_policy import FORMULA_VERSION, apply_serenity_addon, build_reference_snapshot
+from ..serenity.models import FrozenSerenitySignal, SerenityPolicyState
+from ..serenity.store import (
+    load_frozen_signals,
+    load_policy_state as load_serenity_policy_state,
+    save_reference_and_enqueue_pending,
+    suspend_policy,
+)
 
 
 class DailyDataSource(Protocol):
@@ -229,6 +237,15 @@ def _compact_candidate(candidate: Dict[str, Any]) -> Dict[str, Any]:
         "sample_size": evidence.get("sample_size"),
         "risk_flags": list(risk.get("risk_flags") or []),
         "adaptive_score": adaptive.get("adaptive_score") or candidate.get("adaptive_score"),
+        "decision_score": (
+            adaptive.get("decision_score")
+            if adaptive.get("decision_score") is not None
+            else candidate.get("decision_score")
+            if candidate.get("decision_score") is not None
+            else adaptive.get("adaptive_score")
+            if adaptive.get("adaptive_score") is not None
+            else candidate.get("adaptive_score")
+        ),
         "calibrated_probability": adaptive.get("calibrated_probability") or candidate.get("calibrated_probability"),
         "recommendation_strength": adaptive.get("recommendation_strength") or candidate.get("recommendation_strength"),
         "adaptive_action": adaptive.get("action") or candidate.get("adaptive_action"),
@@ -238,6 +255,14 @@ def _compact_candidate(candidate: Dict[str, Any]) -> Dict[str, Any]:
         "missing_features": list(adaptive.get("missing_features") or candidate.get("missing_features") or []),
         "reason_codes": list(candidate.get("reason_codes") or []),
         "rejected_reason": candidate.get("rejected_reason"),
+        "serenity_reference": {
+            "status": adaptive.get("serenity_status") or candidate.get("serenity_status") or "not_ready",
+            "policy_state": adaptive.get("serenity_policy_state") or candidate.get("serenity_policy_state") or "warming",
+            "weight": adaptive.get("serenity_weight") if adaptive.get("serenity_weight") is not None else candidate.get("serenity_weight", 0.0),
+            "adjustment": adaptive.get("serenity_adjustment") if adaptive.get("serenity_adjustment") is not None else candidate.get("serenity_adjustment", 0.0),
+            "fact_ids": list(adaptive.get("serenity_fact_ids") or candidate.get("serenity_fact_ids") or [])[:5],
+            "non_binding": bool(adaptive.get("serenity_non_binding", candidate.get("serenity_non_binding", True))),
+        },
     }
 
 
@@ -303,6 +328,10 @@ def run_market_memory_selection(
     policy_state: Dict[str, Any] | None = None,
     historical_market_context_resolver: Callable[[str], Dict[str, Any]] | None = None,
     historical_event_mode: str = "window",
+    serenity_signal_source: Callable[..., Dict[str, FrozenSerenitySignal]] | None = None,
+    serenity_mode: str | None = None,
+    serenity_policy_state: Any | None = None,
+    serenity_persist: bool = True,
 ) -> Dict[str, Any]:
     date = _normalize_date(date)
     hub: DailyDataSource = data_source or MarketDataHub()
@@ -438,6 +467,67 @@ def run_market_memory_selection(
         risk_profile=risk_profile,
         state=policy_state,
     )
+    decision_created_at = now_iso()
+    serenity_cfg = load_config().serenity
+    resolved_serenity_mode = str(serenity_mode or serenity_cfg.mode)
+    serenity_state = serenity_policy_state
+    if serenity_state is None:
+        serenity_state = (
+            SerenityPolicyState(
+                state="off",
+                applied_weight=0.0,
+                max_weight=serenity_cfg.max_weight,
+                state_since=decision_created_at,
+                updated_at=decision_created_at,
+            )
+            if resolved_serenity_mode == "off"
+            else load_serenity_policy_state()
+        )
+    serenity_symbols = [str(item.get("symbol") or item.get("code") or "") for item in (adaptive.get("adaptive_candidates") or [])]
+    serenity_signals: Dict[str, FrozenSerenitySignal] = {}
+    if resolved_serenity_mode != "off" and serenity_symbols:
+        resolver = serenity_signal_source or load_frozen_signals
+        try:
+            serenity_signals = dict(resolver(serenity_symbols, decision_at=decision_created_at) or {})
+        except Exception as ex:  # noqa: BLE001
+            logger.warning("[serenity] local signal resolution failed: %s", ex)
+            serenity_signals = {}
+    future_evidence_detected = any(
+        any(
+            str(limitation).startswith("future_timestamp_evidence_excluded:")
+            for limitation in signal.limitations
+        )
+        for signal in serenity_signals.values()
+    )
+    if future_evidence_detected and resolved_serenity_mode == "auto":
+        try:
+            serenity_state = (
+                suspend_policy("future_dated_serenity_evidence_detected")
+                if serenity_persist
+                else serenity_state.model_copy(
+                    update={
+                        "state": "suspended",
+                        "applied_weight": 0.0,
+                        "suspension_reasons": ["future_dated_serenity_evidence_detected"],
+                    }
+                )
+            )
+        except Exception as ex:  # noqa: BLE001
+            logger.error("[serenity] failed to persist future-evidence suspension: %s", ex)
+            serenity_state = serenity_state.model_copy(
+                update={
+                    "state": "suspended",
+                    "applied_weight": 0.0,
+                    "suspension_reasons": ["future_dated_serenity_evidence_detected"],
+                }
+            )
+    adaptive = apply_serenity_addon(
+        adaptive,
+        serenity_signals,
+        serenity_state,
+        topk=topk,
+        mode=resolved_serenity_mode,
+    )
     adaptive_by_symbol = {str(item.get("symbol")): item for item in (adaptive.get("adaptive_candidates") or [])}
     for item in ranked:
         symbol = str(item.get("symbol") or item.get("code") or "")
@@ -446,6 +536,7 @@ def run_market_memory_selection(
             continue
         item["adaptive_policy"] = scored
         item["adaptive_score"] = float(scored.get("adaptive_score") or 0.0)
+        item["decision_score"] = float(scored.get("decision_score") if scored.get("decision_score") is not None else scored.get("adaptive_score") or 0.0)
         item["calibrated_probability"] = float(scored.get("calibrated_probability") or 0.0)
         item["recommendation_strength"] = str(scored.get("recommendation_strength") or "")
         item["adaptive_action"] = str(scored.get("action") or "")
@@ -453,9 +544,39 @@ def run_market_memory_selection(
         item["expert_scores"] = dict(scored.get("expert_scores") or {})
         item["expert_contributions"] = dict(scored.get("expert_contributions") or {})
         item["missing_features"] = list(scored.get("missing_features") or [])
+        item["serenity_adjustment"] = float(scored.get("serenity_adjustment") or 0.0)
+        item["serenity_status"] = str(scored.get("serenity_status") or "not_ready")
+        item["serenity_fact_ids"] = list(scored.get("serenity_fact_ids") or [])
+        item["serenity_learning_eligible"] = bool(scored.get("serenity_learning_eligible"))
+        item["serenity_policy_state"] = str(scored.get("serenity_policy_state") or serenity_state.state)
+        item["serenity_weight"] = float(scored.get("serenity_weight") or 0.0)
+        item["serenity_non_binding"] = bool(scored.get("serenity_non_binding", True))
+        item["serenity_would_change_topk"] = bool(
+            scored.get("serenity_would_change_topk")
+        )
+        item["serenity_reference_would_change_topk"] = bool(
+            scored.get("serenity_reference_would_change_topk")
+        )
         merged_reasons = [*list(item.get("reason_codes") or []), *list(scored.get("reason_codes") or [])]
         item["reason_codes"] = list(dict.fromkeys(str(reason) for reason in merged_reasons if str(reason)))
-        item["final_score"] = float(scored.get("adaptive_score") or item.get("final_score") or 0.0)
+        item["final_score"] = float(scored.get("decision_score") if scored.get("decision_score") is not None else scored.get("adaptive_score") or item.get("final_score") or 0.0)
+    applied_serenity_weight = float((adaptive.get("serenity_policy") or {}).get("applied_weight") or 0.0)
+    if applied_serenity_weight > 0.0:
+        # Shadow must remain byte-for-byte equivalent to the baseline ordering.  Once
+        # promoted, the complete ranked view follows the already-frozen add-on order;
+        # candidates rejected by the baseline hard-block checks remain at the tail.
+        serenity_order = {
+            str(item.get("symbol") or ""): index
+            for index, item in enumerate(adaptive.get("adaptive_candidates") or [])
+        }
+        baseline_order = {str(item.get("symbol") or item.get("code") or ""): index for index, item in enumerate(ranked)}
+        ranked.sort(
+            key=lambda item: (
+                serenity_order.get(str(item.get("symbol") or item.get("code") or ""), 10**9),
+                baseline_order.get(str(item.get("symbol") or item.get("code") or ""), 10**9),
+                str(item.get("symbol") or item.get("code") or ""),
+            )
+        )
     selected_symbols_ordered = [str(symbol) for symbol in (adaptive.get("selected_symbols") or []) if str(symbol)]
     selected_symbols = set(selected_symbols_ordered)
     final_decision = str(adaptive.get("final_decision") or "no_trade")
@@ -469,7 +590,7 @@ def run_market_memory_selection(
         "schema": "DecisionContextSnapshot.v1",
         "run_id": f"market_memory_{date}_{now_iso()}",
         "as_of": date,
-        "created_at": now_iso(),
+        "created_at": decision_created_at,
         "market_context": market_context,
         "candidate_list": [_compact_candidate(item) for item in ranked],
         "rejected_candidates": [_compact_candidate(item) for item in rejected],
@@ -479,6 +600,11 @@ def run_market_memory_selection(
         },
         "probability_output": {str(item.get("symbol")): item.get("probability") for item in ranked[: max(10, topk)]},
         "risk_output": {str(item.get("symbol")): item.get("risk") for item in ranked[: max(10, topk)]},
+        "serenity_outcome_risk_plans": {
+            str(item.get("symbol")): item.get("risk")
+            for item in ranked
+            if str(item.get("symbol") or "")
+        },
         "ranking_output": {
             "method": "adaptive_score_topk_no_low_sample_gate",
             "ranked_symbols": [str(item.get("symbol")) for item in ranked],
@@ -487,6 +613,25 @@ def run_market_memory_selection(
         "adaptive_policy_input": adaptive_input,
         "adaptive_policy_output": adaptive,
         "adaptive_policy_state_version": adaptive.get("policy_state_version"),
+        "serenity_policy_snapshot": dict(adaptive.get("serenity_policy") or {}),
+        "reference_signal_output": {
+            symbol: {
+                "status": signal.status,
+                "availability": signal.availability,
+                "learning_eligible": signal.learning_eligible,
+                "direction": signal.direction,
+                "confidence": signal.confidence,
+                "source_quality": signal.source_quality,
+                "fact_ids": list(signal.fact_ids),
+                "hypothesis_ids": list(signal.hypothesis_ids),
+                "input_hash": signal.input_hash,
+                "decision_at": signal.decision_at,
+                "limitations": list(signal.limitations),
+            }
+            for symbol, signal in serenity_signals.items()
+        },
+        "serenity_counterfactuals": list(adaptive.get("serenity_counterfactuals") or []),
+        "serenity_reference_counterfactuals": list(adaptive.get("serenity_reference_counterfactuals") or []),
         "calibration_output": {
             str(item.get("symbol")): (item.get("adaptive_policy") or {}).get("calibration")
             for item in ranked[: max(10, topk)]
@@ -505,9 +650,37 @@ def run_market_memory_selection(
     }
     snapshot_payload["final_response"] = _render_adaptive_narrative(snapshot_payload)
     snapshot_id = save_decision_snapshot(snapshot_payload)
+    serenity_reference_snapshot_id = None
+    if serenity_persist and resolved_serenity_mode != "off" and serenity_signals:
+        try:
+            reference_snapshot = build_reference_snapshot(
+                decision_context_snapshot_id=snapshot_id,
+                decision_day=date,
+                decision_at=decision_created_at,
+                adaptive_output=adaptive,
+                signals=serenity_signals,
+                risk_plans=dict(snapshot_payload.get("serenity_outcome_risk_plans") or {}),
+            )
+            serenity_reference_snapshot_id, _ = save_reference_and_enqueue_pending(
+                reference_snapshot,
+                decision_day=date,
+                epoch=serenity_state.epoch,
+                formula_version=FORMULA_VERSION,
+            )
+            snapshot_payload["serenity_reference_snapshot_id"] = serenity_reference_snapshot_id
+            save_decision_snapshot(snapshot_payload)
+        except Exception as ex:  # noqa: BLE001
+            if applied_serenity_weight > 0.0:
+                try:
+                    suspend_policy("binding_reference_persistence_failed")
+                finally:
+                    raise RuntimeError("serenity_binding_reference_persistence_failed") from ex
+            logger.warning("[serenity] reference snapshot persistence failed: %s", ex)
 
     for item in picks + rejected:
         item["decision_context_snapshot_id"] = snapshot_id
+        if serenity_reference_snapshot_id:
+            item["serenity_reference_snapshot_id"] = serenity_reference_snapshot_id
 
     return {
         "as_of": date,
@@ -522,6 +695,7 @@ def run_market_memory_selection(
         "reason": final_decision,
         "message": snapshot_payload["final_response"],
         "decision_context_snapshot_id": snapshot_id,
+        "serenity_reference_snapshot_id": serenity_reference_snapshot_id,
         "adaptive_policy": adaptive,
         "debug": {
             "pipeline": "market_memory_adaptive_v1",

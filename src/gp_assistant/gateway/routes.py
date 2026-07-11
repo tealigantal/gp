@@ -14,6 +14,7 @@ from ..contracts.api import (
     HealthResponse,
     OpsRunResponse,
     RunResponse,
+    SerenityRuntimeStatus,
     RuntimeStatus,
     RuntimeToolInfo,
     SessionResponse,
@@ -36,6 +37,7 @@ from ..runtime.slot_state import build_runtime_state_snapshot
 from ..runtime.turn_loop import run_turn_sync
 from ..runtime.utils import now_iso
 from ..worker import reconcile_runtime_state
+from ..serenity.store import status_snapshot as serenity_status_snapshot
 
 router = APIRouter()
 
@@ -64,6 +66,13 @@ def _runtime_services() -> list[RuntimeToolInfo]:
             mode="always_on",
             command="python -m gp_assistant.cli runtime-loop",
             description="后台 worker，按统一运行链刷新日线、盘中分钟线和 current artifact。",
+        ),
+        RuntimeToolInfo(
+            service="gp-serenity-worker",
+            mode="experimental",
+            profile="experiments",
+            command="python -m gp_assistant.cli serenity-loop",
+            description="免费官方公告实验采集器；独立于核心选股和聊天请求链。",
         ),
         RuntimeToolInfo(
             service="gp-rebuild-daybook",
@@ -125,6 +134,10 @@ def _runtime_status(book, *, lock_error: str | None = None) -> RuntimeStatus:
         repair_snapshot=snapshot,
     )
     daily_runtime = dict(runtime_state.daily_runtime)
+    try:
+        serenity_runtime = SerenityRuntimeStatus.model_validate(serenity_status_snapshot())
+    except Exception as ex:  # noqa: BLE001
+        serenity_runtime = SerenityRuntimeStatus(mode=str(getattr(getattr(cfg, "serenity", None), "mode", "off")), state="warming", reason=f"{type(ex).__name__}: {ex}")
     return RuntimeStatus(
         market_phase=runtime_state.market_phase,
         calendar_source=ms.calendar_source,
@@ -178,6 +191,7 @@ def _runtime_status(book, *, lock_error: str | None = None) -> RuntimeStatus:
         artifact_lag_fields=runtime_state.artifact_lag_fields,
         tradeability_state=runtime_state.tradeability_state,
         services=_runtime_services(),
+        serenity=serenity_runtime,
         **daily_runtime,
     )
 

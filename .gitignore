@@ -29,6 +29,7 @@ store/backtest/
 store/snapshots/
 store/sessions/
 store/search/
+store/serenity/
 store/book/
 store/runs/
 store/book/*.lock
@@ -77,6 +78,7 @@ store/backtest/
 store/snapshots/
 store/sessions/
 store/search/
+store/serenity/
 *.db
 *.duckdb
 store/recommend/**

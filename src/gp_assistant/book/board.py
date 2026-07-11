@@ -147,6 +147,7 @@ def _daily_pulse_from_pick(pick: AdvicePick, rank: int, total: int) -> SymbolPul
     risk = dict(pick.risk or {})
     ranking = dict(pick.ranking or {})
     adaptive = dict((pick.meta or {}).get("adaptive_policy") or {})
+    serenity = dict((pick.meta or {}).get("serenity") or {})
     execution_quality = finite_float(risk.get("execution_quality"), finite_float(pick.scores.get("execution_quality"), 0.0))
     confidence = finite_float(adaptive.get("confidence") or probability.get("confidence"), finite_float(pick.scores.get("confidence"), 0.0))
     adaptive_score = finite_float(adaptive.get("adaptive_score"), finite_float(pick.scores.get("adaptive"), raw_day_score))
@@ -157,6 +158,8 @@ def _daily_pulse_from_pick(pick: AdvicePick, rank: int, total: int) -> SymbolPul
     feature_coverage = finite_float(adaptive.get("feature_coverage"), finite_float(pick.scores.get("feature_coverage"), 0.0))
     score_breakdown = {
         "adaptive_score": adaptive_score,
+        "decision_score": finite_float(serenity.get("decision_score"), raw_day_score),
+        "serenity_adjustment": finite_float(serenity.get("adjustment"), 0.0),
         "calibrated_probability": calibrated_probability,
         "feature_coverage": feature_coverage,
         "raw_market_memory_ranking_score": raw_day_score,
@@ -248,6 +251,7 @@ def _daily_pulse_from_pick(pick: AdvicePick, rank: int, total: int) -> SymbolPul
             "expert_scores": dict(adaptive.get("expert_scores") or {}),
             "expert_contributions": dict(adaptive.get("expert_contributions") or {}),
             "missing_features": list(adaptive.get("missing_features") or []),
+            "serenity": serenity,
             "raw_day_level_alpha_score": raw_day_score,
             "data_quality_score": 65.0,
             "bars_complete": False,
@@ -274,6 +278,7 @@ def _daily_pulse_from_pick(pick: AdvicePick, rank: int, total: int) -> SymbolPul
             "expert_scores": dict(adaptive.get("expert_scores") or {}),
             "expert_contributions": dict(adaptive.get("expert_contributions") or {}),
             "missing_features": list(adaptive.get("missing_features") or []),
+            "serenity": serenity,
             "historical_cases": list(pick.historical_cases or [])[:8],
             "strategy_reason_codes": list(candidate.get("reason_codes") or []),
             "strategy_reject_reasons": list(candidate.get("reject_reasons") or []),
@@ -354,6 +359,7 @@ def _context_for_entry(entry: BoardEntry, *, previous_entry: BoardEntry | None, 
         "expert_scores": strategy_context.get("expert_scores") or features.get("expert_scores") or {},
         "expert_contributions": strategy_context.get("expert_contributions") or features.get("expert_contributions") or {},
         "missing_features": list(strategy_context.get("missing_features") or features.get("missing_features") or []),
+        "serenity": strategy_context.get("serenity") or features.get("serenity") or {},
         "historical_cases": list(strategy_context.get("historical_cases") or []),
         "decision_context_snapshot_id": features.get("decision_context_snapshot_id") or (entry.pick.decision_context_snapshot_id if entry.pick else None),
         "champion_strategy_score": entry.champion_strategy_score or finite_float(strategy_context.get("champion_strategy_score")),

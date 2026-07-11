@@ -142,6 +142,34 @@ def test_health_reports_intraday_runtime_disabled(monkeypatch):
     assert "日线计划" in str(runtime.get("blocking_reason") or "")
 
 
+def test_health_exposes_serenity_without_degrading_core_status(monkeypatch):
+    monkeypatch.setattr(routes, "load_config", lambda: _config(True))
+    monkeypatch.setattr(routes, "load_current_book", lambda: _Book())
+    monkeypatch.setattr(
+        routes,
+        "serenity_status_snapshot",
+        lambda: {
+            "mode": "auto",
+            "state": "shadow",
+            "available": True,
+            "bootstrap_ready": True,
+            "bootstrap_run_id": "serboot_test",
+            "stale": False,
+            "applied_weight": 0.0,
+            "max_weight": 0.08,
+            "source_health": {"recent_complete_rate": 1.0, "poll_count": 20},
+        },
+    )
+    response = client.get("/api/health")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["status"] in {"ok", "degraded"}
+    serenity = payload["runtime"]["serenity"]
+    assert serenity["state"] == "shadow"
+    assert serenity["bootstrap_ready"] is True
+    assert serenity["source_health"]["recent_complete_rate"] == 1.0
+
+
 def test_health_reports_daily_blocked_when_postclose_current_ready_but_freshness_missing(monkeypatch):
     state = SimpleNamespace(
         market_phase="POSTCLOSE_PENDING",

@@ -16,7 +16,13 @@ def run_agent_backtest(days: Iterable[str], *, topk: int = 3, risk_profile: str 
 
     rows: List[Dict[str, Any]] = []
     for day in days:
-        result = run_market_memory_selection(date=str(day), topk=topk, risk_profile=risk_profile)
+        result = run_market_memory_selection(
+            date=str(day),
+            topk=topk,
+            risk_profile=risk_profile,
+            serenity_mode="off",
+            serenity_persist=False,
+        )
         snapshot_id = str(result.get("decision_context_snapshot_id") or "")
         outcome = track_decision_snapshot_outcomes(snapshot_id) if snapshot_id else {"ok": False, "reason": "snapshot_missing"}
         rows.append(

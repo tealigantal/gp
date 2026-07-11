@@ -7,6 +7,22 @@ This folder is split into:
 
 ## Current
 
+- [../PROJECT_GOAL.md](../PROJECT_GOAL.md)
+  Durable project objective, constraints, and approval gates.
+- [PRODUCT.md](./PRODUCT.md)
+  User-visible behavior, recovery experience, constraints, and current gaps.
+- [ARCHITECTURE.md](./ARCHITECTURE.md)
+  System-level ownership and data-flow index; links the detailed backend and frontend architecture documents.
+- [RESEARCH_LOG.md](./RESEARCH_LOG.md)
+  External-source and open-source research decisions, including Serenity data-source findings.
+- [VALIDATION.md](./VALIDATION.md)
+  Cross-cutting planned and executed validation ledger.
+- [DEBT.md](./DEBT.md)
+  Deliberate temporary compromises and removal conditions.
+- [plans/2026-07-11-serenity-alpha.md](./plans/2026-07-11-serenity-alpha.md)
+  Active Serenity Alpha implementation ExecPlan.
+- [adr/README.md](./adr/README.md)
+  Architecture decision index.
 - [PROGRESS.md](./PROGRESS.md)
   Latest project status, Market-Memory production path, and validation snapshot.
 - [ops_runbook.md](./ops_runbook.md)

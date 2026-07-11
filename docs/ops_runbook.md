@@ -15,6 +15,7 @@ This document covers the current service spine:
 - Market Memory storage and retrieval: `src/gp_assistant/market_memory/`
 - probability/risk engines: `src/gp_assistant/probability_engine/`, `src/gp_assistant/risk_engine/`
 - historical replay and calibration: `src/gp_assistant/evaluation_engine/`
+- Serenity official-announcement experiment: `src/gp_assistant/serenity/` and `decision_engine/serenity_policy.py`
 - session and transcript storage: `src/gp_assistant/memory/`
 - cross-cutting service facade: `src/gp_assistant/kernel/`
 
@@ -93,6 +94,27 @@ python -m gp_assistant rebuild-daybook
 set PYTHONPATH=src
 python -m gp_assistant runtime-loop
 ```
+
+### Bootstrap and run Serenity Alpha
+
+The real 30-day bootstrap is a separate gate and profile. Do not start it through the worker profile:
+
+```powershell
+$env:PYTHONPATH='src'
+python -m gp_assistant.cli serenity-bootstrap --lookback-days 30
+python -m gp_assistant.cli serenity-status
+python -m gp_assistant.cli serenity-loop
+```
+
+Docker:
+
+```powershell
+docker compose --profile serenity-bootstrap run --rm gp-serenity-bootstrap
+docker compose --profile experiments up -d gp-serenity-worker
+docker compose logs -f gp-serenity-worker
+```
+
+Expected first state is `shadow` with `applied_weight=0`. A successful zero-result official query is valid and must report `no_relevant_evidence`; it must not create a fact. Stop the experiment with `GP_SERENITY_MODE=off`, or use `reference` to keep evidence non-binding.
 
 ### Run Historical Replay / AB validation
 
@@ -206,6 +228,7 @@ Typical examples:
 - `store/recommend/`
 - `store/portfolio/`
 - `store/validation/`
+- `store/serenity/` (ignored append-only experiment DB and raw PDFs)
 
 These files are workspace artifacts. Treat them as generated state unless a specific file is intentionally versioned.
 
@@ -246,3 +269,4 @@ PYTHONPATH=src python -m gp_assistant.cli diagnose-slot-state --trade-day YYYY-M
 ```
 
 9. Use [PROGRESS.md](./PROGRESS.md) and [../src/gp_assistant/ARCHITECTURE.md](../src/gp_assistant/ARCHITECTURE.md) as the current structural references.
+10. For Serenity, inspect `runtime.serenity` in health and `serenity-status`. `bootstrap_ready=false`, `stale=true`, an open breaker, or `state=suspended` means its ranking contribution is zero; do not infer “no bad news.”
