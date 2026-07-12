@@ -37,6 +37,40 @@ class RuntimeToolInfo(BaseModel):
     profile: Optional[str] = None
 
 
+class SerenityRuntimeStatus(BaseModel):
+    mode: str = "off"
+    state: str = "off"
+    available: bool = False
+    bootstrap_ready: bool = False
+    bootstrap_run_id: Optional[str] = None
+    stale: bool = False
+    applied_weight: float = 0.0
+    stored_applied_weight: float = 0.0
+    policy_state: Optional[str] = None
+    max_weight: float = 0.08
+    epoch: int = 1
+    worker_heartbeat_at: Optional[str] = None
+    worker_lease_expires_at: Optional[str] = None
+    last_poll_at: Optional[str] = None
+    last_complete_poll_at: Optional[str] = None
+    next_due_at: Optional[str] = None
+    last_elapsed_sec: Optional[float] = None
+    ewma_elapsed_sec: float = 0.0
+    p90_elapsed_sec: float = 0.0
+    last_poll_status: Optional[str] = None
+    last_poll_complete: bool = False
+    source_health: Dict[str, Any] = Field(default_factory=dict)
+    breaker: Dict[str, Any] = Field(default_factory=dict)
+    document_count: int = 0
+    withdrawn_count: int = 0
+    unparsed_count: int = 0
+    matured_days: int = 0
+    available_results: int = 0
+    last_evaluation_at: Optional[str] = None
+    suspension_reasons: List[str] = Field(default_factory=list)
+    reason: Optional[str] = None
+
+
 class RuntimeStatus(BaseModel):
     market_phase: str = "UNKNOWN"
     calendar_source: Optional[str] = None
@@ -87,6 +121,9 @@ class RuntimeStatus(BaseModel):
     daily_stale_symbols: List[str] = Field(default_factory=list)
     daily_failed_symbols: List[str] = Field(default_factory=list)
     services: List[RuntimeToolInfo] = Field(default_factory=list)
+    serenity: SerenityRuntimeStatus = Field(default_factory=SerenityRuntimeStatus)
+    producer: Dict[str, str] = Field(default_factory=dict)
+    current_artifact_compatible: bool = False
 
 
 class OpsRunResponse(BaseModel):

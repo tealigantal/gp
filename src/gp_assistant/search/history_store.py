@@ -22,9 +22,21 @@ _SCHEMA_LOCK = threading.Lock()
 _SCHEMA_INIT_PATHS: set[str] = set()
 _ENSURED_QUERIES: set[tuple[str, str]] = set()
 
+_SQLITE_JOURNAL_MODES = {"DELETE", "PERSIST", "TRUNCATE", "WAL"}
+
+
+def _sqlite_journal_mode() -> str:
+    """Return a whitelisted journal mode suitable for interpolation in PRAGMA."""
+    requested = os.getenv("GP_HISTORY_SQLITE_JOURNAL_MODE", "WAL").strip().upper()
+    return requested if requested in _SQLITE_JOURNAL_MODES else "WAL"
+
 
 def _db_path() -> Path:
-    p = store_dir() / "search" / "history.db"
+    filename = os.getenv("GP_HISTORY_SQLITE_FILENAME", "history.db").strip()
+    # Keep the database inside the managed search directory.
+    if not filename or Path(filename).name != filename:
+        filename = "history.db"
+    p = store_dir() / "search" / filename
     p.parent.mkdir(parents=True, exist_ok=True)
     return p
 
@@ -82,7 +94,9 @@ def _connect() -> sqlite3.Connection:
     dbp = str(_db_path())
     conn = sqlite3.connect(dbp, timeout=15.0)
     try:
-        conn.execute("PRAGMA journal_mode=WAL")
+        # WAL shared-memory files are unreliable on Docker Desktop bind mounts.
+        # Containers default to DELETE via compose; native deployments retain WAL.
+        conn.execute(f"PRAGMA journal_mode={_sqlite_journal_mode()}")
         conn.execute("PRAGMA synchronous=NORMAL")
         conn.execute("PRAGMA busy_timeout=10000")
     except Exception:

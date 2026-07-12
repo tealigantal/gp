@@ -193,6 +193,11 @@ def _tool_step(name: str, arguments: dict) -> dict:
 
 def test_routing_context_deduplicates_heavy_history_and_preserves_refs(monkeypatch):
     book = _book()
+    book.board[0].explain_context["serenity"] = {
+        "fact_ids": ["serfact_routing_must_not_see"],
+        "facts": [{"evidence_excerpt": "SERENITY_RAW_ROUTING_BLOB" + "z" * 10000}],
+    }
+    book.board[0].pick.explain_context["serenity"] = book.board[0].explain_context["serenity"]
     run = _run(book.board)
     marker = "FULL_HISTORY_BLOB_" + "x" * 700_000
     monkeypatch.setattr(context_engine, "load_run", lambda run_id: run if run_id == "run_active" else None)
@@ -208,6 +213,8 @@ def test_routing_context_deduplicates_heavy_history_and_preserves_refs(monkeypat
 
     encoded = json.dumps(context, ensure_ascii=False)
     assert "FULL_HISTORY_BLOB" not in encoded
+    assert "SERENITY_RAW_ROUTING_BLOB" not in encoded
+    assert "serfact_routing_must_not_see" not in encoded
     assert "recent_turns" not in context
     assert "recent_structured_messages" not in context
     assert context["recent_dialogue"][0]["message_kind"] == "recommendation"
@@ -217,6 +224,97 @@ def test_routing_context_deduplicates_heavy_history_and_preserves_refs(monkeypat
     assert len(context["candidate_summary"]) == 10
     assert serialized_size_bytes(context) < ROUTING_PAYLOAD_LIMIT_BYTES
     assert any(ref.get("decision_context_snapshot_id") == "dcs_shared" for ref in context["context_refs"])
+
+
+def test_routing_redacts_prior_assistant_serenity_narrative(monkeypatch):
+    book = _book()
+    run = _run(book.board)
+    monkeypatch.setattr(
+        context_engine,
+        "load_run",
+        lambda run_id: run if run_id == "run_active" else None,
+    )
+    turn = TranscriptEvent(
+        seq=2,
+        turn_id="turn_serenity",
+        session_id="s1",
+        role="assistant",
+        content="原决策仍是等待。公告显示净利润同比增长35%，Serenity仅作参考。",
+        created_at="t",
+        meta={
+            "kind": "pick_detail",
+            "run_id": "run_active",
+            "symbols": ["600001"],
+            "narrative_text": "原决策仍是等待。公告显示净利润同比增长35%，Serenity仅作参考。",
+            "evidence_refs": ["serfact_secret"],
+        },
+    )
+    context = context_engine.build_agent_routing_context(
+        {"session": _session(), "recent_turns": [turn], "recent_claims": []},
+        book,
+    )
+    dialogue = context["recent_dialogue"][0]
+    assert dialogue["content"] == "上一轮补充证据已保留为本地引用，需在工具阶段按目标展开。"
+    assert dialogue["serenity_redacted"] is True
+    assert "净利润" not in json.dumps(context, ensure_ascii=False)
+    assert "serfact_secret" not in json.dumps(context, ensure_ascii=False)
+
+
+def test_routing_redacts_entire_assistant_turn_when_fact_ref_is_present(monkeypatch):
+    book = _book()
+    run = _run(book.board)
+    monkeypatch.setattr(context_engine, "load_run", lambda run_id: run)
+    turn = TranscriptEvent(
+        seq=2,
+        turn_id="turn_fact_ref",
+        session_id="s1",
+        role="assistant",
+        content="公司预计净利润同比增长35%，短期盈利预期改善。",
+        created_at="t",
+        meta={
+            "kind": "pick_detail",
+            "run_id": "run_active",
+            "symbols": ["600001"],
+            "evidence_refs": ["serfact_hidden_without_keyword"],
+        },
+    )
+
+    context = context_engine.build_agent_routing_context(
+        {"session": _session(), "recent_turns": [turn], "recent_claims": []},
+        book,
+    )
+
+    encoded = json.dumps(context, ensure_ascii=False)
+    assert "净利润" not in encoded
+    assert "serfact_hidden_without_keyword" not in encoded
+    assert context["recent_dialogue"][0]["serenity_redacted"] is True
+
+
+def test_routing_redacts_legacy_market_answer_without_fact_refs(monkeypatch):
+    book = _book()
+    run = _run(book.board)
+    monkeypatch.setattr(context_engine, "load_run", lambda run_id: run)
+    turn = TranscriptEvent(
+        seq=2,
+        turn_id="turn_legacy_market",
+        session_id="s1",
+        role="assistant",
+        content="公司预计净利润同比增长35%，短期盈利预期改善。",
+        created_at="t",
+        meta={
+            "kind": "pick_detail",
+            "run_id": "run_active",
+            "symbols": ["600001"],
+        },
+    )
+
+    context = context_engine.build_agent_routing_context(
+        {"session": _session(), "recent_turns": [turn], "recent_claims": []},
+        book,
+    )
+
+    assert "净利润" not in json.dumps(context, ensure_ascii=False)
+    assert context["recent_dialogue"][0]["serenity_redacted"] is True
 
 
 def test_routing_candidate_summary_keeps_decision_fields_without_full_evidence(monkeypatch):

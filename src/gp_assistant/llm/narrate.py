@@ -53,6 +53,15 @@ Forbidden:
 4. Do not say buy when gate is BLOCKED or UNAVAILABLE.
 5. Do not generate missing values or trigger data refresh.
 
+Serenity experimental evidence:
+1. candidate_details[].serenity_reference contains only compact, locally verified official-announcement facts for the already fixed target symbols.
+2. In warming/shadow/suspended state it is reference-only. Do not claim that it changed ranking, action, probability, or trade prices.
+3. In probation/active state, only the supplied precomputed adjustment and decision_score may have affected ranking. Never recompute or reinterpret the weight.
+4. status=no_relevant_evidence means a complete poll found no scored fact; it is not positive or negative evidence. stale/source_error/not_ready means unknown, never "no bad news".
+5. Mention at most two relevant facts with their published/effective time and source. Do not quote PDF bodies or infer facts beyond claim/evidence_excerpt.
+6. A fact that conflicts with the fixed decision may be described as a bounded warning, but it cannot alter action, entry, stop, take, or selected symbols.
+7. backfill_only=true or learning_eligible=false is reference-only even if a reference counterfactual exists; never claim it changed the binding production rank.
+
 State wording:
 - TRADING_SIGNAL: "当前有可执行交易信号", include signal_valid_until_slot.
 - TRIGGER_PLAN: "当前没有直接交易信号，下面是等待触发的交易计划".

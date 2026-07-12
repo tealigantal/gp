@@ -27,8 +27,44 @@ class ProviderConfig:
 
 
 @dataclass
+class SerenityConfig:
+    mode: str = os.getenv("GP_SERENITY_MODE", "auto").strip().lower()
+    max_weight: float = float(os.getenv("GP_SERENITY_MAX_WEIGHT", "0.08"))
+    update_mature_days: int = int(os.getenv("GP_SERENITY_UPDATE_MATURE_DAYS", "5"))
+    eval_window_days: int = int(os.getenv("GP_SERENITY_EVAL_WINDOW_DAYS", "60"))
+    request_timeout_sec: float = float(os.getenv("GP_SERENITY_REQUEST_TIMEOUT_SEC", "15"))
+    page_size: int = int(os.getenv("GP_SERENITY_PAGE_SIZE", "30"))
+    page_budget: int = int(os.getenv("GP_SERENITY_PAGE_BUDGET", "10"))
+    bootstrap_lookback_days: int = int(os.getenv("GP_SERENITY_BOOTSTRAP_LOOKBACK_DAYS", "30"))
+    evidence_ttl_days: int = int(os.getenv("GP_SERENITY_EVIDENCE_TTL_DAYS", "10"))
+    pdf_max_bytes: int = int(os.getenv("GP_SERENITY_PDF_MAX_BYTES", str(15 * 1024 * 1024)))
+    cost_window: int = int(os.getenv("GP_SERENITY_COST_WINDOW", "20"))
+    ewma_alpha: float = float(os.getenv("GP_SERENITY_EWMA_ALPHA", "0.30"))
+    request_spacing_sec: float = float(os.getenv("GP_SERENITY_REQUEST_SPACING_SEC", "1"))
+    content_revalidate_hours: float = float(os.getenv("GP_SERENITY_CONTENT_REVALIDATE_HOURS", "6"))
+    target_fallback_ttl_sec: int = int(os.getenv("GP_SERENITY_TARGET_FALLBACK_TTL_SEC", "3600"))
+    circuit_breaker_sec: int = int(os.getenv("GP_SERENITY_CIRCUIT_BREAKER_SEC", "1800"))
+    lease_sec: int = int(os.getenv("GP_SERENITY_LEASE_SEC", "180"))
+
+    def __post_init__(self) -> None:
+        if self.mode not in {"off", "reference", "auto"}:
+            self.mode = "off"
+        self.max_weight = max(0.0, min(0.08, float(self.max_weight)))
+        self.update_mature_days = max(1, int(self.update_mature_days))
+        self.eval_window_days = max(20, int(self.eval_window_days))
+        self.page_size = max(1, min(100, int(self.page_size)))
+        self.page_budget = max(1, min(50, int(self.page_budget)))
+        self.evidence_ttl_days = max(1, min(90, int(self.evidence_ttl_days)))
+        self.cost_window = max(3, min(100, int(self.cost_window)))
+        self.ewma_alpha = max(0.01, min(1.0, float(self.ewma_alpha)))
+        self.content_revalidate_hours = max(1.0, min(72.0, float(self.content_revalidate_hours)))
+        self.target_fallback_ttl_sec = max(60, min(86400, int(self.target_fallback_ttl_sec)))
+
+
+@dataclass
 class AppConfig:
     provider: ProviderConfig = field(default_factory=ProviderConfig)
+    serenity: SerenityConfig = field(default_factory=SerenityConfig)
 
     # Run mode / developer mode
     run_mode: str = os.getenv("GP_RUN_MODE", "prod").lower()

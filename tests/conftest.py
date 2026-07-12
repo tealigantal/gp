@@ -95,6 +95,14 @@ def pytest_collection_modifyitems(config, items):
         "test_market_memory_agent.py",
         "test_decision_intelligence.py",
         "test_context_budget.py",
+        "test_adaptive_policy.py",
+        "test_full_history_replay.py",
+        "test_serenity_scheduler.py",
+        "test_serenity_store.py",
+        "test_serenity_sources.py",
+        "test_serenity_policy.py",
+        "test_serenity_runtime.py",
+        "test_serenity_narration_boundary.py",
     )
     for item in items:
         fn = item.location[0]

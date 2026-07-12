@@ -50,6 +50,8 @@ export function DecisionSnapshot({
 }: DecisionSnapshotProps) {
   const run = resolveRun(latest)
   const marketPhase = marketPhaseLabel(run?.market_phase || book?.market_phase || health?.runtime?.market_phase)
+  const rawMarketPhase = String(run?.market_phase || book?.market_phase || health?.runtime?.market_phase || '').toUpperCase()
+  const nextSessionReview = ['NON_TRADING', 'POSTCLOSE_PENDING', 'POSTCLOSE_READY'].includes(rawMarketPhase)
   const slotState = slotStatusLabel(run?.slot_status || book?.slot_status || health?.runtime?.slot_status)
   const runRecommendation = recommendationStateMeta(run?.recommendation_state)
   const symbolRows = (run?.picks || []).length
@@ -120,6 +122,7 @@ export function DecisionSnapshot({
       <section className="snapshot-section" aria-label="Top 标的">
         <div className="snapshot-section-title">
           <Typography.Text strong>Top 标的</Typography.Text>
+          {nextSessionReview && symbolRows.length > 0 ? <Tag color="blue">最近交易日计划 / 下个交易日复核</Tag> : null}
           {run?.recommendation_state ? <Tag color={runRecommendation.color}>{runRecommendation.label}</Tag> : null}
           {run ? <Tag>{runActionLabel(run.run_action)}</Tag> : null}
         </div>

@@ -1,5 +1,6 @@
 from gp_assistant.book import engine
 from gp_assistant.contracts.objects import AdvicePick, DayBook
+from gp_assistant.runtime.producer import producer_metadata
 
 
 def _daybook() -> DayBook:
@@ -13,10 +14,11 @@ def _daybook() -> DayBook:
         ],
         reserve_picks=[AdvicePick(symbol='000333', rank=3)],
         reserve_symbols=['000333'],
+        producer=producer_metadata(),
     )
 
 
-def test_load_current_book_builds_readonly_candidates_from_daybook(monkeypatch):
+def test_load_current_book_does_not_masquerade_daybook_as_current(monkeypatch):
     daybook = _daybook()
 
     class _State:
@@ -32,15 +34,10 @@ def test_load_current_book_builds_readonly_candidates_from_daybook(monkeypatch):
     monkeypatch.setattr(engine, 'load_latest_saved_book', lambda trade_day=None: None)
     monkeypatch.setattr(engine, 'load_latest_daybook', lambda: None)
 
-    book = engine.load_current_book()
-    assert book is not None
-    assert book.slot_status == 'UNAVAILABLE'
-    assert book.publish_allowed is False
-    assert [entry.symbol for entry in book.board] == ['600519', '000001']
-    assert all(entry.action == 'INVALID' for entry in book.board)
+    assert engine.load_current_book() is None
 
 
-def test_load_current_book_can_use_latest_saved_book_when_daybook_missing(monkeypatch):
+def test_load_current_book_does_not_use_latest_saved_book_as_current(monkeypatch):
     source = engine.build_unavailable_market_book(
         daybook=_daybook(),
         book_version='book_20240320_saved',
@@ -64,7 +61,4 @@ def test_load_current_book_can_use_latest_saved_book_when_daybook_missing(monkey
     monkeypatch.setattr(engine, 'load_latest_saved_book', lambda trade_day=None: source)
     monkeypatch.setattr(engine, 'load_latest_daybook', lambda: None)
 
-    book = engine.load_current_book()
-    assert book is not None
-    assert book.daybook.trading_day == '20240320'
-    assert len(book.board) == 2
+    assert engine.load_current_book() is None

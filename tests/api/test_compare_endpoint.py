@@ -13,6 +13,7 @@ def _write_latest(payload: dict) -> None:
     p = store_dir() / "recommend"
     p.mkdir(parents=True, exist_ok=True)
     (p / "latest.json").write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+    (p / "20250115.json").write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
 
 
 def test_compare_returns_ranking_and_winner(tmp_path):
@@ -41,7 +42,7 @@ def test_compare_returns_ranking_and_winner(tmp_path):
         "tradeable": True,
     }
     _write_latest(v1)
-    body = {"symbols": ["AAA000", "BBB000"]}
+    body = {"run_id": "20250115", "symbols": ["AAA000", "BBB000"]}
     r = client.post("/api/compare", json=body)
     assert r.status_code == 200, r.text
     data = r.json()

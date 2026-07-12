@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import re
 from copy import deepcopy
 from typing import Any, Dict, Iterable, List, Mapping, Sequence
 
 from ..book.repo import load_run
 from ..contracts.objects import EvidencePack, Judgment, MarketBook, TranscriptEvent, TurnFrame
 from ..market_memory.store import load_decision_snapshot
+from ..serenity.store import load_reference_snapshot
 from .context_budget import (
     ROUTING_PAYLOAD_LIMIT_BYTES,
     TOOL_EVIDENCE_PAYLOAD_LIMIT_BYTES,
@@ -246,20 +248,85 @@ def _first_paragraph(value: Any) -> str:
     return _text(text, _ROUTING_CONCLUSION_LIMIT)
 
 
+_SERENITY_ROUTING_TERMS = (
+    "Serenity",
+    "公告",
+    "新闻",
+    "业绩预告",
+    "业绩快报",
+    "立案",
+    "处罚",
+    "诉讼",
+    "仲裁",
+    "更正",
+    "撤回",
+    "净利润",
+    "同比",
+    "盈利预期",
+    "公司预计",
+)
+
+
+def _routing_safe_assistant_text(value: Any, *, force_redact: bool = False) -> tuple[str, bool]:
+    text = str(value or "").strip()
+    if not text:
+        return "", False
+    if force_redact:
+        return "上一轮补充证据已保留为本地引用，需在工具阶段按目标展开。", True
+    parts = re.split(r"(?<=[。！？!?])|\n+", text)
+    kept = [
+        part.strip()
+        for part in parts
+        if part.strip() and not any(term in part for term in _SERENITY_ROUTING_TERMS)
+    ]
+    redacted = len(kept) != len([part for part in parts if part.strip()])
+    if redacted and not kept:
+        return "上一轮补充证据已保留为本地引用，需在工具阶段按目标展开。", True
+    return "".join(kept), redacted
+
+
 def _compact_turn(turn: TranscriptEvent, *, text_limit: int) -> Dict[str, Any]:
     meta = dict(getattr(turn, "meta", {}) or {})
     message = meta.get("message") if isinstance(meta.get("message"), Mapping) else {}
     narrative = message.get("narrative_text") or meta.get("narrative_text") or getattr(turn, "content", "")
-    content = getattr(turn, "content", "") if getattr(turn, "role", None) == "user" else narrative
+    role = getattr(turn, "role", None)
+    evidence_refs = [
+        str(item)
+        for item in [
+            *list(meta.get("evidence_refs") or []),
+            *list(message.get("evidence_refs") or []),
+        ]
+    ]
+    has_serenity_refs = any(item.startswith("serfact_") for item in evidence_refs)
+    market_facing_assistant = bool(
+        role == "assistant"
+        and (
+            meta.get("run_id")
+            or message.get("run_id")
+            or meta.get("symbols")
+            or message.get("symbols")
+            or (meta.get("kind") and str(meta.get("kind")) != "chat")
+        )
+    )
+    safe_narrative, serenity_redacted = (
+        _routing_safe_assistant_text(
+            narrative,
+            force_redact=has_serenity_refs or market_facing_assistant,
+        )
+        if role == "assistant"
+        else (str(narrative or ""), False)
+    )
+    content = getattr(turn, "content", "") if role == "user" else safe_narrative
     return {
-        "role": getattr(turn, "role", None),
+        "role": role,
         "content": _text(content, text_limit),
-        "user_visible_conclusion": _first_paragraph(narrative) if getattr(turn, "role", None) == "assistant" else "",
+        "user_visible_conclusion": _first_paragraph(safe_narrative) if role == "assistant" else "",
         "kind": meta.get("kind"),
         "message_kind": message.get("message_kind"),
         "run_id": meta.get("run_id") or message.get("run_id"),
         "symbols": [str(symbol) for symbol in list(meta.get("symbols") or message.get("symbols") or [])[:10]],
         "symbol": message.get("symbol"),
+        "serenity_redacted": serenity_redacted,
     }
 
 
@@ -427,12 +494,89 @@ def _snapshot_slice(snapshot: Dict[str, Any] | None, symbol: str) -> Dict[str, A
     ranking_output = dict(snapshot.get("ranking_output") or {})
     ranking_details = dict(ranking_output.get("details") or {})
     historical_cases = dict(snapshot.get("historical_cases") or {})
+    reference_signals = dict(snapshot.get("reference_signal_output") or {})
     return {
         "candidate": candidate,
         "probability": probability_output.get(symbol) or {},
         "risk": risk_output.get(symbol) or {},
         "ranking": ranking_details.get(symbol) or {},
         "historical_cases": historical_cases.get(symbol) or [],
+        "serenity_reference": reference_signals.get(symbol) or {},
+        "serenity_policy": dict(snapshot.get("serenity_policy_snapshot") or {}),
+    }
+
+
+def _serenity_detail(explain: Dict[str, Any], snapshot_evidence: Dict[str, Any], symbol: str) -> Dict[str, Any]:
+    local = dict(explain.get("serenity") or {})
+    compact = dict(snapshot_evidence.get("serenity_reference") or {})
+    reference_snapshot_id = str(local.get("reference_snapshot_id") or "")
+    facts: List[Dict[str, Any]] = []
+    resolved = None
+    if reference_snapshot_id:
+        try:
+            resolved = load_reference_snapshot(reference_snapshot_id)
+        except Exception:
+            resolved = None
+    if resolved is not None:
+        signal = resolved.signals.get(symbol)
+        if signal is not None:
+            for fact in list(signal.facts or [])[:3]:
+                facts.append(
+                    {
+                        "fact_id": fact.fact_id,
+                        "fact_type": fact.fact_type,
+                        "claim": _text(fact.claim, 240),
+                        "published_at": fact.published_at,
+                        "effective_available_at": fact.effective_available_at,
+                        "source": fact.source,
+                        "source_url": fact.source_url,
+                        "content_sha256": fact.content_sha256,
+                        "direction": fact.direction,
+                        "confidence": fact.confidence,
+                        "verification_state": fact.verification_state,
+                        "source_verified": fact.verification_state == "verified" and fact.source_quality >= 1.0,
+                        "backfill_only": fact.backfill_only,
+                        "evidence_excerpt": _text(fact.evidence_excerpt, 240),
+                    }
+                )
+            compact = {
+                **compact,
+                "status": signal.status,
+                "availability": signal.availability,
+                "learning_eligible": signal.learning_eligible,
+                "direction": signal.direction,
+                "confidence": signal.confidence,
+                "source_quality": signal.source_quality,
+                "fact_ids": list(signal.fact_ids),
+                "limitations": list(signal.limitations),
+            }
+    policy = dict(snapshot_evidence.get("serenity_policy") or {})
+    return {
+        "schema": "SerenityNarrationSlice.v1",
+        "role": "supplemental_narration_only",
+        "target_symbol": symbol,
+        "reference_snapshot_id": reference_snapshot_id or None,
+        "status": compact.get("status") or local.get("status") or "not_ready",
+        "policy_state": policy.get("state") or local.get("policy_state") or "warming",
+        "applied_weight": policy.get("applied_weight") if policy.get("applied_weight") is not None else local.get("weight", 0.0),
+        "adjustment": local.get("adjustment", 0.0),
+        "decision_score": local.get("decision_score"),
+        "facts": facts,
+        "fact_ids": list(compact.get("fact_ids") or local.get("fact_ids") or [])[:5],
+        "limitations": list(compact.get("limitations") or [])[:5],
+        "selection_effect_is_precomputed": True,
+        "would_change_topk": bool(policy.get("would_change_topk")),
+        "reference_would_change_topk": bool(
+            policy.get("reference_would_change_topk")
+        ),
+        "binding_effect_allowed": bool(
+            (policy.get("state") or local.get("policy_state")) in {"probation", "active"}
+            and float(policy.get("applied_weight") or local.get("weight") or 0.0) > 0.0
+            and bool(compact.get("learning_eligible", local.get("learning_eligible", False)))
+            and bool(local.get("non_binding", True)) is False
+            and abs(float(local.get("adjustment") or 0.0)) > 1e-12
+        ),
+        "llm_may_reweight": False,
     }
 
 
@@ -483,6 +627,7 @@ def _candidate_detail(
         for key in adaptive_keys
         if explain.get(key) is not None or snapshot_candidate.get(key) is not None
     }
+    serenity = _serenity_detail(explain, snapshot_evidence, str(getattr(entry, "symbol", "")))
     return {
         "identity": {
             "symbol": getattr(entry, "symbol", None),
@@ -522,6 +667,7 @@ def _candidate_detail(
         "risk": risk,
         "ranking": ranking,
         "adaptive": adaptive,
+        "serenity_reference": serenity,
         "historical_cases": historical_cases,
         "score_breakdown": getattr(entry, "score_breakdown", {}),
         "strategy_context": getattr(entry, "strategy_context", {}),

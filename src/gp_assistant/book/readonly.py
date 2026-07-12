@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from ..contracts.objects import DayBook, LiveSlotArtifact, MarketBook, SlotDataQuality, SlotGate, SymbolPulse, TrackedUniverse
 from ..runtime.utils import gen_id, now_iso
+from ..intraday.plans import is_non_execution_phase
+from ..runtime.producer import producer_metadata
 from .board import build_board
 from .side_results import detect_side_results
 
@@ -56,7 +58,7 @@ def build_daily_plan_artifact(
         slot_at=None,
         market_phase=market_phase,
         slot_status="OK",
-        publish_allowed=bool(daybook.tradeable),
+        publish_allowed=bool(daybook.tradeable and not is_non_execution_phase(market_phase)),
         daybook_effective_day=daybook.trading_day,
         gate=SlotGate(state="ALLOW", score=100.0, reasons=["daily_plan"]),
         tracked_universe=tracked_universe,
@@ -76,6 +78,7 @@ def build_daily_plan_artifact(
         side_results=side_results,
         created_at=now_iso(),
         updated_at=now_iso(),
+        producer=producer_metadata(),
     )
 
 
@@ -104,7 +107,7 @@ def build_daily_plan_market_book(
         artifact_id=None,
         slot_id=None,
         slot_status="OK",
-        publish_allowed=bool(daybook.tradeable),
+        publish_allowed=bool(daybook.tradeable and not is_non_execution_phase(market_phase)),
         daybook_effective_day=daybook.trading_day,
         pulse_trade_day=None,
         pulse_slot_at=None,
@@ -121,6 +124,7 @@ def build_daily_plan_market_book(
             errors=[],
         ),
         tracked_universe=tracked_universe,
+        producer=dict(daybook.producer),
     )
 
 

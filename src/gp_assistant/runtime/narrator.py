@@ -726,14 +726,14 @@ def build_structured_reply(
         symbols = [symbol for symbol in judgment.candidate_comparison.compared_symbols if symbol]
     elif judgment.intraday_situation is not None and judgment.intraday_situation.symbol:
         symbols = [judgment.intraday_situation.symbol]
-    elif run is not None:
-        symbols = [pick.symbol for pick in run.picks]
     elif judgment.single_stock_analysis is not None and judgment.single_stock_analysis.symbol:
         symbols = [judgment.single_stock_analysis.symbol]
     elif judgment.subject_entry is not None:
         symbols = [judgment.subject_entry.symbol]
     elif judgment.compare_entries:
         symbols = [entry.symbol for entry in judgment.compare_entries]
+    elif run is not None:
+        symbols = [pick.symbol for pick in run.picks]
 
     snapshot = run.model_dump() if run is not None else None
     right_panel = {
@@ -753,6 +753,13 @@ def build_structured_reply(
         "decision_action": str(judgment.decision_action or "WAIT"),
         "decision_synthesis": dict(judgment.decision_synthesis or {}),
     }
+    serenity_fact_ids: List[str] = []
+    if run is not None:
+        for pick in run.picks:
+            if symbols and pick.symbol not in set(symbols):
+                continue
+            serenity = dict((pick.explain_context or {}).get("serenity") or {})
+            serenity_fact_ids.extend(str(item) for item in (serenity.get("fact_ids") or []) if str(item))
     return ReplyBundle(
         session_id=session_id,
         text=text,
@@ -762,6 +769,7 @@ def build_structured_reply(
         right_panel=right_panel,
         ui_items=[],
         message=message,
+        evidence_refs=list(dict.fromkeys([*list(judgment.evidence_refs or []), *serenity_fact_ids])),
         grounding_summary=_grounding_summary(evidence, judgment).model_dump(),
         decision_basis=_decision_basis(evidence, judgment).model_dump(),
         tool_trace={},

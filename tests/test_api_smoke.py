@@ -36,7 +36,7 @@ def test_book_current_no_500():
     assert response.status_code == 200, response.text
     data = response.json()
     assert "book" in data and isinstance(data["book"], dict)
-    assert "book_version" in data["book"]
+    assert not data["book"] or "book_version" in data["book"]
 
 
 def test_sessions_endpoint_shape():

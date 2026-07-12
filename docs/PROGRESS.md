@@ -1,6 +1,19 @@
 # Current Progress
 
-Last updated: 2026-07-09
+Last updated: 2026-07-11
+
+## Active Delivery State
+
+- **Active Goal:** Implement the free official-announcement Serenity Alpha experiment with real bootstrap, immutable evidence, shadow counterfactuals, and gated automatic ranking promotion up to 8%.
+- **Active ExecPlan:** `docs/plans/2026-07-11-recommendation-chain-recovery.md` (Serenity forward observation remains governed by its existing plan).
+- **Current Milestone:** Canonical recommendation-chain recovery is implemented and container-verified; Serenity forward observation remains an operational gate.
+- **Completed and Verified:** Governance, real source bootstrap gate, append-only evidence/metadata versions, per-symbol coverage and page/hydration resume, official verification boundary, independent add-on/counterfactual policy, T+6 causal evaluation, target-only narration, health/CLI/Compose integration, real zero-result and positive-fact CNINFO smokes, 119 targeted tests, and all 311 default tests.
+- **Implemented but Not Verified:** Live multi-day worker continuity and five consecutive forward shadow trading days.
+- **In Progress:** Recommendation-chain recovery handoff and forward Serenity observation readiness.
+- **Next Work:** Start the experiment worker when Docker Desktop is available, run the container/API smoke, and leave the experiment at shadow/0% until real forward gates mature.
+- **Blockers:** Free endpoints have no SLA; forward predictive performance cannot mature during implementation. Docker runtime validation is pending because the local Docker Desktop Linux engine was unavailable on 2026-07-11.
+- **Recent Decisions:** Serenity remains separate from the eight expert weights; backfill reference arms cannot bind/train; automatic promotion starts at 1%, active learning at 2%, and caps at 8%; replay forces Serenity off; integrity/persistence violations force 0%.
+- **Resume Instructions:** Read `AGENTS.md`, `PROJECT_GOAL.md`, and the active ExecPlan; preserve `store/book/current_slot.json`; inspect `serenity-status`; continue with the first unchecked validation item without synthesizing forward outcomes.
 
 ## Snapshot
 
@@ -15,7 +28,7 @@ The repository is currently centered on one active product surface and one produ
 - `market_memory/` stores normalized feature-vector events and decision snapshots
 - `probability_engine/` infers evidence-backed probabilities from nearest historical cases
 - `risk_engine/` handles execution risk, drawdown risk, and mathematical ranking
-- `decision_engine/` runs Decision Context, Thesis Lifecycle, Decision Synthesizer, validator, and snapshot persistence
+- `decision_engine/` runs Adaptive Decision Engine selection, Decision Context, Thesis Lifecycle, Decision Synthesizer, validator, and snapshot persistence
 - `evaluation_engine/` owns historical replay, AB validation, calibration, counterfactuals, and error attribution
 - `frontend/` renders the chat-first Workspace with a right-side decision snapshot
 
@@ -27,8 +40,27 @@ The current product direction is:
 
 ## Recent Changes
 
+### 2026-07-11 — Serenity Alpha vertical slice
+
+- Added `gp_assistant/serenity/` with official CNINFO discovery/PDF collection, SSE/SZSE verification, conservative deterministic parsing, append-only SQLite WAL persistence, metadata/content version chains, same-ID revalidation, correction fail-close, per-symbol coverage, resumable pagination/hydration, a persistent source breaker, and renewable worker lease.
+- Added a real-bootstrap-only readiness marker. Injected clients/fixtures and ordinary live polls cannot unlock shadow.
+- Added an independent 0%–8% add-on after Adaptive scoring. Backfill can produce a labeled reference counterfactual but binding and learning require live verified facts.
+- Added nine frozen arms, v2 reference sidecars with explicit trading-day identity and frozen risk plans, opaque pending refs, next-trading-day T+6 evaluation, decision-day bootstrap statistics, one-standard-error weight selection, CAS transitions, atomic ledgers, and automatic suspension.
+- Disabled Serenity completely for historical replay/backtests to prevent production-store reads/writes and future leakage.
+- Added target-only narration (maximum three facts), no raw Serenity routing context, grounding guards, `/api/health` status, four CLI commands, and separate Compose worker/bootstrap profiles.
+- Real `000001` bootstrap: 4 requests, 2 PDF records, 3.64 seconds, complete coverage, marker `serboot_9006363b1b6de1090d027602`, zero qualifying facts, state `shadow`, applied weight 0%.
+- Real `000977` bootstrap: 2 PDF records and one verified positive earnings-guidance fact at 0.92 confidence; it remained `backfill_only`, non-learning and non-binding at 0%.
+- Final targeted suite passed 119 tests; the isolated full default suite passed all 311 tests; compileall, changed-file Ruff, diff check, and both Compose profile renders passed. Docker runtime checks remain pending because the local engine was unavailable.
+
 ### 2026-07-09
 
+- Replaced the old risk-gate decision layer with the Adaptive Decision Engine:
+  - `adaptive_policy.py` is now the only production selection authority after ranking
+  - low sample size, missing fields, high uncertainty, and ordinary risk flags lower confidence / recommendation strength instead of automatically producing no-trade
+  - risk is modeled as an adaptive score penalty, not a hard gate, unless an explicit hard block is present
+  - LLM decision payloads are retained for contract shape but marked `not_used_for_selection`
+  - decision snapshots now include adaptive policy input/output, policy state version, calibration output, and adaptive validator result
+  - historical replay exposes adaptive score, calibrated probability, recommendation strength, and optional post-outcome policy-state updates
 - Consolidated slot and daily freshness runtime state:
   - added `runtime.slot_state` as the single normalization layer for clock phase, daily data state, current artifact stage/freshness, and tradeability
   - `/api/health` now derives `daily_data_state`, `artifact_stage`, `artifact_freshness`, `artifact_status`, `book_freshness`, and `tradeability_state` from that layer
@@ -49,7 +81,7 @@ The current product direction is:
   - added unit coverage for strengthened thesis, invalidated holding, no-trade, and weak-probability rejection behavior
 - Completed the production-path migration from the old score stack to the Market-Memory Agent:
   - production `build_day_selection()` now calls the new decision pipeline
-  - new decisions are built from signal events, normalized feature-vector similarity, probability evidence, risk ranking, risk-committee validation, and `DecisionContextSnapshot`
+  - new decisions are built from signal events, normalized feature-vector similarity, probability evidence, risk ranking, Adaptive Decision Engine selection, and `DecisionContextSnapshot`
   - the old `selection_engine` remains available only as migration reference and low-level data support, not as the recommendation ranking authority
 - Added Market Memory persistence:
   - `market_events` with raw features, normalized feature vector, market context, and known outcomes
@@ -132,14 +164,15 @@ The current product direction is:
 ## Current State
 
 - Main flow remains aligned around `gateway -> runtime -> judgment -> reply -> workspace`.
-- Production decisions now flow through `Market Data -> Signal Engine -> Market Memory -> Probability Engine -> Risk Engine -> Decision Intelligence -> Thesis Lifecycle -> DecisionContextSnapshot`.
+- Production decisions now flow through `Market Data -> Signal Engine -> Market Memory -> Probability Engine -> Risk Engine -> Ranking -> Adaptive Decision Engine -> Decision Intelligence -> Thesis Lifecycle -> DecisionContextSnapshot`.
 - Intent parsing is now a hard LLM dependency for `/api/chat`; unavailable or malformed intent responses are surfaced as explicit API errors instead of hidden fallback behavior.
 - `kernel.facade` is the current cross-cutting service boundary for recommendation artifacts, validation, portfolio, execution preview, and workbench aggregation.
 - The production decision path is one runtime chain. It always resolves daily freshness/daybook first, builds Market-Memory daily plans, runs Decision Intelligence for user-facing actions, optionally runs 5-minute pulse evaluation when enabled, and does not call AkShare theme/concept/industry ranking APIs.
 - Runtime state is normalized by `runtime.slot_state`. Clock phase, daily data state, artifact freshness, and tradeability are separate fields; post-close readiness is not encoded as `market_phase=POSTCLOSE_READY`.
 - Mainline is derived from the full-market snapshot and daily candidate universe rather than external theme interfaces.
-- The decision layer is constrained by `DecisionContextModel`, thesis lifecycle, and a validator. The Decision Synthesizer can output only `HOLD / ADD / REDUCE / EXIT / WAIT / NO_TRADE` and cannot promote a candidate outside math ranking or invent market facts.
+- The decision layer is constrained by the Adaptive Decision Engine, `DecisionContextModel`, thesis lifecycle, and a validator. The Adaptive Decision Engine owns symbol selection; the Decision Synthesizer can output only `HOLD / ADD / REDUCE / EXIT / WAIT / NO_TRADE` and cannot select/promote/demote candidates or invent market facts.
 - Probability outputs are not scores. They include evidence and calibration must be monitored.
+- Missing data is an explicit adaptive feature. Risk flags are score penalties unless they represent hard blocks.
 - The Workspace page now presents:
   - a conversation-first left pane
   - a persistent decision snapshot on the right
@@ -181,12 +214,12 @@ The following checks passed locally during the daily-mainline shutdown pass:
 
 Real LLM-connected `/api/chat` acceptance was run from PowerShell after loading `.env`. The checked sequence covered recommendation, rank follow-up, term explanation, comparison, and sell-decision follow-up. All five turns returned HTTP 200; because local data freshness blocked publication, recommendation and subject-dependent follow-ups correctly returned user-facing `no_trade` replies.
 
-The following Market-Memory checks were run locally during the 2026-07-08 validation pass:
+The following Market-Memory checks were run locally during the 2026-07-08 validation pass before the Adaptive Decision Engine replacement:
 
 - `python -m gp_assistant.evaluation_engine.historical_replay --days 20260105 ... 20260127 --topk 3 --max-symbols 12 --output-name historical_replay_ab_202601_top3`
-- replay result: 16 days, 4 recommend decisions, 12 observe decisions
+- replay result: 16 days, 4 recommend decisions, 12 observe decisions under the retired gate behavior
 - new vs legacy baseline: better Top1 T+1/T+3 average return, Top3 T+3 average return, worst drawdown, max consecutive losses, and average regret; worse Top1 T+5 average return and lower trade coverage
-- calibration result: Brier score `0.2465254294485468`; probability buckets were materially overconfident on the tested sample
+- calibration result: Brier score `0.2465254294485468`; probability buckets were materially overconfident on the tested sample. Current adaptive replay should also inspect adaptive score buckets and recommendation-strength groups.
 
 ## Current Documentation Anchors
 
@@ -225,3 +258,8 @@ Use these files first when resuming work on this area:
 - Decide whether to keep `dialogue_text.py` as the single long-term text policy layer and move any remaining duplicated label logic into it.
 - Install and wire CodeRabbit CLI on the working machine if external review is expected to be part of the routine workflow.
 - Re-run a real LLM-connected acceptance pass after environment setup confirms `llm_ready=true`, focusing on multi-turn Chinese follow-ups, term explanation, compare, and sell-decision quality.
+## 2026-07-11 runtime recovery checkpoint
+
+- Added configurable SQLite history filename and journal mode for Docker Desktop bind mounts.
+- Recovered cached-market-data reads using `history-clean.db` with `DELETE` journaling while retaining the original database.
+- Rebuilt and verified API, worker, web, health, cache probes, and daybook generation.

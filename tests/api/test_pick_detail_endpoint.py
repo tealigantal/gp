@@ -13,6 +13,7 @@ def _write_latest(payload: dict) -> None:
     p = store_dir() / "recommend"
     p.mkdir(parents=True, exist_ok=True)
     (p / "latest.json").write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+    (p / "20250115.json").write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
 
 
 def test_pick_detail_returns_item():
@@ -34,7 +35,7 @@ def test_pick_detail_returns_item():
         "tradeable": True,
     }
     _write_latest(v1)
-    r = client.get("/api/pick", params={"symbol": "CCC000"})
+    r = client.get("/api/pick", params={"run_id": "20250115", "symbol": "CCC000"})
     assert r.status_code == 200, r.text
     data = r.json()
     assert data.get("ok") is True

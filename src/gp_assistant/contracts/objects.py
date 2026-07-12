@@ -130,6 +130,7 @@ class DayBook(GPModel):
     reserve_picks: List[AdvicePick] = Field(default_factory=list)
     reserve_symbols: List[str] = Field(default_factory=list)
     source_meta: Dict[str, Any] = Field(default_factory=dict)
+    producer: Dict[str, str] = Field(default_factory=dict)
 
 
 class SymbolPulse(GPModel):
@@ -290,6 +291,7 @@ class LiveSlotArtifact(GPModel):
     side_results: List[SideResult] = Field(default_factory=list)
     created_at: str
     updated_at: str
+    producer: Dict[str, str] = Field(default_factory=dict)
 
 
 class CurrentSlotPointer(GPModel):
@@ -298,6 +300,8 @@ class CurrentSlotPointer(GPModel):
     slot_id: Optional[str] = None
     slot_at: Optional[str] = None
     updated_at: str
+    book_version: Optional[str] = None
+    producer: Dict[str, str] = Field(default_factory=dict)
 
 
 class MarketBook(GPModel):
@@ -325,6 +329,7 @@ class MarketBook(GPModel):
     gate: SlotGate = Field(default_factory=SlotGate)
     data_quality: SlotDataQuality = Field(default_factory=SlotDataQuality)
     tracked_universe: TrackedUniverse = Field(default_factory=TrackedUniverse)
+    producer: Dict[str, str] = Field(default_factory=dict)
 
 
 class AdviceRun(GPModel):

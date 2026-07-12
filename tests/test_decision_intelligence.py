@@ -93,11 +93,13 @@ def test_no_trade_without_security_context_stays_no_trade():
     assert result["decision_context_model"]["security_context"]["symbol"] is None
 
 
-def test_weak_probability_for_new_trade_rejects_instead_of_recommending():
+def test_weak_probability_for_new_trade_waits_instead_of_no_trade():
     result = synthesize_decision(
         evidence=_evidence(request="live_entry_check", subject="symbol", raw_message="还能买吗"),
         pick=_pick(
             can_execute_now=True,
+            adaptive_action="WATCH",
+            recommendation_strength="exploratory",
             probability={
                 "up_probability_3d": 0.43,
                 "expected_return_3d": -0.01,
@@ -111,5 +113,17 @@ def test_weak_probability_for_new_trade_rejects_instead_of_recommending():
         objective="open_or_add_position",
     )
 
-    assert result["decision_action"] == "NO_TRADE"
+    assert result["decision_action"] == "WAIT"
     assert result["thesis_lifecycle"]["current_thesis_state"] == "thesis_weakening"
+    assert result["decision_context_model"]["security_context"]["adaptive_action"] == "WATCH"
+
+
+def test_open_decision_hard_block_stays_no_trade():
+    result = synthesize_decision(
+        evidence=_evidence(request="live_entry_check", subject="symbol", raw_message="还能买吗"),
+        pick=_pick(hard_block=True, adaptive_action="ENTRY"),
+        objective="open_or_add_position",
+    )
+
+    assert result["decision_action"] == "NO_TRADE"
+    assert "security_hard_block" in result["thesis_lifecycle"]["invalidation_triggers"]

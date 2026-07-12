@@ -1,10 +1,11 @@
 from __future__ import annotations
 
-from typing import Any, Dict, List
+from typing import Any, Dict
 
 from ..contracts.objects import AdvicePick, DayBook
 from ..evidence.market_service import build_day_selection
 from ..runtime.utils import now_iso
+from ..runtime.producer import SELECTION_POLICY, producer_metadata
 
 
 def _pick_style(item: Dict[str, Any]) -> str:
@@ -25,7 +26,10 @@ def _map_pick(rank: int, item: Dict[str, Any]) -> AdvicePick:
     risk = dict(item.get('risk') or {})
     ranking = dict(item.get('ranking') or {})
     signal = dict(item.get('signal') or {})
+    adaptive = dict(item.get('adaptive_policy') or {})
     evidence = dict(probability.get('evidence') or {})
+    adaptive_score = float(adaptive.get('adaptive_score') or item.get('adaptive_score') or ranking.get('ranking_score') or item.get('ranking_score') or 0.0)
+    decision_score = float(adaptive.get('decision_score') if adaptive.get('decision_score') is not None else item.get('decision_score') if item.get('decision_score') is not None else adaptive_score)
     # Prefer user-visible fields; do not leak debug explain
     user_thesis = item.get('user_thesis')
     why_selected_text = item.get('why_selected_text')
@@ -41,13 +45,17 @@ def _map_pick(rank: int, item: Dict[str, Any]) -> AdvicePick:
         stop_plan=trade_plan.get('stop') or item.get('stop_plan') or {},
         take_profit_plan=trade_plan.get('take_profit') or item.get('take_profit_plan') or {},
         scores={
-            'final': float(ranking.get('ranking_score') or item.get('ranking_score') or 0.0),
+            'final': decision_score,
+            'adaptive': adaptive_score,
+            'serenity_adjustment': float(adaptive.get('serenity_adjustment') or item.get('serenity_adjustment') or 0.0),
             'ranking': float(ranking.get('ranking_score') or 0.0),
             'probability': float(probability.get('up_probability_3d') or 0.0),
+            'calibrated_probability': float(adaptive.get('calibrated_probability') or item.get('calibrated_probability') or 0.0),
             'expected_return': float(probability.get('expected_return_3d') or 0.0),
             'execution_quality': float(risk.get('execution_quality') or 0.0),
-            'confidence': float(probability.get('confidence') or 0.0),
+            'confidence': float(adaptive.get('confidence') or probability.get('confidence') or 0.0),
             'reward_risk': float(diag.get('reward_risk') or 0.0),
+            'feature_coverage': float(adaptive.get('feature_coverage') or item.get('feature_coverage') or 0.0),
         },
         risk_flags=[str(x) for x in (item.get('risk_flags') or [])],
         why_selected=str(why_selected_text or ''),
@@ -67,6 +75,28 @@ def _map_pick(rank: int, item: Dict[str, Any]) -> AdvicePick:
             'uncertainty': probability.get('uncertainty'),
             'decision_context_snapshot_id': item.get('decision_context_snapshot_id'),
             'rejected_reason': item.get('rejected_reason'),
+            'adaptive_policy': adaptive,
+            'adaptive_score': adaptive.get('adaptive_score') or item.get('adaptive_score'),
+            'calibrated_probability': adaptive.get('calibrated_probability') or item.get('calibrated_probability'),
+            'recommendation_strength': adaptive.get('recommendation_strength') or item.get('recommendation_strength'),
+            'adaptive_action': adaptive.get('action') or item.get('adaptive_action'),
+            'feature_coverage': adaptive.get('feature_coverage') or item.get('feature_coverage'),
+            'expert_scores': dict(adaptive.get('expert_scores') or item.get('expert_scores') or {}),
+            'expert_contributions': dict(adaptive.get('expert_contributions') or item.get('expert_contributions') or {}),
+            'missing_features': list(adaptive.get('missing_features') or item.get('missing_features') or []),
+            'serenity': {
+                'status': adaptive.get('serenity_status') or item.get('serenity_status') or 'not_ready',
+                'policy_state': adaptive.get('serenity_policy_state') or item.get('serenity_policy_state') or 'warming',
+                'weight': adaptive.get('serenity_weight') if adaptive.get('serenity_weight') is not None else item.get('serenity_weight', 0.0),
+                'adjustment': adaptive.get('serenity_adjustment') if adaptive.get('serenity_adjustment') is not None else item.get('serenity_adjustment', 0.0),
+                'decision_score': decision_score,
+                'fact_ids': list(adaptive.get('serenity_fact_ids') or item.get('serenity_fact_ids') or []),
+                'learning_eligible': bool(adaptive.get('serenity_learning_eligible', item.get('serenity_learning_eligible', False))),
+                'reference_snapshot_id': item.get('serenity_reference_snapshot_id'),
+                'non_binding': bool(adaptive.get('serenity_non_binding', item.get('serenity_non_binding', True))),
+                'would_change_topk': bool(adaptive.get('serenity_would_change_topk', item.get('serenity_would_change_topk', False))),
+                'reference_would_change_topk': bool(adaptive.get('serenity_reference_would_change_topk', item.get('serenity_reference_would_change_topk', False))),
+            },
         },
         signal=signal,
         probability=probability,
@@ -79,6 +109,9 @@ def _map_pick(rank: int, item: Dict[str, Any]) -> AdvicePick:
 
 def build_daybook(trading_day: str, *, topk: int = 10, reserve_count: int = 2, risk_profile: str = 'normal') -> DayBook:
     raw = build_day_selection(trading_day, topk=topk, risk_profile=risk_profile)
+    selection_policy = str((raw.get('debug') or {}).get('selection_policy') or '')
+    if selection_policy != SELECTION_POLICY:
+        raise RuntimeError(f'incompatible_selection_policy:{selection_policy or "missing"}')
     freshness = raw.get('daily_freshness') or {}
     picks = [_map_pick(i + 1, item) for i, item in enumerate(raw.get('picks') or []) if str(item.get('symbol') or item.get('code') or '').strip()]
     reserve: list[str] = []
@@ -108,6 +141,9 @@ def build_daybook(trading_day: str, *, topk: int = 10, reserve_count: int = 2, r
             'risk_profile': risk_profile,
             'daily_freshness': freshness,
             'decision_context_snapshot_id': raw.get('decision_context_snapshot_id'),
+            'serenity_reference_snapshot_id': raw.get('serenity_reference_snapshot_id'),
             'decision': raw.get('decision'),
+            'selection_policy': selection_policy,
         },
+        producer=producer_metadata(),
     )

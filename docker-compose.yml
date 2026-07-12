@@ -6,6 +6,7 @@ x-gp-build: &gp-build
     HTTP_PROXY: ${HTTP_PROXY:-}
     HTTPS_PROXY: ${HTTPS_PROXY:-}
     ALL_PROXY: ${ALL_PROXY:-}
+    GP_BUILD_REVISION: ${GP_BUILD_REVISION:-local}
 
 x-gp-env: &gp-env
   TZ: ${TZ:-Asia/Shanghai}
@@ -14,6 +15,8 @@ x-gp-env: &gp-env
   ALL_PROXY: ${ALL_PROXY:-}
 
   GP_RUN_MODE: ${GP_RUN_MODE:-prod}
+  GP_HISTORY_SQLITE_JOURNAL_MODE: ${GP_HISTORY_SQLITE_JOURNAL_MODE:-DELETE}
+  GP_HISTORY_SQLITE_FILENAME: ${GP_HISTORY_SQLITE_FILENAME:-history-clean.db}
   GP_DEV_MODE: ${GP_DEV_MODE:-0}
   GP_RECOMMEND_MODE: ${GP_RECOMMEND_MODE:-}
   GP_INTRADAY_RUNTIME_ENABLED: ${GP_INTRADAY_RUNTIME_ENABLED:-1}
@@ -30,6 +33,19 @@ x-gp-env: &gp-env
   GP_INTRADAY_SYMBOL_COOLDOWN_SEC: ${GP_INTRADAY_SYMBOL_COOLDOWN_SEC:-90}
   GP_INTRADAY_MODEL_MAX_STALE_SEC: ${GP_INTRADAY_MODEL_MAX_STALE_SEC:-600}
   GP_INTRADAY_CORE_FIRST: ${GP_INTRADAY_CORE_FIRST:-1}
+  GP_SERENITY_MODE: ${GP_SERENITY_MODE:-auto}
+  GP_SERENITY_MAX_WEIGHT: ${GP_SERENITY_MAX_WEIGHT:-0.08}
+  GP_SERENITY_UPDATE_MATURE_DAYS: ${GP_SERENITY_UPDATE_MATURE_DAYS:-5}
+  GP_SERENITY_EVAL_WINDOW_DAYS: ${GP_SERENITY_EVAL_WINDOW_DAYS:-60}
+  GP_SERENITY_REQUEST_TIMEOUT_SEC: ${GP_SERENITY_REQUEST_TIMEOUT_SEC:-15}
+  GP_SERENITY_PAGE_SIZE: ${GP_SERENITY_PAGE_SIZE:-30}
+  GP_SERENITY_PAGE_BUDGET: ${GP_SERENITY_PAGE_BUDGET:-10}
+  GP_SERENITY_BOOTSTRAP_LOOKBACK_DAYS: ${GP_SERENITY_BOOTSTRAP_LOOKBACK_DAYS:-30}
+  GP_SERENITY_EVIDENCE_TTL_DAYS: ${GP_SERENITY_EVIDENCE_TTL_DAYS:-10}
+  GP_SERENITY_PDF_MAX_BYTES: ${GP_SERENITY_PDF_MAX_BYTES:-15728640}
+  GP_SERENITY_REQUEST_SPACING_SEC: ${GP_SERENITY_REQUEST_SPACING_SEC:-1}
+  GP_SERENITY_CONTENT_REVALIDATE_HOURS: ${GP_SERENITY_CONTENT_REVALIDATE_HOURS:-6}
+  GP_SERENITY_TARGET_FALLBACK_TTL_SEC: ${GP_SERENITY_TARGET_FALLBACK_TTL_SEC:-3600}
   STRICT_REAL_DATA: ${STRICT_REAL_DATA:-1}
   GP_FORCE_REFRESH_LOOKBACK_DAYS: ${GP_FORCE_REFRESH_LOOKBACK_DAYS:-3}
   GP_ENFORCE_FORCE_REFRESH_ON_MISSING: ${GP_ENFORCE_FORCE_REFRESH_ON_MISSING:-1}
@@ -60,7 +76,8 @@ x-gp-volumes: &gp-volumes
   - ./configs:/app/configs
 
 x-gp-service: &gp-service
-  build: *gp-build
+  image: ${GP_BACKEND_IMAGE:-gp-backend}:${GP_BACKEND_TAG:-local}
+  pull_policy: never
   volumes: *gp-volumes
   env_file:
     - .env
@@ -69,6 +86,7 @@ x-gp-service: &gp-service
 services:
   gp:
     <<: *gp-service
+    build: *gp-build
     command: ["uvicorn", "gp_assistant.gateway.app:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "2", "--proxy-headers", "--forwarded-allow-ips", "*"]
     ports:
       - "8000:8000"
@@ -79,15 +97,27 @@ services:
     command: ["python", "-m", "gp_assistant.cli", "runtime-loop"]
     restart: unless-stopped
 
+  gp-serenity-worker:
+    <<: *gp-service
+    command: ["python", "-m", "gp_assistant.cli", "serenity-loop"]
+    profiles: ["experiments"]
+    restart: unless-stopped
+
+  gp-serenity-bootstrap:
+    <<: *gp-service
+    command: ["python", "-m", "gp_assistant.cli", "serenity-bootstrap", "--lookback-days", "30"]
+    profiles: ["serenity-bootstrap"]
+    restart: "no"
+
   gp-rebuild-daybook:
     <<: *gp-service
-    command: ["python", "-m", "gp_assistant.cli", "rebuild-daybook"]
+    command: ["python", "-m", "gp_assistant.cli", "ops-run", "rebuild-daybook"]
     profiles: ["ops"]
     restart: "no"
 
   gp-postclose-archive:
     <<: *gp-service
-    command: ["python", "-m", "gp_assistant.cli", "postclose-archive"]
+    command: ["python", "-m", "gp_assistant.cli", "ops-run", "postclose-archive"]
     profiles: ["ops"]
     restart: "no"
 

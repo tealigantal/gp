@@ -709,6 +709,7 @@ def _agent_system_prompt() -> str:
         "用户问持有、成本、卖点、止盈、止损、减仓、该不该卖、还能不能拿时，用 analyze_exit_decision。"
         "用户给出现价、最高价、横住、回落、量能、盘口、消息等盘中事实时，用 analyze_intraday_situation。"
         "明确 6 位代码但不是盘中入场问题时，用 analyze_symbol。"
+        "任何新闻、公告、业绩预告、处罚、诉讼或事项终止对具体标的的影响，都必须用 analyze_symbol、compare_candidates 或 analyze_intraday_situation，不能用 answer_chat。"
         "推荐当前机会用 recommend_current；解释本轮变化用 explain_run_change。"
         "只有问候、能力说明或非市场聊天才用 answer_chat。"
         "不要编造本地行情；用户提供的数据在工具结果中会被标成 user_provided/unverified。"

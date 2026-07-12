@@ -154,6 +154,13 @@ export function runStateMeta(
   }
 
   if (run.run_action === 'RECOMMEND') {
+    if (run.non_trading || !run.publish_allowed) {
+      return {
+        badge: { color: 'blue', label: '下个交易日复核' },
+        title: '以下是最近完整交易日保留的日线计划。',
+        summary: run.status_reason || '休市期间保留候选与风控参数，但不能视为可立即执行信号。',
+      }
+    }
     return {
       badge: { color: 'green', label: '日线计划' },
       title: '当前有可跟踪的日线计划。',
