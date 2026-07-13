@@ -31,14 +31,19 @@ def _sqlite_journal_mode() -> str:
     return requested if requested in _SQLITE_JOURNAL_MODES else "WAL"
 
 
-def _db_path() -> Path:
-    filename = os.getenv("GP_HISTORY_SQLITE_FILENAME", "history.db").strip()
-    # Keep the database inside the managed search directory.
-    if not filename or Path(filename).name != filename:
-        filename = "history.db"
-    p = store_dir() / "search" / filename
+def history_db_path() -> Path:
+    """The sole Market Memory history location.
+
+    Multiple filename configuration was a source of split-brain freshness and
+    replay results.  The path is intentionally fixed rather than configurable.
+    """
+    p = store_dir() / "search" / "history.db"
     p.parent.mkdir(parents=True, exist_ok=True)
     return p
+
+
+def _db_path() -> Path:
+    return history_db_path()
 
 
 def _db_lock_path() -> Path:

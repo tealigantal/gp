@@ -4,7 +4,7 @@
 
 ## Objective
 
-Build a dependable A-share main-board decision assistant that combines real market data, Market Memory, calibrated probability, execution risk, Adaptive selection, and auditable evidence into consistent 1–3 trading-day plans and follow-up decisions.
+Build a dependable A-share main-board recommendation chat agent. Every recommendation and follow-up must read one immutable, versioned recommendation snapshot through one chat contract; no legacy recommendation, execution, or operational API may provide an alternative answer.
 
 ## User and Problem
 
@@ -12,13 +12,13 @@ The primary user is an individual A-share researcher/trader who needs a coherent
 
 ## Observable Stopping Condition
 
-The product reaches its durable objective when current-data recommendation and follow-up journeys are reliable, historical replay proves no future leakage, probability and adaptive outputs meet documented holdout thresholds, operational failures fail closed, and all displayed claims are traceable to immutable evidence.
+The product reaches its durable objective when current-data recommendation and follow-up journeys are reliable through the single chat protocol, snapshots and turns commit atomically, legacy stores and APIs are removed, historical replay proves no future leakage, probability and adaptive outputs meet documented holdout thresholds, operational failures fail closed, and all displayed claims are traceable to immutable evidence.
 
 ## Critical User Journeys
 
 - Ask for current Top-N candidates and receive a valid plan or explicit no-trade result.
 - Ask why a candidate was selected or rejected and receive source-grounded evidence.
-- Compare candidates and manage an existing position from the same run.
+- Compare candidates and explain an existing position from the same bound snapshot.
 - Review how a conclusion changed without rewriting the original evidence.
 - Use experimental official-announcement evidence without mistaking unvalidated signals for a hard rule.
 
@@ -34,12 +34,12 @@ The product reaches its durable objective when current-data recommendation and f
 - Real data only; missing or stale critical market data fails closed.
 - Selection and numerical conclusions remain deterministic and auditable.
 - Historical logic uses only information available at the decision time.
-- Existing public ChatResponse compatibility is preserved unless separately approved.
-- Runtime stores and the user's local data are non-destructive boundaries.
+- The only public product interface is the versioned chat contract plus health and chat-history reads.
+- Legacy runtime recommendation and conversation data is deleted rather than converted after the integrity-gated cutover authorized by the user.
 
 ## Current Lifecycle Stage
 
-Adaptive Decision Engine integration, full-history validation, and forward-only Serenity Alpha experimentation.
+Single-protocol storage/API cutover, followed by adaptive validation and forward-only Serenity Alpha experimentation.
 
 ## Approval Gates
 

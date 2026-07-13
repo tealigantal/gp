@@ -57,7 +57,13 @@ def _map_pick(rank: int, item: Dict[str, Any]) -> AdvicePick:
             'reward_risk': float(diag.get('reward_risk') or 0.0),
             'feature_coverage': float(adaptive.get('feature_coverage') or item.get('feature_coverage') or 0.0),
         },
-        risk_flags=[str(x) for x in (item.get('risk_flags') or [])],
+        risk_flags=list(
+            dict.fromkeys(
+                str(flag)
+                for flag in [*list(item.get('risk_flags') or []), *list(risk.get('risk_flags') or [])]
+                if str(flag)
+            )
+        ),
         why_selected=str(why_selected_text or ''),
         why_not_others=[str(x) for x in (item.get('why_not') or [])],
         evidence_refs=[symbol],

@@ -3,47 +3,7 @@ from __future__ import annotations
 from typing import Any, Dict
 
 from ..contracts.objects import DayBook, MarketBook
-from ..runtime.market_clock import compute_market_state
-from ..runtime.utils import now_iso
-from .readonly import build_daily_plan_market_book
-from .repo import load_current_book as _load_current_book
-from .repo import load_current_slot_artifact, load_daybook, load_latest_daybook, load_latest_saved_book
-from ..runtime.producer import producer_is_compatible, producer_metadata
-
-
-def _load_daybook_for_readonly(trading_day: str) -> DayBook:
-    daybook = load_daybook(trading_day)
-    if daybook is not None and producer_is_compatible(daybook.producer):
-        return daybook
-    saved = load_latest_saved_book(trading_day)
-    if saved is not None and producer_is_compatible(saved.producer):
-        return saved.daybook
-    latest_saved = load_latest_saved_book()
-    if latest_saved is not None and producer_is_compatible(latest_saved.producer):
-        return latest_saved.daybook
-    latest = load_latest_daybook()
-    if latest is not None and producer_is_compatible(latest.producer):
-        return latest
-    return DayBook(
-        trading_day=trading_day,
-        generated_at=now_iso(),
-        regime={},
-        tradeable=False,
-        reason="current_slot_unavailable",
-        producer=producer_metadata(),
-    )
-
-
-def _unavailable_book() -> MarketBook:
-    ms = compute_market_state()
-    daybook = _load_daybook_for_readonly(ms.target_daybook_effective_day)
-    return build_daily_plan_market_book(
-        daybook=daybook,
-        book_version=f"unavailable_{ms.target_daybook_effective_day}",
-        market_phase=ms.market_phase,
-        trade_day=ms.target_pulse_trade_day or ms.target_daybook_effective_day,
-        data_status=ms.data_status,
-    )
+from ..agent_store import AgentStore
 
 
 def book_is_fresh_for_plan(book: MarketBook | None, refresh_plan) -> bool:
@@ -57,18 +17,18 @@ def book_is_fresh_for_plan(book: MarketBook | None, refresh_plan) -> bool:
 
 def ensure_book(refresh_plan) -> MarketBook:
     book = load_current_book()
-    return book if book is not None else _unavailable_book()
+    if book is None:
+        raise RuntimeError("current_snapshot_unavailable")
+    return book
 
 
 def load_current_book() -> MarketBook | None:
-    # Current authority is the validated pointer -> immutable versioned book.
-    # Callers that need a display-only fallback must use ensure_book explicitly.
-    return _load_current_book()
+    return AgentStore().current_book()
 
 
 def load_current_artifact_id() -> str | None:
-    artifact = load_current_slot_artifact()
-    return artifact.artifact_id if artifact is not None else None
+    snapshot = AgentStore().current_snapshot()
+    return snapshot.snapshot_id if snapshot else None
 
 
 def sync_book_once() -> Dict[str, Any]:

@@ -65,3 +65,6 @@
 - **Removal condition:** Measured unparsed rate justifies a reviewed OCR pipeline.
 - **Intended milestone:** After 20 trading days of collection telemetry.
 - **Status:** Accepted.
+# Single-protocol cutover
+
+No compatibility layer or deferred data migration is retained. The only operational follow-up is a normal rebuild/deployment of the stopped containers, followed by a worker publication; that is a deployment action and has not been performed in this repository change.

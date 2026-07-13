@@ -54,3 +54,20 @@ Historical replay methodology and prior results remain in `docs/historical_valid
 - Serenity worker is running from the shared image at 0% weight. Its persisted policy remains safely suspended because earlier source failures triggered the documented circuit breaker; no promotion override was applied.
 - Independent final review found and resolved three P1 issues: canonical fallback masking, incomplete non-execution phase gating, and explicit-zero corruption in the V2 adapter. The complete backend suite passed again afterward.
 - Final-image two-turn chat passed with run `run_ddccc64eb9a5`; both turns retained symbols 600000/000651/000001 and reused the same run.
+# 2026-07-13 — single-protocol cutover
+
+- Passed backend contract tests: immutable snapshot, current pointer, atomic/idempotent turns, concurrent sequence allocation, session snapshot binding, no-snapshot `no_trade`, and exactly three public paths.
+- The default pytest command now runs the nine retained single-protocol tests; retired-surface tests are ignored before import rather than acting as an implicit compatibility suite.
+- Passed frontend typecheck, ESLint, one contract test, and production build.
+- Stopped legacy Compose API/worker/web containers before data cutover.
+- Promoted integrity-gated `store/search/history-clean.db` to the sole `store/search/history.db`; both copies had equal byte size before promotion. SQLite integrity/count/latest-item checks were executed read-only before replacement.
+- Deleted `gateway.db`, book/run/recommend/portfolio/validation/cache runtime artifacts and legacy frontend/HTTP surfaces. No deployment was performed; stopped containers still contain the old image and must not be restarted without rebuilding.
+
+# 2026-07-13 — Docker and core-engine database audit
+
+- `docker compose config --quiet` passed. The resolved service set is exactly `api`, `worker`, and `web`; no ops, paper-execution, Workbench, or Serenity Compose service remains.
+- Retained tests passed: 11 tests covering agent transactions, HTTP contract, pre-as-of completed-event retrieval, and daybook risk/entry/stop/take-profit projection.
+- Frontend typecheck, ESLint, Vitest and production build passed.
+- Actual database audit: `store/events/market_memory.db` contains 18,730 market events, 17 decision snapshots and 0 matured prediction outcomes; `store/search/history.db` contains 3,077 query definitions and 12,242,184 cached items, latest item time `2026-07-10`.
+- The newest decision snapshot (`2026-07-13`) is `no_trade`; all candidates carry `daily_bar_not_at_as_of` and `daily_cache_not_current`, so no recommendation was published. This is correct fail-closed behavior.
+- Fixed one output defect: `book.daybook._map_pick` now carries `risk.risk_flags` into the user-visible pick as well as top-level flags.

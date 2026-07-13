@@ -24,7 +24,7 @@ from ..runtime.market_clock import (
     resolve_trading_day_on_or_before,
 )
 from ..runtime.utils import now_iso
-from ..search.history_store import canonical_query_id, ensure_query, list_queries, query_meta
+from ..search.history_store import canonical_query_id, ensure_query, history_db_path, list_queries, query_meta
 from ..selection_engine.datahub import MarketDataHub
 
 
@@ -44,7 +44,7 @@ _EOD_PROBE_SYMBOLS = ("000001", "600000", "600519")
 
 
 def _history_db_path() -> Path:
-    return store_dir() / "search" / "history.db"
+    return history_db_path()
 
 
 def _report_path() -> Path:

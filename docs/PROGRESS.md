@@ -1,11 +1,14 @@
 # Current Progress
 
-Last updated: 2026-07-11
+Last updated: 2026-07-13
 
 ## Active Delivery State
 
-- **Active Goal:** Implement the free official-announcement Serenity Alpha experiment with real bootstrap, immutable evidence, shadow counterfactuals, and gated automatic ranking promotion up to 8%.
-- **Active ExecPlan:** `docs/plans/2026-07-11-recommendation-chain-recovery.md` (Serenity forward observation remains governed by its existing plan).
+- **Active Goal:** Operate one immutable-snapshot recommendation chat protocol while Serenity remains advisory selection evidence.
+- **Active ExecPlan:** `docs/plans/2026-07-13-single-protocol-agent.md`.
+- **Current Milestone:** `agent.db`, `RecommendationSnapshot.v1`, and the three-endpoint public surface are implemented; legacy runtime data has been removed and containers are deliberately stopped pending a normal rebuild/deployment.
+- **Cutover State:** `store/agent.db` schema version 1 is initialized with no current snapshot. This is intentionally fail-closed: chat returns `no_trade` until the rebuilt worker publishes and validates a fresh snapshot.
+- **Docker/Engine Audit:** Compose now has only `api`, `worker`, and `web`; its configuration validates. The engine database-input audit passed and fixed risk-flag projection. Current history ends on 2026-07-10, while the latest 2026-07-13 decision correctly blocks recommendation as stale.
 - **Current Milestone:** Canonical recommendation-chain recovery is implemented and container-verified; Serenity forward observation remains an operational gate.
 - **Completed and Verified:** Governance, real source bootstrap gate, append-only evidence/metadata versions, per-symbol coverage and page/hydration resume, official verification boundary, independent add-on/counterfactual policy, T+6 causal evaluation, target-only narration, health/CLI/Compose integration, real zero-result and positive-fact CNINFO smokes, 119 targeted tests, and all 311 default tests.
 - **Implemented but Not Verified:** Live multi-day worker continuity and five consecutive forward shadow trading days.
