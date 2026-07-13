@@ -2,14 +2,13 @@
 
 ## System Context
 
-GP combines external market/announcement data, local immutable/runtime stores, deterministic decision engines, an LLM routing/narration boundary, a FastAPI service, and a single-page Workspace.
+GP combines external market/announcement data, deterministic selection, one immutable snapshot store, a FastAPI chat service, and a chat-only Workspace.
 
 ## Current Runtime Entry Points
 
 - `gp`: FastAPI through `gp_assistant.gateway.app`.
 - `gp-worker`: unified market runtime through `gp_assistant.cli runtime-loop`.
 - `web`: Workspace frontend.
-- Ops profiles: daybook rebuild and post-close archive.
 - `gp-serenity-worker`: experimental collector/evaluator under the Compose `experiments` profile.
 - `gp-serenity-bootstrap`: one-shot real 30-day bootstrap under the separate `serenity-bootstrap` profile, so enabling the worker cannot race the bootstrap.
 
@@ -18,9 +17,8 @@ Detailed backend decision ownership is canonical in `src/gp_assistant/ARCHITECTU
 ## Major Components and Flow
 
 ```text
-market providers -> local cache -> signal/memory/probability/risk
-  -> Adaptive Decision Engine -> Decision Intelligence -> snapshot
-  -> judgment -> bounded LLM narration -> API/Workspace
+market providers -> Market Memory -> Adaptive Decision Engine
+  -> RecommendationSnapshot.v1 in agent.db -> /api/chat -> Workspace
 ```
 
 Serenity adds a separate path:
@@ -34,7 +32,8 @@ free official announcement sources -> gp-serenity-worker
 
 ## Data Ownership and Persistence
 
-- Existing market cache and books remain under `store/` and `cache/`.
+- `store/agent.db` is the only product-facing state: immutable snapshots, one current pointer, sessions, turns and claims.
+- `store/search/history.db` is the single Market Memory history database.
 - Market Memory owns normalized events, decision snapshots, and prediction outcomes.
 - Serenity owns bootstrap markers, source cursors and resumable page/hydration checkpoints, per-symbol coverage, persisted breakers, poll runs, append-only document metadata/content versions, hypotheses, v2 reference snapshots, evaluations, and policy transitions in `store/serenity/`.
 - Decision and chat paths read Serenity locally; only the Serenity worker performs external announcement I/O.

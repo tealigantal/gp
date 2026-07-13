@@ -8,12 +8,7 @@ from .book.board import build_board
 from .book.daybook import build_daybook
 from .book.pulse5m import compute_slot_pulse_package
 from .book.readonly import build_daily_plan_artifact, tracked_universe_from_daybook
-from .book.repo import (
-    load_current_slot_artifact,
-    load_daybook,
-    publish_current_bundle,
-    save_daybook,
-)
+from .agent_store import AgentStore
 from .book.side_results import detect_side_results
 from .contracts.objects import DayBook, LiveSlotArtifact, SlotDataQuality, SlotGate, TrackedUniverse
 from .core.config import load_config
@@ -25,7 +20,6 @@ from .evidence.daily_freshness import (
     reconcile_daily_freshness,
     resolve_daily_target,
 )
-from .evidence.portfolio_service import load_portfolio_snapshot
 from .evidence.market_service import refresh_intraday_min5_cache
 from .runtime.lanes import book_lane
 from .runtime.market_clock import (
@@ -60,25 +54,9 @@ _INTRADAY_REFRESH_FUTURE: Future | None = None
 _INTRADAY_REFRESH_LAST_RESULT: Dict[str, Any] | None = None
 
 
-def _portfolio_symbols(snapshot: Dict[str, Any]) -> list[str]:
-    return [
-        str(item.get("symbol")).strip()
-        for item in (snapshot.get("positions") or [])
-        if str(item.get("symbol") or "").strip()
-    ]
-
-
-def _tracked_universe(daybook: DayBook, portfolio_snapshot: Dict[str, Any]) -> TrackedUniverse:
+def _tracked_universe(daybook: DayBook) -> TrackedUniverse:
     tracked = tracked_universe_from_daybook(daybook)
-    holdings = _portfolio_symbols(portfolio_snapshot) if getattr(load_config(), "intraday_include_portfolio", True) else []
-    total = list(tracked.total)
-    seen = set(total)
-    for symbol in holdings:
-        if symbol and symbol not in seen:
-            seen.add(symbol)
-            total.append(symbol)
-    tracked.portfolio = holdings
-    tracked.total = total
+    tracked.portfolio = []
     return tracked
 
 
@@ -115,7 +93,6 @@ def _refresh_pending_freshness_meta(
             merged[key] = target_info.get(key)
     if merged != freshness:
         daybook.source_meta["daily_freshness"] = merged
-        save_daybook(daybook)
     return merged
 
 
@@ -127,7 +104,7 @@ def _save_artifact(daybook: DayBook, artifact: LiveSlotArtifact) -> Dict[str, An
     daybook_symbols_set = {pick.symbol for pick in [*daybook.picks, *daybook.reserve_picks]}
     if any(entry.symbol not in daybook_symbols_set for entry in artifact.board):
         raise RuntimeError("runtime_artifact_board_outside_daybook")
-    publish_current_bundle(daybook, artifact)
+    AgentStore().publish_runtime_artifact(daybook, artifact)
     return {
         "artifact_id": artifact.artifact_id,
         "slot_id": artifact.slot_id,
@@ -139,10 +116,10 @@ def _save_artifact(daybook: DayBook, artifact: LiveSlotArtifact) -> Dict[str, An
 
 
 def _load_or_build_daybook(trade_day: str, *, force: bool = False) -> DayBook:
-    daybook = None if force else load_daybook(trade_day)
-    if daybook is not None and not producer_is_compatible(getattr(daybook, "producer", None)):
-        daybook = None
-    freshness = dict(daybook.source_meta.get("daily_freshness") or {}) if daybook is not None else {}
+    # The daybook is an in-memory construction input.  It is persisted only as
+    # part of the immutable RecommendationSnapshot.v1 published below.
+    daybook = None
+    freshness: Dict[str, Any] = {}
     target_info = resolve_daily_target(trade_day)
     target_day = str(target_info.get("target_day") or "")
     target_mode = str(target_info.get("target_mode") or "")
@@ -165,7 +142,6 @@ def _load_or_build_daybook(trade_day: str, *, force: bool = False) -> DayBook:
     )
     if should_rebuild:
         daybook = build_daybook(trade_day, topk=10, reserve_count=2)
-        save_daybook(daybook)
     return daybook
 
 
@@ -255,9 +231,9 @@ def _build_and_save_runtime_artifact(
     enable_minutes: bool,
     force: bool = False,
 ) -> Dict[str, Any]:
-    portfolio_snapshot = load_portfolio_snapshot()
-    tracked = _tracked_universe(daybook, portfolio_snapshot)
-    current = load_current_slot_artifact()
+    portfolio_snapshot: Dict[str, Any] = {}
+    tracked = _tracked_universe(daybook)
+    current = None
     expected_meta = _daily_plan_publish_meta(daybook, market_phase=market_phase)
     runtime_stage = "minute" if enable_minutes and target_slot_at else "daily"
     expected_runtime_meta = {
@@ -455,7 +431,7 @@ def _runtime_capabilities(cfg, ms, *, operation: str) -> Dict[str, bool]:
     return {
         "daily": True,
         "minutes": minutes_enabled,
-        "portfolio": bool(getattr(cfg, "intraday_include_portfolio", True)),
+        "portfolio": False,
     }
 
 

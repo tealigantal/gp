@@ -22,7 +22,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     TZ=Asia/Shanghai
 
 LABEL org.opencontainers.image.revision=${GP_BUILD_REVISION} \
-      io.gp.artifact-schema="gp.runtime-artifact.v2" \
+      io.gp.artifact-schema="RecommendationSnapshot.v1" \
       io.gp.selection-policy="adaptive_policy_single_path"
 
 WORKDIR /app

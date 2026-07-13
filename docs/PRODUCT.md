@@ -2,7 +2,7 @@
 
 ## Product Summary
 
-GP is a single-workspace A-share main-board decision assistant for short 1–3 trading-day plans. The left pane is a continuous conversation and the right pane presents the same canonical decision snapshot.
+GP is a chat-only A-share main-board decision assistant for short 1–3 trading-day plans. Every reply is bound to one immutable `RecommendationSnapshot.v1`.
 
 ## Target Users
 
@@ -25,7 +25,7 @@ Individual researchers and traders who want evidence-backed candidate plans and 
 
 ## Expected User-visible Behavior
 
-All market-facing answers use the same active run and structured judgment. The LLM translates facts into Chinese but cannot change selection or numbers. Serenity is visible immediately as real evidence and shadow/counterfactual impact; it affects production ranking only after automatic causal validation.
+All market-facing answers use the session-bound immutable snapshot. The chat layer cannot change selection, numbers, candidates or evidence. A missing, invalid, stale or non-tradeable snapshot returns structured `no_trade`; it never reads an older run, JSON artifact or historical chat record.
 
 ## Failure and Recovery Experience
 
@@ -37,7 +37,7 @@ Critical market-data failures produce explicit blocked/no-trade behavior. Sereni
 - No automated trading.
 - No future leakage in replay or learning.
 - No silent fallback that fabricates a conclusion.
-- Public chat response compatibility remains stable.
+- No V1/V2 or legacy API compatibility is retained.
 
 ## Non-goals
 

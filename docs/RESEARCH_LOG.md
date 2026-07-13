@@ -18,3 +18,13 @@
 - **Operational observation:** The observed 3.64-second run produced a closed-session 1,800-second delay. Later intervals remain a function of last cost, EWMA, p90, phase bounds, backlog, `Retry-After`, and failure state.
 - **Verification rule:** CNINFO PDF evidence is retained, but a fact is not `verified` or scoring-eligible unless the corresponding SSE/SZSE metadata check succeeds. Verification failure is unknown, not weak confirmation.
 - **Correction rule:** Backfill relations never affect scoring. A live correction freezes only an exact fact ID or matching earnings-report-period key; an unresolved live relation with no trustworthy target zeros only that symbol's Serenity contribution until resolved, leaving baseline Adaptive untouched.
+# 2026-07-13 — recommendation-engine database input audit
+
+Evidence inspected locally, without external research:
+
+- The selection pipeline takes current OHLCV through `MarketDataHub`, writes historical signal events to `market_memory.db`, and retrieves only events with `as_of < decision_as_of` and `outcome.complete=true`.
+- Each retrievable event supplies normalized feature vectors, raw features, market-regime context, realized outcomes, and data provenance. Retrieval is normalized feature-vector distance; matching signal/regime labels are small adjustments only.
+- Probability consumes retrieved outcomes and priors; risk consumes the candidate signal/probability; adaptive policy owns final selection. The LLM has no selection authority.
+- The product-facing snapshot is a projection of the daybook, not a second decision source. It carries rank, entry/stop/take-profit plans, probability/evidence, risk flags, scoring, and evidence references.
+
+Conclusion: the evidence architecture is appropriate for a professional decision-support agent, but the observed production data is not currently fresh enough to issue a professional recommendation. The correct current response is `no_trade` until the worker refreshes and validates the next trading-day data.

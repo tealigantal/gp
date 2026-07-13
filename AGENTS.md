@@ -6,7 +6,7 @@ GP is a chat-first A-share main-board decision assistant for short 1–3 trading
 
 ## Lifecycle stage
 
-The repository is an initialized important project in integration and historical-validation stage. The active project-shaping effort is the Serenity Alpha official-announcement experiment described in `docs/plans/2026-07-11-serenity-alpha.md`.
+The repository is an initialized important project being deliberately reduced to a single-protocol chat-first recommendation agent. The active project-shaping effort is `docs/plans/2026-07-13-single-protocol-agent.md`.
 
 ## Critical journeys
 
@@ -15,6 +15,7 @@ The repository is an initialized important project in integration and historical
 - Answer symbol, comparison, exit, and run-change follow-ups from the same canonical run.
 - Fail closed when required market data is stale or incomplete.
 - Keep Serenity evidence advisory in shadow mode and automatically promote it only through the documented causal gates.
+- Expose recommendation behavior only through the chat contract and one immutable current recommendation snapshot.
 
 ## Repository map and sources of truth
 
@@ -29,6 +30,7 @@ The repository is an initialized important project in integration and historical
 - `docs/VALIDATION.md`: cross-cutting validation ledger.
 - `docs/PROGRESS.md`: recoverable current status.
 - `docs/plans/2026-07-11-serenity-alpha.md`: active ExecPlan.
+- `docs/plans/2026-07-13-single-protocol-agent.md`: active single-protocol cutover ExecPlan.
 
 ## Verified entry points and commands
 
@@ -47,7 +49,7 @@ The backend has no verified Ruff or static-type-check command. Do not claim thos
 - Adaptive Decision Engine owns selection. The LLM may route and narrate but may not invent or change candidates, scores, prices, probabilities, or actions.
 - Network data collection must not run inside `/api/chat`, book locks, or decision rendering.
 - Historical and adaptive learning paths must respect as-of availability and T+5 maturity; never place future outcomes in readable pending state.
-- `store/`, `cache/`, and `results/` are runtime artifacts. Preserve user data and never stage them unless explicitly requested.
+- `store/`, `cache/`, and `results/` are runtime artifacts. The user explicitly authorized deletion of legacy recommendation and conversation runtime data only after the new protocol passes integrity gates; never stage runtime data.
 - `selection_engine/` is legacy/reference and low-level support, not the production ranking authority.
 - New evidence stores must be append-only for versions and first-seen semantics; do not reuse overwrite-oriented `history.db` for Serenity.
 

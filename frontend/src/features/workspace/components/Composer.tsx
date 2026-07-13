@@ -1,4 +1,4 @@
-import { Alert, Button, Input, Space, Typography } from 'antd'
+import { Button, Input, Space, Typography } from 'antd'
 
 interface ComposerProps {
   value: string
@@ -8,17 +8,9 @@ interface ComposerProps {
   llmReady?: boolean
 }
 
-export function Composer({ value, onChange, onSubmit, disabled, llmReady }: ComposerProps) {
+export function Composer({ value, onChange, onSubmit, disabled }: ComposerProps) {
   return (
     <div className="composer-wrap">
-      {!llmReady ? (
-        <Alert
-          type="warning"
-          showIcon
-          message="自然语言助手当前不可用，请先检查后端配置，并确认 `/api/health` 返回 `llm_ready=true`。"
-          style={{ marginBottom: 12 }}
-        />
-      ) : null}
       <div className="composer-headline">
         <Typography.Text className="section-kicker">Ask Naturally</Typography.Text>
         <Typography.Text className="section-subtitle">
@@ -41,9 +33,9 @@ export function Composer({ value, onChange, onSubmit, disabled, llmReady }: Comp
                 onSubmit()
               }
             }}
-            disabled={disabled || !llmReady}
+            disabled={disabled}
           />
-          <Button type="primary" onClick={onSubmit} loading={disabled} disabled={!llmReady}>
+          <Button type="primary" onClick={onSubmit} loading={disabled}>
             发送问题
           </Button>
         </Space.Compact>

@@ -1,15 +1,9 @@
 import axios, { AxiosError } from 'axios'
 import type {
-  BookResponse,
   ChatRequest,
   ChatResponse,
+  ChatHistoryResponse,
   HealthResponse,
-  OpsRunResponse,
-  RunResponse,
-  SessionDiagnosticsResponse,
-  SessionListItem,
-  SessionResponse,
-  SideResult,
 } from './contracts'
 
 const api = axios.create({
@@ -22,33 +16,8 @@ export async function getHealth() {
   return data
 }
 
-export async function getCurrentBook() {
-  const { data } = await api.get<BookResponse>('/api/book/current')
-  return data
-}
-
 export async function getSession(sessionId: string) {
-  const { data } = await api.get<SessionResponse>(`/api/session/${encodeURIComponent(sessionId)}`)
-  return data
-}
-
-export async function getSessionDiagnostics(sessionId: string) {
-  const { data } = await api.get<SessionDiagnosticsResponse>(`/api/session/${encodeURIComponent(sessionId)}/diagnostics`)
-  return data
-}
-
-export async function getRun(runId: string) {
-  const { data } = await api.get<RunResponse>(`/api/run/${encodeURIComponent(runId)}`)
-  return data
-}
-
-export async function getSideResults() {
-  const { data } = await api.get<SideResult[]>('/api/side-results')
-  return data
-}
-
-export async function getSessions(limit = 20) {
-  const { data } = await api.get<SessionListItem[]>(`/api/sessions?limit=${limit}`)
+  const { data } = await api.get<ChatHistoryResponse>(`/api/chat/${encodeURIComponent(sessionId)}`)
   return data
 }
 
@@ -57,10 +26,6 @@ export async function postChat(payload: ChatRequest) {
   return data
 }
 
-export async function runOpsTool(operation: string) {
-  const { data } = await api.post<OpsRunResponse>(`/api/ops/repair/${encodeURIComponent(String(operation || ''))}`)
-  return data
-}
 
 export function readApiError(error: unknown): string {
   if (error instanceof AxiosError) {
