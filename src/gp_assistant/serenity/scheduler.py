@@ -80,7 +80,15 @@ def compute_schedule(
         empty_multiplier = min(4, 1 + max(0, int(consecutive_complete_empty)) // 3)
         delay = min(ceiling, base * empty_multiplier)
     observed_period = max(1.0, cost + delay)
-    stale_after = max(2.0 * floor, min(3.0 * ceiling, 3.0 * observed_period))
+    # A successful poll certificate must remain valid until the next scheduled
+    # poll has had enough time to finish.  Otherwise a healthy resident worker
+    # creates a deterministic stale window between polls.
+    certificate_handoff = delay + max(30.0, 2.0 * cost)
+    stale_after = max(
+        2.0 * floor,
+        min(3.0 * ceiling, 3.0 * observed_period),
+        certificate_handoff,
+    )
     return ScheduleDecision(
         cost_sec=round(cost, 3),
         delay_sec=float(max(1.0, math.ceil(delay))),

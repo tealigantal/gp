@@ -6,24 +6,33 @@ from types import SimpleNamespace
 import pytest
 
 from gp_assistant.decision_engine.serenity_policy import build_reference_snapshot
-from gp_assistant.core.config import load_config
+from gp_assistant.core.config import SerenityConfig, load_config
 from gp_assistant.serenity.models import (
     FrozenSerenitySignal,
+    NATIVE_SERENITY_FORMULA_VERSION,
     SerenityFact,
     SerenityHypothesis,
     SerenityPolicyState,
 )
 from gp_assistant.serenity.store import (
+    candidate_target_ready,
+    candidate_target_readiness_revision,
     commit_evaluation_result,
     commit_poll,
+    current_native_readiness_state,
     acquire_worker_lease,
     enqueue_pending_evaluation,
+    ensure_native_formula_epoch,
     evidence_db_path,
+    initialize_store,
     list_pending_evaluations,
     list_evaluations,
+    load_latest_candidate_target,
+    load_policy_state,
     load_frozen_signals,
     lookup_document,
     record_bootstrap_run,
+    publish_candidate_target,
     save_reference_and_enqueue_pending,
     save_policy_state,
     save_policy_state_with_ledger,
@@ -133,6 +142,55 @@ def _commit(record, run_id: str):
     return result
 
 
+def _commit_target_poll(
+    target,
+    *,
+    run_id: str,
+    finished_at: str,
+    records=(),
+    schema_fingerprint: str = "schema1",
+    window_start: str = "2026-06-10",
+    window_end: str = "2026-07-10",
+    item_count: int | None = None,
+    complete: bool = True,
+    status: str = "success",
+    stale_after_sec: float = 3600,
+):
+    resolved_count = len(records) if item_count is None else item_count
+    return commit_poll(
+        source="cninfo",
+        source_kind="live",
+        run={
+            "run_id": run_id,
+            "started_at": finished_at,
+            "finished_at": finished_at,
+            "elapsed_sec": 0.2,
+            "status": status,
+            "complete": complete,
+            "request_count": 1,
+            "item_count": resolved_count,
+            "stale_after_sec": stale_after_sec,
+            "target_id": target.target_id,
+            "target_activation_revision": target.activation_revision,
+        },
+        records=list(records),
+        cursor={} if complete else None,
+        schema_fingerprint=schema_fingerprint,
+        coverage=[
+            {
+                "symbol": symbol,
+                "metadata_complete": True,
+                "hydration_complete": bool(complete),
+                "item_count": resolved_count,
+                "window_start": window_start,
+                "window_end": window_end,
+                "checked_at": finished_at,
+            }
+            for symbol in target.symbols
+        ],
+    )
+
+
 def test_append_only_versions_and_first_seen(monkeypatch, tmp_path):
     monkeypatch.setenv("GP_SERENITY_STORE_DIR", str(tmp_path / "serenity"))
     first = "2026-07-10T10:00:00+00:00"
@@ -157,6 +215,609 @@ def test_superseded_version_facts_do_not_survive_current_document_view(monkeypat
     signal = load_frozen_signals(["000001"], decision_at="2026-07-10T12:00:00+00:00")["000001"]
     assert signal.evidence_count == 1
     assert signal.direction == -1
+
+
+def test_factless_latest_version_supersedes_older_facts(monkeypatch, tmp_path):
+    monkeypatch.setenv("GP_SERENITY_STORE_DIR", str(tmp_path / "serenity"))
+    _commit(_record("2026-07-10T10:00:00+00:00"), "run1")
+    correction = _record("2026-07-10T11:00:00+00:00", content_hash="c" * 64)
+    correction["facts"] = []
+    correction["hypotheses"] = []
+    _commit(correction, "run2")
+
+    signal = load_frozen_signals(
+        ["000001"], decision_at="2026-07-10T12:00:00+00:00"
+    )["000001"]
+
+    assert signal.status == "no_relevant_evidence"
+    assert signal.availability == 0
+    assert signal.evidence_count == 0
+    assert signal.fact_ids == []
+
+
+def test_initial_withdrawal_never_exposes_evidence(monkeypatch, tmp_path):
+    monkeypatch.setenv("GP_SERENITY_STORE_DIR", str(tmp_path / "withdrawn"))
+    withdrawn = _record("2026-07-10T10:00:00+00:00")
+    withdrawn["document"]["withdrawn"] = True
+    _commit(withdrawn, "withdrawn-run")
+
+    signal = load_frozen_signals(
+        ["000001"], decision_at="2026-07-10T10:30:00+00:00"
+    )["000001"]
+    conn = sqlite3.connect(evidence_db_path())
+    try:
+        withdrawn_at = conn.execute(
+            "SELECT withdrawn_at FROM documents WHERE document_id='serdoc_test'"
+        ).fetchone()[0]
+    finally:
+        conn.close()
+
+    assert withdrawn_at == "2026-07-10T10:00:00+00:00"
+    assert signal.status == "no_relevant_evidence"
+    assert signal.availability == 0
+    assert signal.fact_ids == []
+
+
+def test_active_candidate_target_can_reactivate_an_existing_identity(monkeypatch, tmp_path):
+    monkeypatch.setenv("GP_SERENITY_STORE_DIR", str(tmp_path / "targets"))
+    first = publish_candidate_target(
+        ["000001"],
+        decision_trade_day="2026-07-10",
+        daybook_effective_day="2026-07-11",
+        observed_at="2026-07-10T10:00:00+00:00",
+    )
+    publish_candidate_target(
+        ["000002"],
+        decision_trade_day="2026-07-11",
+        daybook_effective_day="2026-07-12",
+        observed_at="2026-07-11T10:00:00+00:00",
+    )
+    reactivated = publish_candidate_target(
+        ["000001"],
+        decision_trade_day="2026-07-10",
+        daybook_effective_day="2026-07-11",
+        observed_at="2026-07-12T10:00:00+00:00",
+    )
+
+    assert reactivated.target_id == first.target_id
+    assert reactivated.observed_at == "2026-07-12T10:00:00+00:00"
+    assert reactivated.activation_revision != first.activation_revision
+    assert load_latest_candidate_target().target_id == first.target_id
+
+
+def test_equivalent_complete_polls_renew_freshness_without_changing_semantics(
+    monkeypatch, tmp_path
+):
+    monkeypatch.setenv("GP_SERENITY_STORE_DIR", str(tmp_path / "semantic-renewal"))
+    monkeypatch.setenv("GP_SERENITY_MODE", "native")
+    target = publish_candidate_target(
+        ["000001"],
+        decision_trade_day="2026-07-10",
+        daybook_effective_day="2026-07-11",
+        observed_at="2026-07-10T09:00:00+00:00",
+    )
+    record = _record("2026-07-10T09:30:00+00:00")
+    _commit_target_poll(
+        target,
+        run_id="semantic-poll-1",
+        finished_at="2026-07-10T10:00:00+00:00",
+        records=[record],
+    )
+    record_bootstrap_run(
+        poll_run_id="semantic-poll-1",
+        source="cninfo",
+        symbols=target.symbols,
+        lookback_days=30,
+        complete=True,
+        payload={"test": True},
+    )
+    assert acquire_worker_lease("semantic-worker") is True
+    first = current_native_readiness_state(
+        target.target_id, decision_at="2026-07-10T10:05:00+00:00"
+    )
+
+    renewed = _record("2026-07-10T09:30:00+00:00")
+    renewed["document"]["last_seen_at"] = "2026-07-10T10:10:00+00:00"
+    _commit_target_poll(
+        target,
+        run_id="semantic-poll-2",
+        finished_at="2026-07-10T10:10:00+00:00",
+        records=[renewed],
+        schema_fingerprint="schema2",
+        window_start="2026-06-11",
+        window_end="2026-07-11",
+        item_count=7,
+    )
+    second = current_native_readiness_state(
+        target.target_id, decision_at="2026-07-10T10:15:00+00:00"
+    )
+
+    assert first["available"] is True
+    assert second["available"] is True
+    assert first["source_run_id"] != second["source_run_id"]
+    assert first["readiness_revision"] != second["readiness_revision"]
+    assert first["freshness_token"] != second["freshness_token"]
+    assert first["semantic_revision"] == second["semantic_revision"]
+    assert first["binding_token"] == second["binding_token"]
+
+
+def test_new_selected_fact_changes_serenity_semantic_revision(monkeypatch, tmp_path):
+    monkeypatch.setenv("GP_SERENITY_STORE_DIR", str(tmp_path / "semantic-change"))
+    monkeypatch.setenv("GP_SERENITY_MODE", "native")
+    target = publish_candidate_target(
+        ["000001"],
+        decision_trade_day="2026-07-10",
+        daybook_effective_day="2026-07-11",
+        observed_at="2026-07-10T09:00:00+00:00",
+    )
+    first_record = _record("2026-07-10T09:30:00+00:00")
+    _commit_target_poll(
+        target,
+        run_id="semantic-change-1",
+        finished_at="2026-07-10T10:00:00+00:00",
+        records=[first_record],
+    )
+    record_bootstrap_run(
+        poll_run_id="semantic-change-1",
+        source="cninfo",
+        symbols=target.symbols,
+        lookback_days=30,
+        complete=True,
+        payload={"test": True},
+    )
+    assert acquire_worker_lease("semantic-change-worker") is True
+    first = current_native_readiness_state(
+        target.target_id, decision_at="2026-07-10T10:05:00+00:00"
+    )
+
+    changed_record = _record(
+        "2026-07-10T10:10:00+00:00", content_hash="b" * 64, direction=-1
+    )
+    _commit_target_poll(
+        target,
+        run_id="semantic-change-2",
+        finished_at="2026-07-10T10:10:00+00:00",
+        records=[changed_record],
+    )
+    second = current_native_readiness_state(
+        target.target_id, decision_at="2026-07-10T10:15:00+00:00"
+    )
+
+    assert first["available"] is True
+    assert second["available"] is True
+    assert first["semantic_revision"] != second["semantic_revision"]
+    assert first["binding_token"] != second["binding_token"]
+
+
+def test_reactivated_target_requires_a_new_poll_but_same_active_target_does_not(
+    monkeypatch, tmp_path
+):
+    monkeypatch.setenv("GP_SERENITY_STORE_DIR", str(tmp_path / "reactivation"))
+    first = publish_candidate_target(
+        ["000001"],
+        decision_trade_day="2026-07-10",
+        daybook_effective_day="2026-07-11",
+        observed_at="2026-07-10T09:00:00+00:00",
+    )
+    coverage = [
+        {
+            "symbol": "000001",
+            "metadata_complete": True,
+            "hydration_complete": True,
+            "item_count": 0,
+            "window_start": "2026-06-10",
+            "window_end": "2026-07-10",
+        }
+    ]
+    commit_poll(
+        source="cninfo",
+        source_kind="live",
+        run={
+            "run_id": "poll-before-reactivation",
+            "started_at": "2026-07-10T09:10:00+00:00",
+            "finished_at": "2026-07-10T09:10:00+00:00",
+            "elapsed_sec": 0.1,
+            "status": "success",
+            "complete": True,
+            "request_count": 1,
+            "item_count": 0,
+            "stale_after_sec": 7200,
+            "target_id": first.target_id,
+            "target_activation_revision": first.activation_revision,
+        },
+        records=[],
+        cursor={},
+        schema_fingerprint="schema1",
+        coverage=coverage,
+    )
+    assert candidate_target_readiness_revision(
+        first.target_id, decision_at="2026-07-10T09:30:00+00:00"
+    ) is not None
+
+    publish_candidate_target(
+        ["000002"],
+        decision_trade_day="2026-07-10",
+        daybook_effective_day="2026-07-11",
+        observed_at="2026-07-10T10:00:00+00:00",
+    )
+    reactivated = publish_candidate_target(
+        ["000001"],
+        decision_trade_day="2026-07-10",
+        daybook_effective_day="2026-07-11",
+        observed_at="2026-07-10T10:30:00+00:00",
+    )
+    assert reactivated.activation_revision != first.activation_revision
+    assert candidate_target_readiness_revision(
+        first.target_id, decision_at="2026-07-10T10:45:00+00:00"
+    ) is None
+
+    with pytest.raises(
+        RuntimeError, match="serenity_complete_target_coverage_mismatch"
+    ):
+        commit_poll(
+            source="cninfo",
+            source_kind="live",
+            run={
+                "run_id": "poll-overlaps-reactivation",
+                "started_at": "2026-07-10T10:20:00+00:00",
+                "finished_at": "2026-07-10T10:35:00+00:00",
+                "elapsed_sec": 900.0,
+                "status": "success",
+                "complete": True,
+                "request_count": 1,
+                "item_count": 0,
+                "stale_after_sec": 7200,
+                "target_id": first.target_id,
+                "target_activation_revision": first.activation_revision,
+            },
+            records=[],
+            cursor={},
+            schema_fingerprint="schema1",
+            coverage=coverage,
+        )
+
+    same_active = publish_candidate_target(
+        ["000001"],
+        decision_trade_day="2026-07-10",
+        daybook_effective_day="2026-07-11",
+        observed_at="2026-07-10T10:50:00+00:00",
+    )
+    assert same_active.activation_revision == reactivated.activation_revision
+    assert same_active.observed_at == reactivated.observed_at
+
+    commit_poll(
+        source="cninfo",
+        source_kind="live",
+        run={
+            "run_id": "poll-after-reactivation",
+            "started_at": "2026-07-10T10:40:00+00:00",
+            "finished_at": "2026-07-10T10:40:00+00:00",
+            "elapsed_sec": 0.1,
+            "status": "success",
+            "complete": True,
+            "request_count": 1,
+            "item_count": 0,
+            "stale_after_sec": 7200,
+            "target_id": first.target_id,
+            "target_activation_revision": reactivated.activation_revision,
+        },
+        records=[],
+        cursor={},
+        schema_fingerprint="schema1",
+        coverage=coverage,
+    )
+    revision = candidate_target_readiness_revision(
+        first.target_id, decision_at="2026-07-10T10:45:00+00:00"
+    )
+    assert revision is not None
+    assert revision["source_run_id"] == "poll-after-reactivation"
+    assert revision["activation_revision"] == reactivated.activation_revision
+
+
+def test_complete_target_poll_requires_a_positive_finite_ttl(monkeypatch, tmp_path):
+    monkeypatch.setenv("GP_SERENITY_STORE_DIR", str(tmp_path / "invalid-ttl"))
+    target = publish_candidate_target(
+        ["000001"],
+        decision_trade_day="2026-07-10",
+        daybook_effective_day="2026-07-11",
+        observed_at="2026-07-10T09:00:00+00:00",
+    )
+    with pytest.raises(RuntimeError, match="serenity_complete_target_ttl_invalid"):
+        commit_poll(
+            source="cninfo",
+            source_kind="live",
+            run={
+                "run_id": "zero-ttl",
+                "started_at": "2026-07-10T09:10:00+00:00",
+                "finished_at": "2026-07-10T09:10:00+00:00",
+                "elapsed_sec": 0.1,
+                "status": "success",
+                "complete": True,
+                "request_count": 1,
+                "item_count": 0,
+                "stale_after_sec": 0,
+                "target_id": target.target_id,
+                "target_activation_revision": target.activation_revision,
+            },
+            records=[],
+            cursor={},
+            schema_fingerprint="schema1",
+            coverage=[
+                {
+                    "symbol": "000001",
+                    "metadata_complete": True,
+                    "hydration_complete": True,
+                    "item_count": 0,
+                }
+            ],
+        )
+
+
+def test_partial_target_poll_is_not_ready(monkeypatch, tmp_path):
+    monkeypatch.setenv("GP_SERENITY_STORE_DIR", str(tmp_path / "partial-target"))
+    target = publish_candidate_target(
+        ["000001"],
+        decision_trade_day="2026-07-10",
+        daybook_effective_day="2026-07-11",
+        observed_at="2026-07-10T10:00:00+00:00",
+    )
+    commit_poll(
+        source="cninfo",
+        source_kind="live",
+        run={
+            "run_id": "partial-target-run",
+            "started_at": "2026-07-10T10:00:00+00:00",
+            "finished_at": "2026-07-10T10:00:00+00:00",
+            "elapsed_sec": 0.2,
+            "status": "partial",
+            "complete": False,
+            "request_count": 1,
+            "item_count": 0,
+            "next_due_at": "2026-07-10T10:01:00+00:00",
+            "stale_after_sec": 3600,
+            "target_id": target.target_id,
+            "target_activation_revision": target.activation_revision,
+        },
+        records=[],
+        cursor=None,
+        schema_fingerprint="schema1",
+        coverage=[
+            {
+                "symbol": "000001",
+                "metadata_complete": True,
+                "hydration_complete": False,
+                "item_count": 0,
+                "window_start": "2026-06-10",
+                "window_end": "2026-07-10",
+                "error": "hydration_incomplete",
+            }
+        ],
+    )
+
+    assert candidate_target_ready(
+        target.target_id, decision_at="2026-07-10T10:30:00+00:00"
+    ) is False
+    health = status_snapshot()
+    assert health["available"] is False
+    assert health["last_poll_complete"] is False
+
+
+def test_latest_partial_attempt_cannot_reuse_an_older_complete_target_certificate(
+    monkeypatch, tmp_path
+):
+    monkeypatch.setenv("GP_SERENITY_STORE_DIR", str(tmp_path / "target-certificate"))
+    target = publish_candidate_target(
+        ["000001", "000002"],
+        decision_trade_day="2026-07-10",
+        daybook_effective_day="2026-07-11",
+        observed_at="2026-07-10T09:00:00+00:00",
+    )
+    full_coverage = [
+        {
+            "symbol": symbol,
+            "metadata_complete": True,
+            "hydration_complete": True,
+            "item_count": 0,
+            "window_start": "2026-06-10",
+            "window_end": "2026-07-10",
+        }
+        for symbol in target.symbols
+    ]
+    commit_poll(
+        source="cninfo",
+        source_kind="live",
+        run={
+            "run_id": "target-full",
+            "started_at": "2026-07-10T09:00:00+00:00",
+            "finished_at": "2026-07-10T09:00:00+00:00",
+            "elapsed_sec": 0.2,
+            "status": "success",
+            "complete": True,
+            "request_count": 2,
+            "item_count": 0,
+            "next_due_at": "2026-07-10T10:00:00+00:00",
+            "stale_after_sec": 3600,
+            "target_id": target.target_id,
+            "target_activation_revision": target.activation_revision,
+        },
+        records=[],
+        cursor={},
+        schema_fingerprint="schema1",
+        coverage=full_coverage,
+    )
+    record_bootstrap_run(
+        poll_run_id="target-full",
+        source="cninfo",
+        symbols=target.symbols,
+        lookback_days=30,
+        complete=True,
+        payload={"test": True},
+    )
+    first_revision = candidate_target_readiness_revision(
+        target.target_id, decision_at="2026-07-10T09:30:00+00:00"
+    )
+    assert first_revision is not None
+    assert first_revision["source_run_id"] == "target-full"
+    commit_poll(
+        source="cninfo",
+        source_kind="live",
+        run={
+            "run_id": "target-partial-latest",
+            "started_at": "2026-07-10T10:00:00+00:00",
+            "finished_at": "2026-07-10T10:00:00+00:00",
+            "elapsed_sec": 0.2,
+            "status": "partial",
+            "complete": False,
+            "request_count": 2,
+            "item_count": 0,
+            "next_due_at": "2026-07-10T10:01:00+00:00",
+            "stale_after_sec": 3600,
+            "target_id": target.target_id,
+            "target_activation_revision": target.activation_revision,
+        },
+        records=[],
+        cursor=None,
+        schema_fingerprint="schema1",
+        coverage=full_coverage,
+    )
+
+    signals = load_frozen_signals(
+        target.symbols,
+        decision_at="2026-07-10T10:30:00+00:00",
+        target_id=target.target_id,
+    )
+
+    assert {signal.status for signal in signals.values()} == {"not_ready"}
+    assert {signal.source_run_id for signal in signals.values()} == {None}
+    assert (
+        candidate_target_readiness_revision(
+            target.target_id, decision_at="2026-07-10T10:30:00+00:00"
+        )
+        is None
+    )
+    assert candidate_target_ready(
+        target.target_id, decision_at="2026-07-10T10:30:00+00:00"
+    ) is False
+
+
+def test_claimed_complete_target_poll_requires_exact_complete_symbol_coverage(
+    monkeypatch, tmp_path
+):
+    monkeypatch.setenv("GP_SERENITY_STORE_DIR", str(tmp_path / "target-commit"))
+    target = publish_candidate_target(
+        ["000001", "000002"],
+        decision_trade_day="2026-07-10",
+        daybook_effective_day="2026-07-11",
+        observed_at="2026-07-10T09:00:00+00:00",
+    )
+
+    with pytest.raises(RuntimeError, match="serenity_complete_target_coverage_mismatch"):
+        commit_poll(
+            source="cninfo",
+            source_kind="live",
+            run={
+                "run_id": "invalid-complete-target",
+                "started_at": "2026-07-10T10:00:00+00:00",
+                "finished_at": "2026-07-10T10:00:00+00:00",
+                "elapsed_sec": 0.2,
+                "status": "success",
+                "complete": True,
+                "request_count": 1,
+                "item_count": 0,
+                "next_due_at": "2026-07-10T11:00:00+00:00",
+                "stale_after_sec": 3600,
+                "target_id": target.target_id,
+                "target_activation_revision": target.activation_revision,
+            },
+            records=[],
+            cursor={},
+            schema_fingerprint="schema1",
+            coverage=[
+                {
+                    "symbol": "000001",
+                    "metadata_complete": True,
+                    "hydration_complete": True,
+                    "item_count": 0,
+                }
+            ],
+        )
+
+
+def test_native_formula_cutover_retires_legacy_pending_once(monkeypatch, tmp_path):
+    monkeypatch.setenv("GP_SERENITY_STORE_DIR", str(tmp_path / "formula-cutover"))
+    initialize_store()
+    saved = save_policy_state(
+        SerenityPolicyState(
+            epoch=3,
+            state="suspended",
+            applied_weight=0.04,
+            previous_weight=0.03,
+            bootstrap_run_id="serboot_existing",
+            matured_days=9,
+            available_results=40,
+            suspension_reasons=["three_consecutive_source_or_parse_failures"],
+            state_since="2026-07-01T00:00:00+00:00",
+            updated_at="2026-07-01T00:00:00+00:00",
+        )
+    )
+    pending_id = enqueue_pending_evaluation(
+        reference_snapshot_id="serref_legacy",
+        decision_context_snapshot_id="dcs_legacy",
+        decision_day="2026-07-01",
+        epoch=saved.epoch,
+        formula_version="SerenityAddon.v1",
+        input_hash="legacy-input",
+    )
+
+    result = ensure_native_formula_epoch()
+    state = load_policy_state()
+    repeated = ensure_native_formula_epoch()
+    conn = sqlite3.connect(evidence_db_path())
+    try:
+        pending_status = conn.execute(
+            "SELECT status FROM pending_evaluations WHERE pending_id=?", (pending_id,)
+        ).fetchone()[0]
+        ledger_count = conn.execute(
+            "SELECT COUNT(*) FROM policy_update_ledger WHERE evaluation_id='native_formula_cutover_v1'"
+        ).fetchone()[0]
+    finally:
+        conn.close()
+
+    assert result["changed"] is True
+    assert result["epoch"] == 4
+    assert state.epoch == 4
+    assert state.state == "suspended"
+    assert state.applied_weight == 0.0
+    assert state.previous_weight == 0.0
+    assert state.matured_days == 0
+    assert state.available_results == 0
+    assert state.bootstrap_run_id == "serboot_existing"
+    assert pending_status == "retired_formula"
+    assert list_pending_evaluations() == []
+    assert repeated["changed"] is False
+    assert ledger_count == 1
+
+
+def test_native_evaluation_does_not_trigger_formula_cutover(monkeypatch, tmp_path):
+    monkeypatch.setenv("GP_SERENITY_STORE_DIR", str(tmp_path / "native-evaluation"))
+    initialize_store()
+    save_evaluation(
+        {
+            "evaluation_id": "sereval_native",
+            "decision_day": "2026-07-01",
+            "matured_at": "2026-07-08",
+            "epoch": 1,
+            "formula_version": "SerenityEvaluation.v1",
+            "addon_formula_version": NATIVE_SERENITY_FORMULA_VERSION,
+            "input_hash": "native-input",
+            "learning_sample_id": "native-sample",
+            "created_at": "2026-07-09T00:00:00+00:00",
+        }
+    )
+
+    result = ensure_native_formula_epoch()
+
+    assert result == {"changed": False, "reason": "no_legacy_formula_state"}
 
 
 def test_expired_fact_is_reference_only_and_cannot_adjust_score(monkeypatch, tmp_path):
@@ -213,6 +874,63 @@ def test_symbol_without_latest_poll_coverage_is_not_ready(monkeypatch, tmp_path)
     signal = load_frozen_signals(["000001"], decision_at="2026-07-10T10:30:00+00:00")["000001"]
     assert signal.status == "not_ready"
     assert signal.availability == 0
+
+
+def test_later_bootstrap_cannot_retroactively_ready_an_earlier_decision(
+    monkeypatch, tmp_path
+):
+    monkeypatch.setenv("GP_SERENITY_STORE_DIR", str(tmp_path / "bootstrap-asof"))
+    record = _record("2026-07-10T10:00:00+00:00")
+    commit_poll(
+        source="cninfo",
+        source_kind="live",
+        run={
+            "run_id": "live-before-bootstrap",
+            "started_at": "2026-07-10T10:00:00+00:00",
+            "finished_at": "2026-07-10T10:00:00+00:00",
+            "elapsed_sec": 0.2,
+            "status": "success",
+            "complete": True,
+            "request_count": 1,
+            "item_count": 1,
+            "next_due_at": "2026-07-10T11:00:00+00:00",
+            "stale_after_sec": 1_000_000_000,
+        },
+        records=[record],
+        cursor={},
+        schema_fingerprint="schema1",
+        coverage=[
+            {
+                "symbol": "000001",
+                "metadata_complete": True,
+                "hydration_complete": True,
+                "item_count": 1,
+                "window_start": "2026-06-10",
+                "window_end": "2026-07-10",
+            }
+        ],
+    )
+    before = load_frozen_signals(
+        ["000001"], decision_at="2026-07-10T12:00:00+00:00"
+    )["000001"]
+    record_bootstrap_run(
+        poll_run_id="bootstrap-later",
+        source="cninfo",
+        symbols=["000001"],
+        lookback_days=30,
+        complete=True,
+        payload={"test": True},
+    )
+    historical = load_frozen_signals(
+        ["000001"], decision_at="2026-07-10T12:00:00+00:00"
+    )["000001"]
+    after_bootstrap = load_frozen_signals(
+        ["000001"], decision_at="2026-07-15T12:00:00+00:00"
+    )["000001"]
+
+    assert before.status == "not_ready"
+    assert historical.status == "not_ready"
+    assert after_bootstrap.status == "available"
 
 
 def test_periodic_content_revalidation_detects_same_id_new_pdf_version(monkeypatch, tmp_path):
@@ -406,7 +1124,7 @@ def test_evaluation_pending_and_policy_ledger_are_atomic_and_idempotent(monkeypa
         decision_context_snapshot_id="dcs_atomic",
         decision_day="2026-01-02",
         epoch=1,
-        formula_version="SerenityAddon.v1",
+        formula_version=NATIVE_SERENITY_FORMULA_VERSION,
         input_hash="hash",
     )
     payload = {
@@ -501,14 +1219,16 @@ def test_future_or_malformed_fact_timestamps_fail_closed(monkeypatch, tmp_path):
     _commit(future, "future-run")
     signal = load_frozen_signals(["000001"], decision_at="2026-07-10T10:30:00+00:00")["000001"]
     assert signal.availability == 0
-    assert any(item.startswith("future_timestamp_evidence_excluded:") for item in signal.limitations)
+    assert signal.fact_ids == []
+    assert not any("serfact_" in item for item in signal.limitations)
 
     monkeypatch.setenv("GP_SERENITY_STORE_DIR", str(tmp_path / "malformed"))
     malformed = _record("not-a-time")
     _commit(malformed, "malformed-run")
     signal = load_frozen_signals(["000001"], decision_at="2026-07-10T10:30:00+00:00")["000001"]
     assert signal.availability == 0
-    assert any(item.startswith("published_time_missing_excluded:") for item in signal.limitations)
+    assert signal.fact_ids == []
+    assert not any("serfact_" in item for item in signal.limitations)
 
 
 def test_legacy_fractional_quality_verified_fact_is_quarantined(monkeypatch, tmp_path):
@@ -894,11 +1614,57 @@ def test_reference_and_pending_are_persisted_in_one_transaction(monkeypatch, tmp
         snapshot,
         decision_day="2026-01-02",
         epoch=1,
-        formula_version="SerenityAddon.v1",
+        formula_version=NATIVE_SERENITY_FORMULA_VERSION,
     )
     assert snapshot_id == snapshot.snapshot_id
     assert pending_id
     assert [row["reference_snapshot_id"] for row in list_pending_evaluations()] == [snapshot_id]
+
+
+def test_pending_identity_conflict_rolls_back_instead_of_silently_reusing(
+    monkeypatch, tmp_path
+):
+    monkeypatch.setenv("GP_SERENITY_STORE_DIR", str(tmp_path / "pending-conflict"))
+    signal = FrozenSerenitySignal(
+        symbol="000001",
+        status="no_relevant_evidence",
+        decision_at="2026-01-02T15:00:00+08:00",
+        generated_at="2026-01-02T15:00:00+08:00",
+        input_hash="none",
+    )
+    snapshot = build_reference_snapshot(
+        decision_context_snapshot_id="dcs_pending_conflict",
+        decision_day="2026-01-02",
+        decision_at="2026-01-02T15:00:00+08:00",
+        adaptive_output={
+            "serenity_policy": {"state": "shadow", "applied_weight": 0.0},
+            "serenity_counterfactuals": [],
+            "serenity_reference_counterfactuals": [],
+        },
+        signals={"000001": signal},
+    )
+    _, pending_id = save_reference_and_enqueue_pending(
+        snapshot,
+        decision_day="2026-01-02",
+        epoch=1,
+        formula_version=NATIVE_SERENITY_FORMULA_VERSION,
+    )
+    with sqlite3.connect(evidence_db_path()) as conn:
+        conn.execute(
+            "UPDATE pending_evaluations SET decision_day=? WHERE pending_id=?",
+            ("2026-01-03", pending_id),
+        )
+        conn.commit()
+
+    with pytest.raises(
+        RuntimeError, match="serenity_pending_evaluation_immutable_conflict"
+    ):
+        save_reference_and_enqueue_pending(
+            snapshot,
+            decision_day="2026-01-02",
+            epoch=1,
+            formula_version=NATIVE_SERENITY_FORMULA_VERSION,
+        )
 
 
 def test_commit_rechecks_worker_lease_in_same_write_transaction(monkeypatch, tmp_path):
@@ -927,11 +1693,9 @@ def test_commit_rechecks_worker_lease_in_same_write_transaction(monkeypatch, tmp
         )
 
 
-def test_reference_mode_health_reports_effective_zero_weight(monkeypatch, tmp_path):
-    monkeypatch.setenv("GP_SERENITY_STORE_DIR", str(tmp_path / "reference-mode"))
-    monkeypatch.setenv("GP_SERENITY_MODE", "reference")
-    cfg = load_config().serenity
-    cfg.mode = "reference"
+def test_off_mode_health_reports_effective_zero_weight(monkeypatch, tmp_path):
+    monkeypatch.setenv("GP_SERENITY_STORE_DIR", str(tmp_path / "off-mode"))
+    cfg = SerenityConfig(mode="off")
     monkeypatch.setattr(
         "gp_assistant.serenity.store.load_config",
         lambda: SimpleNamespace(serenity=cfg),
@@ -945,7 +1709,7 @@ def test_reference_mode_health_reports_effective_zero_weight(monkeypatch, tmp_pa
     )
     save_policy_state(state)
     status = status_snapshot()
-    assert status["mode"] == "reference"
+    assert status["mode"] == "off"
     assert status["policy_state"] == "active"
     assert status["stored_applied_weight"] == 0.08
     assert status["applied_weight"] == 0.0

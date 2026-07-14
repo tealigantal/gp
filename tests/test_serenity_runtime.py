@@ -1,8 +1,10 @@
 from datetime import date, datetime, timezone
 
+import pytest
+
 from gp_assistant.decision_engine.serenity_policy import build_reference_snapshot, counterfactual_arm_checksum
 from gp_assistant.serenity.evaluation import evaluate_pending_item, process_pending_evaluations, update_policy_from_evaluations
-from gp_assistant.serenity.models import FrozenSerenitySignal, SerenityPolicyState
+from gp_assistant.serenity.models import FrozenSerenitySignal, NATIVE_SERENITY_FORMULA_VERSION, SerenityPolicyState
 from gp_assistant.serenity.sources import SourceError
 from gp_assistant.serenity.store import (
     load_cursor,
@@ -11,7 +13,11 @@ from gp_assistant.serenity.store import (
     lookup_document,
     status_snapshot,
 )
-from gp_assistant.serenity.worker import _consecutive_counts, run_serenity_once
+from gp_assistant.serenity.worker import (
+    _consecutive_counts,
+    _next_consecutive_counts,
+    run_serenity_once,
+)
 
 
 def _state(stage="shadow", weight=0.0):
@@ -25,13 +31,34 @@ def _state(stage="shadow", weight=0.0):
     )
 
 
-def test_source_failure_streak_uses_source_complete_not_partial_status():
+def test_source_failure_streak_requires_complete_success_status():
     assert _consecutive_counts(
         [{"complete": False, "status": "partial"} for _ in range(3)]
     )[1] == 3
     assert _consecutive_counts(
         [{"complete": True, "status": "partial"} for _ in range(3)]
-    )[1] == 0
+    )[1] == 3
+
+
+def test_current_poll_result_resets_or_extends_the_correct_schedule_streak():
+    failure_history = [
+        {"complete": False, "status": "failed", "item_count": 0}
+        for _ in range(5)
+    ]
+    empty_history = [
+        {"complete": True, "status": "success", "item_count": 0}
+        for _ in range(4)
+    ]
+
+    assert _next_consecutive_counts(
+        failure_history, source_complete=True, item_count=2
+    ) == (0, 0)
+    assert _next_consecutive_counts(
+        empty_history, source_complete=True, item_count=0
+    ) == (5, 0)
+    assert _next_consecutive_counts(
+        empty_history, source_complete=False, item_count=0
+    ) == (0, 1)
 
 
 def _reference():
@@ -94,6 +121,7 @@ def test_evaluation_waits_until_day_after_t5(monkeypatch):
         lambda _: {
             "snapshot_id": "dcs_1",
             "as_of": "2026-01-02",
+            "decision_trade_day": "2026-01-02",
             "risk_output": {"000001": {"entry": {"price": 10}, "stop": {"price": 9}, "take_profit": {"price": 12}}},
         },
     )
@@ -116,13 +144,44 @@ def test_evaluation_waits_until_day_after_t5(monkeypatch):
         "decision_day": "2026-01-02",
         "epoch": 1,
         "learning_eligible": True,
-        "formula_version": "SerenityAddon.v1",
+        "formula_version": NATIVE_SERENITY_FORMULA_VERSION,
         "input_hash": reference.input_checksum,
     }
     monkeypatch.setattr("gp_assistant.serenity.evaluation.next_trading_day_on_or_after", lambda _: "20260112")
     assert evaluate_pending_item(pending, today=date(2026, 1, 9)) is None
     assert evaluate_pending_item(pending, today=date(2026, 1, 10)) is None
     assert evaluate_pending_item(pending, today=date(2026, 1, 12))["matured_at"] == "2026-01-09"
+
+
+def test_previous_completed_as_of_uses_explicit_decision_trade_day(monkeypatch):
+    reference = _reference()
+    monkeypatch.setattr(
+        "gp_assistant.serenity.evaluation.load_reference_snapshot",
+        lambda _: reference,
+    )
+    monkeypatch.setattr(
+        "gp_assistant.serenity.evaluation.load_decision_snapshot",
+        lambda _: {
+            "snapshot_id": "dcs_1",
+            "as_of": "2026-01-01",
+            "decision_trade_day": "2026-01-02",
+            "risk_output": reference.risk_plans,
+        },
+    )
+    monkeypatch.setattr(
+        "gp_assistant.serenity.evaluation.future_outcome",
+        lambda *args, **kwargs: {"complete": False},
+    )
+    pending = {
+        "reference_snapshot_id": reference.snapshot_id,
+        "decision_context_snapshot_id": "dcs_1",
+        "decision_day": "2026-01-02",
+        "epoch": 1,
+        "formula_version": NATIVE_SERENITY_FORMULA_VERSION,
+        "input_hash": reference.input_checksum,
+    }
+
+    assert evaluate_pending_item(pending, today=date(2026, 1, 12)) is None
 
 
 def test_reference_tampering_is_detected_before_outcome_learning(monkeypatch):
@@ -133,7 +192,12 @@ def test_reference_tampering_is_detected_before_outcome_learning(monkeypatch):
     monkeypatch.setattr("gp_assistant.serenity.evaluation.load_reference_snapshot", lambda _: tampered)
     monkeypatch.setattr(
         "gp_assistant.serenity.evaluation.load_decision_snapshot",
-        lambda _: {"snapshot_id": "dcs_1", "as_of": "2026-01-02", "risk_output": {}},
+        lambda _: {
+            "snapshot_id": "dcs_1",
+            "as_of": "2026-01-02",
+            "decision_trade_day": "2026-01-02",
+            "risk_output": {},
+        },
     )
     payload = evaluate_pending_item(
         {
@@ -141,7 +205,7 @@ def test_reference_tampering_is_detected_before_outcome_learning(monkeypatch):
             "decision_context_snapshot_id": "dcs_1",
             "decision_day": "2026-01-02",
             "epoch": 1,
-            "formula_version": "SerenityAddon.v1",
+            "formula_version": NATIVE_SERENITY_FORMULA_VERSION,
             "input_hash": reference.input_checksum,
         }
     )
@@ -159,6 +223,7 @@ def test_mutated_decision_risk_plan_is_detected_before_outcome_learning(monkeypa
         lambda _: {
             "snapshot_id": "dcs_1",
             "as_of": "2026-01-02",
+            "decision_trade_day": "2026-01-02",
             "risk_output": {
                 "000001": {
                     "entry": {"price": 99},
@@ -174,7 +239,7 @@ def test_mutated_decision_risk_plan_is_detected_before_outcome_learning(monkeypa
             "decision_context_snapshot_id": "dcs_1",
             "decision_day": "2026-01-02",
             "epoch": 1,
-            "formula_version": "SerenityAddon.v1",
+            "formula_version": NATIVE_SERENITY_FORMULA_VERSION,
             "input_hash": reference.input_checksum,
         }
     )
@@ -191,7 +256,7 @@ def test_missing_reference_becomes_terminal_integrity_result(monkeypatch):
             "decision_context_snapshot_id": "dcs_missing",
             "decision_day": "2026-01-02",
             "epoch": 1,
-            "formula_version": "SerenityAddon.v1",
+            "formula_version": NATIVE_SERENITY_FORMULA_VERSION,
             "input_hash": "hash",
         }
     )
@@ -209,6 +274,7 @@ def test_unfinalized_t5_never_matures(monkeypatch):
         lambda _: {
             "snapshot_id": "dcs_1",
             "as_of": "2026-01-02",
+            "decision_trade_day": "2026-01-02",
             "risk_output": reference.risk_plans,
         },
     )
@@ -226,7 +292,7 @@ def test_unfinalized_t5_never_matures(monkeypatch):
         "decision_context_snapshot_id": "dcs_1",
         "decision_day": "2026-01-02",
         "epoch": 1,
-        "formula_version": "SerenityAddon.v1",
+        "formula_version": NATIVE_SERENITY_FORMULA_VERSION,
         "input_hash": reference.input_checksum,
     }
     assert evaluate_pending_item(pending, today=date(2026, 1, 12)) is None
@@ -280,6 +346,7 @@ def test_incomplete_outcome_for_any_arm_union_symbol_skips_whole_day(monkeypatch
         lambda _: {
             "snapshot_id": "dcs_union",
             "as_of": "2026-01-02",
+            "decision_trade_day": "2026-01-02",
             "risk_output": reference.risk_plans,
         },
     )
@@ -299,7 +366,7 @@ def test_incomplete_outcome_for_any_arm_union_symbol_skips_whole_day(monkeypatch
                 "decision_context_snapshot_id": "dcs_union",
                 "decision_day": "2026-01-02",
                 "epoch": 1,
-                "formula_version": "SerenityAddon.v1",
+                    "formula_version": NATIVE_SERENITY_FORMULA_VERSION,
                 "input_hash": reference.input_checksum,
             },
             today=date(2026, 1, 12),
@@ -335,7 +402,7 @@ def _evaluation(idx: int, delta: float = 0.002):
 def test_shadow_can_only_promote_after_full_forward_gate(monkeypatch):
     monkeypatch.setattr(
         "gp_assistant.serenity.evaluation.recent_poll_outcomes",
-        lambda *args, **kwargs: [{"complete": 1} for _ in range(20)],
+        lambda *args, **kwargs: [{"complete": 1, "status": "success"} for _ in range(20)],
     )
     promoted = update_policy_from_evaluations(_state(), [_evaluation(idx) for idx in range(100)])
     assert promoted.state == "probation"
@@ -345,7 +412,7 @@ def test_shadow_can_only_promote_after_full_forward_gate(monkeypatch):
 def test_integrity_error_suspends_and_zeros_weight(monkeypatch):
     monkeypatch.setattr(
         "gp_assistant.serenity.evaluation.recent_poll_outcomes",
-        lambda *args, **kwargs: [{"complete": 1} for _ in range(20)],
+        lambda *args, **kwargs: [{"complete": 1, "status": "success"} for _ in range(20)],
     )
     row = _evaluation(1)
     row["integrity_errors"] = ["reference_input_hash_mismatch"]
@@ -355,7 +422,7 @@ def test_integrity_error_suspends_and_zeros_weight(monkeypatch):
     assert "reference_input_hash_mismatch" in suspended.suspension_reasons
 
 
-def test_source_level_incomplete_partial_poll_suspends_active_policy(monkeypatch):
+def test_source_level_incomplete_partial_poll_blocks_readiness_without_mutating_policy(monkeypatch):
     monkeypatch.setattr(
         "gp_assistant.serenity.evaluation.recent_poll_outcomes",
         lambda *args, **kwargs: [
@@ -364,20 +431,20 @@ def test_source_level_incomplete_partial_poll_suspends_active_policy(monkeypatch
     )
     state = _state(stage="active", weight=0.02)
 
-    suspended = update_policy_from_evaluations(
+    unchanged = update_policy_from_evaluations(
         state,
         [_evaluation(idx) for idx in range(20)],
     )
 
-    assert suspended.state == "suspended"
-    assert suspended.applied_weight == 0.0
-    assert "source_success_below_90pct" in suspended.suspension_reasons
+    assert unchanged.state == "active"
+    assert unchanged.applied_weight == 0.01
+    assert unchanged.suspension_reasons == []
 
 
 def test_policy_metrics_block_bootstrap_by_unique_decision_day(monkeypatch):
     monkeypatch.setattr(
         "gp_assistant.serenity.evaluation.recent_poll_outcomes",
-        lambda *args, **kwargs: [{"complete": 1} for _ in range(20)],
+        lambda *args, **kwargs: [{"complete": 1, "status": "success"} for _ in range(20)],
     )
     rows = [_evaluation(idx) for idx in range(40)]
     duplicate = dict(rows[-1])
@@ -390,7 +457,7 @@ def test_policy_metrics_block_bootstrap_by_unique_decision_day(monkeypatch):
 def test_repeated_identical_learning_sample_cannot_inflate_promotion_counts(monkeypatch):
     monkeypatch.setattr(
         "gp_assistant.serenity.evaluation.recent_poll_outcomes",
-        lambda *args, **kwargs: [{"complete": 1} for _ in range(20)],
+        lambda *args, **kwargs: [{"complete": 1, "status": "success"} for _ in range(20)],
     )
     rows = [
         {**_evaluation(idx), "learning_sample_id": "same-frozen-decision"}
@@ -422,7 +489,7 @@ def _metric_stub(rows, weight):
 def test_active_weight_moves_one_point_after_two_passes_and_one_failure(monkeypatch):
     monkeypatch.setattr(
         "gp_assistant.serenity.evaluation.recent_poll_outcomes",
-        lambda *args, **kwargs: [{"complete": 1} for _ in range(20)],
+        lambda *args, **kwargs: [{"complete": 1, "status": "success"} for _ in range(20)],
     )
     monkeypatch.setattr("gp_assistant.serenity.evaluation._metrics", _metric_stub)
     rows = [_evaluation(idx) for idx in range(60)]
@@ -454,7 +521,7 @@ def test_active_weight_moves_one_point_after_two_passes_and_one_failure(monkeypa
 def test_probation_requires_four_distinct_five_day_pass_windows(monkeypatch):
     monkeypatch.setattr(
         "gp_assistant.serenity.evaluation.recent_poll_outcomes",
-        lambda *args, **kwargs: [{"complete": 1} for _ in range(20)],
+        lambda *args, **kwargs: [{"complete": 1, "status": "success"} for _ in range(20)],
     )
 
     def passing_metrics(rows, weight):
@@ -483,10 +550,10 @@ def test_probation_requires_four_distinct_five_day_pass_windows(monkeypatch):
     assert state.applied_weight == 0.02
 
 
-def test_suspended_policy_recovers_only_to_new_shadow_epoch(monkeypatch):
+def test_suspended_policy_recovers_only_after_clean_forward_evidence(monkeypatch):
     monkeypatch.setattr(
         "gp_assistant.serenity.evaluation.recent_poll_outcomes",
-        lambda *args, **kwargs: [{"complete": 1} for _ in range(20)],
+        lambda *args, **kwargs: [{"complete": 1, "status": "success"} for _ in range(20)],
     )
     rows = [
         {**_evaluation(idx), "available_results": 6}
@@ -517,7 +584,7 @@ def test_policy_updates_only_after_five_new_unique_mature_days(monkeypatch):
     )
     monkeypatch.setattr("gp_assistant.serenity.evaluation.load_policy_state", lambda: state)
     monkeypatch.setattr("gp_assistant.serenity.evaluation.list_evaluations", lambda **kwargs: evaluations)
-    monkeypatch.setattr("gp_assistant.serenity.evaluation.recent_poll_outcomes", lambda *args, **kwargs: [{"complete": 1}] * 20)
+    monkeypatch.setattr("gp_assistant.serenity.evaluation.recent_poll_outcomes", lambda *args, **kwargs: [{"complete": 1, "status": "success"}] * 20)
     monkeypatch.setattr(
         "gp_assistant.serenity.evaluation.save_policy_state_with_ledger",
         lambda value, **kwargs: value,
@@ -648,6 +715,24 @@ def test_backlog_page_checkpoint_resumes_instead_of_restarting(monkeypatch, tmp_
     assert second["complete"] is True
     assert client.start_pages == [1, 2]
     assert load_source_progress("cninfo") == {}
+
+
+def test_backlog_checkpoint_is_not_reused_on_the_next_target_day(monkeypatch, tmp_path):
+    monkeypatch.setenv("GP_SERENITY_STORE_DIR", str(tmp_path / "next-day-backlog"))
+    client = _BacklogClient()
+    first_day = datetime(2026, 7, 10, 8, 0, tzinfo=timezone.utc)
+    next_day = datetime(2026, 7, 11, 8, 0, tzinfo=timezone.utc)
+
+    first = run_serenity_once(
+        symbols=["000001"], client=client, verifier=None, now=first_day
+    )
+    second = run_serenity_once(
+        symbols=["000001"], client=client, verifier=None, now=next_day
+    )
+
+    assert first["complete"] is False
+    assert second["complete"] is True
+    assert client.start_pages == [1, 1]
 
 
 class _SchemaFailureClient(_EmptyRealClient):
@@ -824,7 +909,7 @@ def test_hydration_failure_keeps_window_pending_until_retry(monkeypatch, tmp_pat
     now = datetime.now(timezone.utc)
 
     first = run_serenity_once(symbols=["000001"], now=now)
-    assert first["complete"] is True
+    assert first["complete"] is False
     assert first["status"] == "partial"
     assert first["coverage"][0]["hydration_complete"] is False
     assert load_source_progress("cninfo")["000001"]["status"] == "hydration_backlog"
@@ -835,7 +920,7 @@ def test_hydration_failure_keeps_window_pending_until_retry(monkeypatch, tmp_pat
     assert client.windows[0] == client.windows[1]
 
 
-def test_local_target_failure_does_not_block_successful_symbol_cursor(monkeypatch, tmp_path):
+def test_partial_target_failure_does_not_advance_source_cursor(monkeypatch, tmp_path):
     monkeypatch.setenv("GP_SERENITY_STORE_DIR", str(tmp_path / "partial-target"))
     monkeypatch.setattr(
         "gp_assistant.serenity.worker.CNInfoClient",
@@ -845,11 +930,10 @@ def test_local_target_failure_does_not_block_successful_symbol_cursor(monkeypatc
 
     result = run_serenity_once(symbols=["000001", "000002"], now=now)
 
-    assert result["complete"] is True
+    assert result["complete"] is False
     assert result["status"] == "partial"
     cursor = load_cursor("cninfo")
-    assert cursor["symbol_last_complete_end"]["000001"]
-    assert "000002" not in cursor["symbol_last_complete_end"]
+    assert cursor == {}
 
 
 class _TerminalUnparsedDefaultClient(_HydrationRetryDefaultClient):
@@ -859,8 +943,16 @@ class _TerminalUnparsedDefaultClient(_HydrationRetryDefaultClient):
         return b"%PDF-scanned-image-only"
 
 
-def test_terminal_unparsed_pdf_does_not_create_permanent_backlog(monkeypatch, tmp_path):
-    monkeypatch.setenv("GP_SERENITY_STORE_DIR", str(tmp_path / "terminal-unparsed"))
+@pytest.mark.parametrize(
+    ("extracted_text", "extraction_status"),
+    (("", "unparsed"), ("只提取到部分页面", "truncated")),
+)
+def test_incomplete_pdf_extraction_keeps_target_pending(
+    monkeypatch, tmp_path, extracted_text, extraction_status
+):
+    monkeypatch.setenv(
+        "GP_SERENITY_STORE_DIR", str(tmp_path / f"pending-{extraction_status}")
+    )
     client = _TerminalUnparsedDefaultClient()
     monkeypatch.setattr(
         "gp_assistant.serenity.worker.CNInfoClient",
@@ -872,20 +964,24 @@ def test_terminal_unparsed_pdf_does_not_create_permanent_backlog(monkeypatch, tm
     )
     monkeypatch.setattr(
         "gp_assistant.serenity.worker.extract_pdf_text",
-        lambda data: ("", "unparsed"),
+        lambda data: (extracted_text, extraction_status),
     )
 
-    result = run_serenity_once(
+    first = run_serenity_once(
+        symbols=["000001"],
+        now=datetime.now(timezone.utc),
+    )
+    second = run_serenity_once(
         symbols=["000001"],
         now=datetime.now(timezone.utc),
     )
 
-    assert result["complete"] is True
-    assert result["status"] == "success"
-    assert result["coverage"][0]["hydration_complete"] is True
-    assert load_source_progress("cninfo") == {}
-    stored = lookup_document("cninfo", "hydration-retry")
-    assert stored["extraction_status"] == "unparsed"
+    assert first["complete"] is False
+    assert first["status"] == "partial"
+    assert first["coverage"][0]["hydration_complete"] is False
+    assert load_source_progress("cninfo")["000001"]["status"] == "hydration_backlog"
+    assert second["complete"] is False
+    assert client.download_attempts == 2
 
 
 class _ChangingSchemaDefaultClient(_EmptyRealClient):

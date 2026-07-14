@@ -5,6 +5,9 @@ x-backend-build: &backend-build
   args:
     BASE_PY_IMAGE: ${BASE_PY_IMAGE:-python:3.11-slim-bookworm}
     PIP_INDEX_URL: ${PIP_INDEX_URL:-https://pypi.org/simple}
+    HTTP_PROXY: ${HTTP_PROXY:-}
+    HTTPS_PROXY: ${HTTPS_PROXY:-}
+    ALL_PROXY: ${ALL_PROXY:-}
     GP_BUILD_REVISION: ${GP_BUILD_REVISION:-local}
 
 x-backend-env: &backend-env
@@ -20,7 +23,6 @@ x-backend-env: &backend-env
   GP_INTRADAY_RUNTIME_ENABLED: ${GP_INTRADAY_RUNTIME_ENABLED:-1}
 
 x-backend: &backend
-  build: *backend-build
   image: ${GP_BACKEND_IMAGE:-gp-backend}:${GP_BACKEND_TAG:-local}
   pull_policy: never
   env_file:
@@ -37,6 +39,7 @@ x-backend: &backend
 services:
   api:
     <<: *backend
+    build: *backend-build
     command: ["python", "-m", "gp_assistant.cli", "serve", "--host", "0.0.0.0", "--port", "8000"]
     ports:
       - "8000:8000"
@@ -56,6 +59,17 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
+  serenity:
+    <<: *backend
+    environment:
+      <<: *backend-env
+      GP_SERENITY_MODE: ${GP_SERENITY_MODE:-native}
+    command: ["python", "-m", "gp_assistant.cli", "serenity-loop"]
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+
   web:
     build:
       context: ./frontend
@@ -63,6 +77,9 @@ services:
         BASE_NODE_IMAGE: ${BASE_NODE_IMAGE:-node:20-alpine}
         BASE_NGINX_IMAGE: ${BASE_NGINX_IMAGE:-nginx:1.25-alpine}
         NPM_REGISTRY: ${NPM_REGISTRY:-https://registry.npmjs.org}
+        HTTP_PROXY: ${HTTP_PROXY:-}
+        HTTPS_PROXY: ${HTTPS_PROXY:-}
+        ALL_PROXY: ${ALL_PROXY:-}
     depends_on:
       api:
         condition: service_healthy

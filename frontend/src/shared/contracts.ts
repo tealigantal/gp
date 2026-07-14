@@ -31,8 +31,29 @@ export interface ChatHistoryResponse {
 
 export interface HealthResponse {
   status: string
+  product_ready: boolean
+  readiness_reasons: string[]
   agent_db: { sessions: number; turns: number; snapshots: number; current_snapshot_id?: string | null; path: string }
   current_snapshot?: { snapshot_id: string; schema_version: string; as_of: string; decision: string; tradeable: boolean; payload_hash: string } | null
   history_db: { path: string; exists: boolean; bytes: number }
-  worker: { publisher: string }
+  llm: {
+    available: boolean
+    configured: boolean
+    configuration_reason: string
+    verification: string
+    model: string
+  }
+  serenity: {
+    available: boolean
+    reason?: string | null
+    snapshot_native_ready: boolean
+    snapshot_target_id?: string | null
+    candidate_target?: { target_id?: string | null } | null
+  }
+  worker: {
+    publisher: string
+    selection_policy: string
+    runtime_contract_ready: boolean
+    expected_market_time?: Record<string, unknown>
+  }
 }

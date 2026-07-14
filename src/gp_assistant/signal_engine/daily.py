@@ -168,6 +168,10 @@ def _make_event(
         "name": name,
         "as_of": as_of,
     }
+    outcome = _outcome(df, idx, features) if with_outcome else {"complete": False}
+    if outcome.get("complete") is True:
+        # The fifth forward trading bar is the earliest complete T+5 outcome.
+        outcome["outcome_available_trading_day"] = _date_at(df, idx + 5)
     return make_market_event(
         as_of=as_of,
         symbol=symbol,
@@ -175,8 +179,8 @@ def _make_event(
         feature_vector=vector,
         features={**features, "signal_type": signal_type, "name": name, "industry": industry},
         market_context=event_context,
-        outcome=_outcome(df, idx, features) if with_outcome else {"complete": False},
-        data_provenance={"source": "daily_ohlcv", "feature_engine": "signal_engine.daily"},
+        outcome=outcome,
+        data_provenance={"source": "daily_ohlcv", "feature_engine": "signal_engine.daily", "signal_trading_day": as_of},
     )
 
 

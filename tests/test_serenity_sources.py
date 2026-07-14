@@ -170,6 +170,40 @@ def test_cninfo_exact_symbol_paginates_and_detects_backlog():
     assert result["backlog"] is True
 
 
+def test_cninfo_accepts_real_null_empty_result_as_complete_coverage():
+    client = CNInfoClient(
+        spacing_sec=0,
+        session=_Session(
+            [
+                _Response(
+                    payload={
+                        "announcements": None,
+                        "totalpages": 0,
+                        "hasMore": False,
+                    }
+                )
+            ]
+        ),
+    )
+
+    result = client.fetch_symbol(
+        "000001",
+        "gssz0000001",
+        start=__import__("datetime").date(2026, 1, 1),
+        end=__import__("datetime").date(2026, 1, 31),
+    )
+
+    assert result == {
+        "records": [],
+        "complete": True,
+        "backlog": False,
+        "schema_fingerprint": None,
+        "total_pages": 0,
+        "next_page": None,
+        "start_page": 1,
+    }
+
+
 def test_cninfo_429_is_structured():
     client = CNInfoClient(spacing_sec=0, session=_Session([_Response(status=429, headers={"Retry-After": "17"})]))
     with pytest.raises(SourceError) as caught:

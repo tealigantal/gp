@@ -1,4 +1,6 @@
-# Serenity Alpha Automatic Promotion ExecPlan
+# Superseded — Serenity Alpha Automatic Promotion ExecPlan
+
+> Superseded on 2026-07-13 by `docs/plans/2026-07-13-serenity-resident-service.md` and ADR 0004. This document remains a historical implementation record; its automatic-promotion design is not active.
 
 ## Purpose / Big Picture
 
@@ -47,7 +49,7 @@ The vertical slice is implemented, has both zero-result and positive-fact real-s
 
 ## Context and Orientation
 
-The base selection is implemented in `src/gp_assistant/decision_engine/adaptive_policy.py` and orchestrated by `decision_engine/pipeline.py`. Decision snapshots live in Market Memory. Chat routing and tool evidence are in `runtime/turn_loop.py` and `runtime/context_engine.py`; narration is in `llm/narrate.py`. Runtime state is exposed by `gateway/routes.py` and `contracts/api.py`.
+The base selection is implemented in `src/gp_assistant/decision_engine/adaptive_policy.py` and orchestrated by `decision_engine/pipeline.py`. Decision snapshots live in Market Memory. The product chat path is `chat_agent.py` over immutable `agent.db` snapshots; runtime state is exposed by `gateway/routes.py` and `contracts/api.py`.
 
 ## Plan of Work
 

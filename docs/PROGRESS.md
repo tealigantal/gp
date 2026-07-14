@@ -1,30 +1,29 @@
 # Current Progress
 
-Last updated: 2026-07-13
+Last updated: 2026-07-14
 
 ## Active Delivery State
 
-- **Active Goal:** Operate one immutable-snapshot recommendation chat protocol while Serenity remains advisory selection evidence.
-- **Active ExecPlan:** `docs/plans/2026-07-13-single-protocol-agent.md`.
-- **Current Milestone:** `agent.db`, `RecommendationSnapshot.v1`, and the three-endpoint public surface are implemented; legacy runtime data has been removed and containers are deliberately stopped pending a normal rebuild/deployment.
-- **Cutover State:** `store/agent.db` schema version 1 is initialized with no current snapshot. This is intentionally fail-closed: chat returns `no_trade` until the rebuilt worker publishes and validates a fresh snapshot.
-- **Docker/Engine Audit:** Compose now has only `api`, `worker`, and `web`; its configuration validates. The engine database-input audit passed and fixed risk-flag projection. Current history ends on 2026-07-10, while the latest 2026-07-13 decision correctly blocks recommendation as stale.
-- **Current Milestone:** Canonical recommendation-chain recovery is implemented and container-verified; Serenity forward observation remains an operational gate.
-- **Completed and Verified:** Governance, real source bootstrap gate, append-only evidence/metadata versions, per-symbol coverage and page/hydration resume, official verification boundary, independent add-on/counterfactual policy, T+6 causal evaluation, target-only narration, health/CLI/Compose integration, real zero-result and positive-fact CNINFO smokes, 119 targeted tests, and all 311 default tests.
-- **Implemented but Not Verified:** Live multi-day worker continuity and five consecutive forward shadow trading days.
-- **In Progress:** Recommendation-chain recovery handoff and forward Serenity observation readiness.
-- **Next Work:** Start the experiment worker when Docker Desktop is available, run the container/API smoke, and leave the experiment at shadow/0% until real forward gates mature.
-- **Blockers:** Free endpoints have no SLA; forward predictive performance cannot mature during implementation. Docker runtime validation is pending because the local Docker Desktop Linux engine was unavailable on 2026-07-11.
-- **Recent Decisions:** Serenity remains separate from the eight expert weights; backfill reference arms cannot bind/train; automatic promotion starts at 1%, active learning at 2%, and caps at 8%; replay forces Serenity off; integrity/persistence violations force 0%.
-- **Resume Instructions:** Read `AGENTS.md`, `PROJECT_GOAL.md`, and the active ExecPlan; preserve `store/book/current_slot.json`; inspect `serenity-status`; continue with the first unchecked validation item without synthesizing forward outcomes.
+- **Active Goal:** Restore the existing production Compose stack so Serenity Alpha is a mandatory candidate-bound ninth Adaptive expert and `/api/chat` uses a real LLM for both routing and grounded narration.
+- **Active ExecPlan:** `docs/plans/2026-07-14-serenity-native-alpha-and-llm-chat.md`.
+- **Current Milestone:** Source, storage, worker, snapshot and chat contracts are implemented; the backend/default 166-test suite and frontend checks pass; the ordinary production Compose services now run the rebuilt image. Product readiness is intentionally waiting for the real 2026-07-14 EOD bar before the worker can publish the candidate target.
+- **Decision Path:** Market Memory preselects and publishes one immutable target; the resident Serenity service completes exact-target official coverage; Adaptive performs one nine-expert score; the resulting target lineage and per-pick Alpha are frozen into `RecommendationSnapshot.v1`.
+- **No-fallback Contract:** Partial target coverage, stale or unparsed documents, target switches, invalid legacy modes, missing native payload, old market-time snapshots, or LLM trace/grounding failure cannot expose an eight-expert recommendation or fixed response template.
+- **LLM Contract:** Every committed chat turn proves ordered real `intent_routing` (or repair) and `tool_evidence` provider calls with 2xx/model/response IDs. Local code owns symbols, refresh scope, decision, action and every number.
+- **Health Contract:** API HTTP 200 is liveness only. `product_ready=true/status=ok` additionally requires a current market-time snapshot, complete embedded native-Alpha lineage, exact active target readiness, a live Serenity lease, and a recent successfully committed two-stage LLM turn.
+- **Verified Locally:** `python -m compileall -q src tests`; all 166 default pytest tests; frontend lint, typecheck, Vitest and production build; Compose render; whitespace check; in-place backend/frontend image builds and ordinary four-service recreation. Exact runtime evidence is recorded in `docs/VALIDATION.md`.
+- **Runtime Data Boundary:** Existing `agent.db`, Market Memory/history databases, Serenity evidence, Docker volumes and unrelated tracked runtime deletions are preserved. No isolated acceptance store, injected source, manual bootstrap, fallback mode, or temporary production path is used.
+- **Next Work:** Let the resident EOD probe observe the real close, then let worker/Serenity naturally publish the target and native snapshot; execute a real first-turn and follow-up chat, inspect persisted LLM evidence, and visually verify the existing Workspace.
+- **Blockers:** Free official sources have no SLA and scanned PDFs have no OCR. Either condition is an explicit unavailable/pending state, not permission to continue with baseline ranking.
+- **Resume Instructions:** Read `AGENTS.md`, `PROJECT_GOAL.md`, and the active ExecPlan; preserve runtime state; continue from ordinary resident-service logs and `product_ready/readiness_reasons` without manually seeding readiness.
 
 ## Snapshot
 
 The repository is currently centered on one active product surface and one production decision path:
 
 - `gateway/` exposes the FastAPI API
-- `runtime/` owns concern parsing, turn orchestration, and user-safe reply assembly
-- `memory/` stores session, transcript, and follow-up context
+- `worker.py` owns market-time resolution, daybook reuse, selection, and snapshot publication
+- `chat_agent.py` and `agent_store.py` own snapshot-grounded chat, session binding, transcript, and claims
 - `book/` builds the daybook and actionable board
 - `judgment/` produces recommendation, follow-up, compare, and exit decisions
 - `signal_engine/` emits structural daily signal events
@@ -42,6 +41,15 @@ The current product direction is:
 - one shared Market-Memory decision source for recommendation, follow-up, comparison, exit, and run-change answers
 
 ## Recent Changes
+
+### 2026-07-14 — Serenity native Alpha and real-LLM restoration
+
+- Replaced the post-hoc Serenity add-on with an exact-target native ninth expert inside the one Adaptive score. Complete known-empty official coverage is neutral; incomplete coverage yields formal no-trade with no baseline candidate leakage.
+- Added additive target-pointer/progress/withdrawal/formula-epoch migrations, as-of bootstrap/version semantics, full-TTL correction re-observation, strict PDF hydration, immutable DCS/reference checksums, and resident target-switch/DayBook promotion handling.
+- Added bounded resident observation of the local target pointer while a source poll is sleeping, so a target created after process startup is consumed promptly without manual polling, source churn or lease takeover.
+- Replaced fixed chat rendering with mandatory real-LLM intent routing and grounded narration. The session stores ordered provider evidence, and commits only after snapshot integrity, field-number/action authority and reply grounding validation.
+- Expanded health from process liveness to explicit product readiness across current market time, native snapshot contents, Serenity worker/coverage and recent committed LLM evidence.
+- ADR 0005 supersedes the reference-only ranking authority in ADR 0004; the resident Compose topology remains.
 
 ### 2026-07-11 — Serenity Alpha vertical slice
 
@@ -228,16 +236,12 @@ The following Market-Memory checks were run locally during the 2026-07-08 valida
 
 Use these files first when resuming work on this area:
 
-- `src/gp_assistant/runtime/turn_loop.py`
-  Turn orchestration, tool-facing assistant context, decision-basis explanation.
-- `src/gp_assistant/runtime/narrator.py`
-  User-facing fallback text and canonical reply assembly.
-- `src/gp_assistant/runtime/dialogue_text.py`
-  Shared text cleaning, observation explanation, and state labeling.
-- `src/gp_assistant/runtime/concern_parser.py`
-  LLM-backed request parsing and normalization behavior.
-- `src/gp_assistant/llm/interpret.py`
-  Strict JSON intent router prompt, one-shot repair, and parse error reporting.
+- `src/gp_assistant/worker.py`
+  Market-time resolution, completed-bar freshness, immutable daybook reuse, and snapshot publication.
+- `src/gp_assistant/chat_agent.py`
+  Snapshot-grounded chat rendering and current/historical no-trade behavior.
+- `src/gp_assistant/agent_store.py`
+  Immutable snapshots, atomic session binding, transcript persistence, and readonly health reads.
 - `src/gp_assistant/kernel/facade.py`
   Public service facade for recommendation v2, compare, pick detail, validation, portfolio, execution preview, and workbench aggregation.
 - `src/gp_assistant/decision_engine/pipeline.py`
@@ -266,3 +270,33 @@ Use these files first when resuming work on this area:
 - Added configurable SQLite history filename and journal mode for Docker Desktop bind mounts.
 - Recovered cached-market-data reads using `history-clean.db` with `DELETE` journaling while retaining the original database.
 - Rebuilt and verified API, worker, web, health, cache probes, and daybook generation.
+
+## 2026-07-14 Serenity-native ranking and real-LLM recovery complete
+
+- Replaced the fixed `/api/chat` renderer with real LLM intent routing and
+  grounded narration while preserving deterministic engine authority over
+  candidates, ordering, actions, prices, probabilities and Serenity facts.
+- Integrated Serenity into the one Adaptive v2 score as the causally gated
+  ninth signed expert. Missing/incomplete exact-target coverage cannot publish
+  the eight-expert baseline.
+- Added atomic cross-store evidence publication, immutable Serenity/reference
+  identities, safe Decision Context Snapshot files, and exact runtime evidence
+  bindings before advancing the sole current pointer.
+- Split live poll freshness from `SerenitySemanticRevision.v1`. Equivalent
+  complete polls renew the worker/coverage certificate without invalidating an
+  unchanged snapshot or an in-flight LLM turn; real fact/policy/target changes
+  still force rebuild, and partial/expired/dead-worker states fail closed.
+- All 253 collected backend tests and compilation passed. The previously run
+  frontend lint, typecheck, five Vitest tests and production build remain green;
+  Compose validation and whitespace checks passed.
+- Rebuilt and recreated only `api`, `worker` and `serenity`. They share image
+  `sha256:cd8fcf2ee0ac716dfed3b660ebb36bc8602ba7426292e20c5a9277ef1e4bde30`;
+  `web`, Docker Desktop, production databases and volumes were not replaced.
+- Natural resident poll renewal changed run/readiness/freshness but retained
+  semantic revision `e15a9c6e...`, stable binding and current snapshot
+  `daily_c3af00389213`. Health remained `product_ready=true`.
+- Real two-turn DeepSeek acceptance and the browser Workspace passed on the
+  same immutable snapshot. The first answer returned 600519/600036/601318 as
+  non-executable next-window plans; the follow-up explained 600519 with neutral
+  shadow Serenity contribution. The persisted conversation contains four roles
+  all bound to `daily_c3af00389213`.

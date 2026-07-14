@@ -5,10 +5,12 @@ interface ComposerProps {
   onChange: (value: string) => void
   onSubmit: () => void
   disabled?: boolean
-  llmReady?: boolean
+  loading?: boolean
+  disabledReason?: string
 }
 
-export function Composer({ value, onChange, onSubmit, disabled }: ComposerProps) {
+export function Composer({ value, onChange, onSubmit, disabled, loading, disabledReason }: ComposerProps) {
+  const inputDisabled = Boolean(disabled || loading)
   return (
     <div className="composer-wrap">
       <div className="composer-headline">
@@ -33,14 +35,14 @@ export function Composer({ value, onChange, onSubmit, disabled }: ComposerProps)
                 onSubmit()
               }
             }}
-            disabled={disabled}
+            disabled={inputDisabled}
           />
-          <Button type="primary" onClick={onSubmit} loading={disabled}>
+          <Button type="primary" onClick={onSubmit} loading={loading} disabled={disabled}>
             发送问题
           </Button>
         </Space.Compact>
         <div className="composer-footer">
-          <Typography.Text type="secondary">直接说问题本身，不需要先解释你要调用什么功能。</Typography.Text>
+          <Typography.Text type="secondary">{disabled && disabledReason ? disabledReason : '直接说问题本身，不需要先解释你要调用什么功能。'}</Typography.Text>
           <Typography.Text type="secondary">Enter 发送，Shift + Enter 换行</Typography.Text>
         </div>
       </div>

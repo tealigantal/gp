@@ -23,6 +23,7 @@ from ..runtime.market_clock import (
     _load_calendar_df,
     resolve_trading_day_on_or_before,
 )
+from ..runtime.market_time import MarketTimeContext, iso_day
 from ..runtime.utils import now_iso
 from ..search.history_store import canonical_query_id, ensure_query, history_db_path, list_queries, query_meta
 from ..selection_engine.datahub import MarketDataHub
@@ -278,7 +279,7 @@ def resolve_daily_target(
     now=None,
     force_probe: bool = False,
     allow_probe: bool = True,
-) -> dict[str, Any]:
+) -> MarketTimeContext:
     ms = compute_market_state(now)
     current_ymd = str(ms.target_daybook_effective_day)
     requested_raw_ymd = _date_ymd(as_of)
@@ -303,17 +304,27 @@ def resolve_daily_target(
         "calendar_blocking_reason": calendar_reason,
     }
 
+    def context(*, effective_ymd: str, mode: str, pending: str | None = None, probe: dict[str, Any] | None = None) -> MarketTimeContext:
+        return MarketTimeContext(
+            decision_trade_day=_iso_from_ymd(current_ymd),
+            daybook_effective_day=_iso_from_ymd(effective_ymd),
+            pulse_trade_day=iso_day(getattr(ms, "target_pulse_trade_day", None)),
+            pulse_slot_closed_at=getattr(ms, "target_pulse_slot_at", None),
+            observed_at=now_iso(),
+            market_phase=ms.market_phase,
+            target_mode=mode,
+            pending_eod_day=pending,
+            eod_probe=probe,
+            calendar_status=common["calendar_status"],
+            calendar_source=common["calendar_source"],
+            calendar_range=common["calendar_range"],
+            calendar_error=common["calendar_error"],
+            next_trading_day=iso_day(common["next_trading_day"]),
+            calendar_blocking_reason=common["calendar_blocking_reason"],
+        )
+
     if requested_ymd != current_ymd:
-        return {
-            "target_ymd": requested_ymd,
-            "target_day": _iso_from_ymd(requested_ymd),
-            "target_mode": TARGET_CURRENT_READY,
-            "daybook_trading_day": requested_ymd,
-            "pending_eod_day": None,
-            "eod_probe": None,
-            "market_phase": ms.market_phase,
-            **common,
-        }
+        return context(effective_ymd=requested_ymd, mode=TARGET_CURRENT_READY)
 
     if ms.market_phase == PHASE_POSTCLOSE_PENDING:
         if allow_probe:
@@ -328,16 +339,7 @@ def resolve_daily_target(
             target_ymd = _previous_open_day_ymd(current_ymd)
             mode = TARGET_CURRENT_PENDING
             pending = _iso_from_ymd(current_ymd)
-        return {
-            "target_ymd": target_ymd,
-            "target_day": _iso_from_ymd(target_ymd),
-            "target_mode": mode,
-            "daybook_trading_day": current_ymd,
-            "pending_eod_day": pending,
-            "eod_probe": probe,
-            "market_phase": ms.market_phase,
-            **common,
-        }
+        return context(effective_ymd=target_ymd, mode=mode, pending=pending, probe=probe)
 
     if ms.market_phase in _UNFINISHED_CURRENT_DAY_PHASES:
         target_ymd = _previous_open_day_ymd(current_ymd)
@@ -348,16 +350,7 @@ def resolve_daily_target(
     else:
         target_ymd = current_ymd
         mode = TARGET_CURRENT_READY
-    return {
-        "target_ymd": target_ymd,
-        "target_day": _iso_from_ymd(target_ymd),
-        "target_mode": mode,
-        "daybook_trading_day": current_ymd,
-        "pending_eod_day": None,
-        "eod_probe": None,
-        "market_phase": ms.market_phase,
-        **common,
-    }
+    return context(effective_ymd=target_ymd, mode=mode)
 
 
 def resolve_target_trading_day(as_of: str | None = None) -> str:

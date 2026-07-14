@@ -5,6 +5,7 @@ import sqlite3
 import threading
 import time
 import os
+import uuid
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from hashlib import sha256
@@ -27,8 +28,8 @@ _SQLITE_JOURNAL_MODES = {"DELETE", "PERSIST", "TRUNCATE", "WAL"}
 
 def _sqlite_journal_mode() -> str:
     """Return a whitelisted journal mode suitable for interpolation in PRAGMA."""
-    requested = os.getenv("GP_HISTORY_SQLITE_JOURNAL_MODE", "WAL").strip().upper()
-    return requested if requested in _SQLITE_JOURNAL_MODES else "WAL"
+    requested = os.getenv("GP_HISTORY_SQLITE_JOURNAL_MODE", "DELETE").strip().upper()
+    return requested if requested in _SQLITE_JOURNAL_MODES else "DELETE"
 
 
 def history_db_path() -> Path:
@@ -52,26 +53,28 @@ def _db_lock_path() -> Path:
     return path
 
 
-def _acquire_process_lock(path: Path, *, timeout_sec: float = 30.0, poll_sec: float = 0.05) -> None:
+def _acquire_process_lock(path: Path, *, timeout_sec: float = 1.2, poll_sec: float = 0.05) -> str:
     deadline = time.monotonic() + timeout_sec
+    token = uuid.uuid4().hex
     while True:
         try:
             fd = os.open(str(path), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
             try:
-                payload = f"{os.getpid()} {time.time():.6f}\n".encode("utf-8")
+                payload = f"{os.getpid()} {time.time():.6f} {token}\n".encode("utf-8")
                 os.write(fd, payload)
             finally:
                 os.close(fd)
-            return
+            return token
         except FileExistsError:
             if time.monotonic() >= deadline:
                 raise TimeoutError(f"Timed out waiting for history db lock: {path}")
             time.sleep(poll_sec)
 
 
-def _release_process_lock(path: Path) -> None:
+def _release_process_lock(path: Path, token: str) -> None:
     try:
-        path.unlink()
+        if token in path.read_text(encoding="utf-8"):
+            path.unlink()
     except FileNotFoundError:
         return
 
@@ -82,16 +85,17 @@ def history_db_lane():
     _DB_LOCK.acquire()
     depth = int(getattr(_DB_LOCK_STATE, "depth", 0) or 0)
     outermost = depth == 0
+    token: str | None = None
     try:
         if outermost:
-            _acquire_process_lock(path)
+            token = _acquire_process_lock(path)
         _DB_LOCK_STATE.depth = depth + 1
         yield
     finally:
         next_depth = max(int(getattr(_DB_LOCK_STATE, "depth", 1) or 1) - 1, 0)
         _DB_LOCK_STATE.depth = next_depth
-        if outermost:
-            _release_process_lock(path)
+        if outermost and token is not None:
+            _release_process_lock(path, token)
         _DB_LOCK.release()
 
 
@@ -141,6 +145,16 @@ def _connect() -> sqlite3.Connection:
                 )
                 conn.commit()
                 _SCHEMA_INIT_PATHS.add(dbp)
+    return conn
+
+
+def _connect_read() -> sqlite3.Connection | None:
+    path = _db_path()
+    if not path.exists():
+        return None
+    conn = sqlite3.connect(f"{path.resolve().as_uri()}?mode=ro", uri=True, timeout=0.5)
+    conn.execute("PRAGMA query_only=ON")
+    conn.execute("PRAGMA busy_timeout=500")
     return conn
 
 
@@ -213,9 +227,10 @@ def ensure_query(query_id: str, params: Dict[str, Any]) -> None:
 
 
 def query_meta(query_id: str) -> Dict[str, Any]:
-    with history_db_lane():
-        conn = _connect()
-        try:
+    conn = _connect_read()
+    if conn is None:
+        return {"id": query_id, "params": None, "created_at": None, "updated_at": None, "last_fetch_at": None, "last_item_time": None}
+    try:
             cur = conn.execute(
                 "SELECT id, params, created_at, updated_at, last_fetch_at, last_item_time FROM queries WHERE id=?",
                 (query_id,),
@@ -238,14 +253,15 @@ def query_meta(query_id: str) -> Dict[str, Any]:
                 "last_fetch_at": r[4],
                 "last_item_time": r[5],
             }
-        finally:
-            conn.close()
+    finally:
+        conn.close()
 
 
 def count_items(query_id: str, *, since: Optional[str] = None) -> int:
-    with history_db_lane():
-        conn = _connect()
-        try:
+    conn = _connect_read()
+    if conn is None:
+        return 0
+    try:
             if since is None:
                 cur = conn.execute("SELECT COUNT(*) FROM items WHERE query_id=?", (query_id,))
             else:
@@ -255,8 +271,8 @@ def count_items(query_id: str, *, since: Optional[str] = None) -> int:
                 )
             r = cur.fetchone()
             return int(r[0] or 0) if r else 0
-        finally:
-            conn.close()
+    finally:
+        conn.close()
 
 
 def watermark(query_id: str) -> Optional[str]:
@@ -412,9 +428,10 @@ def list_items(
     since: Optional[str] = None,
     limit: Optional[int] = None,
 ) -> List[Dict[str, Any]]:
-    with history_db_lane():
-        conn = _connect()
-        try:
+    conn = _connect_read()
+    if conn is None:
+        return []
+    try:
             if since is None:
                 sql = "SELECT item_id, item_time, etag, payload, updated_at FROM items WHERE query_id=? ORDER BY item_time ASC"
                 args: Tuple[Any, ...] = (query_id,)
@@ -437,14 +454,15 @@ def list_items(
                     }
                 )
             return out
-        finally:
-            conn.close()
+    finally:
+        conn.close()
 
 
 def list_queries(*, kind: str | None = None) -> List[Dict[str, Any]]:
-    with history_db_lane():
-        conn = _connect()
-        try:
+    conn = _connect_read()
+    if conn is None:
+        return []
+    try:
             cur = conn.execute("SELECT params, last_fetch_at, last_item_time FROM queries")
             out: List[Dict[str, Any]] = []
             for params_json, last_fetch_at, last_item_time in cur.fetchall():
@@ -462,8 +480,8 @@ def list_queries(*, kind: str | None = None) -> List[Dict[str, Any]]:
                     }
                 )
             return out
-        finally:
-            conn.close()
+    finally:
+        conn.close()
 
 
 def reset_query(query_id: str) -> None:

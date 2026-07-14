@@ -13,6 +13,7 @@ from ..core.logging import logger
 from ..core.paths import data_dir
 from ..providers.factory import get_provider
 from ..runtime.market_clock import compute_market_state
+from ..runtime.utils import now_iso
 from ..decision_engine.pipeline import run_market_memory_selection
 from ..selection_engine.datahub import MarketDataHub
 from .daily_freshness import reconcile_daily_freshness, selection_symbols
@@ -22,12 +23,29 @@ def current_trading_day() -> str:
     return str(compute_market_state().target_daybook_effective_day)
 
 
-def build_day_selection(trading_day: str, *, topk: int = 10, risk_profile: str = "normal") -> Dict[str, Any]:
+def build_day_selection(
+    trading_day: str,
+    *,
+    topk: int = 10,
+    risk_profile: str = "normal",
+    decision_trade_day: str | None = None,
+    observed_at: str | None = None,
+) -> Dict[str, Any]:
     date = f"{trading_day[:4]}-{trading_day[4:6]}-{trading_day[6:8]}" if len(trading_day) == 8 else trading_day
-    raw = run_market_memory_selection(date=date, topk=topk, risk_profile=risk_profile, allow_snapshot=False)
+    selection_kwargs = {
+        "date": date,
+        "topk": topk,
+        "risk_profile": risk_profile,
+        "allow_snapshot": False,
+        "decision_trade_day": decision_trade_day or date,
+        "daybook_effective_day": date,
+        "observed_at": observed_at,
+    }
+    raw = run_market_memory_selection(**selection_kwargs)
     report = reconcile_daily_freshness(selection_symbols(raw), as_of=date, strict=True)
     if report["refreshed_symbols"]:
-        raw = run_market_memory_selection(date=date, topk=topk, risk_profile=risk_profile, allow_snapshot=False)
+        refreshed_kwargs = {**selection_kwargs, "observed_at": now_iso()}
+        raw = run_market_memory_selection(**refreshed_kwargs)
         report = reconcile_daily_freshness(selection_symbols(raw), as_of=date, strict=True)
     report_map = {item["symbol"]: item for item in report["symbol_reports"]}
     for bucket in ("picks", "candidate_pool"):

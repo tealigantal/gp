@@ -33,6 +33,7 @@ def _event(symbol: str, *, as_of: str, signal_type: str, value: float, ret3: flo
         market_context={"market_regime": regime},
         outcome={
             "complete": True,
+            "outcome_available_trading_day": "2024-01-08",
             "return_1d": ret3 / 2,
             "return_3d": ret3,
             "return_5d": ret3,

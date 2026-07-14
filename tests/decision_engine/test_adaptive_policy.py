@@ -203,18 +203,20 @@ def test_pipeline_ranked_nonempty_yields_picks_and_adaptive_snapshot(monkeypatch
             "evidence": {"sample_size": 20, "effective_sample_size": 12, "mean_similarity": 0.7, "nearest_cases": []},
         }
 
-    def fake_save(snapshot):
-        snapshots.append(snapshot)
-        return "dcs_adaptive_test"
-
     monkeypatch.setattr(pipeline, "MarketDataHub", Hub)
     monkeypatch.setattr(pipeline, "build_signal_events_for_symbol", fake_signal)
     monkeypatch.setattr(pipeline, "retrieve_similar_events", lambda *_, **__: {"cases": [], "mean_similarity": 0.7})
     monkeypatch.setattr(pipeline, "infer_probability", fake_probability)
     monkeypatch.setattr(pipeline, "upsert_market_events", lambda events: 0)
-    monkeypatch.setattr(pipeline, "save_decision_snapshot", fake_save)
 
-    result = pipeline.run_market_memory_selection(date="2026-01-05", topk=1, symbols=["000001"], prefer_cache_only=True)
+    result = pipeline.run_market_memory_selection(
+        date="2026-01-05",
+        topk=1,
+        symbols=["000001"],
+        prefer_cache_only=True,
+        serenity_mode="off",
+    )
+    snapshots.append(result["_deferred_persistence"]["decision_snapshot"])
 
     assert result["decision"] == "recommend"
     assert result["tradeable"] is True
@@ -234,11 +236,6 @@ def test_pipeline_ranked_nonempty_yields_picks_and_adaptive_snapshot(monkeypatch
         pipeline,
         "load_frozen_signals",
         lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("historical/off path read live Serenity evidence")),
-    )
-    monkeypatch.setattr(
-        pipeline,
-        "save_reference_and_enqueue_pending",
-        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("historical/off path wrote Serenity state")),
     )
     replay_safe = pipeline.run_market_memory_selection(
         date="2026-01-05",

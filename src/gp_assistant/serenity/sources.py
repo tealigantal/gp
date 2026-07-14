@@ -11,6 +11,8 @@ from urllib.parse import urljoin
 from zoneinfo import ZoneInfo
 
 import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 from .text import normalize_cn_text
 
@@ -87,6 +89,19 @@ class CNInfoClient:
         self.page_budget = max(1, int(page_budget))
         self.spacing_sec = max(0.0, float(spacing_sec))
         self.session = session or requests.Session()
+        if session is None:
+            retry = Retry(
+                total=2,
+                connect=2,
+                read=2,
+                status=2,
+                backoff_factor=0.35,
+                status_forcelist=(500, 502, 503, 504),
+                allowed_methods=frozenset({"GET", "POST"}),
+                raise_on_status=False,
+            )
+            adapter = HTTPAdapter(max_retries=retry)
+            self.session.mount("https://", adapter)
         self.session.headers.update(
             {
                 "User-Agent": "Mozilla/5.0 (compatible; GP-Serenity/1.0; local-research)",
@@ -166,7 +181,7 @@ class CNInfoClient:
         announcements: List[Dict[str, Any]] = []
         complete = True
         has_more = False
-        total_pages = 1
+        total_pages = 0
         last_page = max(1, int(start_page)) - 1
         for page in range(max(1, int(start_page)), max(1, int(start_page)) + self.page_budget):
             last_page = page
@@ -193,12 +208,20 @@ class CNInfoClient:
                 if not isinstance(payload, dict) or "announcements" not in payload or "totalpages" not in payload:
                     raise KeyError("required_top_level_fields_missing")
                 rows_value = payload.get("announcements")
+                raw_total_pages = int(payload.get("totalpages") or 0)
+                empty_complete = (
+                    rows_value is None
+                    and raw_total_pages == 0
+                    and not bool(payload.get("hasMore"))
+                )
+                if empty_complete:
+                    rows_value = []
                 if not isinstance(rows_value, list):
-                    raise TypeError("announcements_not_array")
+                    raise TypeError("announcements_not_array_or_valid_empty")
                 if any(not isinstance(row, dict) for row in rows_value):
                     raise TypeError("announcement_row_not_object")
                 rows = list(rows_value)
-                total_pages = max(1, int(payload.get("totalpages") or 1))
+                total_pages = max(0, raw_total_pages)
                 has_more = bool(payload.get("hasMore")) or page < total_pages
             except Exception as ex:
                 raise SourceError("cninfo_announcement_schema_changed", schema_error=True) from ex

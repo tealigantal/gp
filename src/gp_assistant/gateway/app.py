@@ -5,6 +5,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 
+from ..agent_store import AgentStore
 from ..core.errors import APIError
 from ..core.logging import setup_logging
 from .routes import router
@@ -14,6 +15,7 @@ setup_logging()
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
+    AgentStore().initialize()
     yield
 
 

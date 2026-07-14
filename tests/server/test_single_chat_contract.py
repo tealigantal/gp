@@ -4,7 +4,7 @@ from fastapi.testclient import TestClient
 
 from gp_assistant.agent_store import AgentStore
 from gp_assistant.gateway.app import app
-from tests.agent.test_agent_store import make_book
+from tests.agent.test_agent_store import make_book, patch_chat_llm
 
 
 def test_openapi_exposes_only_product_api_paths():
@@ -18,6 +18,7 @@ def test_chat_requires_client_turn_id():
 
 
 def test_http_chat_and_history_bind_one_published_snapshot(monkeypatch, tmp_path):
+    patch_chat_llm(monkeypatch)
     db = tmp_path / "agent.db"
     monkeypatch.setenv("GP_AGENT_DB", str(db))
     AgentStore(db).publish_book(make_book("http-snapshot"))

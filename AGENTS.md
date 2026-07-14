@@ -6,7 +6,7 @@ GP is a chat-first A-share main-board decision assistant for short 1–3 trading
 
 ## Lifecycle stage
 
-The repository is an initialized important project being deliberately reduced to a single-protocol chat-first recommendation agent. The active project-shaping effort is `docs/plans/2026-07-13-single-protocol-agent.md`.
+The repository is an initialized important project with one single-protocol chat-first recommendation agent. The active project-shaping effort is `docs/plans/2026-07-14-serenity-native-alpha-and-llm-chat.md`.
 
 ## Critical journeys
 
@@ -14,7 +14,8 @@ The repository is an initialized important project being deliberately reduced to
 - Explain why a selected or rejected symbol received its position without inventing facts.
 - Answer symbol, comparison, exit, and run-change follow-ups from the same canonical run.
 - Fail closed when required market data is stale or incomplete.
-- Keep Serenity evidence advisory in shadow mode and automatically promote it only through the documented causal gates.
+- Feed the deterministic candidate set through resident Serenity coverage and one native ninth-expert Adaptive score; incomplete coverage must stay pending/no-trade and may not fall back to an older or baseline-only ranking.
+- Route and narrate every recommendation turn through the configured real LLM while keeping candidates, scores, prices, actions and facts immutable and engine-owned.
 - Expose recommendation behavior only through the chat contract and one immutable current recommendation snapshot.
 
 ## Repository map and sources of truth
@@ -29,8 +30,10 @@ The repository is an initialized important project being deliberately reduced to
 - `docs/historical_validation.md`: historical replay method and recorded results.
 - `docs/VALIDATION.md`: cross-cutting validation ledger.
 - `docs/PROGRESS.md`: recoverable current status.
-- `docs/plans/2026-07-11-serenity-alpha.md`: active ExecPlan.
-- `docs/plans/2026-07-13-single-protocol-agent.md`: active single-protocol cutover ExecPlan.
+- `docs/plans/2026-07-13-serenity-resident-service.md`: active Serenity resident-service ExecPlan.
+- `docs/plans/2026-07-13-single-protocol-agent.md`: completed single-protocol cutover ExecPlan.
+- `docs/plans/2026-07-13-market-time-storage-contract.md`: active market-time and SQLite concurrency ExecPlan.
+- `docs/plans/2026-07-14-serenity-native-alpha-and-llm-chat.md`: active Serenity-native scoring and real-LLM recovery ExecPlan.
 
 ## Verified entry points and commands
 
@@ -39,15 +42,16 @@ The repository is an initialized important project being deliberately reduced to
 - Compile: `python -m compileall -q src tests`
 - Backend tests: `python -m pytest -q` (integration tests are excluded by `pytest.ini` unless explicitly selected)
 - Frontend: from `frontend/`, run `npm ci`, then `npm run lint`, `npm run typecheck`, `npm test -- --run`, and `npm run build`
-- Docker services: `docker compose up -d gp gp-worker web`
+- Docker services: `docker compose up -d` (starts `api`, `worker`, `serenity`, and `web`).
 - Historical replay: use the isolated-store command in `docs/historical_validation.md`.
 
 The backend has no verified Ruff or static-type-check command. Do not claim those checks ran unless the repository later adds and executes them.
 
 ## Architecture and dependency boundaries
 
-- Adaptive Decision Engine owns selection. The LLM may route and narrate but may not invent or change candidates, scores, prices, probabilities, or actions.
+- Adaptive Decision Engine owns selection through one score that includes Serenity as a causally gated ninth signed expert. The LLM must route and narrate but may not invent or change candidates, scores, prices, probabilities, facts, or actions.
 - Network data collection must not run inside `/api/chat`, book locks, or decision rendering.
+- No production fallback may substitute baseline-only ranking, previous Serenity targets/signals, fixed chat templates, or stale snapshots when the native path is incomplete.
 - Historical and adaptive learning paths must respect as-of availability and T+5 maturity; never place future outcomes in readable pending state.
 - `store/`, `cache/`, and `results/` are runtime artifacts. The user explicitly authorized deletion of legacy recommendation and conversation runtime data only after the new protocol passes integrity gates; never stage runtime data.
 - `selection_engine/` is legacy/reference and low-level support, not the production ranking authority.
@@ -55,7 +59,7 @@ The backend has no verified Ruff or static-type-check command. Do not claim thos
 
 ## Approval gates
 
-User approval is required before deployment, publication, secret changes, paid data acquisition, destructive migration, commercial use of public data, or public API breaks. The user has authorized local free-data Serenity collection and gated automatic promotion up to an 8% add-on weight; promotion may occur only through the recorded state machine.
+User approval is required before external deployment, publication, secret changes, paid data acquisition, destructive migration, commercial use of public data, or public API breaks. On 2026-07-14 the user explicitly authorized local Serenity Alpha ranking integration, real-LLM chat restoration, and ordinary local container rebuild/recreation without deleting production databases or volumes.
 
 ## Definition of done
 
