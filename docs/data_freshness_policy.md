@@ -19,6 +19,8 @@ GP 必须把下面三层东西彻底分开管理：
 
 会话记忆可以复用引用关系，不能绕过 freshness 校验复用旧市场结论。
 跨收盘边界以后，旧 run 默认失效，不能继续当成“当前最新结论”。
+
+An already bound session may explain an older snapshot after the trading day changes only as `perspective=historical`, `is_current=false`, and `tradeable=false`. A current recommendation or execution request against that snapshot returns structured `no_trade`.
 5 分钟线只能使用“最近一个已收完的 bar”，不能读未收完 bar。
 如果跨边界后新数据尚未落地，只能进入 degraded/pending 状态，不能假装旧数据还是新的。
 2. 交易时段边界（按当前 A 股主板规则）
@@ -47,6 +49,12 @@ GP 必须把下面三层东西彻底分开管理：
 收盘前：daybook_effective_day = 上一个已完成交易日
 收盘后且当日日线已确认可取：daybook_effective_day = 当日
 非交易日：daybook_effective_day = 最近一个已完成交易日
+
+### 3.1.1 MarketTimeContext (authoritative date contract)
+
+`resolve_daily_target()` returns the one `MarketTimeContext` used by the core runtime. It names `decision_trade_day`, `daybook_effective_day`, `pulse_trade_day`, `pulse_slot_closed_at`, timezone-bearing `observed_at`, `market_phase`, `target_mode`, and optional `pending_eod_day`.
+
+`decision_trade_day` is the plan's intended trading day; `daybook_effective_day` is the only date permitted for daily-bar selection, cache freshness, and candidate validation. Runtime artifacts use the former as `trade_day`; `DayBook.trading_day` uses the latter. The old `as_of` field is a read-only compatibility alias and must not decide freshness.
 3.2 pulse_trade_day
 
 5 分钟线所属的交易日。

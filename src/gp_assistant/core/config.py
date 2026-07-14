@@ -28,7 +28,7 @@ class ProviderConfig:
 
 @dataclass
 class SerenityConfig:
-    mode: str = os.getenv("GP_SERENITY_MODE", "auto").strip().lower()
+    mode: str = os.getenv("GP_SERENITY_MODE", "native").strip().lower()
     max_weight: float = float(os.getenv("GP_SERENITY_MAX_WEIGHT", "0.08"))
     update_mature_days: int = int(os.getenv("GP_SERENITY_UPDATE_MATURE_DAYS", "5"))
     eval_window_days: int = int(os.getenv("GP_SERENITY_EVAL_WINDOW_DAYS", "60"))
@@ -42,13 +42,12 @@ class SerenityConfig:
     ewma_alpha: float = float(os.getenv("GP_SERENITY_EWMA_ALPHA", "0.30"))
     request_spacing_sec: float = float(os.getenv("GP_SERENITY_REQUEST_SPACING_SEC", "1"))
     content_revalidate_hours: float = float(os.getenv("GP_SERENITY_CONTENT_REVALIDATE_HOURS", "6"))
-    target_fallback_ttl_sec: int = int(os.getenv("GP_SERENITY_TARGET_FALLBACK_TTL_SEC", "3600"))
     circuit_breaker_sec: int = int(os.getenv("GP_SERENITY_CIRCUIT_BREAKER_SEC", "1800"))
     lease_sec: int = int(os.getenv("GP_SERENITY_LEASE_SEC", "180"))
 
     def __post_init__(self) -> None:
-        if self.mode not in {"off", "reference", "auto"}:
-            self.mode = "off"
+        if self.mode not in {"off", "native"}:
+            raise ValueError(f"invalid GP_SERENITY_MODE: {self.mode}")
         self.max_weight = max(0.0, min(0.08, float(self.max_weight)))
         self.update_mature_days = max(1, int(self.update_mature_days))
         self.eval_window_days = max(20, int(self.eval_window_days))
@@ -58,7 +57,6 @@ class SerenityConfig:
         self.cost_window = max(3, min(100, int(self.cost_window)))
         self.ewma_alpha = max(0.01, min(1.0, float(self.ewma_alpha)))
         self.content_revalidate_hours = max(1.0, min(72.0, float(self.content_revalidate_hours)))
-        self.target_fallback_ttl_sec = max(60, min(86400, int(self.target_fallback_ttl_sec)))
 
 
 @dataclass
@@ -89,8 +87,8 @@ class AppConfig:
     # LLM
     llm_base_url: Optional[str] = os.getenv("LLM_BASE_URL")
     llm_api_key: Optional[str] = os.getenv("LLM_API_KEY")
-    chat_model: str = os.getenv("CHAT_MODEL", "deepseek-chat")
-    agent_model: str = os.getenv("AGENT_MODEL", os.getenv("CHAT_MODEL", "deepseek-chat"))
+    chat_model: str = os.getenv("CHAT_MODEL", "deepseek-v4-flash")
+    agent_model: str = os.getenv("AGENT_MODEL", os.getenv("CHAT_MODEL", "deepseek-v4-flash"))
     agent_max_tool_rounds: int = int(os.getenv("GP_AGENT_MAX_TOOL_ROUNDS", "3"))
 
     # AkShare routes (optional)

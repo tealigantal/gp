@@ -73,13 +73,12 @@ Market Data
   -> Market Memory
   -> Probability Engine
   -> Risk Engine
-  -> Ranking
-  -> Decision Intelligence
-  -> Thesis Lifecycle
-  -> Decision Synthesizer
-  -> Validator
+  -> immutable candidate target
+  -> Serenity as-of Alpha freeze
+  -> Adaptive single nine-expert score
   -> DecisionContextSnapshot
-  -> Response
+  -> RecommendationSnapshot.v1
+  -> LLM TurnFrame routing + grounded narration
 ```
 
 ### 模块边界
@@ -90,24 +89,21 @@ Market Data
 - `risk_engine/` 和 ranking：负责数学排序、风险调整和执行质量
 - `decision_engine/`：构建 `DecisionContextModel`，统一包含 market / security / signal-thesis / user / position / objective / constraints
 - Thesis Lifecycle：判断 `thesis_strengthened / thesis_unchanged / thesis_weakening / thesis_invalidated`
-- Decision Synthesizer：输出 `HOLD / ADD / REDUCE / EXIT / WAIT / NO_TRADE`，不能编造价格、概率、样本或历史事实
+- 本地 Judgment：从不可变快照确定 `recommend / no_trade` 与执行动作；LLM 只负责 TurnFrame 语义路由和受证据约束的中文叙述
 - `DecisionContextSnapshot`：保存每次决策的上下文、动作、校验结果和最终解释，供未来复盘
 
 ## 运行与部署
 
 ### 服务拓扑
 
-- `gp`：FastAPI API 服务
-- `gp-worker`：常驻 worker，负责统一运行链（日线 freshness、daybook、盘中分钟线、current artifact）刷新
+- `api`：FastAPI API 服务
+- `worker`：常驻 worker，负责统一运行链（日线 freshness、daybook、盘中分钟线、current artifact）刷新
 - `web`：前端单页 Workspace
-- `gp-rebuild-daybook`：按需手工重建 daybook
-- `gp-postclose-archive`：按需执行收盘后归档
-- `gp-serenity-worker`：可选实验 worker，只读取当前 Top10、reserve 与持仓，采集免费官方公告并做前向影子验证
-- `gp-serenity-bootstrap`：一次性真实 30 日公告 bootstrap，与常驻实验 worker 使用不同 Compose profile
+- `serenity`：常驻官方公告证据服务，只读取当前稳定目标并保存可审计参考证据
 
-`gp` 和 `gp-worker` 是常驻服务；`gp-rebuild-daybook` 与 `gp-postclose-archive` 位于 Compose 的 `ops` profile 下，按需手工运行。当前仓库没有额外 scheduler / cron / 队列系统。
+`api`、`worker`、`serenity` 和 `web` 是常驻服务；普通 `docker compose up -d` 会一并启动。当前仓库没有额外 scheduler / cron / 队列系统。
 
-Serenity 默认配置为 `auto`，但初始状态固定为 `warming/shadow + 0%`；没有完成真实 bootstrap 与前向门槛时，不会改变正式排序。
+Serenity 默认配置为 `native`：它持续采集并核验精确候选目标的官方公告，将冻结的 Alpha 作为 Adaptive 的第九个专家参与一次最终评分。任一候选覆盖不完整时，整组保持 pending/no-trade，不得退回八专家 baseline。
 
 ### 环境要求
 
@@ -128,21 +124,20 @@ Copy-Item .env.example .env
 
 - `LLM_API_KEY`：必需。当前 `/api/chat` 的意图解析依赖 LLM；缺失时 API 会明确返回 503，而不是伪装成普通闲聊
 - `LLM_BASE_URL`：必需。`.env.example` 使用 DeepSeek 兼容接口
-- `CHAT_MODEL`：默认 `deepseek-chat`
+- `CHAT_MODEL`：默认 `deepseek-v4-flash`
 - `DATA_PROVIDER`：默认 `akshare`
 - `STRICT_REAL_DATA=1`：默认优先真实数据
 - `TZ=Asia/Shanghai`
-- `GP_SERENITY_MODE=auto`：`off / reference / auto`；只有 `auto` 且状态已自动晋升至 probation/active 时才允许非零权重
-- `GP_SERENITY_MAX_WEIGHT=0.08`：独立 add-on 的硬上限，不进入原八专家权重
+- `GP_SERENITY_MODE=native`：正式常驻模式；`off` 只用于明确停用并使生产推荐 fail closed。旧 `auto` 和 `reference` 配置会被拒绝，不会静默降级
 
-如果本机没有代理，请清空或删除 `.env` 中的 `HTTP_PROXY`、`HTTPS_PROXY` 和 `ALL_PROXY`。
+默认构建直连网络。仅在本机确实需要代理时，才在 `.env` 设置 `HTTP_PROXY`、`HTTPS_PROXY` 和 `ALL_PROXY`；不要复用过期端口。代理只在依赖安装构建层使用，不会写入最终运行镜像。
 
 ### 最快启动
 
-启动 API、worker 和前端：
+启动 API、市场 worker、Serenity 与前端：
 
 ```powershell
-docker compose up -d gp gp-worker web
+docker compose up -d
 ```
 
 默认入口：
@@ -178,32 +173,25 @@ GP 的数据链不是“每次请求都整仓重抓”，而是分层更新：
 | --- | --- |
 | 日线 | 默认优先真实数据 provider；先读本地 `store/cache`，本地没有、数据过时或长度不足时再在线抓取；抓取后写回本地复用。 |
 | 盘中数据 | `gp-worker` 按 slot 持续更新；bars、benchmark、breadth snapshot 进入当前 artifact / current book。provider snapshot 缺失但 bars 足够时，走派生逻辑。 |
-| 决策与盘中判断 | `Market Memory Agent` 处理日线候选、相似历史、概率、风险和数学排序；Decision Intelligence 合成决策上下文；Thesis Lifecycle 判断 thesis 状态；`DecisionContextSnapshot` 记录决策；`daybook` 保存日线计划与 Workspace 当前状态。 |
+| 决策与盘中判断 | `Market Memory Agent` 预选候选并发布 immutable target；Serenity 冻结精确 target 的 Alpha；Adaptive 九专家只排序一次；`DecisionContextSnapshot` 与 `RecommendationSnapshot.v1` 记录结果。LLM 不参与选择或数值计算。 |
 
 聊天推荐、右侧 `DecisionSnapshot`、单票详情、盘中入场判断和持仓处理，全部读取同一个 canonical run / artifact 及 Decision Intelligence 输出。
 
-### Serenity Alpha 实验
+### Serenity 官方公告证据服务
 
-先运行一次真实 bootstrap；fixture 或普通两日轮询不能令实验 ready：
-
-```powershell
-docker compose --profile serenity-bootstrap run --rm gp-serenity-bootstrap
-```
-
-确认 bootstrap 成功后，再启动常驻 worker：
+Serenity 随普通 Compose 启动并持续采集官方公告。它只使用当前 immutable target；源失败、PDF 未解析、覆盖不全或 target 切换都会使该目标不可发布，绝不产生 baseline-only 推荐。
 
 ```powershell
-docker compose --profile experiments up -d gp-serenity-worker
-docker compose logs -f gp-serenity-worker
+docker compose logs -f serenity
 ```
 
 查看状态：
 
 ```powershell
-docker compose exec -T gp python -m gp_assistant.cli serenity-status
+docker compose exec -T api python -m gp_assistant.cli serenity-status
 ```
 
-`shadow` 时官方事实、非绑定参考分数和反事实排名可用于解释，但正式 `adaptive_score`、候选、动作和交易参数不变。只有双源核验、未过期、非 backfill 的前向事实才进入自动学习；缺失、陈旧、源故障或无相关公告的贡献严格为零。
+只有核验成功、未过期且非 backfill 的事实才可形成有效 Alpha。完整查询确实没有相关事实时，Alpha 为可审计的中性零值；缺失、陈旧、源故障、未解析或截断内容则是 unavailable，并阻止当前 target 发布。策略权重只从新公式 epoch 的因果 T+5 样本更新。
 
 ### Slot 与日线状态
 
@@ -263,32 +251,14 @@ docker compose --profile ops run --rm gp-postclose-archive
 Invoke-RestMethod http://127.0.0.1:8000/api/health | ConvertTo-Json -Depth 8
 ```
 
-`/api/health` 除 `status / trading_day / llm_ready / storage` 外，还会返回 `runtime`：
-
-- `market_phase`、`data_provider`、`auto_update_service`、`auto_update_expected`
-- `worker_poll_interval_sec`、`daily_data_state`、`clock_data_status`、`book_freshness`
-- `artifact_stage`、`artifact_freshness`、`artifact_status`、`tradeability_state`
-- `book_updated_at`、`artifact_id`、`pulse_trade_day`、`pulse_slot_at`、`last_closed_5m`
-- `slot_status`、`publish_allowed`、`services`
-
-查看当前 book：
-
-```powershell
-Invoke-RestMethod http://127.0.0.1:8000/api/book/current | ConvertTo-Json -Depth 8
-```
-
-查看当前推荐 run：
-
-```powershell
-Invoke-RestMethod http://127.0.0.1:8000/api/run/<run_id> | ConvertTo-Json -Depth 8
-```
+`/api/health` 的 HTTP 200 只表示 API liveness。只有 `product_ready=true` 且 `status=ok` 才表示真实产品链路可用；响应同时给出 `readiness_reasons`、当前 immutable snapshot、市场时间契约、Serenity target/coverage/worker heartbeat，以及最近 30 分钟内已提交的真实两阶段 LLM 调用状态。
 
 ### 数据未更新时
 
 按以下顺序检查：
 
 1. `docker compose logs -f gp-worker`
-2. `GET /api/health` 中的 `runtime.daily_data_state / artifact_stage / artifact_freshness / book_freshness`
+2. `GET /api/health` 中的 `product_ready / readiness_reasons / worker / serenity / llm`
 3. Workspace 右侧“运行与工具”卡
 4. 本地运行只读诊断：
 
@@ -338,35 +308,22 @@ npm run dev
 ## API 入口
 
 - `POST /api/chat`
+- `GET /api/chat/{session_id}`
 - `GET /api/health`
-- `GET /api/book/current`
-- `GET /api/book/slot/{artifact_id}`
-- `GET /api/run/{run_id}`
-- `GET /api/recommend_v2`
-- `POST /api/compare`
-- `GET /api/pick`
-- `GET /api/validation/summary`
-- `GET /api/workbench`
-- `GET /api/session/{session_id}`
-- `GET /api/sessions`
-- `GET /api/side-results`
 
 ## 仓库结构
 
 ```text
 src/gp_assistant/
   gateway/            FastAPI API 入口和路由
-  runtime/            turn loop、上下文、canonical artifact
-  memory/             session、transcript、focus 和记忆
+  runtime/            市场时间、grounding、producer 与快照完整性边界
   book/               daybook、board、slot artifact、repo
-  judgment/           recommend / detail / compare / exit / run_change
   evidence/           行情、验证、组合、股票池服务
-  kernel/             跨推荐、验证、组合、执行预览的服务门面
   signal_engine/      日线结构信号与 feature fingerprint
   market_memory/      相似历史事件、决策快照、预测结果存储
   probability_engine/ 相似案例统计、Bayesian shrinkage、evidence block
   risk_engine/        执行风险、回撤风险、数学 ranking
-  decision_engine/    Decision Context、Thesis Lifecycle、Decision Synthesizer、validator
+  decision_engine/    Market-Memory pipeline、Adaptive 九专家与 Serenity policy
   evaluation_engine/  historical replay、AB validation、calibration、counterfactual
   selection_engine/   旧系统参考和低层行情工具；不再是生产推荐排序权威
 

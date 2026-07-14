@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, Iterable, List
 
-from ..agent_store import AgentStore
+from .store import load_latest_candidate_target
 
 
 def _symbols(values: Iterable[Any]) -> List[str]:
@@ -17,19 +17,21 @@ def _symbols(values: Iterable[Any]) -> List[str]:
 
 
 def load_stable_targets(*, retries: int = 3, retry_delay_sec: float = 0.05) -> Dict[str, Any]:
-    """Read one immutable published snapshot; no book/run or portfolio fallback."""
-    snapshot = AgentStore().current_snapshot()
-    if snapshot is None:
-        return {"ok": False, "symbols": [], "reason": "current_snapshot_unavailable"}
-    book = AgentStore().book_for_snapshot(snapshot)
-    tracked = getattr(book, "tracked_universe", None)
-    reco = list(getattr(tracked, "reco", []) or [])[:10]
-    reserve = list(getattr(tracked, "reserve", []) or [])[:2]
-    if not reco:
-        reco = [getattr(entry, "symbol", None) for entry in list(getattr(book, "board", []) or [])[:10]]
-    targets = _symbols([*reco, *reserve])
+    """Read the newest immutable preselection target; never read a recommendation."""
+    target = load_latest_candidate_target()
+    if target is None:
+        return {"ok": False, "symbols": [], "reason": "candidate_target_unavailable"}
+    targets = _symbols(target.symbols)
     return {
-        "ok": bool(targets), "symbols": targets, "reco": _symbols(reco), "reserve": _symbols(reserve),
-        "book_version": getattr(book, "book_version", None), "artifact_id": snapshot.snapshot_id,
-        "trade_day": getattr(book, "trading_day", None), "reason": None if targets else "target_set_empty",
+        "ok": bool(targets),
+        "symbols": targets,
+        "target_id": target.target_id,
+        "decision_trade_day": target.decision_trade_day,
+        "daybook_effective_day": target.daybook_effective_day,
+        "observed_at": target.observed_at,
+        "input_hash": target.input_hash,
+        "activated_at": target.activated_at,
+        "activation_observed_at": target.activation_observed_at,
+        "activation_revision": target.activation_revision,
+        "reason": None if targets else "candidate_target_empty",
     }

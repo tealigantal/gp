@@ -2,7 +2,6 @@ import pytest
 from pydantic import ValidationError
 
 from gp_assistant.decision_engine.serenity_policy import (
-    apply_serenity_addon,
     build_reference_snapshot,
     build_serenity_counterfactuals,
     decision_score,
@@ -23,6 +22,7 @@ def _signal(
         availability=1 if status == "available" else 0,
         learning_eligible=status == "available" and learning_eligible,
         direction=direction,
+        alpha_value=float(direction),
         confidence=1.0,
         source_quality=1.0,
         decision_at="2026-07-10T15:00:00+08:00",
@@ -52,10 +52,14 @@ def test_shadow_is_bit_for_bit_selection_invariant():
         ],
         "validator_result": {"ok": True},
     }
-    out = apply_serenity_addon(base, {"000002": _signal("000002", 1)}, _state("shadow", 0), topk=2, mode="auto")
-    assert out["selected_symbols"] == base["selected_symbols"]
-    assert [row["adaptive_score"] for row in out["adaptive_candidates"]] == [0.60, 0.59]
-    assert all(row["serenity_adjustment"] == 0 for row in out["adaptive_candidates"])
+    arms = build_serenity_counterfactuals(
+        base["adaptive_candidates"],
+        {"000002": _signal("000002", 1)},
+        topk=2,
+        weights=[0.0],
+    )
+    assert arms[0].selected_symbols == base["selected_symbols"]
+    assert arms[0].scores == {"000001": 0.6, "000002": 0.59}
 
 
 def test_active_weight_can_change_close_ranking_but_missing_never_penalizes():
@@ -67,8 +71,12 @@ def test_active_weight_can_change_close_ranking_but_missing_never_penalizes():
             {"symbol": "000002", "adaptive_score": 0.57},
         ],
     }
-    out = apply_serenity_addon(base, {"000002": _signal("000002", 1)}, _state("active", 0.08), topk=1, mode="auto")
-    assert out["selected_symbols"] == ["000002"]
+    arms = build_serenity_counterfactuals(
+        base["adaptive_candidates"],
+        {"000002": _signal("000002", 1)},
+        topk=1,
+    )
+    assert arms[-1].selected_symbols == ["000002"]
     score, adjustment = decision_score(0.60, _signal("000001", -1, status="stale"), 0.08)
     assert score == 0.60
     assert adjustment == 0.0
@@ -86,13 +94,15 @@ def test_backfill_only_signal_can_show_reference_counterfactual_but_never_bind()
         ],
     }
     signal = _signal("000002", 1, learning_eligible=False)
-    out = apply_serenity_addon(base, {"000002": signal}, _state("active", 0.08), topk=1, mode="auto")
-    assert out["selected_symbols"] == ["000001"]
-    assert next(
-        row for row in out["adaptive_candidates"] if row["symbol"] == "000002"
-    )["serenity_non_binding"] is True
-    assert out["serenity_policy"]["reference_would_change_topk"] is True
-    assert out["serenity_reference_counterfactuals"][-1]["selected_symbols"] == ["000002"]
+    binding = build_serenity_counterfactuals(base["adaptive_candidates"], {"000002": signal}, topk=1)
+    reference = build_serenity_counterfactuals(
+        base["adaptive_candidates"],
+        {"000002": signal},
+        topk=1,
+        allow_reference_only=True,
+    )
+    assert binding[-1].selected_symbols == ["000001"]
+    assert reference[-1].selected_symbols == ["000002"]
 
 
 @pytest.mark.parametrize("weight", [float("nan"), float("inf"), 0.09, -0.01])
@@ -103,17 +113,25 @@ def test_invalid_policy_weight_is_rejected_instead_of_silently_clamped(weight):
 
 def test_learning_sample_uses_explicit_trading_day_not_generation_clock():
     signal = _signal("000001", 1)
-    adaptive = apply_serenity_addon(
-        {
-            "final_decision": "recommend",
-            "selected_symbols": ["000001"],
-            "adaptive_candidates": [{"symbol": "000001", "adaptive_score": 0.60}],
-        },
+    arms = build_serenity_counterfactuals(
+        [{"symbol": "000001", "adaptive_score": 0.60}],
         {"000001": signal},
-        _state("shadow", 0),
         topk=1,
-        mode="auto",
     )
+    adaptive = {
+        "final_decision": "recommend",
+        "selected_symbols": ["000001"],
+        "adaptive_candidates": [{"symbol": "000001", "adaptive_score": 0.60}],
+        "serenity_counterfactuals": [arm.model_dump(mode="json") for arm in arms],
+        "serenity_reference_counterfactuals": [],
+        "serenity_policy": {
+            "state": "shadow",
+            "applied_weight": 0.0,
+            "baseline_selected_symbols": ["000001"],
+            "applied_selected_symbols": ["000001"],
+            "would_change_topk": False,
+        },
+    }
     kwargs = {
         "decision_context_snapshot_id": "dcs_day_key",
         "adaptive_output": adaptive,

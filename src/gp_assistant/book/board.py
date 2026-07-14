@@ -159,7 +159,9 @@ def _daily_pulse_from_pick(pick: AdvicePick, rank: int, total: int) -> SymbolPul
     score_breakdown = {
         "adaptive_score": adaptive_score,
         "decision_score": finite_float(serenity.get("decision_score"), raw_day_score),
-        "serenity_adjustment": finite_float(serenity.get("adjustment"), 0.0),
+        "serenity_adjustment": finite_float(
+            serenity.get("score_contribution"), 0.0
+        ),
         "calibrated_probability": calibrated_probability,
         "feature_coverage": feature_coverage,
         "raw_market_memory_ranking_score": raw_day_score,

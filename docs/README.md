@@ -19,8 +19,8 @@ This folder is split into:
   Cross-cutting planned and executed validation ledger.
 - [DEBT.md](./DEBT.md)
   Deliberate temporary compromises and removal conditions.
-- [plans/2026-07-11-serenity-alpha.md](./plans/2026-07-11-serenity-alpha.md)
-  Active Serenity Alpha implementation ExecPlan.
+- [plans/2026-07-14-serenity-native-alpha-and-llm-chat.md](./plans/2026-07-14-serenity-native-alpha-and-llm-chat.md)
+  Active Serenity-native engine and real-LLM chat restoration ExecPlan.
 - [adr/README.md](./adr/README.md)
   Architecture decision index.
 - [PROGRESS.md](./PROGRESS.md)
@@ -46,7 +46,7 @@ This folder is split into:
 ## Notes
 
 - The current service entrypoint is `src/gp_assistant/gateway/`.
-- The current turn loop is `src/gp_assistant/runtime/turn_loop.py`.
+- The current chat path is `src/gp_assistant/chat_agent.py`, backed only by `src/gp_assistant/agent_store.py`.
 - The current production decision path is `Market Data -> Signal Engine -> Market Memory -> Probability Engine -> Risk Engine -> Decision Intelligence -> Thesis Lifecycle -> Decision Synthesizer`.
 - `src/gp_assistant/selection_engine/` is retained as legacy reference and low-level market-data support, not as the production ranking authority.
 - Legacy `gp_assistant.chat` and `gp_assistant.recommend` compatibility surfaces were removed on April 22, 2026.

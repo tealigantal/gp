@@ -22,7 +22,7 @@ from ..market_memory.store import load_decision_snapshot
 from ..runtime.market_clock import next_trading_day_on_or_after
 from ..runtime.utils import now_iso
 from ..selection_engine.datahub import MarketDataHub
-from .models import SerenityPolicyState
+from .models import NATIVE_SERENITY_FORMULA_VERSION, SerenityPolicyState
 from .scheduler import trading_day_cooldown_until
 from .store import (
     commit_evaluation_result,
@@ -251,6 +251,11 @@ def evaluate_pending_item(pending: Mapping[str, Any], *, data_source: Any | None
         reference_arms=reference.reference_counterfactual_arms,
         risk_plans=reference.risk_plans,
         learning_sample_id=reference.learning_sample_id,
+        actual_weight=reference.actual_weight,
+        policy_state=reference.policy_state,
+        baseline_selected_symbols=reference.baseline_selected_symbols,
+        applied_selected_symbols=reference.applied_selected_symbols,
+        would_change_topk=reference.would_change_topk,
     )
     if recomputed_learning_sample_id != reference.learning_sample_id:
         integrity_errors.append("learning_sample_id_mismatch")
@@ -268,11 +273,13 @@ def evaluate_pending_item(pending: Mapping[str, Any], *, data_source: Any | None
             integrity_errors.append(decision_load_error)
     elif str(decision.get("snapshot_id") or "") != str(pending.get("decision_context_snapshot_id") or ""):
         integrity_errors.append("decision_snapshot_identity_mismatch")
-    if decision and str(decision.get("as_of") or "") != str(pending.get("decision_day") or ""):
+    if decision and str(decision.get("decision_trade_day") or "") != str(
+        pending.get("decision_day") or ""
+    ):
         integrity_errors.append("decision_day_mismatch")
     if int(pending.get("epoch") or 0) <= 0:
         integrity_errors.append("epoch_invalid")
-    if str(pending.get("formula_version") or "") != "SerenityAddon.v1":
+    if str(pending.get("formula_version") or "") != NATIVE_SERENITY_FORMULA_VERSION:
         integrity_errors.append("formula_version_mismatch")
     arms = list(reference.counterfactual_arms or [])
     if [round(float(arm.weight), 2) for arm in arms] != [step / 100 for step in range(9)]:
@@ -488,7 +495,12 @@ def update_policy_from_evaluations(state: SerenityPolicyState, evaluations: List
     conflicting_count = sum(int(row.get("conflicting_count") or 0) for row in current_epoch)
     recent_polls = recent_poll_outcomes("cninfo", limit=20)
     source_success = (
-        mean([1.0 if bool(row.get("complete")) else 0.0 for row in recent_polls])
+        mean([
+            1.0
+            if bool(row.get("complete")) and str(row.get("status") or "") == "success"
+            else 0.0
+            for row in recent_polls
+        ])
         if recent_polls
         else 0.0
     )
@@ -529,8 +541,6 @@ def update_policy_from_evaluations(state: SerenityPolicyState, evaluations: List
     hard_reasons: List[str] = []
     if integrity_errors:
         hard_reasons.extend(integrity_errors)
-    if state.state != "suspended" and recent_polls and source_success < 0.90:
-        hard_reasons.append("source_success_below_90pct")
     if not math.isfinite(float(state.applied_weight)) or state.applied_weight < 0 or state.applied_weight > 0.08:
         hard_reasons.append("weight_non_finite_or_out_of_bounds")
     if state.state in {"probation", "active"}:

@@ -6,7 +6,7 @@ from typing import Any, Dict
 
 from .client import LLMClient
 from ..contracts.objects import TurnFrame
-from ..core.errors import IntentLLMUnavailable, IntentParseFailed
+from ..core.errors import IntentLLMUnavailable, IntentParseFailed, LLMPayloadBudgetExceeded
 from ..runtime.utils import gen_id
 
 
@@ -156,8 +156,18 @@ def parse_turn_frame(context: Dict[str, Any], user_message: str) -> TurnFrame:
     ]
     first_content = ""
     try:
-        first = client.chat(messages, json_mode=True, temperature=0.0)
-        first_content = _extract_content(first)
+        first = client.chat(
+            messages,
+            json_mode=True,
+            temperature=0.0,
+            budget_stage="intent_routing",
+        )
+    except LLMPayloadBudgetExceeded:
+        raise
+    except Exception as provider_error:
+        raise IntentLLMUnavailable(f"{type(provider_error).__name__}:{provider_error}") from provider_error
+    first_content = _extract_content(first)
+    try:
         frame = _decode_turn_frame(first_content, user_message)
         LOGGER.info(
             "intent_parse_success",
@@ -186,8 +196,18 @@ def parse_turn_frame(context: Dict[str, Any], user_message: str) -> TurnFrame:
         ]
         second_content = ""
         try:
-            second = client.chat(repair_messages, json_mode=True, temperature=0.0)
-            second_content = _extract_content(second)
+            second = client.chat(
+                repair_messages,
+                json_mode=True,
+                temperature=0.0,
+                budget_stage="intent_routing_repair",
+            )
+        except LLMPayloadBudgetExceeded:
+            raise
+        except Exception as provider_error:
+            raise IntentLLMUnavailable(f"{type(provider_error).__name__}:{provider_error}") from provider_error
+        second_content = _extract_content(second)
+        try:
             frame = _decode_turn_frame(second_content, user_message)
             LOGGER.info(
                 "intent_parse_success",

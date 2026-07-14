@@ -1,5 +1,14 @@
 # Research Log
 
+## 2026-07-14 — Real LLM provider/model verification
+
+- **Question:** Which configured OpenAI-compatible model is available for the restored production chat path, and what authority may it hold?
+- **Checked date:** 2026-07-14.
+- **Official sources:** [DeepSeek API documentation](https://api-docs.deepseek.com/), [model-list endpoint](https://api-docs.deepseek.com/api/list-models), and [pricing/model context](https://api-docs.deepseek.com/quick_start/pricing/).
+- **Observed deployment configuration:** `LLM_BASE_URL=https://api.deepseek.com/v1` and `CHAT_MODEL=deepseek-v4-flash`.
+- **Verification method:** Real `/api/chat` calls record request model, response model, provider response ID, HTTP status and latency for every routing/narration stage. The model name is deployment evidence, not a fixed architecture dependency.
+- **Authority decision:** The provider may classify intent and narrate a locally validated compact certificate. It may not select, rank, score, price or change actions; all quantitative display values remain opaque until local expansion and validation.
+
 ## 2026-07-11 — Free official data for Serenity Alpha
 
 - **Question:** Can GP obtain free, stable enough data for a real official-announcement Alpha experiment?
@@ -18,7 +27,18 @@
 - **Operational observation:** The observed 3.64-second run produced a closed-session 1,800-second delay. Later intervals remain a function of last cost, EWMA, p90, phase bounds, backlog, `Retry-After`, and failure state.
 - **Verification rule:** CNINFO PDF evidence is retained, but a fact is not `verified` or scoring-eligible unless the corresponding SSE/SZSE metadata check succeeds. Verification failure is unknown, not weak confirmation.
 - **Correction rule:** Backfill relations never affect scoring. A live correction freezes only an exact fact ID or matching earnings-report-period key; an unresolved live relation with no trustworthy target zeros only that symbol's Serenity contribution until resolved, leaving baseline Adaptive untouched.
-# 2026-07-13 — recommendation-engine database input audit
+
+### 2026-07-14 authority supersession
+
+ADR 0005 supersedes the earlier reference-only and symbol-local degradation conclusions. Serenity is now the mandatory ninth Adaptive expert for production. Complete known-empty coverage is a neutral zero Alpha; any unavailable symbol, unresolved correction, incomplete PDF extraction, stale poll or target mismatch blocks the whole exact candidate set. Production never publishes an eight-expert baseline while Serenity is incomplete.
+
+## 2026-07-13 — Resident reference-service operating model (historical; authority superseded by ADR 0005)
+
+- **Question:** How can official-evidence collection be available after every normal local startup without converting uncertain free-source evidence into selection authority?
+- **Decision:** Start Serenity as the default `serenity` Docker Compose service in `reference` mode. It may collect, verify, version, persist, and report evidence health, but it has zero decision weight.
+- **Compatibility:** A legacy `GP_SERENITY_MODE=auto` is normalized to `reference`; only `off` disables the service behavior.
+- **Rationale:** This keeps collection continuously available while preserving the deterministic Adaptive Decision Engine as the only ranking authority. A future ranking integration needs a new explicit decision and fresh causal validation.
+## 2026-07-13 — Recommendation-engine database input audit (historical checkpoint)
 
 Evidence inspected locally, without external research:
 
@@ -27,4 +47,4 @@ Evidence inspected locally, without external research:
 - Probability consumes retrieved outcomes and priors; risk consumes the candidate signal/probability; adaptive policy owns final selection. The LLM has no selection authority.
 - The product-facing snapshot is a projection of the daybook, not a second decision source. It carries rank, entry/stop/take-profit plans, probability/evidence, risk flags, scoring, and evidence references.
 
-Conclusion: the evidence architecture is appropriate for a professional decision-support agent, but the observed production data is not currently fresh enough to issue a professional recommendation. The correct current response is `no_trade` until the worker refreshes and validates the next trading-day data.
+At that 2026-07-13 checkpoint, the evidence architecture was appropriate for a professional decision-support agent, but the observed production data was not fresh enough to issue a professional recommendation. The correct response at that time was `no_trade` until the worker refreshed and validated the next trading-day data; this paragraph is not a claim about the current runtime state.

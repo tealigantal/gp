@@ -1,13 +1,21 @@
 from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class ChatRequest(BaseModel):
     session_id: Optional[str] = None
     message: str = Field(min_length=1)
     client_turn_id: str = Field(min_length=1)
+
+    @field_validator("message", "client_turn_id")
+    @classmethod
+    def _non_blank(cls, value: str) -> str:
+        text = str(value or "").strip()
+        if not text:
+            raise ValueError("must_not_be_blank")
+        return text
 
 
 class ChatResponse(BaseModel):
@@ -140,9 +148,13 @@ class OpsRunResponse(BaseModel):
 
 class HealthResponse(BaseModel):
     status: str
+    product_ready: bool = False
+    readiness_reasons: List[str] = Field(default_factory=list)
     agent_db: Dict[str, Any] = Field(default_factory=dict)
     current_snapshot: Optional[Dict[str, Any]] = None
     history_db: Dict[str, Any] = Field(default_factory=dict)
+    llm: Dict[str, Any] = Field(default_factory=dict)
+    serenity: Dict[str, Any] = Field(default_factory=dict)
     worker: Dict[str, Any] = Field(default_factory=dict)
 
 

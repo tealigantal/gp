@@ -6,6 +6,9 @@ from typing import Any, Dict, List, Literal, Optional
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field, field_validator
 
 
+NATIVE_SERENITY_FORMULA_VERSION = "AdaptiveDecisionEngine.v2+SerenityAlpha.v1"
+
+
 class SerenityModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -78,7 +81,7 @@ class SerenityHypothesis(SerenityModel):
 
 
 class FrozenSerenitySignal(SerenityModel):
-    schema_version: str = Field(default="FrozenSerenitySignal.v1", validation_alias=AliasChoices("schema_version", "schema"))
+    schema_version: str = Field(default="SerenityAlphaFeatureSet.v1", validation_alias=AliasChoices("schema_version", "schema"))
     symbol: str
     status: SignalStatus = "not_ready"
     availability: int = 0
@@ -86,14 +89,37 @@ class FrozenSerenitySignal(SerenityModel):
     direction: int = 0
     confidence: float = 0.0
     source_quality: float = 0.0
+    alpha_value: float = 0.0
     decision_at: str
     generated_at: str
+    target_id: Optional[str] = None
+    source_run_id: Optional[str] = None
     evidence_count: int = 0
     fact_ids: List[str] = Field(default_factory=list)
     hypothesis_ids: List[str] = Field(default_factory=list)
     facts: List[SerenityFact] = Field(default_factory=list)
+    lineage: Dict[str, Any] = Field(default_factory=dict)
     input_hash: str
     limitations: List[str] = Field(default_factory=list)
+
+    @field_validator("alpha_value")
+    @classmethod
+    def _signed_unit_interval(cls, value: float) -> float:
+        return max(-1.0, min(1.0, float(value)))
+
+
+class SerenityCandidateTarget(SerenityModel):
+    schema_version: str = "SerenityCandidateTarget.v1"
+    target_id: str
+    decision_trade_day: str
+    daybook_effective_day: str
+    observed_at: str
+    symbols: List[str] = Field(default_factory=list)
+    input_hash: str
+    created_at: str
+    activated_at: Optional[str] = None
+    activation_observed_at: Optional[str] = None
+    activation_revision: Optional[str] = None
 
 
 class SerenityPolicyState(SerenityModel):

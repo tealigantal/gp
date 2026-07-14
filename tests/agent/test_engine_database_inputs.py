@@ -5,7 +5,7 @@ from gp_assistant.market_memory.retrieval import retrieve_similar_events
 from gp_assistant.market_memory.store import make_market_event, upsert_market_event
 
 
-def _event(symbol: str, *, as_of: str, complete: bool, value: float):
+def _event(symbol: str, *, as_of: str, complete: bool, value: float, outcome_available: str | None = None):
     vector = {name: value for name in (
         "trend_strength", "pullback_quality", "volume_confirmation", "atr_pct", "extension_pct",
         "support_distance_pct", "liquidity_score", "market_regime_score", "industry_strength_score", "price_position_score",
@@ -14,7 +14,7 @@ def _event(symbol: str, *, as_of: str, complete: bool, value: float):
         as_of=as_of, symbol=symbol, signal_type="breakout_pullback", feature_vector=vector,
         features={"close": 10.0, "volume_ratio": 1.2, "atr_pct": 0.03},
         market_context={"market_regime": "B"},
-        outcome={"complete": complete, "return_3d": 0.04, "max_drawdown": -0.01, "stop_hit": False},
+        outcome={"complete": complete, "return_3d": 0.04, "max_drawdown": -0.01, "stop_hit": False, "outcome_available_trading_day": outcome_available},
         data_provenance={"source": "isolated-test", "daily_as_of": as_of},
     )
 
@@ -22,8 +22,8 @@ def _event(symbol: str, *, as_of: str, complete: bool, value: float):
 def test_core_engine_reads_only_pre_asof_completed_market_memory(monkeypatch, tmp_path):
     monkeypatch.setenv("GP_STORE_DIR", str(tmp_path / "store"))
     current = _event("600000", as_of="2026-07-13", complete=False, value=0.10)
-    past = _event("600001", as_of="2026-07-10", complete=True, value=0.11)
-    future = _event("600002", as_of="2026-07-14", complete=True, value=0.10)
+    past = _event("600001", as_of="2026-07-03", complete=True, value=0.11, outcome_available="2026-07-10")
+    future = _event("600002", as_of="2026-07-14", complete=True, value=0.10, outcome_available="2026-07-21")
     incomplete = _event("600003", as_of="2026-07-09", complete=False, value=0.10)
     for event in (past, future, incomplete):
         upsert_market_event(event)

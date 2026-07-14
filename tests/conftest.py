@@ -54,12 +54,40 @@ def pytest_ignore_collect(collection_path, config):  # noqa: ANN001
     path = str(collection_path).replace("\\", "/")
     if not path.endswith(".py"):
         return False
-    return "/tests/agent/" not in path and not path.endswith("/tests/server/test_single_chat_contract.py")
+    restored = (
+        "/tests/test_worker_reconcile.py",
+        "/tests/test_daily_freshness.py",
+        "/tests/test_history_store_journal_mode.py",
+        "/tests/test_health_storage_stats.py",
+        "/tests/test_compose_shared_backend.py",
+        "/tests/test_llm_payload_shape.py",
+        "/tests/test_serenity_narration_boundary.py",
+        "/tests/test_serenity_policy.py",
+        "/tests/test_serenity_runtime.py",
+        "/tests/test_serenity_scheduler.py",
+        "/tests/test_serenity_sources.py",
+        "/tests/test_serenity_store.py",
+        "/tests/decision_engine/test_adaptive_policy.py",
+    )
+    return "/tests/agent/" not in path and not path.endswith("/tests/server/test_single_chat_contract.py") and not path.endswith(restored)
 
 
 def pytest_collection_modifyitems(config, items):
     """Only the unified product contract is part of the default suite."""
-    keep_prefixes = ("test_agent_store.py", "test_engine_database_inputs.py", "test_single_chat_contract.py")
+    keep_prefixes = (
+        "test_agent_store.py", "test_engine_database_inputs.py", "test_market_time_storage_contract.py",
+        "test_agent_serenity_resident_service.py",
+        "test_agent_serenity_lease_recovery.py",
+        "test_compose_shared_backend.py",
+        "test_single_chat_contract.py", "test_worker_reconcile.py", "test_daily_freshness.py",
+        "test_history_store_journal_mode.py", "test_health_storage_stats.py",
+        "test_agent_llm_chat.py", "test_serenity_native_engine.py",
+        "test_agent_native_snapshot_integrity.py",
+        "test_daybook_native_projection.py",
+        "test_llm_payload_shape.py", "test_serenity_narration_boundary.py",
+        "test_serenity_policy.py", "test_serenity_runtime.py", "test_serenity_scheduler.py", "test_serenity_sources.py",
+        "test_serenity_store.py", "test_adaptive_policy.py",
+    )
     for item in items:
         fn = item.location[0]
         if not any(fn.endswith(prefix) for prefix in keep_prefixes):

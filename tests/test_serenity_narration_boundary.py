@@ -220,7 +220,7 @@ def test_grounding_rejects_mixed_multi_symbol_binding_rank_claim():
         evidence_refs=["serfact_first", "serfact_second"],
     )
 
-    with pytest.raises(RuntimeError, match="reference-only Serenity"):
+    with pytest.raises(RuntimeError, match="ambiguous candidate scope"):
         validate_reply(reply, judgment)
 
 
