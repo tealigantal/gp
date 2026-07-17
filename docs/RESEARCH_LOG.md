@@ -1,5 +1,14 @@
 # Research Log
 
+## 2026-07-17 — DeepSeek Beta strict tool routing
+
+- **Question:** Why did compact real `/api/chat` routing calls return HTTP 400 from DeepSeek?
+- **Checked date:** 2026-07-17.
+- **Official source:** DeepSeek Function Calling documentation and Chat Completion reference.
+- **Observation:** The live routing payload was 7,492 bytes, so it was below the local 600,000-byte budget and not the prior prompt-overflow incident. A direct Beta request returned the provider error `Thinking mode does not support this tool_choice`; the same complete GP tool schema returned HTTP 200 after thinking was explicitly disabled.
+- **Provider constraint:** Strict function mode is a Beta feature and every property of each object must be required with `additionalProperties=false`.
+- **Decision impact:** GP uses `https://api.deepseek.com/beta` without a `/v1` fallback, keeps strict tools, encodes unknown routing fields as explicit JSON `null`, and always disables thinking for required-tool routing.
+
 ## 2026-07-11 — Free official data for Serenity Alpha
 
 - **Question:** Can GP obtain free, stable enough data for a real official-announcement Alpha experiment?
@@ -18,3 +27,11 @@
 - **Operational observation:** The observed 3.64-second run produced a closed-session 1,800-second delay. Later intervals remain a function of last cost, EWMA, p90, phase bounds, backlog, `Retry-After`, and failure state.
 - **Verification rule:** CNINFO PDF evidence is retained, but a fact is not `verified` or scoring-eligible unless the corresponding SSE/SZSE metadata check succeeds. Verification failure is unknown, not weak confirmation.
 - **Correction rule:** Backfill relations never affect scoring. A live correction freezes only an exact fact ID or matching earnings-report-period key; an unresolved live relation with no trustworthy target zeros only that symbol's Serenity contribution until resolved, leaving baseline Adaptive untouched.
+
+## 2026-07-17 — CNINFO announcement-query envelope v2 observation
+
+- **Source and checked date:** Live `POST https://www.cninfo.com.cn/new/hisAnnouncement/query`, checked 2026-07-17. This is the public CNINFO web-query endpoint used by Serenity, not a paid CNINFO Data Service API.
+- **Observed request/response:** Exact-stock form queries use `stock={symbol},{orgId}`, `column`, `seDate`, pagination fields and `tabName=fulltext`. The complete top-level response contains `classifiedAnnouncements`, `totalSecurities`, `totalAnnouncement`, `totalRecordNum`, `announcements`, `categoryList`, `hasMore`, and `totalpages`. A genuine no-result response returned HTTP 200 with `announcements:null`, all record counts and `totalpages` equal to 0, and `hasMore:false`.
+- **Observed non-empty fields:** Each announcement row includes `announcementId`, `secCode`, `secName`, `orgId`, `announcementTitle`, epoch-millisecond `announcementTime`, `adjunctUrl`, and additional official metadata. `id` was null in observed rows.
+- **Maintenance and applicability:** CNINFO's public web interface has no contractual stability guarantee. The collector now follows this observed v2 shape strictly: only `announcementId` is accepted as the record key, only the official nullable empty representation is accepted, and `hasMore` alone controls continuation because exact-stock queries may report `totalpages:0` even when rows exist.
+- **Decision impact:** The prior `cninfo_announcement_schema_changed` was a local parser defect, not evidence of a provider field rename. A valid empty poll completes with zero evidence and keeps Serenity at its additive 0% contribution.

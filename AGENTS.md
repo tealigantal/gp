@@ -6,7 +6,7 @@ GP is a chat-first A-share main-board decision assistant for short 1–3 trading
 
 ## Lifecycle stage
 
-The repository is an initialized important project in integration and historical-validation stage. The active project-shaping effort is the Serenity Alpha official-announcement experiment described in `docs/plans/2026-07-11-serenity-alpha.md`.
+The repository is an initialized important project in integration and historical-validation stage. The active recovery effort is DeepSeek Beta strict tool routing in `docs/plans/2026-07-17-deepseek-beta-tool-routing.md`; Serenity Alpha remains governed by `docs/plans/2026-07-11-serenity-alpha.md`.
 
 ## Critical journeys
 
@@ -28,7 +28,8 @@ The repository is an initialized important project in integration and historical
 - `docs/historical_validation.md`: historical replay method and recorded results.
 - `docs/VALIDATION.md`: cross-cutting validation ledger.
 - `docs/PROGRESS.md`: recoverable current status.
-- `docs/plans/2026-07-11-serenity-alpha.md`: active ExecPlan.
+- `docs/plans/2026-07-17-deepseek-beta-tool-routing.md`: active recovery ExecPlan.
+- `docs/plans/2026-07-11-serenity-alpha.md`: Serenity Alpha execution plan.
 
 ## Verified entry points and commands
 

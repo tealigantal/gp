@@ -109,6 +109,9 @@ def test_agent_tool_schema_is_strict_and_uses_required_tool_choice():
     compare_tool = next(tool for tool in tools if tool["function"]["name"] == "compare_candidates")
     assert compare_tool["function"]["strict"] is True
     assert compare_tool["function"]["parameters"]["additionalProperties"] is False
+    for tool in tools:
+        parameters = tool["function"]["parameters"]
+        assert set(parameters["required"]) == set(parameters["properties"])
 
     seen = {}
 

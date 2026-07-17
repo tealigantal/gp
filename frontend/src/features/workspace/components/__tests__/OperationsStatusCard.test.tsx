@@ -183,3 +183,24 @@ it('does not recommend manual archive when postclose daily artifact is current',
   expect(screen.getAllByText('今日日线已就绪').length).toBeGreaterThan(0)
   expect(container.querySelector('button[data-service="gp-postclose-archive"]')).not.toHaveClass('ant-btn-primary')
 })
+
+it('shows the lunch data update state without using the trading recommendation state', () => {
+  render(
+    <OperationsStatusCard
+      runtime={runtime({
+        market_phase: 'LUNCH_BREAK',
+        intraday_runtime_enabled: true,
+        pulse_trade_day: '20260717',
+        pulse_target_trade_day: '20260717',
+        pulse_slot_at: '2026-07-17 11:30:00',
+        pulse_target_slot_at: '2026-07-17 11:30:00',
+        slot_status: 'OK',
+        artifact_freshness: 'current',
+        publish_allowed: false,
+        tradeability_state: 'blocked',
+      })}
+    />,
+  )
+
+  expect(screen.getByText('午盘数据已更新 · 11:30')).toBeInTheDocument()
+})

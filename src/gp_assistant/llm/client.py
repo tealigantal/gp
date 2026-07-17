@@ -207,7 +207,8 @@ class LLMClient:
             temperature=temperature,
             model=self.agent_model,
             tool_choice=tool_choice,
-            thinking=thinking,
+            # DeepSeek Beta rejects `tool_choice` while thinking mode is enabled.
+            thinking=thinking if thinking is not None else {"type": "disabled"},
             budget_stage="agent_routing",
             payload_limit_bytes=ROUTING_PAYLOAD_LIMIT_BYTES,
             payload_compressed=True,

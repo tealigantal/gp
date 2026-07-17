@@ -127,7 +127,7 @@ Copy-Item .env.example .env
 最重要的变量：
 
 - `LLM_API_KEY`：必需。当前 `/api/chat` 的意图解析依赖 LLM；缺失时 API 会明确返回 503，而不是伪装成普通闲聊
-- `LLM_BASE_URL`：必需。`.env.example` 使用 DeepSeek 兼容接口
+- `LLM_BASE_URL`：必需。`.env.example` 使用 DeepSeek Beta 接口
 - `CHAT_MODEL`：默认 `deepseek-chat`
 - `DATA_PROVIDER`：默认 `akshare`
 - `STRICT_REAL_DATA=1`：默认优先真实数据

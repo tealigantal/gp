@@ -28,6 +28,32 @@
 
 ## Remaining operational gates
 
+## 2026-07-17 CNINFO official-envelope repair and local container refresh
+
+- **Cause proven:** A live HTTP 200 CNINFO no-result response used the official top-level fields `classifiedAnnouncements`, `totalSecurities`, `totalAnnouncement`, `totalRecordNum`, `announcements`, `categoryList`, `hasMore`, and `totalpages`, with `announcements:null`, zero counts, `hasMore:false`, and `totalpages:0`. The old parser incorrectly required an array and raised `cninfo_announcement_schema_changed`.
+- **Change:** Adopted strict `cninfo-announcement-envelope-v2`: official `announcementId` only, official nullable empty page only, exact envelope checks, and `hasMore`-only continuation. No legacy `id` or empty-array compatibility was retained.
+- **Executed validation:** `python -m pytest tests/test_serenity_sources.py tests/test_serenity_runtime.py -q` passed (47 tests); `python -m pytest -q`, `python -m compileall -q src tests`, and `git diff --check` passed.
+- **Live source validation:** The repaired local collector queried current CNINFO data for `002594` and completed with zero records, `backlog=false`, `total_pages=0`, `next_page=null`, and source fingerprint `6ee17c3ed8440c47`.
+- **Container validation:** `docker compose --profile experiments config --quiet` passed; `docker compose build gp web` rebuilt `gp-backend:local` and `gp-web`; force recreation refreshed `gp`, `gp-worker`, `gp-serenity-worker`, and `web` without `--remove-orphans`. The in-container and local SHA-256 for `src/gp_assistant/serenity/sources.py` both equal `34ed0c58fa2ecd87d87865a0f68c4e362f0f87127746c3406ddcadf101ad38cf`.
+- **Live worker recovery:** After the old worker lease naturally expired, the renewed worker was the sole lease owner. The obsolete pre-repair CNINFO breaker was cleared and its first real poll succeeded: run `serpoll_6a9a0f9de6c34be98e3b66519c3b6870`, 3 requests, 0 records, complete coverage for `002594` and `600000`, no errors, no backlog, and schema fingerprint `576ec46738c76f6b`. Base GP API and market worker are up; Serenity policy remains suspended at 0% because the forward causal gate has not changed.
+
+## 2026-07-17 DeepSeek Beta tool-routing recovery
+
+- Updated the local Compose environment and `.env.example` to use `https://api.deepseek.com/beta`; no `/v1` fallback remains.
+- Corrected strict tool schemas so every declared object property is required and unknown routing values use JSON `null`.
+- The provider's direct response identified the rejected field as thinking mode combined with `tool_choice=required`. The client now sends `thinking={"type":"disabled"}` for agent tool routing.
+- Passed `python -m pytest tests/unit/test_llm_client.py tests/unit/test_card_tool_llm_explanation.py tests/test_worker_reconcile.py tests/server/test_chat_endpoint_smoke.py -q` (31 tests), `python -m compileall -q src tests`, `docker compose config --quiet`, and `git diff --check`.
+- Rebuilt and recreated `gp`, `gp-worker`, and `gp-serenity-worker` with the shared `gp-backend:local` image.
+- Direct live DeepSeek Beta validation with the complete GP agent schema returned HTTP 200 and selected `answer_chat`; this proves the original provider 400 is resolved.
+- Full local `/api/chat` acceptance remains pending only because the worker is still refreshing and `current book unavailable` prevents routing before the provider call.
+
+## 2026-07-15 local container refresh and compatibility check
+
+- Recreated the local API, runtime worker, Serenity worker, and Workspace containers without deleting the mounted `store/`, `data/`, or `configs/` directories.
+- A source-overlay image (`gp-backend-current:local`) compiled successfully and served `/api/health`; its current tool-calling `/api/chat` path was rejected by the configured `deepseek-v4-flash` provider with HTTP 400, so it was not retained as the live API image.
+- Restored the previously validated `gp-backend:local` image with `GP_SERENITY_MODE=native`, then verified `/api/health` reported `product_ready=true` and an isolated real `/api/chat` turn completed with HTTP 200.
+- The full dependency-image rebuild remains in progress through the slow external Python package source; it was not used for the live cutover.
+
 - Docker image build and live API/container smoke when the local Docker daemon is available.
 - Five consecutive forward shadow trading days cannot be completed in this implementation session and remain a rollout gate, not a simulated acceptance result.
 
@@ -54,3 +80,6 @@ Historical replay methodology and prior results remain in `docs/historical_valid
 - Serenity worker is running from the shared image at 0% weight. Its persisted policy remains safely suspended because earlier source failures triggered the documented circuit breaker; no promotion override was applied.
 - Independent final review found and resolved three P1 issues: canonical fallback masking, incomplete non-execution phase gating, and explicit-zero corruption in the V2 adapter. The complete backend suite passed again afterward.
 - Final-image two-turn chat passed with run `run_ddccc64eb9a5`; both turns retained symbols 600000/000651/000001 and reused the same run.
+## 2026-07-17 Lunch-break runtime indicator
+
+- Frontend component test verifies that a current, complete 11:30 artifact renders `午盘数据已更新 · 11:30` independently from `publish_allowed` and tradeability.

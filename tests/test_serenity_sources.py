@@ -32,6 +32,27 @@ class _Session:
         return self.responses.pop(0)
 
 
+def _official_payload(
+    announcements,
+    *,
+    total_announcement=None,
+    total_record_num=None,
+    has_more=False,
+    total_pages=0,
+):
+    count = len(announcements) if isinstance(announcements, list) else 0
+    return {
+        "classifiedAnnouncements": None,
+        "totalSecurities": 1 if count else 0,
+        "totalAnnouncement": count if total_announcement is None else total_announcement,
+        "totalRecordNum": count if total_record_num is None else total_record_num,
+        "announcements": announcements,
+        "categoryList": None,
+        "hasMore": has_more,
+        "totalpages": total_pages,
+    }
+
+
 def _build(title: str, text: str):
     bound_text = f"证券代码：000001。{text}" if text else ""
     return build_verified_evidence(
@@ -151,8 +172,8 @@ def test_cninfo_exact_symbol_paginates_and_detects_backlog():
     row2 = {"announcementId": "2", "secCode": "000001", "announcementTitle": "B", "announcementTime": 1_700_000_100_000, "adjunctUrl": "b.pdf"}
     session = _Session(
         [
-            _Response(payload={"announcements": [row1], "totalpages": 2, "hasMore": True}),
-            _Response(payload={"announcements": [row2], "totalpages": 2, "hasMore": False}),
+            _Response(payload=_official_payload([row1], total_announcement=2, total_record_num=2, has_more=True)),
+            _Response(payload=_official_payload([row2], total_announcement=2, total_record_num=2)),
         ]
     )
     client = CNInfoClient(page_budget=2, spacing_sec=0, session=session)
@@ -163,7 +184,7 @@ def test_cninfo_exact_symbol_paginates_and_detects_backlog():
     limited = CNInfoClient(
         page_budget=1,
         spacing_sec=0,
-        session=_Session([_Response(payload={"announcements": [row1], "totalpages": 2, "hasMore": True})]),
+        session=_Session([_Response(payload=_official_payload([row1], total_announcement=2, total_record_num=2, has_more=True))]),
     )
     result = limited.fetch_symbol("000001", "gssz0000001", start=__import__("datetime").date(2026, 1, 1), end=__import__("datetime").date(2026, 1, 31))
     assert result["complete"] is False
@@ -190,7 +211,7 @@ def test_cninfo_rejects_partial_row_schema_before_cursor_can_advance():
         page_budget=1,
         spacing_sec=0,
         session=_Session(
-            [_Response(payload={"announcements": [bad], "totalpages": 1, "hasMore": False})]
+            [_Response(payload=_official_payload([bad]))]
         ),
     )
     with pytest.raises(SourceError, match="required_field_missing"):
@@ -205,8 +226,8 @@ def test_cninfo_rejects_partial_row_schema_before_cursor_can_advance():
 @pytest.mark.parametrize(
     "payload",
     [
-        {"announcements": {}, "totalpages": 1},
-        {"announcements": ["not-an-object"], "totalpages": 1},
+        _official_payload({}, total_announcement=1, total_record_num=1),
+        _official_payload(["not-an-object"]),
     ],
 )
 def test_cninfo_rejects_invalid_announcement_container_and_rows(payload):
@@ -235,7 +256,7 @@ def test_cninfo_rejects_invalid_stock_map_container_and_rows(stock_list):
     assert caught.value.schema_error is True
 
 
-def test_schema_fingerprint_is_independent_of_rows_and_empty_results():
+def test_schema_fingerprint_is_independent_of_rows_and_present_for_official_empty_results():
     row = {
         "announcementId": "1",
         "secCode": "000001",
@@ -246,7 +267,7 @@ def test_schema_fingerprint_is_independent_of_rows_and_empty_results():
     first = CNInfoClient(
         spacing_sec=0,
         session=_Session(
-            [_Response(payload={"announcements": [row], "totalpages": 1})]
+            [_Response(payload=_official_payload([row]))]
         ),
     ).fetch_symbol(
         "000001",
@@ -259,10 +280,7 @@ def test_schema_fingerprint_is_independent_of_rows_and_empty_results():
         session=_Session(
             [
                 _Response(
-                    payload={
-                        "announcements": [{**row, "optionalNewField": "allowed"}],
-                        "totalpages": 1,
-                    }
+                    payload=_official_payload([{**row, "optionalNewField": "allowed"}])
                 )
             ]
         ),
@@ -275,7 +293,7 @@ def test_schema_fingerprint_is_independent_of_rows_and_empty_results():
     empty = CNInfoClient(
         spacing_sec=0,
         session=_Session(
-            [_Response(payload={"announcements": [], "totalpages": 1})]
+            [_Response(payload=_official_payload(None))]
         ),
     ).fetch_symbol(
         "000001",
@@ -285,4 +303,42 @@ def test_schema_fingerprint_is_independent_of_rows_and_empty_results():
     )
 
     assert first["schema_fingerprint"] == second["schema_fingerprint"]
-    assert empty["schema_fingerprint"] is None
+    assert empty["schema_fingerprint"] == first["schema_fingerprint"]
+
+
+def test_cninfo_accepts_only_the_observed_official_null_empty_envelope():
+    result = CNInfoClient(
+        spacing_sec=0,
+        session=_Session([_Response(payload=_official_payload(None))]),
+    ).fetch_symbol(
+        "000001",
+        "gssz0000001",
+        start=__import__("datetime").date(2026, 7, 1),
+        end=__import__("datetime").date(2026, 7, 31),
+    )
+    assert result["records"] == []
+    assert result["complete"] is True
+    assert result["backlog"] is False
+    assert result["total_pages"] == 0
+    assert result["next_page"] is None
+    assert result["schema_fingerprint"]
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        _official_payload([], total_pages=0),
+        _official_payload(None, total_announcement=1, total_record_num=1),
+        {"announcements": None, "totalpages": 0, "hasMore": False},
+    ],
+)
+def test_cninfo_rejects_non_official_empty_or_incomplete_envelopes(payload):
+    client = CNInfoClient(spacing_sec=0, session=_Session([_Response(payload=payload)]))
+    with pytest.raises(SourceError, match="schema_changed") as caught:
+        client.fetch_symbol(
+            "000001",
+            "gssz0000001",
+            start=__import__("datetime").date(2026, 7, 1),
+            end=__import__("datetime").date(2026, 7, 31),
+        )
+    assert caught.value.schema_error is True

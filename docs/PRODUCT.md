@@ -25,7 +25,9 @@ Individual researchers and traders who want evidence-backed candidate plans and 
 
 ## Expected User-visible Behavior
 
-All market-facing answers use the same active run and structured judgment. The LLM translates facts into Chinese but cannot change selection or numbers. Serenity is visible immediately as real evidence and shadow/counterfactual impact; it affects production ranking only after automatic causal validation.
+All market-facing answers use the same active run and structured judgment. The LLM translates facts into Chinese but cannot change selection or numbers. DeepSeek tool routing uses the provider's strict Beta interface; unavailable provider calls fail explicitly rather than silently using a different router. Serenity is visible immediately as real evidence and shadow/counterfactual impact; it affects production ranking only after automatic causal validation.
+
+During the lunch break, the runtime status card shows whether the 11:30 intraday data artifact has updated. This is a data-completion signal only; it does not imply a trading recommendation.
 
 ## Failure and Recovery Experience
 

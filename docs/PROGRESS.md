@@ -1,17 +1,17 @@
 # Current Progress
 
-Last updated: 2026-07-11
+Last updated: 2026-07-17
 
 ## Active Delivery State
 
 - **Active Goal:** Implement the free official-announcement Serenity Alpha experiment with real bootstrap, immutable evidence, shadow counterfactuals, and gated automatic ranking promotion up to 8%.
-- **Active ExecPlan:** `docs/plans/2026-07-11-recommendation-chain-recovery.md` (Serenity forward observation remains governed by its existing plan).
-- **Current Milestone:** Canonical recommendation-chain recovery is implemented and container-verified; Serenity forward observation remains an operational gate.
+- **Active ExecPlan:** `docs/plans/2026-07-17-deepseek-beta-tool-routing.md` (Serenity forward observation remains governed by its existing plan).
+- **Current Milestone:** Canonical recommendation-chain recovery is implemented and all local GP containers were rebuilt from current source. Serenity now uses the strict observed CNINFO v2 no-result contract and its renewed worker has completed a live zero-record poll; forward observation remains an operational gate.
 - **Completed and Verified:** Governance, real source bootstrap gate, append-only evidence/metadata versions, per-symbol coverage and page/hydration resume, official verification boundary, independent add-on/counterfactual policy, T+6 causal evaluation, target-only narration, health/CLI/Compose integration, real zero-result and positive-fact CNINFO smokes, 119 targeted tests, and all 311 default tests.
 - **Implemented but Not Verified:** Live multi-day worker continuity and five consecutive forward shadow trading days.
-- **In Progress:** Recommendation-chain recovery handoff and forward Serenity observation readiness.
-- **Next Work:** Start the experiment worker when Docker Desktop is available, run the container/API smoke, and leave the experiment at shadow/0% until real forward gates mature.
-- **Blockers:** Free endpoints have no SLA; forward predictive performance cannot mature during implementation. Docker runtime validation is pending because the local Docker Desktop Linux engine was unavailable on 2026-07-11.
+- **In Progress:** Forward Serenity observation after the source-contract recovery.
+- **Next Work:** Let the renewed worker execute its next scheduled live poll; retain shadow/0% until real forward gates mature.
+- **Blockers:** Free endpoints have no SLA; forward predictive performance cannot mature during implementation. The policy is still suspended from earlier failure history and remains at 0% until its documented causal gates recover.
 - **Recent Decisions:** Serenity remains separate from the eight expert weights; backfill reference arms cannot bind/train; automatic promotion starts at 1%, active learning at 2%, and caps at 8%; replay forces Serenity off; integrity/persistence violations force 0%.
 - **Resume Instructions:** Read `AGENTS.md`, `PROJECT_GOAL.md`, and the active ExecPlan; preserve `store/book/current_slot.json`; inspect `serenity-status`; continue with the first unchecked validation item without synthesizing forward outcomes.
 
@@ -39,6 +39,12 @@ The current product direction is:
 - one shared Market-Memory decision source for recommendation, follow-up, comparison, exit, and run-change answers
 
 ## Recent Changes
+
+### 2026-07-17 — CNINFO strict source-contract recovery
+
+- Replaced the legacy announcement parser with the observed official nullable v2 envelope: `announcements:null` plus zero counts is a successful zero-record poll, while incomplete or inconsistent envelopes still fail closed.
+- Removed the legacy `id` record-key fallback and made `hasMore` the sole pagination signal; `totalpages` is retained only as an observed field because exact-stock results can report zero despite rows.
+- Rebuilt `gp`, `gp-worker`, `gp-serenity-worker`, and `web` from the current workspace without deleting mounted runtime directories. The rebuilt backend source hash matches local `serenity/sources.py`.
 
 ### 2026-07-11 — Serenity Alpha vertical slice
 

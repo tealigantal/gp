@@ -42,7 +42,7 @@ from .targets import load_stable_targets
 from .evaluation import process_pending_evaluations
 
 
-_SCHEMA_CONTRACT_VERSION = "cninfo-announcement-envelope-v1"
+_SCHEMA_CONTRACT_VERSION = "cninfo-announcement-envelope-v2"
 _TERMINAL_HYDRATION_STATUSES = {"parsed", "metadata_only", "unparsed", "truncated"}
 
 

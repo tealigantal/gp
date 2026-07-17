@@ -601,10 +601,12 @@ def _agent_tool_schemas() -> List[Dict[str, Any]]:
         }
 
     def obj(properties: Dict[str, Any], required: List[str] | None = None) -> Dict[str, Any]:
+        # DeepSeek Beta strict mode requires every object property to be required.
+        # Values that are not known at routing time use an explicit JSON null.
         return {
             "type": "object",
             "properties": properties,
-            "required": required or [],
+            "required": list(properties),
             "additionalProperties": False,
         }
 
@@ -643,8 +645,8 @@ def _agent_tool_schemas() -> List[Dict[str, Any]]:
             ),
             parameters=obj(
                 {
-                    "symbol": {"type": ["string", "null"], "description": "Six digit A-share symbol when known."},
-                    "rank": {"type": ["integer", "null"], "minimum": 1, "maximum": 10},
+                    "symbol": {"anyOf": [{"type": "string"}, {"type": "null"}], "description": "Six digit A-share symbol when known."},
+                    "rank": {"anyOf": [{"type": "integer", "minimum": 1, "maximum": 10}, {"type": "null"}]},
                     "position_context": {"type": "string", "description": "User-provided holding, cost, profit/loss and sell-point context."},
                 },
             ),
@@ -654,8 +656,8 @@ def _agent_tool_schemas() -> List[Dict[str, Any]]:
             description="Analyze user-provided intraday situation such as current price, high/low, volume, pullback,盘口 or news.",
             parameters=obj(
                 {
-                    "symbol": {"type": ["string", "null"], "description": "Six digit symbol when known."},
-                    "rank": {"type": ["integer", "null"], "minimum": 1, "maximum": 10},
+                    "symbol": {"anyOf": [{"type": "string"}, {"type": "null"}], "description": "Six digit symbol when known."},
+                    "rank": {"anyOf": [{"type": "integer", "minimum": 1, "maximum": 10}, {"type": "null"}]},
                     "user_situation": {"type": "string", "description": "The user's intraday facts and question."},
                 },
             ),
@@ -666,9 +668,9 @@ def _agent_tool_schemas() -> List[Dict[str, Any]]:
             parameters=obj(
                 {
                     "symbols": {"type": "array", "items": {"type": "string"}},
-                    "top_n": {"type": ["integer", "null"], "minimum": 1, "maximum": 10},
-                    "selected_symbol": {"type": ["string", "null"]},
-                    "selected_rank": {"type": ["integer", "null"], "minimum": 1, "maximum": 10},
+                    "top_n": {"anyOf": [{"type": "integer", "minimum": 1, "maximum": 10}, {"type": "null"}]},
+                    "selected_symbol": {"anyOf": [{"type": "string"}, {"type": "null"}]},
+                    "selected_rank": {"anyOf": [{"type": "integer", "minimum": 1, "maximum": 10}, {"type": "null"}]},
                     "selection_reason": {"type": "string"},
                     "confidence": {"type": "number", "minimum": 0, "maximum": 1},
                     "user_constraint": {"type": "string"},

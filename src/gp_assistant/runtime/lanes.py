@@ -25,8 +25,8 @@ def _book_lock_path() -> Path:
     return path
 
 
-def _acquire_process_lock(path: Path) -> None:
-    deadline = time.monotonic() + _BOOK_LOCK_TIMEOUT_SEC
+def _acquire_process_lock(path: Path, *, timeout_sec: float | None = None) -> None:
+    deadline = time.monotonic() + (_BOOK_LOCK_TIMEOUT_SEC if timeout_sec is None else max(0.0, float(timeout_sec)))
     while True:
         try:
             fd = os.open(str(path), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
@@ -85,15 +85,20 @@ def session_lane(session_id: str):
 
 
 @contextmanager
-def book_lane():
+def book_lane(*, timeout_sec: float | None = None):
     path = _book_lock_path()
-    _book_thread_lock.acquire()
+    if timeout_sec is None:
+        acquired = _book_thread_lock.acquire()
+    else:
+        acquired = _book_thread_lock.acquire(timeout=max(0.0, float(timeout_sec)))
+    if not acquired:
+        raise TimeoutError("Timed out waiting for local book reconcile lock")
     depth = int(getattr(_book_thread_state, "depth", 0) or 0)
     outermost = depth == 0
     heartbeat_stop: Event | None = None
     try:
         if outermost:
-            _acquire_process_lock(path)
+            _acquire_process_lock(path, timeout_sec=timeout_sec)
             heartbeat_stop = _start_lock_heartbeat(path)
         _book_thread_state.depth = depth + 1
         yield

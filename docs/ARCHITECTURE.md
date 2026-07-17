@@ -41,7 +41,7 @@ free official announcement sources -> gp-serenity-worker
 
 ## External Integrations
 
-Market providers currently default to AkShare. LLM calls use an OpenAI-compatible endpoint. Serenity v1 uses free CNINFO discovery/PDF data with SSE/SZSE metadata for verification; these sources are experimental and have no contractual SLA.
+Market providers currently default to AkShare. LLM calls use DeepSeek's OpenAI-compatible Beta endpoint; strict tool-routing schemas require every declared object property, with unknown values encoded as JSON `null`. Serenity v1 uses free CNINFO discovery/PDF data with SSE/SZSE metadata for verification; these sources are experimental and have no contractual SLA.
 
 ## Dependency Directions
 

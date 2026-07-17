@@ -100,6 +100,29 @@ def test_reconcile_runtime_state_uses_single_dispatch_path(monkeypatch):
     assert calls == ["auto", "rebuild_daybook"]
 
 
+def test_reconcile_runtime_state_passes_nonblocking_lock_timeout(monkeypatch):
+    captured = {}
+
+    class _Lane:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+    def _book_lane(*, timeout_sec=None):
+        captured["timeout_sec"] = timeout_sec
+        return _Lane()
+
+    monkeypatch.setattr(worker, "book_lane", _book_lane)
+    monkeypatch.setattr(worker, "run_runtime_chain", lambda now=None, operation="auto": {"operation": operation})
+
+    result = worker.reconcile_runtime_state(lock_timeout_sec=0.0)
+
+    assert result["operation"] == "auto"
+    assert captured["timeout_sec"] == 0.0
+
+
 def test_auto_reconcile_uses_postclose_archive_in_postclose_pending(monkeypatch):
     monkeypatch.setattr(worker, "run_runtime_chain", lambda now=None, operation="auto": {"path": "runtime", "operation": operation})
 

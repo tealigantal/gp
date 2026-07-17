@@ -94,6 +94,21 @@ export function OperationsStatusCard({
     (!artifactFreshness && (dailyStatus === 'artifact_lagging' || String(runtime?.book_freshness || '').toLowerCase() === 'lagging')) ||
     Boolean(runtime?.artifact_lag_reason)
   const dailyStatusLabel = freshness.label
+  const isLunchBreak = runtime?.market_phase === 'LUNCH_BREAK'
+  const lunchDataReady =
+    runtime?.intraday_runtime_enabled !== false &&
+    runtime?.pulse_trade_day === runtime?.pulse_target_trade_day &&
+    Boolean(runtime?.pulse_slot_at && runtime?.pulse_target_slot_at && runtime.pulse_slot_at >= runtime.pulse_target_slot_at) &&
+    String(runtime?.slot_status || '').toUpperCase() === 'OK' &&
+    String(runtime?.artifact_freshness || '').toLowerCase() === 'current'
+  const lunchDataLabel =
+    runtime?.intraday_runtime_enabled === false
+      ? '午盘数据未开启'
+      : lunchDataReady
+        ? `午盘数据已更新 · ${runtime?.pulse_slot_at?.slice(11, 16)}`
+        : String(runtime?.slot_status || '').toUpperCase() === 'OK'
+          ? '午盘数据更新中'
+          : '午盘数据受限'
 
   return (
     <section className="snapshot-section ops-card" aria-label="运行态与修复工具">
@@ -110,6 +125,7 @@ export function OperationsStatusCard({
           <Tag color={artifactLagging ? 'volcano' : eodPending ? 'gold' : dailyBlocked ? 'volcano' : 'green'}>
             {dailyStatusLabel}
           </Tag>
+          {isLunchBreak ? <Tag color={lunchDataReady ? 'green' : runtime?.intraday_runtime_enabled === false ? 'default' : 'gold'}>{lunchDataLabel}</Tag> : null}
         </div>
 
         <Typography.Paragraph type="secondary" className="ops-note">
