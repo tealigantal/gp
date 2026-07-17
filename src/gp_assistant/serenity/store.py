@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import math
 import os
 import sqlite3
 import threading
@@ -8,12 +9,12 @@ from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from hashlib import sha256
 from pathlib import Path
-from typing import Any, Dict, Iterable, Iterator, List, Sequence
+from typing import Any, Dict, Iterable, Iterator, List, Mapping, Sequence
 
 from ..core.config import load_config
 from ..core.paths import store_dir
 from ..runtime.utils import now_iso
-from .models import FrozenSerenitySignal, SerenityFact, SerenityHypothesis, SerenityPolicyState, SerenityReferenceSnapshot
+from .models import FrozenSerenitySignal, NATIVE_SERENITY_FORMULA_VERSION, SerenityCandidateTarget, SerenityFact, SerenityHypothesis, SerenityPolicyState, SerenityReferenceSnapshot
 from .scheduler import trading_day_cooldown_until
 
 
@@ -87,9 +88,30 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
                 schema_fingerprint TEXT,
                 next_due_at TEXT,
                 stale_after_sec REAL,
-                error TEXT
+                error TEXT,
+                target_id TEXT,
+                target_activation_revision TEXT
             );
             CREATE INDEX IF NOT EXISTS idx_poll_runs_source_finished ON poll_runs(source, finished_at DESC);
+            CREATE TABLE IF NOT EXISTS candidate_targets(
+                target_id TEXT PRIMARY KEY,
+                decision_trade_day TEXT NOT NULL,
+                daybook_effective_day TEXT NOT NULL,
+                observed_at TEXT NOT NULL,
+                symbols_json TEXT NOT NULL,
+                input_hash TEXT NOT NULL UNIQUE,
+                created_at TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_candidate_targets_latest
+                ON candidate_targets(created_at DESC);
+            CREATE TABLE IF NOT EXISTS active_candidate_target(
+                singleton INTEGER PRIMARY KEY CHECK(singleton=1),
+                target_id TEXT NOT NULL,
+                activated_at TEXT NOT NULL,
+                activation_observed_at TEXT,
+                activation_revision TEXT,
+                FOREIGN KEY(target_id) REFERENCES candidate_targets(target_id)
+            );
             CREATE TABLE IF NOT EXISTS poll_symbol_coverage(
                 run_id TEXT NOT NULL,
                 source TEXT NOT NULL,
@@ -108,6 +130,7 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
             CREATE TABLE IF NOT EXISTS source_progress(
                 source TEXT NOT NULL,
                 symbol TEXT NOT NULL,
+                target_id TEXT,
                 window_start TEXT NOT NULL,
                 window_end TEXT NOT NULL,
                 next_page INTEGER NOT NULL,
@@ -268,6 +291,67 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
         }
         if "current_metadata_version_id" not in document_columns:
             conn.execute("ALTER TABLE documents ADD COLUMN current_metadata_version_id TEXT")
+        if "withdrawn_at" not in document_columns:
+            conn.execute("ALTER TABLE documents ADD COLUMN withdrawn_at TEXT")
+        conn.execute(
+            "UPDATE documents SET withdrawn_at=last_seen_at "
+            "WHERE withdrawn=1 AND (withdrawn_at IS NULL OR withdrawn_at='')"
+        )
+        progress_columns = {
+            str(row[1]) for row in conn.execute("PRAGMA table_info(source_progress)").fetchall()
+        }
+        if "target_id" not in progress_columns:
+            conn.execute("ALTER TABLE source_progress ADD COLUMN target_id TEXT")
+        poll_columns = {
+            str(row[1]) for row in conn.execute("PRAGMA table_info(poll_runs)").fetchall()
+        }
+        if "target_id" not in poll_columns:
+            conn.execute("ALTER TABLE poll_runs ADD COLUMN target_id TEXT")
+        if "target_activation_revision" not in poll_columns:
+            conn.execute(
+                "ALTER TABLE poll_runs ADD COLUMN target_activation_revision TEXT"
+            )
+        active_target_columns = {
+            str(row[1])
+            for row in conn.execute(
+                "PRAGMA table_info(active_candidate_target)"
+            ).fetchall()
+        }
+        if "activation_observed_at" not in active_target_columns:
+            conn.execute(
+                "ALTER TABLE active_candidate_target "
+                "ADD COLUMN activation_observed_at TEXT"
+            )
+        if "activation_revision" not in active_target_columns:
+            conn.execute(
+                "ALTER TABLE active_candidate_target "
+                "ADD COLUMN activation_revision TEXT"
+            )
+        active_rows = conn.execute(
+            "SELECT singleton,target_id,activated_at,activation_observed_at,"
+            "activation_revision FROM active_candidate_target"
+        ).fetchall()
+        for active_row in active_rows:
+            activated_at = str(
+                active_row["activation_observed_at"]
+                or active_row["activated_at"]
+                or ""
+            )
+            activation_revision = str(
+                active_row["activation_revision"] or ""
+            )
+            if not activation_revision:
+                activation_revision = "seractivation_" + sha256(
+                    (
+                        f"{active_row['target_id']}|{activated_at}|legacy"
+                    ).encode("utf-8")
+                ).hexdigest()[:24]
+            conn.execute(
+                "UPDATE active_candidate_target SET "
+                "activation_observed_at=?,activation_revision=? "
+                "WHERE singleton=?",
+                (activated_at, activation_revision, active_row["singleton"]),
+            )
         evaluation_columns = {
             str(row[1]) for row in conn.execute("PRAGMA table_info(evaluations)").fetchall()
         }
@@ -315,7 +399,342 @@ def write_transaction() -> Iterator[sqlite3.Connection]:
 def initialize_store() -> Path:
     conn = _connect(readonly=False)
     conn.close()
+    ensure_native_formula_epoch()
     return evidence_db_path()
+
+
+def ensure_native_formula_epoch() -> Dict[str, Any]:
+    """Retire legacy add-on samples and start one auditable native-Alpha epoch."""
+
+    marker = "native_formula_cutover_v1"
+    with write_transaction() as conn:
+        existing = conn.execute(
+            "SELECT update_id,epoch FROM policy_update_ledger WHERE evaluation_id=? LIMIT 1",
+            (marker,),
+        ).fetchone()
+        if existing is not None:
+            return {
+                "changed": False,
+                "epoch": int(existing["epoch"]),
+                "update_id": str(existing["update_id"]),
+            }
+        legacy_pending = conn.execute(
+            "SELECT COUNT(*) AS n FROM pending_evaluations WHERE status='pending' AND formula_version<>?",
+            (NATIVE_SERENITY_FORMULA_VERSION,),
+        ).fetchone()
+        evaluation_rows = conn.execute(
+            "SELECT payload_json FROM evaluations"
+        ).fetchall()
+        legacy_evaluation_count = 0
+        for evaluation_row in evaluation_rows:
+            try:
+                evaluation_payload = json.loads(evaluation_row["payload_json"] or "{}")
+            except (TypeError, ValueError):
+                legacy_evaluation_count += 1
+                continue
+            if (
+                str(evaluation_payload.get("addon_formula_version") or "")
+                != NATIVE_SERENITY_FORMULA_VERSION
+            ):
+                legacy_evaluation_count += 1
+        legacy_count = int(legacy_pending["n"] or 0) + legacy_evaluation_count
+        if legacy_count == 0:
+            return {"changed": False, "reason": "no_legacy_formula_state"}
+
+        now = now_iso()
+        row = conn.execute(
+            "SELECT version,payload_json FROM serenity_policy_state WHERE policy_name='serenity'"
+        ).fetchone()
+        if row is not None:
+            prior = SerenityPolicyState.model_validate(json.loads(row["payload_json"] or "{}"))
+            epoch = int(prior.epoch) + 1
+            next_stage = "suspended" if prior.state == "suspended" else (
+                "shadow" if prior.bootstrap_run_id else "warming"
+            )
+            transition_raw = (
+                f"{prior.transition_log_hash}|{prior.epoch}|{epoch}|"
+                f"{NATIVE_SERENITY_FORMULA_VERSION}|{legacy_count}"
+            )
+            next_state = prior.model_copy(
+                update={
+                    "version": int(row["version"]) + 1,
+                    "epoch": epoch,
+                    "state": next_stage,
+                    "applied_weight": 0.0,
+                    "previous_weight": 0.0,
+                    "state_since": now,
+                    "last_matured_day": None,
+                    "last_evaluation_at": None,
+                    "matured_days": 0,
+                    "available_results": 0,
+                    "decision_snapshots": 0,
+                    "supportive_count": 0,
+                    "conflicting_count": 0,
+                    "consecutive_passes": 0,
+                    "consecutive_failures": 0,
+                    "probation_matured_days": 0,
+                    "probation_available_results": 0,
+                    "rolling_metrics": {},
+                    "transition_log_hash": sha256(transition_raw.encode("utf-8")).hexdigest(),
+                    "updated_at": now,
+                }
+            )
+        else:
+            bootstrap = conn.execute(
+                "SELECT bootstrap_id FROM bootstrap_runs WHERE complete=1 ORDER BY completed_at DESC LIMIT 1"
+            ).fetchone()
+            epoch = 1
+            next_state = SerenityPolicyState(
+                epoch=epoch,
+                state="shadow" if bootstrap else "warming",
+                applied_weight=0.0,
+                previous_weight=0.0,
+                max_weight=load_config().serenity.max_weight,
+                state_since=now,
+                bootstrap_run_id=str(bootstrap["bootstrap_id"]) if bootstrap else None,
+                transition_log_hash=sha256(
+                    f"{marker}|{NATIVE_SERENITY_FORMULA_VERSION}|{legacy_count}".encode("utf-8")
+                ).hexdigest(),
+                updated_at=now,
+            )
+        conn.execute(
+            """
+            INSERT INTO serenity_policy_state(policy_name,version,payload_json,updated_at)
+            VALUES('serenity',?,?,?)
+            ON CONFLICT(policy_name) DO UPDATE SET
+                version=excluded.version,payload_json=excluded.payload_json,updated_at=excluded.updated_at
+            """,
+            (
+                next_state.version,
+                json.dumps(next_state.model_dump(mode="json"), ensure_ascii=False, sort_keys=True),
+                now,
+            ),
+        )
+        retired = conn.execute(
+            """
+            UPDATE pending_evaluations
+            SET status='retired_formula',evaluated_at=?
+            WHERE status='pending' AND formula_version<>?
+            """,
+            (now, NATIVE_SERENITY_FORMULA_VERSION),
+        ).rowcount
+        ledger_payload = {
+            "transition": "native_formula_epoch_cutover",
+            "formula_version": NATIVE_SERENITY_FORMULA_VERSION,
+            "retired_pending_count": int(retired),
+            "legacy_record_count": legacy_count,
+            "previous_epoch": int(next_state.epoch) - 1,
+            "new_epoch": int(next_state.epoch),
+        }
+        update_id = "serupd_" + sha256(
+            json.dumps(ledger_payload, sort_keys=True).encode("utf-8")
+        ).hexdigest()[:24]
+        conn.execute(
+            "INSERT INTO policy_update_ledger(update_id,evaluation_id,epoch,applied_at,payload_json) VALUES(?,?,?,?,?)",
+            (
+                update_id,
+                marker,
+                int(next_state.epoch),
+                now,
+                json.dumps(ledger_payload, ensure_ascii=False, sort_keys=True),
+            ),
+        )
+        return {"changed": True, "epoch": int(next_state.epoch), **ledger_payload, "update_id": update_id}
+
+
+def candidate_target_identity_hash(
+    symbols: Iterable[str],
+    *,
+    decision_trade_day: str,
+    daybook_effective_day: str,
+) -> str:
+    clean_symbols = sorted(
+        dict.fromkeys(
+            str(symbol or "").strip()
+            for symbol in symbols
+            if str(symbol or "").strip()
+        )
+    )
+    identity = {
+        "decision_trade_day": str(decision_trade_day),
+        "daybook_effective_day": str(daybook_effective_day),
+        "symbols": clean_symbols,
+    }
+    return sha256(
+        json.dumps(
+            identity,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+    ).hexdigest()
+
+
+def publish_candidate_target(
+    symbols: Iterable[str],
+    *,
+    decision_trade_day: str,
+    daybook_effective_day: str,
+    observed_at: str,
+) -> SerenityCandidateTarget:
+    clean_symbols = sorted(dict.fromkeys(str(symbol or "").strip() for symbol in symbols if str(symbol or "").strip()))
+    if not clean_symbols:
+        raise ValueError("serenity_candidate_target_empty")
+    input_hash = candidate_target_identity_hash(
+        clean_symbols,
+        decision_trade_day=decision_trade_day,
+        daybook_effective_day=daybook_effective_day,
+    )
+    target_id = "sertarget_" + input_hash[:24]
+    created_at = now_iso()
+    with write_transaction() as conn:
+        conn.execute(
+            """
+            INSERT OR IGNORE INTO candidate_targets(
+                target_id,decision_trade_day,daybook_effective_day,observed_at,
+                symbols_json,input_hash,created_at
+            ) VALUES(?,?,?,?,?,?,?)
+            """,
+            (
+                target_id,
+                str(decision_trade_day),
+                str(daybook_effective_day),
+                str(observed_at),
+                json.dumps(clean_symbols, ensure_ascii=False),
+                input_hash,
+                created_at,
+            ),
+        )
+        row = conn.execute(
+            "SELECT * FROM candidate_targets WHERE target_id=?", (target_id,)
+        ).fetchone()
+        active = conn.execute(
+            "SELECT target_id,activated_at,activation_observed_at,"
+            "activation_revision FROM active_candidate_target WHERE singleton=1"
+        ).fetchone()
+        if active is None or str(active["target_id"]) != target_id:
+            activation_observed_at = str(observed_at)
+            activated_at = created_at
+            prior_revision = str(active["activation_revision"] or "") if active else ""
+            activation_revision = "seractivation_" + sha256(
+                (
+                    f"{prior_revision}|{target_id}|{activation_observed_at}"
+                ).encode("utf-8")
+            ).hexdigest()[:24]
+            conn.execute(
+                """
+                INSERT INTO active_candidate_target(
+                    singleton,target_id,activated_at,activation_observed_at,
+                    activation_revision
+                ) VALUES(1,?,?,?,?)
+                ON CONFLICT(singleton) DO UPDATE SET
+                    target_id=excluded.target_id,
+                    activated_at=excluded.activated_at,
+                    activation_observed_at=excluded.activation_observed_at,
+                    activation_revision=excluded.activation_revision
+                """,
+                (
+                    target_id,
+                    activated_at,
+                    activation_observed_at,
+                    activation_revision,
+                ),
+            )
+        active = conn.execute(
+            "SELECT target_id,activated_at,activation_observed_at,"
+            "activation_revision FROM active_candidate_target WHERE singleton=1"
+        ).fetchone()
+    assert row is not None
+    assert active is not None
+    return SerenityCandidateTarget(
+        target_id=str(row["target_id"]),
+        decision_trade_day=str(row["decision_trade_day"]),
+        daybook_effective_day=str(row["daybook_effective_day"]),
+        observed_at=str(active["activation_observed_at"] or row["observed_at"]),
+        symbols=list(json.loads(row["symbols_json"] or "[]")),
+        input_hash=str(row["input_hash"]),
+        created_at=str(row["created_at"]),
+        activated_at=str(active["activated_at"]),
+        activation_observed_at=str(active["activation_observed_at"]),
+        activation_revision=str(active["activation_revision"]),
+    )
+
+
+def load_candidate_target(target_id: str) -> SerenityCandidateTarget | None:
+    try:
+        conn = _connect(readonly=True)
+    except (FileNotFoundError, sqlite3.Error):
+        return None
+    try:
+        row = conn.execute(
+            "SELECT * FROM candidate_targets WHERE target_id=?", (str(target_id),)
+        ).fetchone()
+        if row is None:
+            return None
+        return SerenityCandidateTarget(
+            target_id=str(row["target_id"]),
+            decision_trade_day=str(row["decision_trade_day"]),
+            daybook_effective_day=str(row["daybook_effective_day"]),
+            observed_at=str(row["observed_at"]),
+            symbols=list(json.loads(row["symbols_json"] or "[]")),
+            input_hash=str(row["input_hash"]),
+            created_at=str(row["created_at"]),
+        )
+    finally:
+        conn.close()
+
+
+def load_latest_candidate_target() -> SerenityCandidateTarget | None:
+    try:
+        conn = _connect(readonly=True)
+    except (FileNotFoundError, sqlite3.Error):
+        return None
+    try:
+        row = conn.execute(
+            """
+            SELECT t.*,a.activated_at,a.activation_observed_at,
+                   a.activation_revision
+            FROM active_candidate_target a
+            JOIN candidate_targets t ON t.target_id=a.target_id
+            WHERE a.singleton=1
+            """
+        ).fetchone()
+    finally:
+        conn.close()
+    if row is None:
+        return None
+    return SerenityCandidateTarget(
+        target_id=str(row["target_id"]),
+        decision_trade_day=str(row["decision_trade_day"]),
+        daybook_effective_day=str(row["daybook_effective_day"]),
+        observed_at=str(
+            row["activation_observed_at"] or row["observed_at"]
+        ),
+        symbols=list(json.loads(row["symbols_json"] or "[]")),
+        input_hash=str(row["input_hash"]),
+        created_at=str(row["created_at"]),
+        activated_at=str(row["activated_at"]),
+        activation_observed_at=str(row["activation_observed_at"]),
+        activation_revision=str(row["activation_revision"]),
+    )
+
+
+def candidate_target_ready(target_id: str, *, decision_at: str | None = None) -> bool:
+    target = load_candidate_target(target_id)
+    if target is None or not target.symbols:
+        return False
+    signals = load_frozen_signals(
+        target.symbols,
+        decision_at=str(decision_at or now_iso()),
+        target_id=target.target_id,
+    )
+    return bool(
+        len(signals) == len(target.symbols)
+        and all(
+            signals[symbol].status in {"available", "no_relevant_evidence"}
+            for symbol in target.symbols
+        )
+    )
 
 
 def _parse_iso(value: str | None) -> datetime | None:
@@ -494,6 +913,59 @@ def commit_poll(
                 or lease_expiry <= datetime.now(timezone.utc)
             ):
                 raise RuntimeError("serenity_worker_lease_lost_before_commit")
+        target_id = str(run.get("target_id") or "")
+        if complete and target_id:
+            target_row = conn.execute(
+                """
+                SELECT t.symbols_json,a.target_id AS active_target_id,
+                       a.activation_revision
+                FROM candidate_targets t
+                LEFT JOIN active_candidate_target a ON a.singleton=1
+                WHERE t.target_id=?
+                """,
+                (target_id,),
+            ).fetchone()
+            expected_symbols = (
+                {
+                    str(symbol or "").strip()
+                    for symbol in json.loads(target_row["symbols_json"] or "[]")
+                    if str(symbol or "").strip()
+                }
+                if target_row is not None
+                else set()
+            )
+            coverage_symbols = [
+                str(item.get("symbol") or "").strip() for item in coverage
+            ]
+            coverage_complete = bool(
+                expected_symbols
+                and len(coverage_symbols) == len(expected_symbols)
+                and set(coverage_symbols) == expected_symbols
+                and all(
+                    bool(item.get("metadata_complete"))
+                    and bool(item.get("hydration_complete"))
+                    for item in coverage
+                )
+            )
+            if (
+                target_row is None
+                or str(target_row["active_target_id"] or "") != target_id
+                or not str(run.get("target_activation_revision") or "")
+                or str(run.get("target_activation_revision") or "")
+                != str(target_row["activation_revision"] or "")
+                or str(run.get("status") or "") != "success"
+                or not coverage_complete
+            ):
+                raise RuntimeError("serenity_complete_target_coverage_mismatch")
+            try:
+                target_stale_after_sec = float(run.get("stale_after_sec"))
+            except (TypeError, ValueError):
+                target_stale_after_sec = 0.0
+            if (
+                not math.isfinite(target_stale_after_sec)
+                or target_stale_after_sec <= 0.0
+            ):
+                raise RuntimeError("serenity_complete_target_ttl_invalid")
         for record in records:
             document = dict(record.get("document") or {})
             version = dict(record.get("version") or {})
@@ -529,8 +1001,8 @@ def commit_poll(
                     INSERT INTO documents(
                         document_id,source,source_record_id,symbol,title,source_url,published_at,
                         first_seen_at,last_seen_at,current_version_id,current_metadata_version_id,
-                        withdrawn,backfill_only,raw_metadata_json
-                    ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                        withdrawn,withdrawn_at,backfill_only,raw_metadata_json
+                    ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
                     """,
                     (
                         doc_id,
@@ -545,6 +1017,11 @@ def commit_poll(
                         version.get("version_id") if make_version_current else None,
                         metadata_version_id,
                         1 if document.get("withdrawn") else 0,
+                        (
+                            str(document.get("last_seen_at") or document["first_seen_at"])
+                            if document.get("withdrawn")
+                            else None
+                        ),
                         1 if document.get("backfill_only") else 0,
                         raw_metadata_json,
                     ),
@@ -556,6 +1033,10 @@ def commit_poll(
                     UPDATE documents SET title=?,source_url=?,published_at=?,last_seen_at=?,
                         current_version_id=?,current_metadata_version_id=?,
                         withdrawn=CASE WHEN withdrawn=1 OR ?=1 THEN 1 ELSE 0 END,
+                        withdrawn_at=CASE
+                            WHEN withdrawn=0 AND ?=1 THEN ?
+                            ELSE withdrawn_at
+                        END,
                         raw_metadata_json=?
                     WHERE document_id=?
                     """,
@@ -567,6 +1048,8 @@ def commit_poll(
                         version.get("version_id") if make_version_current else existing["current_version_id"],
                         metadata_version_id,
                         1 if document.get("withdrawn") else 0,
+                        1 if document.get("withdrawn") else 0,
+                        str(document.get("last_seen_at") or document.get("first_seen_at") or now_iso()),
                         raw_metadata_json,
                         existing["document_id"],
                     ),
@@ -677,8 +1160,9 @@ def commit_poll(
             """
             INSERT OR REPLACE INTO poll_runs(
                 run_id,source,source_kind,started_at,finished_at,elapsed_sec,status,complete,
-                request_count,item_count,schema_fingerprint,next_due_at,stale_after_sec,error
-            ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                request_count,item_count,schema_fingerprint,next_due_at,stale_after_sec,error,target_id,
+                target_activation_revision
+            ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
             """,
             (
                 str(run["run_id"]),
@@ -695,6 +1179,8 @@ def commit_poll(
                 run.get("next_due_at"),
                 float(run.get("stale_after_sec") or 0.0),
                 run.get("error"),
+                run.get("target_id"),
+                run.get("target_activation_revision"),
             ),
         )
         for item in coverage:
@@ -727,15 +1213,16 @@ def commit_poll(
                 continue
             conn.execute(
                 """
-                INSERT INTO source_progress(source,symbol,window_start,window_end,next_page,status,updated_at)
-                VALUES(?,?,?,?,?,?,?)
+                INSERT INTO source_progress(source,symbol,target_id,window_start,window_end,next_page,status,updated_at)
+                VALUES(?,?,?,?,?,?,?,?)
                 ON CONFLICT(source,symbol) DO UPDATE SET
-                    window_start=excluded.window_start,window_end=excluded.window_end,
+                    target_id=excluded.target_id,window_start=excluded.window_start,window_end=excluded.window_end,
                     next_page=excluded.next_page,status=excluded.status,updated_at=excluded.updated_at
                 """,
                 (
                     source,
                     symbol,
+                    run.get("target_id"),
                     str(item.get("window_start") or ""),
                     str(item.get("window_end") or ""),
                     max(1, int(item.get("next_page") or 1)),
@@ -786,6 +1273,10 @@ def record_bootstrap_run(
         f"{poll_run_id}|{target_checksum}|{lookback_days}|{int(bool(complete))}".encode("utf-8")
     ).hexdigest()[:24]
     with write_transaction() as conn:
+        poll = conn.execute(
+            "SELECT finished_at FROM poll_runs WHERE run_id=?", (poll_run_id,)
+        ).fetchone()
+        completed_at = str(poll["finished_at"]) if poll is not None else now_iso()
         conn.execute(
             """
             INSERT OR IGNORE INTO bootstrap_runs(
@@ -802,23 +1293,53 @@ def record_bootstrap_run(
                 int(lookback_days),
                 1 if complete else 0,
                 json.dumps(payload, ensure_ascii=False, sort_keys=True, default=str),
-                now_iso(),
+                completed_at,
             ),
         )
     return bootstrap_id
 
 
-def latest_complete_bootstrap(source: str = "cninfo") -> Dict[str, Any] | None:
+def _latest_complete_bootstrap_conn(
+    conn: sqlite3.Connection,
+    source: str = "cninfo",
+    *,
+    completed_at_or_before: str | datetime | None = None,
+) -> Dict[str, Any] | None:
+    rows = conn.execute(
+        "SELECT * FROM bootstrap_runs WHERE source=? AND complete=1 ORDER BY completed_at DESC",
+        (source,),
+    ).fetchall()
+    if completed_at_or_before is None:
+        return dict(rows[0]) if rows else None
+    bound = (
+        completed_at_or_before
+        if isinstance(completed_at_or_before, datetime)
+        else _parse_iso(str(completed_at_or_before))
+    )
+    if bound is None:
+        return None
+    for row in rows:
+        completed_at = _parse_iso(row["completed_at"])
+        if completed_at is not None and completed_at <= bound:
+            return dict(row)
+    return None
+
+
+def latest_complete_bootstrap(
+    source: str = "cninfo",
+    *,
+    completed_at_or_before: str | datetime | None = None,
+) -> Dict[str, Any] | None:
     try:
         conn = _connect(readonly=True)
     except FileNotFoundError:
         return None
     try:
-        row = conn.execute(
-            "SELECT * FROM bootstrap_runs WHERE source=? AND complete=1 ORDER BY completed_at DESC LIMIT 1",
-            (source,),
-        ).fetchone()
-        return dict(row) if row else None
+        return _latest_complete_bootstrap_conn(
+            conn,
+            source,
+            completed_at_or_before=completed_at_or_before,
+        )
     finally:
         conn.close()
 
@@ -830,7 +1351,7 @@ def recent_poll_durations(source: str, *, limit: int = 20, source_kind: str = "l
         return []
     try:
         rows = conn.execute(
-            "SELECT elapsed_sec FROM poll_runs WHERE source=? AND source_kind=? AND complete=1 ORDER BY finished_at DESC LIMIT ?",
+            "SELECT elapsed_sec FROM poll_runs WHERE source=? AND source_kind=? AND complete=1 AND status='success' ORDER BY finished_at DESC LIMIT ?",
             (source, source_kind, max(1, int(limit))),
         ).fetchall()
         return [float(row["elapsed_sec"] or 0.0) for row in reversed(rows)]
@@ -855,26 +1376,218 @@ def recent_poll_outcomes(source: str, *, limit: int = 20, source_kind: str = "li
 
 def _last_complete_poll(conn: sqlite3.Connection, source: str = "cninfo") -> sqlite3.Row | None:
     return conn.execute(
-        "SELECT * FROM poll_runs WHERE source=? AND complete=1 AND source_kind IN ('live','bootstrap') ORDER BY finished_at DESC LIMIT 1",
+        "SELECT * FROM poll_runs WHERE source=? AND complete=1 AND status='success' AND source_kind IN ('live','bootstrap') ORDER BY finished_at DESC LIMIT 1",
         (source,),
     ).fetchone()
 
 
-def _last_symbol_coverage(conn: sqlite3.Connection, symbol: str, source: str = "cninfo") -> sqlite3.Row | None:
-    return conn.execute(
+def _last_symbol_coverage(
+    conn: sqlite3.Connection,
+    symbol: str,
+    *,
+    decision_at: datetime,
+    target_id: str | None,
+    source: str = "cninfo",
+) -> sqlite3.Row | None:
+    rows = conn.execute(
         """
         SELECT c.*,p.finished_at,p.stale_after_sec,p.source_kind,p.complete AS poll_complete
         FROM poll_symbol_coverage c
         JOIN poll_runs p ON p.run_id=c.run_id
-        WHERE c.source=? AND c.symbol=? AND p.source_kind IN ('live','bootstrap')
+        WHERE c.source=? AND c.symbol=?
+          AND p.source_kind IN ('live','bootstrap')
+          AND (? IS NULL OR p.target_id=?)
         ORDER BY c.checked_at DESC
-        LIMIT 1
         """,
-        (source, symbol),
+        (source, symbol, target_id, target_id),
+    ).fetchall()
+    for row in rows:
+        checked_at = _parse_iso(row["checked_at"])
+        if checked_at is not None and checked_at <= decision_at:
+            return row
+    return None
+
+
+def _target_poll_certificate(
+    conn: sqlite3.Connection,
+    *,
+    target_id: str,
+    decision_at: datetime,
+    source: str = "cninfo",
+) -> Dict[str, Any] | None:
+    target = conn.execute(
+        """
+        SELECT t.symbols_json,t.input_hash,a.activated_at,
+               a.activation_observed_at,a.activation_revision
+        FROM candidate_targets t
+        JOIN active_candidate_target a ON a.target_id=t.target_id
+        WHERE a.singleton=1 AND t.target_id=?
+        """,
+        (str(target_id),),
     ).fetchone()
+    if target is None:
+        return None
+    expected_symbols = {
+        str(symbol or "").strip()
+        for symbol in json.loads(target["symbols_json"] or "[]")
+        if str(symbol or "").strip()
+    }
+    if not expected_symbols:
+        return None
+    activation_observed_at = _parse_iso(
+        target["activation_observed_at"] or target["activated_at"]
+    )
+    activation_revision = str(target["activation_revision"] or "")
+    if (
+        activation_observed_at is None
+        or not activation_revision
+        or decision_at < activation_observed_at
+    ):
+        return None
+    attempts = conn.execute(
+        """
+        SELECT * FROM poll_runs
+        WHERE source=? AND source_kind='live' AND target_id=?
+          AND target_activation_revision=?
+        ORDER BY finished_at DESC, run_id DESC
+        """,
+        (source, str(target_id), activation_revision),
+    ).fetchall()
+    latest_attempt: sqlite3.Row | None = None
+    for row in attempts:
+        finished_at = _parse_iso(row["finished_at"])
+        if (
+            finished_at is not None
+            and activation_observed_at <= finished_at <= decision_at
+        ):
+            latest_attempt = row
+            break
+    if (
+        latest_attempt is None
+        or not bool(latest_attempt["complete"])
+        or str(latest_attempt["status"] or "") != "success"
+    ):
+        return None
+    rows = conn.execute(
+        """
+        SELECT c.*,p.finished_at,p.stale_after_sec,p.source_kind,
+               p.complete AS poll_complete,p.status AS poll_status
+        FROM poll_symbol_coverage c
+        JOIN poll_runs p ON p.run_id=c.run_id
+        WHERE c.source=? AND c.run_id=?
+        ORDER BY c.symbol
+        """,
+        (source, str(latest_attempt["run_id"])),
+    ).fetchall()
+    coverage = {str(row["symbol"]): row for row in rows}
+    if (
+        set(coverage) != expected_symbols
+        or len(rows) != len(expected_symbols)
+        or any(
+            not bool(row["metadata_complete"])
+            or not bool(row["hydration_complete"])
+            or (_parse_iso(row["checked_at"]) or datetime.max.replace(tzinfo=timezone.utc))
+            > decision_at
+            for row in rows
+        )
+    ):
+        return None
+    revision_payload = {
+        "target_id": str(target_id),
+        "target_input_hash": str(target["input_hash"] or ""),
+        "activation_observed_at": activation_observed_at.isoformat(),
+        "activation_revision": activation_revision,
+        "source_run_id": str(latest_attempt["run_id"]),
+        "finished_at": str(latest_attempt["finished_at"]),
+        "stale_after_sec": float(latest_attempt["stale_after_sec"] or 0.0),
+        "coverage": [
+            {
+                "symbol": str(row["symbol"]),
+                "checked_at": str(row["checked_at"]),
+                "window_start": str(row["window_start"] or ""),
+                "window_end": str(row["window_end"] or ""),
+                "metadata_complete": bool(row["metadata_complete"]),
+                "hydration_complete": bool(row["hydration_complete"]),
+            }
+            for row in rows
+        ],
+    }
+    readiness_revision = sha256(
+        json.dumps(
+            revision_payload,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+    ).hexdigest()
+    finished_at = _parse_iso(latest_attempt["finished_at"])
+    stale_after_sec = float(latest_attempt["stale_after_sec"] or 0.0)
+    if (
+        finished_at is None
+        or not math.isfinite(stale_after_sec)
+        or stale_after_sec <= 0.0
+    ):
+        return None
+    expires_at = (finished_at + timedelta(seconds=stale_after_sec)).isoformat()
+    return {
+        "target_id": str(target_id),
+        "target_input_hash": str(target["input_hash"] or ""),
+        "activation_observed_at": activation_observed_at.isoformat(),
+        "activation_revision": activation_revision,
+        "source_run_id": str(latest_attempt["run_id"]),
+        "schema_fingerprint": str(latest_attempt["schema_fingerprint"] or ""),
+        "finished_at": str(latest_attempt["finished_at"]),
+        "expires_at": expires_at,
+        "readiness_revision": readiness_revision,
+        "coverage": coverage,
+    }
 
 
-def load_frozen_signals(symbols: Iterable[str], *, decision_at: str) -> Dict[str, FrozenSerenitySignal]:
+def candidate_target_readiness_revision(
+    target_id: str, *, decision_at: str | None = None
+) -> Dict[str, Any] | None:
+    decision_clock = _parse_iso(str(decision_at or now_iso()))
+    if decision_clock is None:
+        return None
+    try:
+        conn = _connect(readonly=True)
+    except (FileNotFoundError, sqlite3.Error):
+        return None
+    try:
+        certificate = _target_poll_certificate(
+            conn,
+            target_id=str(target_id),
+            decision_at=decision_clock,
+        )
+        if certificate is None:
+            return None
+        expires_at = _parse_iso(certificate.get("expires_at"))
+        if expires_at is not None and decision_clock > expires_at:
+            return None
+        return {
+            key: certificate[key]
+            for key in (
+                "target_id",
+                "target_input_hash",
+                "activation_observed_at",
+                "activation_revision",
+                "source_run_id",
+                "finished_at",
+                "expires_at",
+                "readiness_revision",
+            )
+        }
+    finally:
+        conn.close()
+
+
+def load_frozen_signals(
+    symbols: Iterable[str],
+    *,
+    decision_at: str,
+    target_id: str | None = None,
+    _conn: sqlite3.Connection | None = None,
+) -> Dict[str, FrozenSerenitySignal]:
     clean_symbols = list(dict.fromkeys(str(symbol or "").strip() for symbol in symbols if str(symbol or "").strip()))
     generated_at = now_iso()
     if not clean_symbols:
@@ -892,8 +1605,9 @@ def load_frozen_signals(symbols: Iterable[str], *, decision_at: str) -> Dict[str
             )
             for symbol in clean_symbols
         }
+    owns_connection = _conn is None
     try:
-        conn = _connect(readonly=True)
+        conn = _conn or _connect(readonly=True)
     except (FileNotFoundError, sqlite3.Error):
         return {
             symbol: FrozenSerenitySignal(
@@ -907,26 +1621,95 @@ def load_frozen_signals(symbols: Iterable[str], *, decision_at: str) -> Dict[str
             for symbol in clean_symbols
         }
     try:
-        bootstrap_ready = latest_complete_bootstrap() is not None
+        if owns_connection:
+            conn.execute("BEGIN")
+        bootstrap_ready = (
+            _latest_complete_bootstrap_conn(
+                conn, completed_at_or_before=decision_clock
+            )
+            is not None
+        )
+        target_certificate = (
+            _target_poll_certificate(
+                conn,
+                target_id=str(target_id),
+                decision_at=decision_clock,
+            )
+            if target_id
+            else None
+        )
         out: Dict[str, FrozenSerenitySignal] = {}
         for symbol in clean_symbols:
-            coverage = _last_symbol_coverage(conn, symbol)
+            coverage = (
+                target_certificate["coverage"].get(symbol)
+                if target_certificate is not None
+                else None
+            )
+            if not target_id:
+                coverage = _last_symbol_coverage(
+                    conn,
+                    symbol,
+                    decision_at=decision_clock,
+                    target_id=None,
+                )
             poll_finished = _parse_iso(coverage["finished_at"] if coverage else None)
             stale_after = float(coverage["stale_after_sec"] or 0.0) if coverage else 0.0
-            stale = bool(poll_finished and stale_after > 0 and decision_clock > poll_finished + timedelta(seconds=stale_after))
-            rows = conn.execute(
+            stale = bool(
+                coverage
+                and (
+                    poll_finished is None
+                    or not math.isfinite(stale_after)
+                    or stale_after <= 0.0
+                    or decision_clock
+                    > poll_finished + timedelta(seconds=stale_after)
+                )
+            )
+            version_rows = conn.execute(
                 """
-                SELECT f.payload_json
-                FROM facts f
-                JOIN document_versions v ON v.version_id=f.version_id
-                JOIN documents d ON d.current_version_id=v.version_id
-                WHERE f.symbol=? AND d.withdrawn=0
-                ORDER BY COALESCE(d.published_at,f.effective_available_at) DESC, f.effective_available_at DESC
-                LIMIT 30
+                SELECT v.version_id,v.document_id,v.content_hash,v.created_at,
+                       d.first_seen_at,d.withdrawn,d.withdrawn_at
+                FROM document_versions v
+                JOIN documents d ON d.document_id=v.document_id
+                WHERE d.symbol=?
+                ORDER BY v.created_at DESC,v.version_id DESC
                 """,
                 (symbol,),
             ).fetchall()
+            latest_version_by_document: Dict[str, tuple[datetime, str]] = {}
+            for row in version_rows:
+                version_seen = _parse_iso(row["created_at"])
+                document_seen = _parse_iso(row["first_seen_at"])
+                withdrawn_at = _parse_iso(row["withdrawn_at"])
+                if version_seen is None or document_seen is None:
+                    continue
+                if version_seen > decision_clock or document_seen > decision_clock:
+                    continue
+                if bool(row["withdrawn"]) and withdrawn_at is not None and withdrawn_at <= decision_clock:
+                    continue
+                document_id = str(row["document_id"])
+                prior = latest_version_by_document.get(document_id)
+                if prior is None or version_seen > prior[0]:
+                    latest_version_by_document[document_id] = (version_seen, str(row["version_id"]))
+            latest_version_ids = [value[1] for value in latest_version_by_document.values()]
+            if latest_version_ids:
+                placeholders = ",".join("?" for _ in latest_version_ids)
+                rows = conn.execute(
+                    f"""
+                    SELECT f.payload_json,f.version_id,v.document_id,v.content_hash,v.created_at,
+                           d.first_seen_at,d.withdrawn,d.withdrawn_at
+                    FROM facts f
+                    JOIN document_versions v ON v.version_id=f.version_id
+                    JOIN documents d ON d.document_id=v.document_id
+                    WHERE f.symbol=? AND f.version_id IN ({placeholders})
+                    ORDER BY v.created_at DESC,f.effective_available_at DESC
+                    LIMIT 100
+                    """,
+                    (symbol, *latest_version_ids),
+                ).fetchall()
+            else:
+                rows = []
             facts: List[SerenityFact] = []
+            fact_lineage: Dict[str, Dict[str, Any]] = {}
             expired_fact_ids: List[str] = []
             time_unknown_fact_ids: List[str] = []
             future_fact_ids: List[str] = []
@@ -991,6 +1774,13 @@ def load_frozen_signals(symbols: Iterable[str], *, decision_at: str) -> Dict[str
                     quarantined_fact_ids.append(fact.fact_id)
                     continue
                 facts.append(fact)
+                fact_lineage[fact.fact_id] = {
+                    "document_id": str(row["document_id"]),
+                    "version_id": str(row["version_id"]),
+                    "content_hash": str(row["content_hash"] or ""),
+                    "document_first_seen_at": str(row["first_seen_at"]),
+                    "version_first_seen_at": str(row["created_at"]),
+                }
             def _is_frozen_by_relation(candidate: SerenityFact) -> bool:
                 candidate_published = _parse_iso(candidate.published_at)
                 if candidate_published is None:
@@ -1018,6 +1808,14 @@ def load_frozen_signals(symbols: Iterable[str], *, decision_at: str) -> Dict[str
             frozen_fact_ids = [fact.fact_id for fact in facts if _is_frozen_by_relation(fact)]
             if frozen_fact_ids:
                 facts = [fact for fact in facts if fact.fact_id not in set(frozen_fact_ids)]
+            facts.sort(
+                key=lambda fact: (
+                    -float((_parse_iso(fact.effective_available_at) or datetime.min.replace(tzinfo=timezone.utc)).timestamp()),
+                    -float((_parse_iso(fact.published_at) or datetime.min.replace(tzinfo=timezone.utc)).timestamp()),
+                    -float(fact.confidence),
+                    str(fact.fact_id),
+                )
+            )
             live_directional = [
                 fact for fact in facts if fact.direction != 0 and not fact.backfill_only
             ][:3]
@@ -1038,24 +1836,89 @@ def load_frozen_signals(symbols: Iterable[str], *, decision_at: str) -> Dict[str
                 status = "stale"
             elif unresolved_unscoped_relation_ids:
                 status = "source_error"
-            elif facts:
+            elif live_directional:
                 status = "available"
             else:
                 status = "no_relevant_evidence"
             scored = list(live_directional)
             learning_eligible = bool(scored)
-            # Bootstrap facts are visible in shadow counterfactuals after local first-seen,
-            # but remain excluded from promotion statistics until a live fact exists.
-            if not scored:
-                scored = list(backfill_directional)
-            weighted = sum(float(f.direction) * float(f.confidence) * float(f.source_quality) for f in scored)
+            weighted_terms = [
+                float(f.direction) * float(f.confidence) * float(f.source_quality)
+                for f in scored
+            ]
+            weighted = sum(weighted_terms)
+            alpha_value = max(-1.0, min(1.0, weighted / max(1, len(weighted_terms))))
             direction = -1 if weighted < -1e-12 else 1 if weighted > 1e-12 else 0
             availability = 1 if status == "available" and scored else 0
-            confidence = max((float(f.confidence) for f in scored), default=0.0)
-            source_quality = max((float(f.source_quality) for f in scored), default=0.0)
+            confidence = min(1.0, sum(abs(value) for value in weighted_terms) / max(1, len(weighted_terms)))
+            source_quality = (
+                sum(float(f.source_quality) for f in scored) / len(scored)
+                if scored
+                else 0.0
+            )
             payload = [fact.model_dump(mode="json") for fact in facts]
+            lineage = {
+                "target_id": target_id,
+                "source_run_id": str(coverage["run_id"]) if coverage else None,
+                "readiness_revision": (
+                    str(target_certificate["readiness_revision"])
+                    if target_certificate is not None
+                    else None
+                ),
+                "activation_observed_at": (
+                    str(target_certificate["activation_observed_at"])
+                    if target_certificate is not None
+                    else None
+                ),
+                "activation_revision": (
+                    str(target_certificate["activation_revision"])
+                    if target_certificate is not None
+                    else None
+                ),
+                "poll_finished_at": (
+                    str(target_certificate["finished_at"])
+                    if target_certificate is not None
+                    else None
+                ),
+                "poll_expires_at": (
+                    str(target_certificate["expires_at"])
+                    if target_certificate is not None
+                    else None
+                ),
+                "source_schema_fingerprint": (
+                    str(target_certificate["schema_fingerprint"])
+                    if target_certificate is not None
+                    else None
+                ),
+                "coverage_checked_at": str(coverage["checked_at"]) if coverage else None,
+                "coverage_window_start": str(coverage["window_start"] or "") if coverage else None,
+                "coverage_window_end": str(coverage["window_end"] or "") if coverage else None,
+                "coverage_metadata_complete": (
+                    bool(coverage["metadata_complete"]) if coverage else False
+                ),
+                "coverage_hydration_complete": (
+                    bool(coverage["hydration_complete"]) if coverage else False
+                ),
+                "coverage_item_count": int(coverage["item_count"] or 0) if coverage else 0,
+                "facts": {
+                    fact.fact_id: fact_lineage.get(fact.fact_id, {})
+                    for fact in facts
+                },
+            }
             digest = sha256(
-                json.dumps({"symbol": symbol, "decision_at": decision_at, "facts": payload}, ensure_ascii=False, sort_keys=True).encode("utf-8")
+                json.dumps(
+                    {
+                        "symbol": symbol,
+                        "decision_at": decision_at,
+                        "target_id": target_id,
+                        "status": status,
+                        "alpha_value": alpha_value,
+                        "facts": payload,
+                        "lineage": lineage,
+                    },
+                    ensure_ascii=False,
+                    sort_keys=True,
+                ).encode("utf-8")
             ).hexdigest()
             hypothesis_ids: List[str] = []
             if facts:
@@ -1095,18 +1958,121 @@ def load_frozen_signals(symbols: Iterable[str], *, decision_at: str) -> Dict[str
                 direction=direction if availability else 0,
                 confidence=confidence if availability else 0.0,
                 source_quality=source_quality if availability else 0.0,
+                alpha_value=alpha_value if availability else 0.0,
                 decision_at=decision_at,
                 generated_at=generated_at,
+                target_id=target_id,
+                source_run_id=str(coverage["run_id"]) if coverage else None,
                 evidence_count=len(facts),
                 fact_ids=[fact.fact_id for fact in facts],
                 hypothesis_ids=hypothesis_ids,
                 facts=facts,
+                lineage=lineage,
                 input_hash=digest,
                 limitations=limitations,
             )
         return out
     finally:
-        conn.close()
+        if owns_connection:
+            if conn.in_transaction:
+                conn.rollback()
+            conn.close()
+
+
+def serenity_batch_semantic_revision(
+    signals: Mapping[str, FrozenSerenitySignal],
+    *,
+    target_id: str,
+    target_input_hash: str,
+    activation_observed_at: str,
+    activation_revision: str,
+    formula_version: str,
+    policy_snapshot: Mapping[str, Any],
+) -> str:
+    """Hash only evidence and policy state that can change the decision.
+
+    Poll/run timestamps remain part of the immutable audit attestation and the
+    live freshness certificate, but an equivalent successful poll must not
+    invalidate an already-published decision snapshot.
+    """
+
+    clean_target = str(target_id or "")
+    clean_hash = str(target_input_hash or "")
+    clean_activation = str(activation_revision or "")
+    clean_formula = str(formula_version or "")
+    if not signals or not all(
+        (clean_target, clean_hash, activation_observed_at, clean_activation, clean_formula)
+    ):
+        return ""
+    try:
+        normalized_policy = {
+            "mode": str(policy_snapshot.get("mode") or ""),
+            "state": str(policy_snapshot.get("state") or ""),
+            "epoch": int(policy_snapshot.get("epoch") or 0),
+            "applied_weight": float(policy_snapshot.get("applied_weight") or 0.0),
+            "max_weight": float(policy_snapshot.get("max_weight") or 0.0),
+            "native_required": policy_snapshot.get("native_required") is True,
+        }
+    except (TypeError, ValueError):
+        return ""
+    if (
+        normalized_policy["mode"] != "native"
+        or normalized_policy["epoch"] < 1
+        or not normalized_policy["native_required"]
+        or not math.isfinite(normalized_policy["applied_weight"])
+        or not math.isfinite(normalized_policy["max_weight"])
+    ):
+        return ""
+
+    semantic_signals: Dict[str, Any] = {}
+    for symbol, raw_signal in sorted(signals.items()):
+        signal = (
+            raw_signal
+            if isinstance(raw_signal, FrozenSerenitySignal)
+            else FrozenSerenitySignal.model_validate(raw_signal)
+        )
+        if str(signal.symbol or "") != str(symbol) or str(signal.target_id or "") != clean_target:
+            return ""
+        semantic_signals[str(symbol)] = {
+            "symbol": str(signal.symbol),
+            "status": str(signal.status),
+            "availability": int(signal.availability),
+            "learning_eligible": bool(signal.learning_eligible),
+            "direction": int(signal.direction),
+            "confidence": float(signal.confidence),
+            "source_quality": float(signal.source_quality),
+            "alpha_value": float(signal.alpha_value),
+            "evidence_count": int(signal.evidence_count),
+            # Fact order is decision-visible: the deterministic narration
+            # projection exposes the first two facts.  Preserve the frozen
+            # ordering instead of treating a reorder as equivalent.
+            "fact_ids": [str(item) for item in signal.fact_ids],
+            "facts": [
+                fact.model_dump(mode="json") for fact in signal.facts
+            ],
+            "fact_lineage": dict((signal.lineage or {}).get("facts") or {}),
+        }
+    observed = _parse_iso(str(activation_observed_at))
+    payload = {
+        "schema": "SerenitySemanticRevision.v1",
+        "target_id": clean_target,
+        "target_input_hash": clean_hash,
+        "activation_observed_at": (
+            observed.isoformat() if observed is not None else str(activation_observed_at)
+        ),
+        "activation_revision": clean_activation,
+        "formula_version": clean_formula,
+        "policy": normalized_policy,
+        "signals": semantic_signals,
+    }
+    return sha256(
+        json.dumps(
+            payload,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+    ).hexdigest()
 
 
 def _default_policy_state() -> SerenityPolicyState:
@@ -1146,6 +2112,270 @@ def load_policy_state() -> SerenityPolicyState:
                     "suspension_reasons": ["policy_state_invalid_fail_closed"],
                 }
             )
+    finally:
+        conn.close()
+
+
+def current_native_readiness_state(
+    target_id: str | None = None, *, decision_at: str | None = None
+) -> Dict[str, Any]:
+    """Read the current target, poll certificate, policy and lease atomically."""
+
+    decision_clock = _parse_iso(str(decision_at or now_iso()))
+    if decision_clock is None:
+        raise RuntimeError("serenity_readiness_clock_invalid")
+    cfg = load_config().serenity
+    conn = _connect(readonly=True)
+    try:
+        conn.execute("BEGIN")
+        active = conn.execute(
+            """
+            SELECT t.target_id,t.input_hash,t.symbols_json,a.activated_at,
+                   a.activation_observed_at,a.activation_revision
+            FROM active_candidate_target a
+            JOIN candidate_targets t ON t.target_id=a.target_id
+            WHERE a.singleton=1
+            """
+        ).fetchone()
+        active_target_id = str(active["target_id"] or "") if active else ""
+        requested_target_id = str(target_id or active_target_id)
+        certificate = (
+            _target_poll_certificate(
+                conn,
+                target_id=requested_target_id,
+                decision_at=decision_clock,
+            )
+            if active_target_id and requested_target_id == active_target_id
+            else None
+        )
+        policy_row = conn.execute(
+            "SELECT version,payload_json FROM serenity_policy_state "
+            "WHERE policy_name='serenity'"
+        ).fetchone()
+        if policy_row is None:
+            policy = _default_policy_state()
+        else:
+            try:
+                policy = SerenityPolicyState.model_validate(
+                    json.loads(policy_row["payload_json"] or "{}")
+                )
+            except Exception:
+                fallback = _default_policy_state()
+                policy = fallback.model_copy(
+                    update={
+                        "version": int(policy_row["version"] or fallback.version),
+                        "state": "suspended",
+                        "applied_weight": 0.0,
+                        "suspension_reasons": [
+                            "policy_state_invalid_fail_closed"
+                        ],
+                    }
+                )
+        bootstrap = conn.execute(
+            "SELECT bootstrap_id FROM bootstrap_runs "
+            "WHERE source='cninfo' AND complete=1 "
+            "ORDER BY completed_at DESC LIMIT 1"
+        ).fetchone()
+        heartbeat = conn.execute(
+            "SELECT owner_id,heartbeat_at,expires_at FROM worker_lease "
+            "WHERE lease_name='serenity-worker'"
+        ).fetchone()
+        lease_expires_at = _parse_iso(
+            heartbeat["expires_at"] if heartbeat else None
+        )
+        worker_alive = bool(
+            heartbeat is not None
+            and lease_expires_at is not None
+            and lease_expires_at > decision_clock
+        )
+        effective_weight = (
+            max(
+                0.0,
+                min(
+                    float(policy.max_weight),
+                    0.08,
+                    round(float(policy.applied_weight), 2),
+                ),
+            )
+            if cfg.mode == "native"
+            and policy.state in {"probation", "active"}
+            and bool(policy.bootstrap_run_id)
+            else 0.0
+        )
+        active_symbols = (
+            sorted(
+                {
+                    str(symbol or "").strip()
+                    for symbol in json.loads(active["symbols_json"] or "[]")
+                    if str(symbol or "").strip()
+                }
+            )
+            if active is not None
+            else []
+        )
+        semantic_signals: Dict[str, FrozenSerenitySignal] = {}
+        if certificate is not None and active_symbols:
+            try:
+                semantic_signals = load_frozen_signals(
+                    active_symbols,
+                    decision_at=decision_clock.isoformat(),
+                    target_id=active_target_id,
+                    _conn=conn,
+                )
+            except Exception:
+                semantic_signals = {}
+        semantic_ready = bool(
+            certificate is not None
+            and set(semantic_signals) == set(active_symbols)
+            and all(
+                signal.status in {"available", "no_relevant_evidence"}
+                and str(signal.target_id or "") == active_target_id
+                and str(signal.source_run_id or "")
+                == str(certificate.get("source_run_id") or "")
+                and str((signal.lineage or {}).get("readiness_revision") or "")
+                == str(certificate.get("readiness_revision") or "")
+                for signal in semantic_signals.values()
+            )
+        )
+        semantic_revision = (
+            serenity_batch_semantic_revision(
+                semantic_signals,
+                target_id=active_target_id,
+                target_input_hash=str(active["input_hash"] or "") if active else "",
+                activation_observed_at=(
+                    str(active["activation_observed_at"] or "") if active else ""
+                ),
+                activation_revision=(
+                    str(active["activation_revision"] or "") if active else ""
+                ),
+                formula_version=NATIVE_SERENITY_FORMULA_VERSION,
+                policy_snapshot={
+                    "mode": str(cfg.mode),
+                    "state": str(policy.state),
+                    "epoch": int(policy.epoch),
+                    "applied_weight": float(effective_weight),
+                    "max_weight": float(policy.max_weight),
+                    "native_required": True,
+                },
+            )
+            if semantic_ready
+            else ""
+        )
+        expires_at = _parse_iso(
+            certificate.get("expires_at") if certificate else None
+        )
+        certificate_current = bool(
+            certificate is not None
+            and expires_at is not None
+            and decision_clock <= expires_at
+        )
+        freshness_binding = {
+            "mode": str(cfg.mode),
+            "formula_version": NATIVE_SERENITY_FORMULA_VERSION,
+            "target_id": active_target_id,
+            "target_input_hash": (
+                str(active["input_hash"] or "") if active else ""
+            ),
+            "activation_observed_at": (
+                str(active["activation_observed_at"] or "") if active else ""
+            ),
+            "activation_revision": (
+                str(active["activation_revision"] or "") if active else ""
+            ),
+            "source_run_id": (
+                str(certificate.get("source_run_id") or "")
+                if certificate
+                else ""
+            ),
+            "readiness_revision": (
+                str(certificate.get("readiness_revision") or "")
+                if certificate
+                else ""
+            ),
+            "poll_finished_at": (
+                str(certificate.get("finished_at") or "")
+                if certificate
+                else ""
+            ),
+            "poll_expires_at": (
+                str(certificate.get("expires_at") or "")
+                if certificate
+                else ""
+            ),
+            "coverage_digest": (
+                str(certificate.get("readiness_revision") or "")
+                if certificate
+                else ""
+            ),
+            "semantic_revision": semantic_revision,
+            "policy_state": str(policy.state),
+            "policy_epoch": int(policy.epoch),
+            "policy_applied_weight": float(effective_weight),
+            "policy_max_weight": float(policy.max_weight),
+            "native_required": True,
+        }
+        semantic_binding = {
+            key: value
+            for key, value in freshness_binding.items()
+            if key
+            not in {
+                "source_run_id",
+                "readiness_revision",
+                "poll_finished_at",
+                "poll_expires_at",
+                "coverage_digest",
+            }
+        }
+        binding_token = sha256(
+            json.dumps(
+                semantic_binding,
+                ensure_ascii=False,
+                sort_keys=True,
+                separators=(",", ":"),
+            ).encode("utf-8")
+        ).hexdigest()
+        freshness_token = sha256(
+            json.dumps(
+                freshness_binding,
+                ensure_ascii=False,
+                sort_keys=True,
+                separators=(",", ":"),
+            ).encode("utf-8")
+        ).hexdigest()
+        return {
+            **freshness_binding,
+            "binding_token": binding_token,
+            "freshness_token": freshness_token,
+            "requested_target_id": requested_target_id,
+            "target_matches": bool(
+                requested_target_id and requested_target_id == active_target_id
+            ),
+            "certificate_current": certificate_current,
+            "semantic_ready": semantic_ready,
+            "bootstrap_ready": bootstrap is not None,
+            "bootstrap_run_id": (
+                str(bootstrap["bootstrap_id"]) if bootstrap else None
+            ),
+            "worker_alive": worker_alive,
+            "worker_owner_id": (
+                str(heartbeat["owner_id"] or "") if heartbeat else None
+            ),
+            "worker_heartbeat_at": (
+                str(heartbeat["heartbeat_at"] or "") if heartbeat else None
+            ),
+            "worker_lease_expires_at": (
+                str(heartbeat["expires_at"] or "") if heartbeat else None
+            ),
+            "available": bool(
+                cfg.mode == "native"
+                and requested_target_id == active_target_id
+                and certificate_current
+                and semantic_ready
+                and bool(semantic_revision)
+                and bootstrap is not None
+                and worker_alive
+            ),
+        }
     finally:
         conn.close()
 
@@ -1251,6 +2481,59 @@ def suspend_policy(reason: str) -> SerenityPolicyState:
     raise RuntimeError("serenity_policy_cas_conflict_exhausted")
 
 
+_OPERATIONAL_SUSPENSION_REASONS = {
+    "three_consecutive_source_or_parse_failures",
+    "recent_20_source_success_below_90pct",
+    "source_success_below_90pct",
+}
+
+
+def recover_operational_suspension_after_complete_poll() -> SerenityPolicyState:
+    """Move an old source-health suspension to shadow after a real complete poll.
+
+    Source readiness now blocks the candidate set directly.  It must not share
+    the causal-performance suspension state or retain a stale ten-day cooldown.
+    Integrity and performance suspensions remain untouched.
+    """
+
+    for _ in range(3):
+        state = load_policy_state()
+        reasons = set(state.suspension_reasons)
+        if state.state != "suspended" or not reasons or not reasons <= _OPERATIONAL_SUSPENSION_REASONS:
+            return state
+        transition_raw = (
+            f"{state.transition_log_hash}|{state.epoch}|suspended|0.0|shadow|0.0|"
+            f"source_recovered|{now_iso()}"
+        )
+        next_state = state.model_copy(
+            update={
+                "state": "shadow",
+                "previous_weight": 0.0,
+                "applied_weight": 0.0,
+                "state_since": now_iso(),
+                "cooldown_until": None,
+                "suspension_reasons": [],
+                "consecutive_failures": 0,
+                "consecutive_passes": 0,
+                "transition_log_hash": sha256(transition_raw.encode("utf-8")).hexdigest(),
+            }
+        )
+        try:
+            return save_policy_state_with_ledger(
+                next_state,
+                expected_version=state.version,
+                evaluation_id="source_recovered_" + sha256(transition_raw.encode("utf-8")).hexdigest()[:16],
+                ledger_payload={
+                    "transition": "operational_source_recovered_to_shadow",
+                    "cleared_reasons": sorted(reasons),
+                },
+            )
+        except RuntimeError as ex:
+            if not str(ex).startswith("serenity_policy_cas_conflict"):
+                raise
+    raise RuntimeError("serenity_policy_cas_conflict_exhausted")
+
+
 def ensure_shadow_ready(bootstrap_run_id: str) -> SerenityPolicyState:
     bootstrap = latest_complete_bootstrap()
     if bootstrap is None or str(bootstrap.get("bootstrap_id") or "") != str(bootstrap_run_id or ""):
@@ -1283,6 +2566,12 @@ def ensure_shadow_ready(bootstrap_run_id: str) -> SerenityPolicyState:
 def save_reference_snapshot(snapshot: SerenityReferenceSnapshot) -> str:
     payload = json.dumps(snapshot.model_dump(mode="json"), ensure_ascii=False, sort_keys=True)
     with write_transaction() as conn:
+        existing = conn.execute(
+            "SELECT payload_json FROM reference_snapshots WHERE snapshot_id=?",
+            (snapshot.snapshot_id,),
+        ).fetchone()
+        if existing is not None and json.loads(existing["payload_json"] or "{}") != json.loads(payload):
+            raise RuntimeError("serenity_reference_snapshot_immutable_conflict")
         conn.execute(
             "INSERT OR IGNORE INTO reference_snapshots(snapshot_id,decision_context_snapshot_id,decision_at,input_checksum,payload_json,created_at) VALUES(?,?,?,?,?,?)",
             (
@@ -1306,8 +2595,12 @@ def enqueue_pending_evaluation(
     formula_version: str,
     input_hash: str,
 ) -> str:
-    raw = f"{reference_snapshot_id}|{decision_context_snapshot_id}|{epoch}|{formula_version}"
-    pending_id = "serpending_" + sha256(raw.encode("utf-8")).hexdigest()[:24]
+    pending_id = pending_evaluation_id(
+        reference_snapshot_id=reference_snapshot_id,
+        decision_context_snapshot_id=decision_context_snapshot_id,
+        epoch=epoch,
+        formula_version=formula_version,
+    )
     with write_transaction() as conn:
         conn.execute(
             """
@@ -1331,6 +2624,20 @@ def enqueue_pending_evaluation(
     return pending_id
 
 
+def pending_evaluation_id(
+    *,
+    reference_snapshot_id: str,
+    decision_context_snapshot_id: str,
+    epoch: int,
+    formula_version: str,
+) -> str:
+    raw = (
+        f"{reference_snapshot_id}|{decision_context_snapshot_id}|"
+        f"{int(epoch)}|{formula_version}"
+    )
+    return "serpending_" + sha256(raw.encode("utf-8")).hexdigest()[:24]
+
+
 def save_reference_and_enqueue_pending(
     snapshot: SerenityReferenceSnapshot,
     *,
@@ -1344,14 +2651,21 @@ def save_reference_and_enqueue_pending(
         raise ValueError("serenity_decision_snapshot_reference_required")
     if str(snapshot.decision_day) != str(decision_day):
         raise ValueError("serenity_reference_decision_day_mismatch")
-    raw = (
-        f"{snapshot.snapshot_id}|{snapshot.decision_context_snapshot_id}|"
-        f"{int(epoch)}|{formula_version}"
+    pending_id = pending_evaluation_id(
+        reference_snapshot_id=snapshot.snapshot_id,
+        decision_context_snapshot_id=snapshot.decision_context_snapshot_id,
+        epoch=epoch,
+        formula_version=formula_version,
     )
-    pending_id = "serpending_" + sha256(raw.encode("utf-8")).hexdigest()[:24]
     payload = json.dumps(snapshot.model_dump(mode="json"), ensure_ascii=False, sort_keys=True)
     created_at = now_iso()
     with write_transaction() as conn:
+        existing = conn.execute(
+            "SELECT payload_json FROM reference_snapshots WHERE snapshot_id=?",
+            (snapshot.snapshot_id,),
+        ).fetchone()
+        if existing is not None and json.loads(existing["payload_json"] or "{}") != json.loads(payload):
+            raise RuntimeError("serenity_reference_snapshot_immutable_conflict")
         conn.execute(
             "INSERT OR IGNORE INTO reference_snapshots(snapshot_id,decision_context_snapshot_id,decision_at,input_checksum,payload_json,created_at) VALUES(?,?,?,?,?,?)",
             (
@@ -1363,6 +2677,25 @@ def save_reference_and_enqueue_pending(
                 snapshot.created_at,
             ),
         )
+        existing_pending = conn.execute(
+            """
+            SELECT reference_snapshot_id,decision_context_snapshot_id,decision_day,
+                   epoch,formula_version,input_hash
+            FROM pending_evaluations
+            WHERE pending_id=?
+            """,
+            (pending_id,),
+        ).fetchone()
+        expected_pending = (
+            snapshot.snapshot_id,
+            snapshot.decision_context_snapshot_id,
+            str(decision_day),
+            int(epoch),
+            formula_version,
+            snapshot.input_checksum,
+        )
+        if existing_pending is not None and tuple(existing_pending) != expected_pending:
+            raise RuntimeError("serenity_pending_evaluation_immutable_conflict")
         conn.execute(
             """
             INSERT OR IGNORE INTO pending_evaluations(
@@ -1396,6 +2729,21 @@ def list_pending_evaluations(*, limit: int = 100) -> List[Dict[str, Any]]:
             (max(1, int(limit)),),
         ).fetchall()
         return [dict(row) for row in rows]
+    finally:
+        conn.close()
+
+
+def load_pending_evaluation(pending_id: str) -> Dict[str, Any] | None:
+    try:
+        conn = _connect(readonly=True)
+    except (FileNotFoundError, sqlite3.Error):
+        return None
+    try:
+        row = conn.execute(
+            "SELECT * FROM pending_evaluations WHERE pending_id=?",
+            (str(pending_id),),
+        ).fetchone()
+        return dict(row) if row is not None else None
     finally:
         conn.close()
 
@@ -1567,11 +2915,32 @@ def status_snapshot() -> Dict[str, Any]:
         return base
     try:
         policy = load_policy_state()
+        latest_target = conn.execute(
+            """
+            SELECT t.*,a.activated_at,a.activation_observed_at,
+                   a.activation_revision
+            FROM active_candidate_target a
+            JOIN candidate_targets t ON t.target_id=a.target_id
+            WHERE a.singleton=1
+            """
+        ).fetchone()
+        target_id = str(latest_target["target_id"]) if latest_target else None
+        target_symbols = (
+            {
+                str(symbol or "").strip()
+                for symbol in json.loads(latest_target["symbols_json"] or "[]")
+                if str(symbol or "").strip()
+            }
+            if latest_target is not None
+            else set()
+        )
         last = conn.execute(
-            "SELECT * FROM poll_runs WHERE source_kind IN ('live','bootstrap') ORDER BY finished_at DESC LIMIT 1"
+            "SELECT * FROM poll_runs WHERE source_kind='live' AND (? IS NULL OR target_id=?) ORDER BY finished_at DESC LIMIT 1",
+            (target_id, target_id),
         ).fetchone()
         completed = conn.execute(
-            "SELECT * FROM poll_runs WHERE source_kind IN ('live','bootstrap') AND complete=1 ORDER BY finished_at DESC LIMIT 1"
+            "SELECT * FROM poll_runs WHERE source_kind='live' AND complete=1 AND status='success' AND (? IS NULL OR target_id=?) ORDER BY finished_at DESC LIMIT 1",
+            (target_id, target_id),
         ).fetchone()
         bootstrap = conn.execute(
             "SELECT * FROM bootstrap_runs WHERE source='cninfo' AND complete=1 ORDER BY completed_at DESC LIMIT 1"
@@ -1602,7 +2971,13 @@ def status_snapshot() -> Dict[str, Any]:
         durations = recent_poll_durations("cninfo", limit=cfg.cost_window)
         poll_health = recent_poll_outcomes("cninfo", limit=20)
         recent_complete_rate = (
-            sum(1 for row in poll_health if bool(row.get("complete"))) / len(poll_health)
+            sum(
+                1
+                for row in poll_health
+                if bool(row.get("complete"))
+                and str(row.get("status") or "") == "success"
+            )
+            / len(poll_health)
             if poll_health
             else 0.0
         )
@@ -1614,41 +2989,75 @@ def status_snapshot() -> Dict[str, Any]:
         for value in durations:
             ewma = value if ewma <= 0 else cfg.ewma_alpha * value + (1.0 - cfg.ewma_alpha) * ewma
         completed_at = _parse_iso(completed["finished_at"] if completed else None)
+        worker_lease_expires_at = _parse_iso(heartbeat["expires_at"] if heartbeat else None)
+        worker_alive = bool(
+            heartbeat is not None
+            and worker_lease_expires_at is not None
+            and worker_lease_expires_at > datetime.now(timezone.utc)
+        )
         stale_after_sec = float(completed["stale_after_sec"] or 0.0) if completed else 0.0
         stale = bool(
-            completed_at
-            and stale_after_sec > 0
-            and datetime.now(timezone.utc) > completed_at + timedelta(seconds=stale_after_sec)
+            completed is not None
+            and (
+                completed_at is None
+                or not math.isfinite(stale_after_sec)
+                or stale_after_sec <= 0.0
+                or datetime.now(timezone.utc)
+                > completed_at + timedelta(seconds=stale_after_sec)
+            )
         )
-        latest_complete = bool(last["complete"]) if last else False
+        current_certificate = (
+            _target_poll_certificate(
+                conn,
+                target_id=target_id,
+                decision_at=datetime.now(timezone.utc),
+            )
+            if target_id
+            else None
+        )
+        latest_complete = bool(last["complete"] and str(last["status"]) == "success") if last else False
+        target_coverage_complete = bool(
+            latest_coverage
+            and len(latest_coverage) == len(target_symbols)
+            and {str(row["symbol"]) for row in latest_coverage} == target_symbols
+            and all(
+                bool(row["metadata_complete"]) and bool(row["hydration_complete"])
+                for row in latest_coverage
+            )
+        )
         effective_weight = (
             float(policy.applied_weight)
-            if cfg.mode == "auto"
+            if cfg.mode == "native"
             and policy.state in {"probation", "active"}
             and bool(policy.bootstrap_run_id)
             else 0.0
         )
         available = bool(
-            cfg.mode != "off"
+            cfg.mode == "native"
             and
             bootstrap is not None
-            and completed is not None
-            and latest_complete
-            and not stale
-            and policy.state not in {"suspended", "off", "warming"}
+            and latest_target is not None
+            and current_certificate is not None
+            and worker_alive
         )
         if cfg.mode == "off":
             reason = "serenity_mode_off"
+        elif not worker_alive:
+            reason = "serenity_worker_heartbeat_missing_or_expired"
         elif bootstrap is None:
             reason = "real_bootstrap_incomplete"
-        elif policy.state == "suspended":
-            reason = "policy_suspended"
+        elif latest_target is None:
+            reason = "candidate_target_unavailable"
         elif last is None:
             reason = "no_official_poll"
         elif not latest_complete:
             reason = "latest_poll_incomplete"
+        elif not target_coverage_complete:
+            reason = "target_coverage_incomplete"
         elif stale:
             reason = "official_source_stale"
+        elif current_certificate is None:
+            reason = "active_target_poll_certificate_missing"
         else:
             reason = None
         return {
@@ -1694,8 +3103,28 @@ def status_snapshot() -> Dict[str, Any]:
                     if row["error"]
                 ][:10],
             },
+            "candidate_target": (
+                {
+                    "target_id": str(latest_target["target_id"]),
+                    "decision_trade_day": str(latest_target["decision_trade_day"]),
+                    "daybook_effective_day": str(latest_target["daybook_effective_day"]),
+                    "observed_at": str(latest_target["observed_at"]),
+                    "symbols": list(json.loads(latest_target["symbols_json"] or "[]")),
+                    "input_hash": str(latest_target["input_hash"]),
+                    "activated_at": str(latest_target["activated_at"]),
+                    "activation_observed_at": str(
+                        latest_target["activation_observed_at"] or ""
+                    ),
+                    "activation_revision": str(
+                        latest_target["activation_revision"] or ""
+                    ),
+                }
+                if latest_target is not None
+                else None
+            ),
             "worker_heartbeat_at": (heartbeat["heartbeat_at"] if heartbeat else None),
             "worker_lease_expires_at": (heartbeat["expires_at"] if heartbeat else None),
+            "worker_alive": worker_alive,
             "document_count": int(counts["documents"] or 0),
             "withdrawn_count": int(counts["withdrawn"] or 0),
             "unparsed_count": int(unparsed["n"] or 0),

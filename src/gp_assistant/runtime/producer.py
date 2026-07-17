@@ -10,8 +10,8 @@ from typing import Any, Mapping
 from ..core.paths import store_dir
 
 
-ARTIFACT_SCHEMA_VERSION = "gp.runtime-artifact.v2"
-SELECTION_POLICY = "adaptive_policy_single_path"
+ARTIFACT_SCHEMA_VERSION = "gp.runtime-artifact.v3"
+SELECTION_POLICY = "adaptive_v2_native_serenity_single_score"
 
 
 @lru_cache(maxsize=1)

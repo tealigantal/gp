@@ -1,9 +1,9 @@
 from gp_assistant.search import history_store
 
 
-def test_history_journal_mode_defaults_to_wal(monkeypatch):
+def test_history_journal_mode_defaults_to_delete_for_bind_mounts(monkeypatch):
     monkeypatch.delenv("GP_HISTORY_SQLITE_JOURNAL_MODE", raising=False)
-    assert history_store._sqlite_journal_mode() == "WAL"
+    assert history_store._sqlite_journal_mode() == "DELETE"
 
 
 def test_history_journal_mode_accepts_delete_case_insensitively(monkeypatch):
@@ -13,7 +13,7 @@ def test_history_journal_mode_accepts_delete_case_insensitively(monkeypatch):
 
 def test_history_journal_mode_rejects_untrusted_pragma(monkeypatch):
     monkeypatch.setenv("GP_HISTORY_SQLITE_JOURNAL_MODE", "WAL; DROP TABLE items")
-    assert history_store._sqlite_journal_mode() == "WAL"
+    assert history_store._sqlite_journal_mode() == "DELETE"
 
 
 def test_history_database_filename_cannot_escape_store(monkeypatch, tmp_path):

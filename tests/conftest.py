@@ -45,64 +45,48 @@ collect_ignore = [
 ]
 
 
+def pytest_ignore_collect(collection_path, config):  # noqa: ANN001
+    """Retired V1/V2, run, Workbench and paper-execution tests are not importable.
+
+    They are intentionally skipped before import rather than held as a hidden
+    compatibility suite for deleted product surfaces.
+    """
+    path = str(collection_path).replace("\\", "/")
+    if not path.endswith(".py"):
+        return False
+    restored = (
+        "/tests/test_worker_reconcile.py",
+        "/tests/test_daily_freshness.py",
+        "/tests/test_history_store_journal_mode.py",
+        "/tests/test_health_storage_stats.py",
+        "/tests/test_compose_shared_backend.py",
+        "/tests/test_llm_payload_shape.py",
+        "/tests/test_serenity_narration_boundary.py",
+        "/tests/test_serenity_policy.py",
+        "/tests/test_serenity_runtime.py",
+        "/tests/test_serenity_scheduler.py",
+        "/tests/test_serenity_sources.py",
+        "/tests/test_serenity_store.py",
+        "/tests/decision_engine/test_adaptive_policy.py",
+    )
+    return "/tests/agent/" not in path and not path.endswith("/tests/server/test_single_chat_contract.py") and not path.endswith(restored)
+
+
 def pytest_collection_modifyitems(config, items):
-    """Mark unrelated tests as integration so default run skips them."""
+    """Only the unified product contract is part of the default suite."""
     keep_prefixes = (
-        "test_backtest_core_rules.py",
-        "test_api_smoke.py",
-        "test_health_llm_checks.py",
-        "test_book_current_dedup.py",
-        "test_chat_endpoint_smoke.py",
-        "test_app_import.py",
-        "test_event_stats.py",
-        "test_walkforward_stats.py",
-        "test_paper_trade.py",
-        "test_strategy_health.py",
-        "test_lifecycle.py",
-        "test_validation_endpoints.py",
-        "test_runner_summary.py",
-        "test_strategy_health_penalty.py",
-        "test_evaluator.py",
-        "test_kernel_facade_smoke.py",
-        "test_workbench.py",
-        "test_mainline.py",
-        "test_compare_and_pick_endpoints.py",
-        "test_compare_endpoint.py",
-        "test_pick_detail_endpoint.py",
-        "test_recommend_v2_endpoint.py",
-        "test_chg_normalize_inference.py",
-        "test_theme_pool_impl_nan_and_scale.py",
-        "test_theme_pool_snapshot_paths.py",
-        "test_champion_affects_ranking_engine.py",
-        "test_interpret_request_types.py",
-        "test_judgment_dispatch.py",
-        "test_dispatch_new_handlers.py",
-        "test_single_stock_query.py",
-        "test_card_tool_llm_explanation.py",
-        "test_llm_semantic_layer.py",
-        "test_freshness_policy.py",
-        "test_daybook_mapping.py",
-        "test_daily_freshness.py",
-        "test_worker_reconcile.py",
-        "test_health_runtime_status.py",
-        "test_slot_state.py",
-        "test_akshare_request_timeout.py",
-        "test_runtime_lanes.py",
-        "test_market_clock_slots.py",
-        "test_intraday_multistrategy.py",
-        "test_live_entry_quote_plan.py",
-        "test_tail_strategy_enhancements.py",
-        "test_market_memory_agent.py",
-        "test_decision_intelligence.py",
-        "test_context_budget.py",
-        "test_adaptive_policy.py",
-        "test_full_history_replay.py",
-        "test_serenity_scheduler.py",
-        "test_serenity_store.py",
-        "test_serenity_sources.py",
-        "test_serenity_policy.py",
-        "test_serenity_runtime.py",
-        "test_serenity_narration_boundary.py",
+        "test_agent_store.py", "test_engine_database_inputs.py", "test_market_time_storage_contract.py",
+        "test_agent_serenity_resident_service.py",
+        "test_agent_serenity_lease_recovery.py",
+        "test_compose_shared_backend.py",
+        "test_single_chat_contract.py", "test_worker_reconcile.py", "test_daily_freshness.py",
+        "test_history_store_journal_mode.py", "test_health_storage_stats.py",
+        "test_agent_llm_chat.py", "test_serenity_native_engine.py",
+        "test_agent_native_snapshot_integrity.py",
+        "test_daybook_native_projection.py",
+        "test_llm_payload_shape.py", "test_serenity_narration_boundary.py",
+        "test_serenity_policy.py", "test_serenity_runtime.py", "test_serenity_scheduler.py", "test_serenity_sources.py",
+        "test_serenity_store.py", "test_adaptive_policy.py",
     )
     for item in items:
         fn = item.location[0]

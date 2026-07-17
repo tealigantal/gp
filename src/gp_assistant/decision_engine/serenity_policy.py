@@ -10,13 +10,14 @@ from ..core.config import load_config
 from ..runtime.utils import now_iso
 from ..serenity.models import (
     FrozenSerenitySignal,
+    NATIVE_SERENITY_FORMULA_VERSION,
     SerenityCounterfactualArm,
     SerenityPolicyState,
     SerenityReferenceSnapshot,
 )
 
 
-FORMULA_VERSION = "SerenityAddon.v1"
+FORMULA_VERSION = NATIVE_SERENITY_FORMULA_VERSION
 WEIGHT_ARMS = tuple(round(step / 100.0, 2) for step in range(0, 9))
 
 
@@ -47,6 +48,8 @@ def signal_value(
         return 0.0
     if not allow_reference_only and not bool(item.get("learning_eligible")):
         return 0.0
+    if "alpha_value" in item:
+        return max(-1.0, min(1.0, _safe_float(item.get("alpha_value"), 0.0)))
     direction = -1.0 if _safe_float(item.get("direction"), 0.0) < 0 else 1.0 if _safe_float(item.get("direction"), 0.0) > 0 else 0.0
     return direction * _clamp(item.get("confidence")) * _clamp(item.get("source_quality"))
 
@@ -81,6 +84,14 @@ def counterfactual_arm_checksum(arm: SerenityCounterfactualArm | Mapping[str, An
     )
 
 
+def _causal_signal_payload(signal: FrozenSerenitySignal) -> Dict[str, Any]:
+    payload = signal.model_dump(mode="json")
+    # generated_at is observability metadata, not a causal scoring input. An
+    # equivalent rebuild must retain the same immutable reference identity.
+    payload.pop("generated_at", None)
+    return payload
+
+
 def reference_input_checksum(
     *,
     decision_context_snapshot_id: str | None,
@@ -91,13 +102,18 @@ def reference_input_checksum(
     reference_arms: Sequence[SerenityCounterfactualArm] = (),
     risk_plans: Mapping[str, Mapping[str, Any]] | None = None,
     learning_sample_id: str = "",
+    actual_weight: float = 0.0,
+    policy_state: str = "shadow",
+    baseline_selected_symbols: Sequence[str] = (),
+    applied_selected_symbols: Sequence[str] = (),
+    would_change_topk: bool = False,
 ) -> str:
     return _checksum(
         {
             "decision_context_snapshot_id": decision_context_snapshot_id,
             "decision_day": decision_day,
             "decision_at": decision_at,
-            "signals": {symbol: signal.model_dump(mode="json") for symbol, signal in sorted(signals.items())},
+            "signals": {symbol: _causal_signal_payload(signal) for symbol, signal in sorted(signals.items())},
             "arms": [arm.model_dump(mode="json") for arm in arms],
             "reference_arms": [arm.model_dump(mode="json") for arm in reference_arms],
             "risk_plans": {
@@ -105,6 +121,11 @@ def reference_input_checksum(
                 for symbol, plan in sorted((risk_plans or {}).items())
             },
             "learning_sample_id": str(learning_sample_id or ""),
+            "actual_weight": round(float(actual_weight), 2),
+            "policy_state": str(policy_state),
+            "baseline_selected_symbols": list(baseline_selected_symbols),
+            "applied_selected_symbols": list(applied_selected_symbols),
+            "would_change_topk": bool(would_change_topk),
             "formula_version": FORMULA_VERSION,
         }
     )
@@ -169,7 +190,7 @@ def _ranked_for_weight(
     for original_rank, candidate in enumerate(candidates):
         symbol = str(candidate.get("symbol") or "")
         score, adjustment = decision_score(
-            candidate.get("adaptive_score"),
+            candidate.get("baseline_adaptive_score", candidate.get("adaptive_score")),
             signals.get(symbol),
             weight,
             allow_reference_only=allow_reference_only,
@@ -219,7 +240,7 @@ def build_serenity_counterfactuals(
 def effective_weight(state: SerenityPolicyState, *, mode: str | None = None) -> float:
     resolved_mode = str(mode or load_config().serenity.mode)
     if (
-        resolved_mode != "auto"
+        resolved_mode != "native"
         or state.state not in {"probation", "active"}
         or not state.bootstrap_run_id
     ):
@@ -229,106 +250,6 @@ def effective_weight(state: SerenityPolicyState, *, mode: str | None = None) -> 
     if weight < 0.0 or weight > 0.08 or max_weight < 0.0 or max_weight > 0.08:
         return 0.0
     return max(0.0, min(max_weight, 0.08, round(weight, 2)))
-
-
-def apply_serenity_addon(
-    adaptive_output: Dict[str, Any],
-    signals: Mapping[str, FrozenSerenitySignal],
-    state: SerenityPolicyState,
-    *,
-    topk: int,
-    mode: str | None = None,
-) -> Dict[str, Any]:
-    base = deepcopy(dict(adaptive_output or {}))
-    base_candidates = [dict(item) for item in list(base.get("adaptive_candidates") or [])]
-    if not base_candidates:
-        base["serenity_policy"] = {
-            "formula_version": FORMULA_VERSION,
-            "state": state.state,
-            "epoch": state.epoch,
-            "applied_weight": 0.0,
-            "max_weight": state.max_weight,
-        }
-        base["serenity_counterfactuals"] = []
-        return base
-    arms = build_serenity_counterfactuals(base_candidates, signals, topk=topk)
-    reference_arms = build_serenity_counterfactuals(
-        base_candidates,
-        signals,
-        topk=topk,
-        allow_reference_only=True,
-    )
-    applied_weight = effective_weight(state, mode=mode)
-    applied_arm = next((arm for arm in arms if abs(arm.weight - applied_weight) < 1e-9), arms[0])
-    baseline_arm = arms[0]
-    reference_max_arm = reference_arms[-1]
-    original_rank = {str(item.get("symbol") or ""): idx for idx, item in enumerate(base_candidates)}
-    by_symbol = {str(item.get("symbol") or ""): dict(item) for item in base_candidates}
-    ranked_candidates: List[Dict[str, Any]] = []
-    for symbol in applied_arm.ranked_symbols:
-        candidate = by_symbol[symbol]
-        baseline_score = _clamp(candidate.get("adaptive_score"))
-        score = float(applied_arm.scores[symbol])
-        signal = signals.get(symbol)
-        adjustment = float(score - baseline_score)
-        binding_candidate = bool(
-            applied_weight > 0.0
-            and signal is not None
-            and signal.learning_eligible
-            and abs(adjustment) > 1e-12
-        )
-        candidate.update(
-            {
-                "decision_score": score,
-                "serenity_adjustment": adjustment,
-                "serenity_status": signal.status if signal else "not_ready",
-                "serenity_fact_ids": list(signal.fact_ids if signal else []),
-                "serenity_learning_eligible": bool(signal.learning_eligible) if signal else False,
-                "serenity_input_hash": signal.input_hash if signal else None,
-                "serenity_policy_state": state.state,
-                "serenity_weight": applied_weight,
-                "serenity_non_binding": not binding_candidate,
-                "serenity_would_change_topk": applied_arm.selected_symbols
-                != baseline_arm.selected_symbols,
-                "serenity_reference_would_change_topk": reference_max_arm.selected_symbols
-                != baseline_arm.selected_symbols,
-            }
-        )
-        ranked_candidates.append(candidate)
-    ranked_candidates.sort(
-        key=lambda item: (
-            -float(item.get("decision_score") or 0.0),
-            original_rank.get(str(item.get("symbol") or ""), 10**9),
-            str(item.get("symbol") or ""),
-        )
-    )
-    base["adaptive_candidates"] = ranked_candidates
-    base["selected_symbols"] = list(applied_arm.selected_symbols)
-    base["final_decision"] = "recommend" if applied_arm.selected_symbols else "no_trade"
-    base["serenity_policy"] = {
-        "formula_version": FORMULA_VERSION,
-        "state": state.state,
-        "epoch": state.epoch,
-        "applied_weight": applied_weight,
-        "max_weight": state.max_weight,
-        "would_change_topk": applied_arm.selected_symbols != baseline_arm.selected_symbols,
-        "baseline_selected_symbols": baseline_arm.selected_symbols,
-        "applied_selected_symbols": applied_arm.selected_symbols,
-        "reference_would_change_topk": reference_max_arm.selected_symbols != baseline_arm.selected_symbols,
-        "reference_selected_symbols_at_max_weight": reference_max_arm.selected_symbols,
-    }
-    base["serenity_counterfactuals"] = [arm.model_dump(mode="json") for arm in arms]
-    base["serenity_reference_counterfactuals"] = [arm.model_dump(mode="json") for arm in reference_arms]
-    validator = dict(base.get("validator_result") or {})
-    validator.update(
-        {
-            "serenity_weight_bounded": 0.0 <= applied_weight <= 0.08,
-            "serenity_hard_blocks_unchanged": True,
-            "serenity_baseline_preserved": True,
-        }
-    )
-    base["validator_result"] = validator
-    return base
 
 
 def build_reference_snapshot(
@@ -373,6 +294,11 @@ def build_reference_snapshot(
         reference_arms=reference_arms,
         risk_plans=frozen_risk_plans,
         learning_sample_id=learning_sample_id,
+        actual_weight=float(policy.get("applied_weight") or 0.0),
+        policy_state=str(policy.get("state") or "shadow"),
+        baseline_selected_symbols=list(policy.get("baseline_selected_symbols") or []),
+        applied_selected_symbols=list(policy.get("applied_selected_symbols") or []),
+        would_change_topk=bool(policy.get("would_change_topk")),
     )
     snapshot_id = "sersnap_" + input_checksum[:24]
     return SerenityReferenceSnapshot(

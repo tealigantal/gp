@@ -4,10 +4,12 @@ import json
 import math
 import os
 from pathlib import Path
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Mapping, Tuple
 
 from ..core.paths import store_dir
 from ..runtime.utils import now_iso
+from ..serenity.models import FrozenSerenitySignal, SerenityPolicyState
+from .serenity_policy import FORMULA_VERSION as SERENITY_FORMULA_VERSION, effective_weight, signal_value
 
 
 POLICY_SCHEMA = "AdaptiveDecisionPolicy.v1"
@@ -408,7 +410,14 @@ def _action(strength: str, setup_score: float, adaptive_score: float) -> str:
     return "WAIT"
 
 
-def score_candidate(candidate: dict, market_context: dict, state: dict | None = None) -> dict:
+def score_candidate(
+    candidate: dict,
+    market_context: dict,
+    state: dict | None = None,
+    *,
+    serenity_signal: FrozenSerenitySignal | Mapping[str, Any] | None = None,
+    serenity_weight: float = 0.0,
+) -> dict:
     state = _normalize_state(state or load_policy_state())
     market_context = dict(market_context or {})
     candidate = dict(candidate or {})
@@ -469,6 +478,7 @@ def score_candidate(candidate: dict, market_context: dict, state: dict | None = 
         "ranking": ranking_score_norm,
         "regime": regime_score,
         "exploration": exploration_score,
+        "serenity": signal_value(serenity_signal),
     }
     expert_contributions = {
         "signal": weights["signal"] * signal_score,
@@ -479,7 +489,14 @@ def score_candidate(candidate: dict, market_context: dict, state: dict | None = 
         "ranking": weights["ranking"] * ranking_score_norm,
         "regime": weights["regime"] * regime_score,
         "exploration": weights["exploration"] * exploration_score,
+        "serenity": max(0.0, min(0.08, float(serenity_weight))) * signal_value(serenity_signal),
     }
+    baseline_adaptive_score = _clamp(
+        sum(value for key, value in expert_contributions.items() if key != "serenity"),
+        0.0,
+        1.0,
+        0.0,
+    )
     adaptive_score = _clamp(sum(expert_contributions.values()), 0.0, 1.0, 0.0)
     confidence_base = _clamp(probability.get("confidence"), 0.0, 1.0, 0.5)
     confidence = _clamp(0.46 * confidence_base + 0.24 * feature_coverage + 0.16 * memory_sample + 0.14 * (1.0 - uncertainty), 0.0, 1.0, 0.4)
@@ -489,6 +506,8 @@ def score_candidate(candidate: dict, market_context: dict, state: dict | None = 
     action = _action(recommendation_strength, setup_score, adaptive_score)
 
     reason_codes = ["adaptive_policy"]
+    if serenity_signal is not None:
+        reason_codes.append("serenity_native_expert")
     if effective_n < 10.0:
         reason_codes.append("low_effective_sample_exploratory")
     if feature_coverage < 0.75:
@@ -503,6 +522,8 @@ def score_candidate(candidate: dict, market_context: dict, state: dict | None = 
     return {
         "symbol": symbol,
         "adaptive_score": float(adaptive_score),
+        "baseline_adaptive_score": float(baseline_adaptive_score),
+        "decision_score": float(adaptive_score),
         "expected_edge": float(expected_edge),
         "calibrated_probability": float(calibrated_probability),
         "predicted_drawdown": float(predicted_drawdown),
@@ -512,7 +533,47 @@ def score_candidate(candidate: dict, market_context: dict, state: dict | None = 
         "recommendation_strength": recommendation_strength,
         "action": action,
         "expert_scores": {key: float(value) for key, value in expert_scores.items()},
+        "expert_weights": {key: float(value) for key, value in weights.items()},
         "expert_contributions": {key: float(value) for key, value in expert_contributions.items()},
+        "serenity_adjustment": float(expert_contributions["serenity"]),
+        "serenity_status": str(
+            serenity_signal.status
+            if isinstance(serenity_signal, FrozenSerenitySignal)
+            else (serenity_signal or {}).get("status", "not_ready")
+        ),
+        "serenity_fact_ids": list(
+            serenity_signal.fact_ids
+            if isinstance(serenity_signal, FrozenSerenitySignal)
+            else (serenity_signal or {}).get("fact_ids", [])
+        ),
+        "serenity_learning_eligible": bool(
+            serenity_signal.learning_eligible
+            if isinstance(serenity_signal, FrozenSerenitySignal)
+            else (serenity_signal or {}).get("learning_eligible", False)
+        ),
+        "serenity_input_hash": (
+            serenity_signal.input_hash
+            if isinstance(serenity_signal, FrozenSerenitySignal)
+            else (serenity_signal or {}).get("input_hash")
+        ),
+        "serenity_target_id": (
+            serenity_signal.target_id
+            if isinstance(serenity_signal, FrozenSerenitySignal)
+            else (serenity_signal or {}).get("target_id")
+        ),
+        "serenity_source_run_id": (
+            serenity_signal.source_run_id
+            if isinstance(serenity_signal, FrozenSerenitySignal)
+            else (serenity_signal or {}).get("source_run_id")
+        ),
+        "serenity_alpha_value": float(signal_value(serenity_signal)),
+        "serenity_weight": max(0.0, min(0.08, float(serenity_weight))),
+        "serenity_non_binding": abs(float(expert_contributions["serenity"])) <= 1e-12,
+        "serenity_lineage": dict(
+            serenity_signal.lineage
+            if isinstance(serenity_signal, FrozenSerenitySignal)
+            else (serenity_signal or {}).get("lineage", {})
+        ),
         "missing_features": list(feature_bundle.get("missing_features") or []),
         "reason_codes": reason_codes,
         "calibration": calibration_debug,
@@ -545,15 +606,35 @@ def select_candidates(
     market_context: dict,
     risk_profile: str = "normal",
     state: dict | None = None,
+    serenity_signals: Mapping[str, FrozenSerenitySignal] | None = None,
+    serenity_policy_state: SerenityPolicyState | None = None,
+    serenity_mode: str = "off",
+    require_serenity: bool = False,
 ) -> dict:
     state = _normalize_state(state or load_policy_state())
     ranked = list(ranked_candidates or [])
+    signals = dict(serenity_signals or {})
+    serenity_weight = (
+        effective_weight(serenity_policy_state, mode=serenity_mode)
+        if serenity_policy_state is not None
+        else 0.0
+    )
+    serenity_policy = {
+        "formula_version": SERENITY_FORMULA_VERSION,
+        "mode": serenity_mode,
+        "state": serenity_policy_state.state if serenity_policy_state is not None else "off",
+        "epoch": serenity_policy_state.epoch if serenity_policy_state is not None else 0,
+        "applied_weight": serenity_weight,
+        "max_weight": serenity_policy_state.max_weight if serenity_policy_state is not None else 0.08,
+        "native_required": bool(require_serenity),
+    }
     if not ranked:
         return {
             "final_decision": "no_trade",
             "selected_symbols": [],
             "adaptive_candidates": [],
             "policy_state_version": state.get("version", 1),
+            "serenity_policy": serenity_policy,
             "policy_debug": {
                 "scored_count": 0,
                 "invalid_count": 0,
@@ -571,24 +652,85 @@ def select_candidates(
 
     scored: List[Dict[str, Any]] = []
     invalid: List[Dict[str, Any]] = []
+    coverage_failures: List[Dict[str, Any]] = []
     for idx, candidate in enumerate(ranked):
         symbol = _normalize_symbol((candidate or {}).get("symbol") or (candidate or {}).get("code"))
         if not symbol:
             invalid.append({"index": idx, "reason": "symbol_missing"})
             continue
+        serenity_signal = signals.get(symbol)
+        serenity_status = (
+            serenity_signal.status if serenity_signal is not None else "not_ready"
+        )
+        if require_serenity and serenity_status not in {"available", "no_relevant_evidence"}:
+            coverage_failures.append(
+                {"index": idx, "symbol": symbol, "status": serenity_status}
+            )
         block = _hard_block(candidate, market_context)
         if block:
             invalid.append({"index": idx, "symbol": symbol, "reason": block})
             continue
         try:
-            scored_item = score_candidate(candidate, market_context, state)
+            scored_item = score_candidate(
+                candidate,
+                market_context,
+                state,
+                serenity_signal=serenity_signal,
+                serenity_weight=serenity_weight,
+            )
             if not math.isfinite(_safe_float(scored_item.get("adaptive_score"), float("nan"))):
                 raise ValueError("adaptive_score_non_finite")
             scored.append(scored_item)
         except Exception as ex:  # noqa: BLE001
             invalid.append({"index": idx, "symbol": symbol, "reason": f"score_error:{type(ex).__name__}"})
 
-    scored.sort(key=lambda item: float(item.get("adaptive_score") or 0.0), reverse=True)
+    scored.sort(
+        key=lambda item: (
+            -float(item.get("decision_score") or 0.0),
+            str(item.get("symbol") or ""),
+        )
+    )
+    baseline_selected_symbols = [
+        str(item.get("symbol"))
+        for item in sorted(
+            scored,
+            key=lambda item: (
+                -float(item.get("baseline_adaptive_score") or 0.0),
+                str(item.get("symbol") or ""),
+            ),
+        )[: max(0, int(topk))]
+    ]
+    serenity_policy.update(
+        {
+            "baseline_selected_symbols": baseline_selected_symbols,
+            "applied_selected_symbols": [],
+            "would_change_topk": False,
+        }
+    )
+    if coverage_failures:
+        return {
+            "final_decision": "no_trade",
+            "selected_symbols": [],
+            "adaptive_candidates": scored,
+            "policy_state_version": state.get("version", 1),
+            "serenity_policy": serenity_policy,
+            "policy_debug": {
+                "scored_count": len(scored),
+                "invalid_count": len(invalid),
+                "invalid_candidates": invalid[:20],
+                "serenity_coverage_failures": coverage_failures[:20],
+                "selection_policy": "adaptive_v2_native_serenity_single_score",
+                "reason": "serenity_coverage_incomplete",
+                "risk_profile": risk_profile,
+            },
+            "validator_result": {
+                "ok": True,
+                "policy": "adaptive_v2_native_serenity_single_score",
+                "selected_from_ranked_candidates": True,
+                "serenity_complete_for_target": False,
+                "reason": "serenity_coverage_incomplete",
+            },
+        }
     selected = scored[: max(0, int(topk))]
     if not selected:
         reason = "all_candidates_invalid_or_hard_blocked"
@@ -597,37 +739,47 @@ def select_candidates(
             "selected_symbols": [],
             "adaptive_candidates": scored,
             "policy_state_version": state.get("version", 1),
+            "serenity_policy": serenity_policy,
             "policy_debug": {
                 "scored_count": len(scored),
                 "invalid_count": len(invalid),
                 "invalid_candidates": invalid[:20],
-                "selection_policy": "adaptive_score_topk_no_low_sample_gate",
+                "selection_policy": "adaptive_v2_native_serenity_single_score",
                 "reason": reason,
                 "risk_profile": risk_profile,
             },
             "validator_result": {
                 "ok": True,
-                "policy": "adaptive_policy_single_path",
+                "policy": "adaptive_v2_native_serenity_single_score",
                 "selected_from_ranked_candidates": True,
                 "reason": reason,
             },
         }
+    applied_selected_symbols = [str(item.get("symbol")) for item in selected]
+    serenity_policy.update(
+        {
+            "applied_selected_symbols": applied_selected_symbols,
+            "would_change_topk": applied_selected_symbols != baseline_selected_symbols,
+        }
+    )
     return {
         "final_decision": "recommend",
-        "selected_symbols": [str(item.get("symbol")) for item in selected],
+        "selected_symbols": applied_selected_symbols,
         "adaptive_candidates": scored,
         "policy_state_version": state.get("version", 1),
+        "serenity_policy": serenity_policy,
         "policy_debug": {
             "scored_count": len(scored),
             "invalid_count": len(invalid),
             "invalid_candidates": invalid[:20],
-            "selection_policy": "adaptive_score_topk_no_low_sample_gate",
+            "selection_policy": "adaptive_v2_native_serenity_single_score",
             "risk_profile": risk_profile,
         },
         "validator_result": {
             "ok": True,
-            "policy": "adaptive_policy_single_path",
+            "policy": "adaptive_v2_native_serenity_single_score",
             "selected_from_ranked_candidates": True,
+            "serenity_complete_for_target": not require_serenity or not coverage_failures,
         },
     }
 

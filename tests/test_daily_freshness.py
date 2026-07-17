@@ -123,7 +123,7 @@ def test_resolve_daily_target_holiday_uses_previous_completed_day(monkeypatch):
     assert target["target_day"] == "2026-04-30"
     assert target["target_mode"] == "previous_completed"
     assert target["daybook_trading_day"] == "20260430"
-    assert target["next_trading_day"] == "20260506"
+    assert target["next_trading_day"] == "2026-05-06"
 
 
 def test_active_freshness_discards_stale_holiday_target_when_book_matches_current(monkeypatch):

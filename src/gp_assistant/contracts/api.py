@@ -1,25 +1,36 @@
 from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class ChatRequest(BaseModel):
     session_id: Optional[str] = None
-    message: str
+    message: str = Field(min_length=1)
+    client_turn_id: str = Field(min_length=1)
+
+    @field_validator("message", "client_turn_id")
+    @classmethod
+    def _non_blank(cls, value: str) -> str:
+        text = str(value or "").strip()
+        if not text:
+            raise ValueError("must_not_be_blank")
+        return text
 
 
 class ChatResponse(BaseModel):
     session_id: str
+    client_turn_id: str
+    snapshot_id: Optional[str] = None
+    decision: str
     reply: str
     message: Dict[str, Any] = Field(default_factory=dict)
-    run_id: Optional[str] = None
     symbols: List[str] = Field(default_factory=list)
-    right_panel: Dict[str, Any] = Field(default_factory=dict)
-    ui_items: List[Dict[str, Any]] = Field(default_factory=list)
-    planner_trace: Dict[str, Any] = Field(default_factory=dict)
-    evidence_refs: List[str] = Field(default_factory=list)
-    grounding_summary: Dict[str, Any] = Field(default_factory=dict)
+
+
+class ChatHistoryResponse(BaseModel):
+    session_id: str
+    turns: List[Dict[str, Any]] = Field(default_factory=list)
 
 
 class HealthStorageStats(BaseModel):
@@ -137,11 +148,14 @@ class OpsRunResponse(BaseModel):
 
 class HealthResponse(BaseModel):
     status: str
-    trading_day: Optional[str] = None
-    book_version: Optional[str] = None
-    llm_ready: bool = False
-    storage: HealthStorageStats = Field(default_factory=HealthStorageStats)
-    runtime: RuntimeStatus = Field(default_factory=RuntimeStatus)
+    product_ready: bool = False
+    readiness_reasons: List[str] = Field(default_factory=list)
+    agent_db: Dict[str, Any] = Field(default_factory=dict)
+    current_snapshot: Optional[Dict[str, Any]] = None
+    history_db: Dict[str, Any] = Field(default_factory=dict)
+    llm: Dict[str, Any] = Field(default_factory=dict)
+    serenity: Dict[str, Any] = Field(default_factory=dict)
+    worker: Dict[str, Any] = Field(default_factory=dict)
 
 
 class SessionResponse(BaseModel):

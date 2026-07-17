@@ -24,6 +24,7 @@ from .store import (
     ensure_shadow_ready,
     heartbeat_worker_lease,
     initialize_store,
+    latest_complete_bootstrap,
     load_cursor,
     load_source_breaker,
     load_source_progress,
@@ -31,19 +32,19 @@ from .store import (
     raw_dir,
     recent_poll_durations,
     recent_poll_outcomes,
+    recover_operational_suspension_after_complete_poll,
     record_bootstrap_run,
     release_worker_lease,
     status_snapshot,
     set_source_breaker,
     clear_source_breaker,
-    suspend_policy,
 )
 from .targets import load_stable_targets
 from .evaluation import process_pending_evaluations
 
 
 _SCHEMA_CONTRACT_VERSION = "cninfo-announcement-envelope-v2"
-_TERMINAL_HYDRATION_STATUSES = {"parsed", "metadata_only", "unparsed", "truncated"}
+_COMPLETE_HYDRATION_STATUSES = {"parsed"}
 
 
 class _LeaseHeartbeater:
@@ -84,16 +85,32 @@ def _consecutive_counts(history: List[Dict[str, Any]]) -> tuple[int, int]:
     empty = 0
     failed = 0
     for row in history:
-        if bool(row.get("complete")) and int(row.get("item_count") or 0) == 0:
+        source_success = bool(row.get("complete")) and str(row.get("status") or "") == "success"
+        if source_success and int(row.get("item_count") or 0) == 0:
             empty += 1
         else:
             break
     for row in history:
-        if not bool(row.get("complete")):
+        source_success = bool(row.get("complete")) and str(row.get("status") or "") == "success"
+        if not source_success:
             failed += 1
         else:
             break
     return empty, failed
+
+
+def _next_consecutive_counts(
+    history: List[Dict[str, Any]],
+    *,
+    source_complete: bool,
+    item_count: int,
+) -> tuple[int, int]:
+    """Apply the current poll result to the historical failure/empty streaks."""
+
+    empty, failed = _consecutive_counts(history)
+    if source_complete:
+        return (empty + 1 if int(item_count) == 0 else 0), 0
+    return 0, failed + 1
 
 
 def _raw_path(record_id: str, content_hash: str, published_at: str | None) -> Path:
@@ -160,7 +177,7 @@ def _record_payload(
     revalidate_due = last_checked is None or datetime.now(timezone.utc) >= last_checked + timedelta(hours=content_revalidate_hours)
     needs_hydration = (
         not known
-        or extraction_status not in _TERMINAL_HYDRATION_STATUSES
+        or extraction_status not in _COMPLETE_HYDRATION_STATUSES
         or not raw_path_value
         or not Path(str(raw_path_value)).exists()
         or revalidate_due
@@ -252,7 +269,7 @@ def _record_payload(
     if (
         content_hash
         and raw_path_value
-        and hydration_status in _TERMINAL_HYDRATION_STATUSES
+        and hydration_status in _COMPLETE_HYDRATION_STATUSES
     ):
         version_id = "server_" + sha256(f"{document_id}|{content_hash}".encode()).hexdigest()[:24]
         version = {
@@ -322,6 +339,10 @@ def _run_serenity_once_owned(
     else:
         effective_source_kind = "bootstrap" if bootstrap and source_kind == "live" else source_kind
     cursor = load_cursor(source)
+    target_meta = {"ok": True, "symbols": list(symbols or [])}
+    if not symbols:
+        target_meta = load_stable_targets()
+        symbols = list(target_meta.get("symbols") or [])
     breaker = load_source_breaker(source)
     if breaker:
         try:
@@ -339,6 +360,7 @@ def _run_serenity_once_owned(
                 "source_kind": effective_source_kind,
                 "next_due_at": breaker_until.isoformat(),
                 "schedule": {"delay_sec": max(1.0, (breaker_until - started_dt).total_seconds())},
+                "target_meta": target_meta,
             }
     client = client or CNInfoClient(
         timeout_sec=cfg.request_timeout_sec,
@@ -347,29 +369,21 @@ def _run_serenity_once_owned(
         spacing_sec=cfg.request_spacing_sec,
     )
     verifier = verifier or ExchangeVerifier(timeout_sec=cfg.request_timeout_sec)
-    target_meta = {"ok": True, "symbols": list(symbols or [])}
-    if not symbols:
-        target_meta = load_stable_targets()
-        symbols = list(target_meta.get("symbols") or [])
-        if not symbols and cursor.get("target_symbols"):
-            cursor_updated = None
-            try:
-                cursor_updated = datetime.fromisoformat(str(cursor.get("_updated_at") or "").replace("Z", "+00:00"))
-                if cursor_updated.tzinfo is None:
-                    cursor_updated = cursor_updated.replace(tzinfo=timezone.utc)
-            except Exception:
-                cursor_updated = None
-            if cursor_updated and (started_dt - cursor_updated).total_seconds() <= cfg.target_fallback_ttl_sec:
-                symbols = list(cursor.get("target_symbols") or [])
-                target_meta = {
-                    **target_meta,
-                    "ok": True,
-                    "symbols": symbols,
-                    "degraded": True,
-                    "reason": "using_recent_stable_target_fallback",
-                }
     clean_symbols = list(dict.fromkeys(str(symbol).strip() for symbol in symbols if str(symbol).strip()))
-    days = max(1, int(lookback_days or (cfg.bootstrap_lookback_days if bootstrap else 2)))
+    # Every live poll must re-observe the full evidence window that can still
+    # affect Alpha; otherwise a 3-10 day old correction/withdrawal could be
+    # missed while the older fact remained scoreable.
+    days = max(
+        1,
+        int(
+            lookback_days
+            or (
+                cfg.bootstrap_lookback_days
+                if bootstrap
+                else cfg.evidence_ttl_days
+            )
+        ),
+    )
     end = started_dt.astimezone().date()
     start = end - timedelta(days=days)
     records: List[Dict[str, Any]] = []
@@ -411,7 +425,14 @@ def _run_serenity_once_owned(
                 )
                 continue
             pending_progress = source_progress.get(symbol) if not bootstrap else None
-            if pending_progress and str(pending_progress.get("status") or "") in {
+            progress_matches_target = bool(
+                pending_progress
+                and str(pending_progress.get("target_id") or "")
+                == str(target_meta.get("target_id") or "")
+                and str(pending_progress.get("window_start") or "") == start.isoformat()
+                and str(pending_progress.get("window_end") or "") == end.isoformat()
+            )
+            if progress_matches_target and str(pending_progress.get("status") or "") in {
                 "backlog",
                 "hydration_backlog",
             }:
@@ -419,11 +440,10 @@ def _run_serenity_once_owned(
                 symbol_end = date.fromisoformat(str(pending_progress["window_end"]))
                 start_page = max(1, int(pending_progress.get("next_page") or 1))
             else:
-                last_complete_end = str((cursor.get("symbol_last_complete_end") or {}).get(symbol) or "")
-                try:
-                    symbol_start = date.fromisoformat(last_complete_end) - timedelta(days=1)
-                except Exception:
-                    symbol_start = start
+                # Re-observe the full scoreable evidence window every live run.
+                # A short cursor window would miss corrections/withdrawals to
+                # still-active announcements and leave stale Alpha in ranking.
+                symbol_start = start
                 symbol_end = end
                 start_page = 1
             symbol_windows[symbol] = (symbol_start, symbol_end)
@@ -519,7 +539,7 @@ def _run_serenity_once_owned(
             str(record.get("hydration_status") or "")
             for record in records
             if str(record.get("hydration_status") or "")
-            not in _TERMINAL_HYDRATION_STATUSES
+            not in _COMPLETE_HYDRATION_STATUSES
         ]
         if extraction_failures:
             errors.append("document_extraction_incomplete:" + ",".join(extraction_failures[:5]))
@@ -529,7 +549,7 @@ def _run_serenity_once_owned(
                     for record in records
                     if str((record.get("document") or {}).get("symbol") or "") == str(item.get("symbol") or "")
                     and str(record.get("hydration_status") or "")
-                    not in _TERMINAL_HYDRATION_STATUSES
+                    not in _COMPLETE_HYDRATION_STATUSES
                 ]
                 if symbol_failures:
                     item["hydration_complete"] = False
@@ -565,30 +585,6 @@ def _run_serenity_once_owned(
     except Exception as ex:  # noqa: BLE001
         complete = False
         errors.append(f"{type(ex).__name__}:{ex}")
-    elapsed = max(0.0, time.monotonic() - started_mono)
-    history = recent_poll_outcomes(source, limit=cfg.cost_window)
-    empty_count, failure_count = _consecutive_counts(history)
-    if complete and not fetched_metadata:
-        empty_count += 1
-    if not complete:
-        failure_count += 1
-    durations = recent_poll_durations(source, limit=cfg.cost_window)
-    if complete:
-        durations.append(elapsed)
-    schedule = compute_schedule(
-        last_elapsed_sec=elapsed,
-        completed_durations=durations,
-        now=started_dt,
-        alpha=cfg.ewma_alpha,
-        consecutive_complete_empty=empty_count,
-        consecutive_failures=failure_count,
-        retry_after_sec=retry_after,
-        backlog=backlog,
-        circuit_break=circuit_break,
-        is_trading_day=compute_market_state(started_dt).is_trading_day,
-    )
-    finished_dt = datetime.now(timezone.utc)
-    finished_at = finished_dt.isoformat()
     latest_ids = dict(cursor.get("latest_ids") or {})
     for symbol in clean_symbols:
         ids = _record_ids(row for row in fetched_metadata if str(row.get("symbol") or "") == symbol)
@@ -640,6 +636,32 @@ def _run_serenity_once_owned(
             for item in coverage
         )
     )
+    fetch_complete = bool(complete)
+    source_complete = bool(fetch_complete and coverage_complete)
+    elapsed = max(0.0, time.monotonic() - started_mono)
+    history = recent_poll_outcomes(source, limit=cfg.cost_window)
+    empty_count, failure_count = _next_consecutive_counts(
+        history,
+        source_complete=source_complete,
+        item_count=len(fetched_metadata),
+    )
+    durations = recent_poll_durations(source, limit=cfg.cost_window)
+    if source_complete:
+        durations.append(elapsed)
+    schedule = compute_schedule(
+        last_elapsed_sec=elapsed,
+        completed_durations=durations,
+        now=started_dt,
+        alpha=cfg.ewma_alpha,
+        consecutive_complete_empty=empty_count,
+        consecutive_failures=failure_count,
+        retry_after_sec=retry_after,
+        backlog=backlog,
+        circuit_break=circuit_break,
+        is_trading_day=compute_market_state(started_dt).is_trading_day,
+    )
+    finished_dt = datetime.now(timezone.utc)
+    finished_at = finished_dt.isoformat()
     run = {
         "run_id": run_id,
         "started_at": started_at,
@@ -647,25 +669,27 @@ def _run_serenity_once_owned(
         "elapsed_sec": elapsed,
         "status": (
             "success"
-            if complete and coverage_complete
+            if source_complete
             else "partial"
             if not circuit_break
             and (backlog or bool(fetched_metadata) or successful_symbol_fetches > 0)
             else "failed"
         ),
-        "complete": complete,
+        "complete": source_complete,
         "request_count": client.request_count,
         "item_count": len(fetched_metadata),
         "next_due_at": next_due_at(finished_dt, schedule.delay_sec),
         "stale_after_sec": schedule.stale_after_sec,
         "error": ";".join(errors)[:1000] if errors else None,
+        "target_id": target_meta.get("target_id"),
+        "target_activation_revision": target_meta.get("activation_revision"),
     }
     stats = commit_poll(
         source=source,
         source_kind=effective_source_kind,
         run=run,
         records=records,
-        cursor=next_cursor if complete else None,
+        cursor=next_cursor if source_complete else None,
         schema_fingerprint=schema_fingerprint,
         coverage=coverage,
         progress=progress_updates,
@@ -675,7 +699,7 @@ def _run_serenity_once_owned(
     bootstrap_complete = bool(
         bootstrap
         and effective_source_kind == "bootstrap"
-        and complete
+        and source_complete
         and days >= cfg.bootstrap_lookback_days
         and coverage
         and all(bool(item.get("metadata_complete")) and bool(item.get("hydration_complete")) for item in coverage)
@@ -710,27 +734,13 @@ def _run_serenity_once_owned(
             until_at=(finished_dt + timedelta(seconds=cfg.circuit_breaker_sec)).isoformat(),
             sample_hash=schema_fingerprint,
         )
-    elif complete and effective_source_kind in {"live", "bootstrap"}:
+    elif source_complete and effective_source_kind in {"live", "bootstrap"}:
         clear_source_breaker(source)
-    if effective_source_kind == "live":
-        live_history = recent_poll_outcomes(source, limit=20)
-        _, consecutive_live_failures = _consecutive_counts(live_history)
-        live_success_rate = (
-            sum(1 for row in live_history if bool(row.get("complete")))
-            / len(live_history)
-            if live_history
-            else 1.0
-        )
-        suspension_reason = None
-        if consecutive_live_failures >= 3:
-            suspension_reason = "three_consecutive_source_or_parse_failures"
-        elif len(live_history) >= 20 and live_success_rate < 0.90:
-            suspension_reason = "recent_20_source_success_below_90pct"
-        if suspension_reason:
-            try:
-                suspend_policy(suspension_reason)
-            except Exception as ex:  # noqa: BLE001
-                logger.error("[serenity] failed to atomically suspend policy: %s", ex)
+    if effective_source_kind == "live" and source_complete:
+        try:
+            recover_operational_suspension_after_complete_poll()
+        except Exception as ex:  # noqa: BLE001
+            logger.error("[serenity] failed to recover source-health suspension: %s", ex)
     evaluation_report: Dict[str, Any] = {}
     if effective_source_kind == "live":
         try:
@@ -817,20 +827,71 @@ def run_serenity_loop() -> None:
         return
     owner = f"worker-{uuid.uuid4().hex}"
     initialize_store()
-    if not acquire_worker_lease(owner):
-        raise RuntimeError("serenity_worker_lease_held")
-    heartbeater = _LeaseHeartbeater(owner, cfg.lease_sec)
-    heartbeater.start()
-    try:
-        while True:
-            heartbeater.assert_owned()
-            report = _run_serenity_once_owned(owner_id=owner)
-            logger.info("[serenity] poll %s", json.dumps(report, ensure_ascii=False, separators=(",", ":"), default=str))
-            delay = float((report.get("schedule") or {}).get("delay_sec") or 60.0)
-            time.sleep(max(1.0, delay))
-    finally:
-        heartbeater.stop()
-        release_worker_lease(owner)
+    retry_delay = max(5.0, min(30.0, float(cfg.lease_sec) / 3.0))
+    while True:
+        if not acquire_worker_lease(owner):
+            # A Compose recreate can begin before the stopped process's
+            # persisted lease expires. Waiting inside this long-lived service
+            # preserves the single-writer invariant without a crash/restart
+            # loop or an unsafe lease takeover.
+            logger.info("[serenity] worker lease held; retrying in %.0fs", retry_delay)
+            time.sleep(retry_delay)
+            continue
+        heartbeater = _LeaseHeartbeater(owner, cfg.lease_sec)
+        heartbeater.start()
+        try:
+            while True:
+                heartbeater.assert_owned()
+                bootstrap_required = latest_complete_bootstrap() is None
+                report = _run_serenity_once_owned(
+                    owner_id=owner,
+                    bootstrap=bootstrap_required,
+                )
+                logger.info("[serenity] poll %s", json.dumps(report, ensure_ascii=False, separators=(",", ":"), default=str))
+                if bootstrap_required and bool(report.get("bootstrap_complete")):
+                    # A successful bootstrap establishes the causal starting
+                    # point; immediately follow it with the first live target
+                    # poll instead of leaving production pending for a full
+                    # scheduler interval.
+                    continue
+                reported_target_id = str(
+                    ((report.get("target_meta") or {}).get("target_id") or "")
+                )
+                allow_target_wakeup = str(report.get("status") or "") != "circuit_open"
+                delay = float((report.get("schedule") or {}).get("delay_sec") or 60.0)
+                # The selection worker owns publication of the immutable candidate
+                # target.  Serenity must therefore observe that pointer while it is
+                # waiting for the next source poll; otherwise a startup with no
+                # target can sleep for an entire scheduler interval after the
+                # worker publishes one.  Keep the lease heartbeat alive, check the
+                # additive pointer at a bounded cadence, and contact the source
+                # only after a new target is actually visible (or the normal due
+                # time arrives).
+                remaining = max(1.0, delay)
+                while remaining > 0:
+                    active_target_id = str(
+                        (load_stable_targets().get("target_id") or "")
+                    )
+                    if (
+                        allow_target_wakeup
+                        and active_target_id
+                        and active_target_id != reported_target_id
+                    ):
+                        logger.info(
+                            "[serenity] target changed while waiting %s -> %s; polling immediately",
+                            reported_target_id or "<none>",
+                            active_target_id,
+                        )
+                        break
+                    wait_step = min(retry_delay, remaining)
+                    time.sleep(wait_step)
+                    heartbeater.assert_owned()
+                    remaining -= wait_step
+                if remaining > 0:
+                    continue
+        finally:
+            heartbeater.stop()
+            release_worker_lease(owner)
 
 
 def serenity_status() -> Dict[str, Any]:

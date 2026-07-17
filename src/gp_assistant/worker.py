@@ -8,12 +8,7 @@ from .book.board import build_board
 from .book.daybook import build_daybook
 from .book.pulse5m import compute_slot_pulse_package
 from .book.readonly import build_daily_plan_artifact, tracked_universe_from_daybook
-from .book.repo import (
-    load_current_slot_artifact,
-    load_daybook,
-    publish_current_bundle,
-    save_daybook,
-)
+from .agent_store import AgentStore
 from .book.side_results import detect_side_results
 from .contracts.objects import DayBook, LiveSlotArtifact, SlotDataQuality, SlotGate, TrackedUniverse
 from .core.config import load_config
@@ -25,7 +20,6 @@ from .evidence.daily_freshness import (
     reconcile_daily_freshness,
     resolve_daily_target,
 )
-from .evidence.portfolio_service import load_portfolio_snapshot
 from .evidence.market_service import refresh_intraday_min5_cache
 from .runtime.lanes import book_lane
 from .runtime.market_clock import (
@@ -45,6 +39,11 @@ from .runtime.slot_state import (
 )
 from .runtime.utils import gen_id, now_iso
 from .runtime.producer import producer_is_compatible, producer_metadata
+from .runtime.market_time import MarketTimeContext, compare_snapshot_market_time
+from .runtime.native_snapshot import serenity_runtime_binding_check
+from .serenity.store import (
+    current_native_readiness_state,
+)
 
 
 _INTRADAY_PHASES = {
@@ -60,25 +59,9 @@ _INTRADAY_REFRESH_FUTURE: Future | None = None
 _INTRADAY_REFRESH_LAST_RESULT: Dict[str, Any] | None = None
 
 
-def _portfolio_symbols(snapshot: Dict[str, Any]) -> list[str]:
-    return [
-        str(item.get("symbol")).strip()
-        for item in (snapshot.get("positions") or [])
-        if str(item.get("symbol") or "").strip()
-    ]
-
-
-def _tracked_universe(daybook: DayBook, portfolio_snapshot: Dict[str, Any]) -> TrackedUniverse:
+def _tracked_universe(daybook: DayBook) -> TrackedUniverse:
     tracked = tracked_universe_from_daybook(daybook)
-    holdings = _portfolio_symbols(portfolio_snapshot) if getattr(load_config(), "intraday_include_portfolio", True) else []
-    total = list(tracked.total)
-    seen = set(total)
-    for symbol in holdings:
-        if symbol and symbol not in seen:
-            seen.add(symbol)
-            total.append(symbol)
-    tracked.portfolio = holdings
-    tracked.total = total
+    tracked.portfolio = []
     return tracked
 
 
@@ -115,11 +98,10 @@ def _refresh_pending_freshness_meta(
             merged[key] = target_info.get(key)
     if merged != freshness:
         daybook.source_meta["daily_freshness"] = merged
-        save_daybook(daybook)
     return merged
 
 
-def _save_artifact(daybook: DayBook, artifact: LiveSlotArtifact) -> Dict[str, Any]:
+def _save_artifact(daybook: DayBook, artifact: LiveSlotArtifact, *, market_time: MarketTimeContext) -> Dict[str, Any]:
     if daybook.trading_day != artifact.daybook_effective_day:
         raise RuntimeError("runtime_artifact_trade_day_mismatch")
     if not producer_is_compatible(daybook.producer) or not producer_is_compatible(artifact.producer):
@@ -127,7 +109,7 @@ def _save_artifact(daybook: DayBook, artifact: LiveSlotArtifact) -> Dict[str, An
     daybook_symbols_set = {pick.symbol for pick in [*daybook.picks, *daybook.reserve_picks]}
     if any(entry.symbol not in daybook_symbols_set for entry in artifact.board):
         raise RuntimeError("runtime_artifact_board_outside_daybook")
-    publish_current_bundle(daybook, artifact)
+    AgentStore().publish_runtime_artifact(daybook, artifact, market_time=market_time)
     return {
         "artifact_id": artifact.artifact_id,
         "slot_id": artifact.slot_id,
@@ -138,35 +120,74 @@ def _save_artifact(daybook: DayBook, artifact: LiveSlotArtifact) -> Dict[str, An
     }
 
 
-def _load_or_build_daybook(trade_day: str, *, force: bool = False) -> DayBook:
-    daybook = None if force else load_daybook(trade_day)
-    if daybook is not None and not producer_is_compatible(getattr(daybook, "producer", None)):
-        daybook = None
-    freshness = dict(daybook.source_meta.get("daily_freshness") or {}) if daybook is not None else {}
-    target_info = resolve_daily_target(trade_day)
-    target_day = str(target_info.get("target_day") or "")
-    target_mode = str(target_info.get("target_mode") or "")
-    if daybook is not None and freshness:
-        freshness = _refresh_pending_freshness_meta(daybook, freshness, target_info)
-    if (
-        bool(freshness.get("ready", False))
-        and str(freshness.get("target_mode") or "") == TARGET_CURRENT_READY
-        and str(freshness.get("target_day") or "") == _trade_day_iso(trade_day)
-    ):
-        target_day = str(freshness.get("target_day") or "")
-        target_mode = str(freshness.get("target_mode") or "")
-    should_rebuild = (
-        daybook is None
-        or not producer_is_compatible(daybook.producer)
-        or not freshness
-        or freshness.get("target_day") != target_day
-        or str(freshness.get("target_mode") or "") != target_mode
-        or not bool(freshness.get("ready", False))
+def _load_or_build_daybook(market_time: MarketTimeContext, *, force: bool = False) -> DayBook:
+    """Reuse an immutable, producer-compatible daybook for completed bars only."""
+    store = AgentStore()
+    daybook = None if force else store.load_daybook(market_time.daybook_effective_day, producer=producer_metadata())
+    if daybook is not None and daybook.source_meta.get("serenity_native_ready") is False:
+        target_id = str(daybook.source_meta.get("serenity_target_id") or "")
+        if not target_id:
+            daybook = None
+        else:
+            try:
+                current = current_native_readiness_state(
+                    target_id, decision_at=market_time.observed_at
+                )
+            except Exception:
+                current = {}
+            if (
+                not bool(current.get("target_matches"))
+                or bool(current.get("certificate_current"))
+            ):
+                daybook = None
+    if daybook is not None and daybook.source_meta.get("serenity_native_ready") is True:
+        source_meta = dict(daybook.source_meta or {})
+        target_id = str(daybook.source_meta.get("serenity_target_id") or "")
+        try:
+            current = current_native_readiness_state(
+                target_id, decision_at=market_time.observed_at
+            )
+        except Exception:
+            current = {}
+        serenity_reason, _ = serenity_runtime_binding_check(
+            source_meta, current
+        )
+        if serenity_reason:
+            daybook = None
+    if daybook is not None and producer_is_compatible(daybook.producer):
+        return daybook
+    daybook = build_daybook(
+        market_time.daybook_effective_ymd,
+        topk=10,
+        reserve_count=2,
+        decision_trade_day=market_time.decision_trade_day,
+        observed_at=market_time.observed_at,
     )
-    if should_rebuild:
-        daybook = build_daybook(trade_day, topk=10, reserve_count=2)
-        save_daybook(daybook)
+    if _trade_day_iso(daybook.trading_day) != market_time.daybook_effective_day:
+        raise RuntimeError("daybook_effective_day_mismatch")
+    daybook.source_meta["market_time"] = market_time.as_dict()
     return daybook
+
+
+def _snapshot_contains_daybook(snapshot: Any, daybook: DayBook) -> bool:
+    """Return whether the current pointer already publishes this exact DayBook."""
+
+    if snapshot is None:
+        return False
+    try:
+        published = AgentStore.book_for_snapshot(snapshot).daybook
+    except Exception:
+        return False
+    return published.model_dump(mode="json") == daybook.model_dump(mode="json")
+
+
+def _snapshot_matches_market_time(
+    snapshot: Any, market_time: MarketTimeContext
+) -> bool:
+    return bool(
+        snapshot is not None
+        and compare_snapshot_market_time(snapshot, market_time).get("matches")
+    )
 
 
 _DAILY_PLAN_META_KEYS = (
@@ -235,13 +256,14 @@ def _refresh_elapsed_sec(refresh_report: Dict[str, Any] | None) -> Any:
     return None
 
 
-def _build_and_save_daily_plan(*, daybook: DayBook, trade_day: str, market_phase: str, force: bool = False) -> Dict[str, Any]:
+def _build_and_save_daily_plan(*, daybook: DayBook, trade_day: str, market_phase: str, market_time: MarketTimeContext | None = None, force: bool = False) -> Dict[str, Any]:
     return _build_and_save_runtime_artifact(
         daybook=daybook,
         trade_day=trade_day,
         market_phase=market_phase,
         target_slot_at=None,
         enable_minutes=False,
+        market_time=market_time,
         force=force,
     )
 
@@ -253,11 +275,12 @@ def _build_and_save_runtime_artifact(
     market_phase: str,
     target_slot_at: str | None,
     enable_minutes: bool,
+    market_time: MarketTimeContext | None = None,
     force: bool = False,
 ) -> Dict[str, Any]:
-    portfolio_snapshot = load_portfolio_snapshot()
-    tracked = _tracked_universe(daybook, portfolio_snapshot)
-    current = load_current_slot_artifact()
+    portfolio_snapshot: Dict[str, Any] = {}
+    tracked = _tracked_universe(daybook)
+    current = None
     expected_meta = _daily_plan_publish_meta(daybook, market_phase=market_phase)
     runtime_stage = "minute" if enable_minutes and target_slot_at else "daily"
     expected_runtime_meta = {
@@ -405,7 +428,9 @@ def _build_and_save_runtime_artifact(
                 "data_status": "daily_plan",
             }
         )
-    saved = _save_artifact(daybook, artifact)
+    if market_time is None:
+        market_time = resolve_daily_target(trade_day)
+    saved = _save_artifact(daybook, artifact, market_time=market_time)
     saved.update(
         {
             "trade_day": trade_day,
@@ -455,18 +480,37 @@ def _runtime_capabilities(cfg, ms, *, operation: str) -> Dict[str, bool]:
     return {
         "daily": True,
         "minutes": minutes_enabled,
-        "portfolio": bool(getattr(cfg, "intraday_include_portfolio", True)),
+        "portfolio": False,
     }
 
 
 def run_runtime_chain(*, now=None, operation: str = "auto") -> Dict[str, Any]:
     cfg = load_config()
     ms = compute_market_state(now)
+    market_time = resolve_daily_target(now=now)
     force_daybook = operation in {"rebuild_daybook", "replay_today", "postclose_archive"}
-    daybook = _load_or_build_daybook(ms.target_daybook_effective_day, force=force_daybook)
+    if market_time.target_mode == TARGET_CURRENT_PENDING:
+        return {
+            "trade_day": market_time.decision_trade_ymd,
+            "decision_trade_day": market_time.decision_trade_day,
+            "daybook_effective_day": market_time.daybook_effective_day,
+            "market_phase": ms.market_phase,
+            "operation": operation,
+            "runtime_chain": True,
+            "runtime_stage": "probing_eod",
+            "archived": False,
+            "pending": True,
+            "reason": "eod_daily_pending",
+            "daily_data_state": DAILY_EOD_PENDING,
+            "daily_status": DAILY_EOD_PENDING,
+            "daily_freshness": market_time.as_dict(),
+            "daily_plan_only": True,
+            "message": "今日收盘日线尚未就绪，后台会按探测 TTL 自动重试。",
+        }
+    daybook = _load_or_build_daybook(market_time, force=force_daybook)
     freshness = dict(daybook.source_meta.get("daily_freshness") or {})
     if not freshness and daybook_symbols(daybook):
-        freshness = reconcile_daily_freshness(daybook_symbols(daybook), as_of=ms.target_daybook_effective_day, strict=True)
+        freshness = reconcile_daily_freshness(daybook_symbols(daybook), as_of=market_time.daybook_effective_day, strict=True)
         daybook.source_meta["daily_freshness"] = freshness
     daily_data_state = daily_data_state_from_freshness(freshness) if freshness else "unavailable"
     if daily_data_state == DAILY_EOD_PENDING:
@@ -518,20 +562,35 @@ def run_runtime_chain(*, now=None, operation: str = "auto") -> Dict[str, Any]:
         }
 
     caps = _runtime_capabilities(cfg, ms, operation=operation)
+    current = AgentStore().current_snapshot()
+    if (
+        not force_daybook and not caps["minutes"]
+        and _snapshot_matches_market_time(current, market_time)
+        and _snapshot_contains_daybook(current, daybook)
+    ):
+        return {
+            "trade_day": market_time.decision_trade_ymd, "decision_trade_day": market_time.decision_trade_day,
+            "daybook_effective_day": market_time.daybook_effective_day, "artifact_id": current.snapshot_id,
+            "runtime_chain": True, "runtime_stage": "daily", "daily_plan_only": True, "intraday_pulse": False,
+            "noop": True, "operation": operation, "daily_freshness": freshness, "daily_data_state": daily_data_state,
+            "daily_status": daily_data_state, "capabilities": caps,
+        }
     if caps["minutes"]:
         saved = _build_and_save_runtime_artifact(
             daybook=daybook,
-            trade_day=ms.target_daybook_effective_day,
+            trade_day=market_time.decision_trade_ymd,
             market_phase=ms.market_phase,
             target_slot_at=ms.target_pulse_slot_at,
             enable_minutes=True,
+            market_time=market_time,
             force=force_daybook,
         )
     else:
         saved = _build_and_save_daily_plan(
             daybook=daybook,
-            trade_day=ms.target_daybook_effective_day,
+            trade_day=market_time.decision_trade_ymd,
             market_phase=ms.market_phase,
+            market_time=market_time,
             force=force_daybook,
         )
     saved["operation"] = operation
@@ -553,6 +612,7 @@ def reconcile_runtime_state(*, now=None, operation: str = "auto", lock_timeout_s
 
 def run_runtime_loop() -> Dict[str, Any]:
     cfg = load_config()
+    AgentStore().initialize()
     poll = max(30, int(getattr(cfg, "intraday_poll_interval_sec", 60) or 60))
     while True:
         try:
