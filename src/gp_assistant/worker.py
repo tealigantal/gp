@@ -603,8 +603,8 @@ def run_runtime_chain(*, now=None, operation: str = "auto") -> Dict[str, Any]:
     return saved
 
 
-def reconcile_runtime_state(*, now=None, operation: str = "auto") -> Dict[str, Any]:
-    with book_lane():
+def reconcile_runtime_state(*, now=None, operation: str = "auto", lock_timeout_sec: float | None = None) -> Dict[str, Any]:
+    with book_lane(timeout_sec=lock_timeout_sec):
         result = run_runtime_chain(now=now, operation=operation)
         result.setdefault("daily_plan_only", not bool(result.get("intraday_pulse")))
         return result

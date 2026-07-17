@@ -11,8 +11,6 @@ from urllib.parse import urljoin
 from zoneinfo import ZoneInfo
 
 import requests
-from requests.adapters import HTTPAdapter
-from urllib3.util.retry import Retry
 
 from .text import normalize_cn_text
 
@@ -32,21 +30,28 @@ class SourceError(RuntimeError):
 
 
 _ANNOUNCEMENT_SCHEMA_CONTRACT = {
-    "envelope": ["announcements", "totalpages"],
+    "envelope": [
+        "classifiedAnnouncements",
+        "totalSecurities",
+        "totalAnnouncement",
+        "totalRecordNum",
+        "announcements",
+        "categoryList",
+        "hasMore",
+        "totalpages",
+    ],
     "row_required": [
-        "announcementId|id",
+        "announcementId",
         "adjunctUrl",
         "secCode",
         "announcementTitle",
         "announcementTime",
     ],
-    "version": 1,
+    "version": 2,
 }
 
 
 def _schema_fingerprint(items: List[Dict[str, Any]]) -> str | None:
-    if not items:
-        return None
     return sha256(
         json.dumps(
             _ANNOUNCEMENT_SCHEMA_CONTRACT,
@@ -89,19 +94,6 @@ class CNInfoClient:
         self.page_budget = max(1, int(page_budget))
         self.spacing_sec = max(0.0, float(spacing_sec))
         self.session = session or requests.Session()
-        if session is None:
-            retry = Retry(
-                total=2,
-                connect=2,
-                read=2,
-                status=2,
-                backoff_factor=0.35,
-                status_forcelist=(500, 502, 503, 504),
-                allowed_methods=frozenset({"GET", "POST"}),
-                raise_on_status=False,
-            )
-            adapter = HTTPAdapter(max_retries=retry)
-            self.session.mount("https://", adapter)
         self.session.headers.update(
             {
                 "User-Agent": "Mozilla/5.0 (compatible; GP-Serenity/1.0; local-research)",
@@ -181,7 +173,7 @@ class CNInfoClient:
         announcements: List[Dict[str, Any]] = []
         complete = True
         has_more = False
-        total_pages = 0
+        total_pages = 1
         last_page = max(1, int(start_page)) - 1
         for page in range(max(1, int(start_page)), max(1, int(start_page)) + self.page_budget):
             last_page = page
@@ -205,28 +197,45 @@ class CNInfoClient:
             response.encoding = "utf-8"
             try:
                 payload = response.json()
-                if not isinstance(payload, dict) or "announcements" not in payload or "totalpages" not in payload:
-                    raise KeyError("required_top_level_fields_missing")
-                rows_value = payload.get("announcements")
-                raw_total_pages = int(payload.get("totalpages") or 0)
-                empty_complete = (
-                    rows_value is None
-                    and raw_total_pages == 0
-                    and not bool(payload.get("hasMore"))
-                )
-                if empty_complete:
+                if not isinstance(payload, dict):
+                    raise TypeError("announcement_payload_not_object")
+                required_envelope = _ANNOUNCEMENT_SCHEMA_CONTRACT["envelope"]
+                if any(field not in payload for field in required_envelope):
+                    raise KeyError("official_envelope_field_missing")
+                count_fields = ("totalSecurities", "totalAnnouncement", "totalRecordNum", "totalpages")
+                if any(type(payload[field]) is not int or payload[field] < 0 for field in count_fields):
+                    raise TypeError("official_envelope_count_invalid")
+                if type(payload["hasMore"]) is not bool:
+                    raise TypeError("official_envelope_has_more_invalid")
+                rows_value = payload["announcements"]
+                if rows_value is None:
+                    if not (
+                        payload["totalAnnouncement"] == 0
+                        and payload["totalRecordNum"] == 0
+                        and payload["hasMore"] is False
+                        and payload["totalpages"] == 0
+                    ):
+                        raise ValueError("official_empty_announcement_envelope_inconsistent")
                     rows_value = []
+                elif (
+                    rows_value == []
+                    and payload["totalAnnouncement"] == 0
+                    and payload["totalRecordNum"] == 0
+                    and payload["hasMore"] is False
+                    and payload["totalpages"] == 0
+                ):
+                    raise ValueError("official_empty_announcements_must_be_null")
                 if not isinstance(rows_value, list):
-                    raise TypeError("announcements_not_array_or_valid_empty")
+                    raise TypeError("official_announcements_not_nullable_array")
                 if any(not isinstance(row, dict) for row in rows_value):
-                    raise TypeError("announcement_row_not_object")
+                    raise TypeError("official_announcement_row_not_object")
                 rows = list(rows_value)
-                total_pages = max(0, raw_total_pages)
-                has_more = bool(payload.get("hasMore")) or page < total_pages
+                total_pages = payload["totalpages"]
+                has_more = payload["hasMore"]
             except Exception as ex:
                 raise SourceError("cninfo_announcement_schema_changed", schema_error=True) from ex
             for row in rows:
-                record_id = str(row.get("announcementId") or row.get("id") or "").strip()
+                record_id = str(row.get("announcementId") or "").strip()
                 if not record_id:
                     raise SourceError("cninfo_announcement_id_missing", schema_error=True)
                 adjunct = str(row.get("adjunctUrl") or "").lstrip("/")
@@ -253,7 +262,7 @@ class CNInfoClient:
                 )
             if not has_more:
                 break
-        if has_more and last_page < total_pages:
+        if has_more:
             complete = False
         return {
             "records": announcements,

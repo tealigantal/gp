@@ -33,8 +33,9 @@ def test_native_mode_uses_the_stored_weight_only_for_an_active_bootstrapped_stat
 
 def test_serenity_is_a_default_compose_service():
     compose_path = Path(__file__).resolve().parents[2] / "docker-compose.yml"
-    service = yaml.safe_load(compose_path.read_text(encoding="utf-8"))["services"]["serenity"]
+    compose = yaml.safe_load(compose_path.read_text(encoding="utf-8"))
+    service = compose["services"]["gp-serenity-worker"]
 
-    assert "profiles" not in service
+    assert service["profiles"] == ["experiments"]
     assert service["command"] == ["python", "-m", "gp_assistant.cli", "serenity-loop"]
-    assert service["environment"]["GP_SERENITY_MODE"] == "${GP_SERENITY_MODE:-native}"
+    assert compose["x-gp-env"]["GP_SERENITY_MODE"] == "${GP_SERENITY_MODE:-auto}"

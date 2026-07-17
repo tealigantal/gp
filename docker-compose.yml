@@ -1,91 +1,144 @@
-name: gp
-
-x-backend-build: &backend-build
+x-gp-build: &gp-build
   context: .
   args:
-    BASE_PY_IMAGE: ${BASE_PY_IMAGE:-python:3.11-slim-bookworm}
+    BASE_PY_IMAGE: ${BASE_PY_IMAGE:-docker.m.daocloud.io/library/python:3.11-slim-bookworm}
     PIP_INDEX_URL: ${PIP_INDEX_URL:-https://pypi.org/simple}
     HTTP_PROXY: ${HTTP_PROXY:-}
     HTTPS_PROXY: ${HTTPS_PROXY:-}
     ALL_PROXY: ${ALL_PROXY:-}
     GP_BUILD_REVISION: ${GP_BUILD_REVISION:-local}
 
-x-backend-env: &backend-env
+x-gp-env: &gp-env
   TZ: ${TZ:-Asia/Shanghai}
-  GP_STORE_DIR: /app/store
-  GP_DATA_DIR: /app/data
-  GP_UNIVERSE_DIR: /app/universe
-  GP_CONFIGS_DIR: /app/configs
-  GP_HISTORY_SQLITE_JOURNAL_MODE: DELETE
-  GP_AGENT_DB: /app/store/agent.db
-  DATA_PROVIDER: ${DATA_PROVIDER:-akshare}
-  STRICT_REAL_DATA: ${STRICT_REAL_DATA:-1}
-  GP_INTRADAY_RUNTIME_ENABLED: ${GP_INTRADAY_RUNTIME_ENABLED:-1}
+  HTTP_PROXY: ${HTTP_PROXY:-}
+  HTTPS_PROXY: ${HTTPS_PROXY:-}
+  ALL_PROXY: ${ALL_PROXY:-}
 
-x-backend: &backend
+  GP_RUN_MODE: ${GP_RUN_MODE:-prod}
+  GP_HISTORY_SQLITE_JOURNAL_MODE: ${GP_HISTORY_SQLITE_JOURNAL_MODE:-DELETE}
+  GP_HISTORY_SQLITE_FILENAME: ${GP_HISTORY_SQLITE_FILENAME:-history-clean.db}
+  GP_DEV_MODE: ${GP_DEV_MODE:-0}
+  GP_RECOMMEND_MODE: ${GP_RECOMMEND_MODE:-}
+  GP_INTRADAY_RUNTIME_ENABLED: ${GP_INTRADAY_RUNTIME_ENABLED:-1}
+  GP_DEV_SYMBOLS: ${GP_DEV_SYMBOLS:-}
+  GP_DEV_OHLCV_LEN: ${GP_DEV_OHLCV_LEN:-90}
+  GP_CORS_ORIGINS: ${GP_CORS_ORIGINS:-}
+  DATA_PROVIDER: ${DATA_PROVIDER:-akshare}
+  GP_REQUEST_TIMEOUT_SEC: ${GP_REQUEST_TIMEOUT_SEC:-30}
+  GP_INTRADAY_FETCH_WORKERS: ${GP_INTRADAY_FETCH_WORKERS:-3}
+  GP_INTRADAY_FETCH_TIMEOUT_SEC: ${GP_INTRADAY_FETCH_TIMEOUT_SEC:-180}
+  GP_INTRADAY_FETCH_RETRY_MISSING: ${GP_INTRADAY_FETCH_RETRY_MISSING:-1}
+  GP_INTRADAY_MIN5_REFRESH_SEC: ${GP_INTRADAY_MIN5_REFRESH_SEC:-120}
+  GP_INTRADAY_FETCH_BUDGET_SEC: ${GP_INTRADAY_FETCH_BUDGET_SEC:-110}
+  GP_INTRADAY_SYMBOL_COOLDOWN_SEC: ${GP_INTRADAY_SYMBOL_COOLDOWN_SEC:-90}
+  GP_INTRADAY_MODEL_MAX_STALE_SEC: ${GP_INTRADAY_MODEL_MAX_STALE_SEC:-600}
+  GP_INTRADAY_CORE_FIRST: ${GP_INTRADAY_CORE_FIRST:-1}
+  GP_SERENITY_MODE: ${GP_SERENITY_MODE:-auto}
+  GP_SERENITY_MAX_WEIGHT: ${GP_SERENITY_MAX_WEIGHT:-0.08}
+  GP_SERENITY_UPDATE_MATURE_DAYS: ${GP_SERENITY_UPDATE_MATURE_DAYS:-5}
+  GP_SERENITY_EVAL_WINDOW_DAYS: ${GP_SERENITY_EVAL_WINDOW_DAYS:-60}
+  GP_SERENITY_REQUEST_TIMEOUT_SEC: ${GP_SERENITY_REQUEST_TIMEOUT_SEC:-15}
+  GP_SERENITY_PAGE_SIZE: ${GP_SERENITY_PAGE_SIZE:-30}
+  GP_SERENITY_PAGE_BUDGET: ${GP_SERENITY_PAGE_BUDGET:-10}
+  GP_SERENITY_BOOTSTRAP_LOOKBACK_DAYS: ${GP_SERENITY_BOOTSTRAP_LOOKBACK_DAYS:-30}
+  GP_SERENITY_EVIDENCE_TTL_DAYS: ${GP_SERENITY_EVIDENCE_TTL_DAYS:-10}
+  GP_SERENITY_PDF_MAX_BYTES: ${GP_SERENITY_PDF_MAX_BYTES:-15728640}
+  GP_SERENITY_REQUEST_SPACING_SEC: ${GP_SERENITY_REQUEST_SPACING_SEC:-1}
+  GP_SERENITY_CONTENT_REVALIDATE_HOURS: ${GP_SERENITY_CONTENT_REVALIDATE_HOURS:-6}
+  GP_SERENITY_TARGET_FALLBACK_TTL_SEC: ${GP_SERENITY_TARGET_FALLBACK_TTL_SEC:-3600}
+  STRICT_REAL_DATA: ${STRICT_REAL_DATA:-1}
+  GP_FORCE_REFRESH_LOOKBACK_DAYS: ${GP_FORCE_REFRESH_LOOKBACK_DAYS:-3}
+  GP_ENFORCE_FORCE_REFRESH_ON_MISSING: ${GP_ENFORCE_FORCE_REFRESH_ON_MISSING:-1}
+  AK_SPOT_PRIORITY: ${AK_SPOT_PRIORITY:-}
+  AK_DAILY_PRIORITY: ${AK_DAILY_PRIORITY:-}
+  GP_RESTRICT_MAINLINE: ${GP_RESTRICT_MAINLINE:-1}
+  GP_MAINLINE_TOP_N: ${GP_MAINLINE_TOP_N:-2}
+  GP_MAINLINE_MODE: ${GP_MAINLINE_MODE:-auto}
+  GP_MIN_AVG_AMOUNT: ${GP_MIN_AVG_AMOUNT:-500000000}
+  GP_NEW_STOCK_DAYS: ${GP_NEW_STOCK_DAYS:-60}
+  GP_PRICE_MIN: ${GP_PRICE_MIN:-2}
+  GP_PRICE_MAX: ${GP_PRICE_MAX:-500}
+  GP_DYNAMIC_POOL_SIZE: ${GP_DYNAMIC_POOL_SIZE:-200}
+  GP_MAX_PER_INDUSTRY: ${GP_MAX_PER_INDUSTRY:-2}
+  GP_TRADEABLE_MIN_UNIVERSE: ${GP_TRADEABLE_MIN_UNIVERSE:-50}
+  GP_TRADEABLE_MIN_CANDIDATES: ${GP_TRADEABLE_MIN_CANDIDATES:-20}
+  LLM_BASE_URL: ${LLM_BASE_URL:-https://api.deepseek.com/beta}
+  LLM_API_KEY: ${LLM_API_KEY:-}
+  CHAT_MODEL: ${CHAT_MODEL:-deepseek-chat}
+  AGENT_MODEL: ${AGENT_MODEL:-${CHAT_MODEL:-deepseek-chat}}
+
+x-gp-volumes: &gp-volumes
+  - ./data:/app/data
+  - ./results:/app/results
+  - ./universe:/app/universe
+  - ./store:/app/store
+  - ./cache:/app/cache
+  - ./configs:/app/configs
+
+x-gp-service: &gp-service
   image: ${GP_BACKEND_IMAGE:-gp-backend}:${GP_BACKEND_TAG:-local}
   pull_policy: never
+  volumes: *gp-volumes
   env_file:
-    - path: .env
-      required: false
-  environment: *backend-env
-  volumes:
-    - ./store:/app/store
-    - ./data:/app/data
-    - ./universe:/app/universe:ro
-    - ./configs:/app/configs:ro
-  init: true
+    - .env
+  environment: *gp-env
 
 services:
-  api:
-    <<: *backend
-    build: *backend-build
-    command: ["python", "-m", "gp_assistant.cli", "serve", "--host", "0.0.0.0", "--port", "8000"]
+  gp:
+    <<: *gp-service
+    build: *gp-build
+    command: ["uvicorn", "gp_assistant.gateway.app:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "2", "--proxy-headers", "--forwarded-allow-ips", "*"]
     ports:
       - "8000:8000"
-    healthcheck:
-      test: ["CMD", "python", "-c", "from urllib.request import urlopen; urlopen('http://127.0.0.1:8000/api/health', timeout=3).read()"]
-      interval: 15s
-      timeout: 5s
-      retries: 3
-      start_period: 15s
     restart: unless-stopped
 
-  worker:
-    <<: *backend
+  gp-worker:
+    <<: *gp-service
     command: ["python", "-m", "gp_assistant.cli", "runtime-loop"]
-    depends_on:
-      api:
-        condition: service_healthy
     restart: unless-stopped
 
-  serenity:
-    <<: *backend
-    environment:
-      <<: *backend-env
-      GP_SERENITY_MODE: ${GP_SERENITY_MODE:-native}
+  gp-serenity-worker:
+    <<: *gp-service
     command: ["python", "-m", "gp_assistant.cli", "serenity-loop"]
-    depends_on:
-      api:
-        condition: service_healthy
+    profiles: ["experiments"]
     restart: unless-stopped
+
+  gp-serenity-bootstrap:
+    <<: *gp-service
+    command: ["python", "-m", "gp_assistant.cli", "serenity-bootstrap", "--lookback-days", "30"]
+    profiles: ["serenity-bootstrap"]
+    restart: "no"
+
+  gp-rebuild-daybook:
+    <<: *gp-service
+    command: ["python", "-m", "gp_assistant.cli", "ops-run", "rebuild-daybook"]
+    profiles: ["ops"]
+    restart: "no"
+
+  gp-postclose-archive:
+    <<: *gp-service
+    command: ["python", "-m", "gp_assistant.cli", "ops-run", "postclose-archive"]
+    profiles: ["ops"]
+    restart: "no"
 
   web:
     build:
       context: ./frontend
       args:
-        BASE_NODE_IMAGE: ${BASE_NODE_IMAGE:-node:20-alpine}
-        BASE_NGINX_IMAGE: ${BASE_NGINX_IMAGE:-nginx:1.25-alpine}
-        NPM_REGISTRY: ${NPM_REGISTRY:-https://registry.npmjs.org}
+        BASE_NODE_IMAGE: ${BASE_NODE_IMAGE:-docker.m.daocloud.io/library/node:20-alpine}
+        BASE_NGINX_IMAGE: ${BASE_NGINX_IMAGE:-docker.m.daocloud.io/library/nginx:1.25-alpine}
+        NPM_REGISTRY: ${NPM_REGISTRY:-https://registry.npmmirror.com}
         HTTP_PROXY: ${HTTP_PROXY:-}
         HTTPS_PROXY: ${HTTPS_PROXY:-}
         ALL_PROXY: ${ALL_PROXY:-}
+    environment:
+      HTTP_PROXY: ${HTTP_PROXY:-}
+      HTTPS_PROXY: ${HTTPS_PROXY:-}
+      ALL_PROXY: ${ALL_PROXY:-}
     depends_on:
-      api:
-        condition: service_healthy
+      - gp
     ports:
       - "8080:80"
     volumes:
       - ./frontend/nginx.conf:/etc/nginx/conf.d/default.conf:ro
-    init: true
     restart: unless-stopped

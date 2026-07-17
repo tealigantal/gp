@@ -1,13 +1,13 @@
 # Research Log
 
-## 2026-07-14 — Real LLM provider/model verification
+## 2026-07-17 — DeepSeek Beta strict tool routing
 
-- **Question:** Which configured OpenAI-compatible model is available for the restored production chat path, and what authority may it hold?
-- **Checked date:** 2026-07-14.
-- **Official sources:** [DeepSeek API documentation](https://api-docs.deepseek.com/), [model-list endpoint](https://api-docs.deepseek.com/api/list-models), and [pricing/model context](https://api-docs.deepseek.com/quick_start/pricing/).
-- **Observed deployment configuration:** `LLM_BASE_URL=https://api.deepseek.com/v1` and `CHAT_MODEL=deepseek-v4-flash`.
-- **Verification method:** Real `/api/chat` calls record request model, response model, provider response ID, HTTP status and latency for every routing/narration stage. The model name is deployment evidence, not a fixed architecture dependency.
-- **Authority decision:** The provider may classify intent and narrate a locally validated compact certificate. It may not select, rank, score, price or change actions; all quantitative display values remain opaque until local expansion and validation.
+- **Question:** Why did compact real `/api/chat` routing calls return HTTP 400 from DeepSeek?
+- **Checked date:** 2026-07-17.
+- **Official source:** DeepSeek Function Calling documentation and Chat Completion reference.
+- **Observation:** The live routing payload was 7,492 bytes, so it was below the local 600,000-byte budget and not the prior prompt-overflow incident. A direct Beta request returned the provider error `Thinking mode does not support this tool_choice`; the same complete GP tool schema returned HTTP 200 after thinking was explicitly disabled.
+- **Provider constraint:** Strict function mode is a Beta feature and every property of each object must be required with `additionalProperties=false`.
+- **Decision impact:** GP uses `https://api.deepseek.com/beta` without a `/v1` fallback, keeps strict tools, encodes unknown routing fields as explicit JSON `null`, and always disables thinking for required-tool routing.
 
 ## 2026-07-11 — Free official data for Serenity Alpha
 
@@ -28,23 +28,10 @@
 - **Verification rule:** CNINFO PDF evidence is retained, but a fact is not `verified` or scoring-eligible unless the corresponding SSE/SZSE metadata check succeeds. Verification failure is unknown, not weak confirmation.
 - **Correction rule:** Backfill relations never affect scoring. A live correction freezes only an exact fact ID or matching earnings-report-period key; an unresolved live relation with no trustworthy target zeros only that symbol's Serenity contribution until resolved, leaving baseline Adaptive untouched.
 
-### 2026-07-14 authority supersession
+## 2026-07-17 — CNINFO announcement-query envelope v2 observation
 
-ADR 0005 supersedes the earlier reference-only and symbol-local degradation conclusions. Serenity is now the mandatory ninth Adaptive expert for production. Complete known-empty coverage is a neutral zero Alpha; any unavailable symbol, unresolved correction, incomplete PDF extraction, stale poll or target mismatch blocks the whole exact candidate set. Production never publishes an eight-expert baseline while Serenity is incomplete.
-
-## 2026-07-13 — Resident reference-service operating model (historical; authority superseded by ADR 0005)
-
-- **Question:** How can official-evidence collection be available after every normal local startup without converting uncertain free-source evidence into selection authority?
-- **Decision:** Start Serenity as the default `serenity` Docker Compose service in `reference` mode. It may collect, verify, version, persist, and report evidence health, but it has zero decision weight.
-- **Compatibility:** A legacy `GP_SERENITY_MODE=auto` is normalized to `reference`; only `off` disables the service behavior.
-- **Rationale:** This keeps collection continuously available while preserving the deterministic Adaptive Decision Engine as the only ranking authority. A future ranking integration needs a new explicit decision and fresh causal validation.
-## 2026-07-13 — Recommendation-engine database input audit (historical checkpoint)
-
-Evidence inspected locally, without external research:
-
-- The selection pipeline takes current OHLCV through `MarketDataHub`, writes historical signal events to `market_memory.db`, and retrieves only events with `as_of < decision_as_of` and `outcome.complete=true`.
-- Each retrievable event supplies normalized feature vectors, raw features, market-regime context, realized outcomes, and data provenance. Retrieval is normalized feature-vector distance; matching signal/regime labels are small adjustments only.
-- Probability consumes retrieved outcomes and priors; risk consumes the candidate signal/probability; adaptive policy owns final selection. The LLM has no selection authority.
-- The product-facing snapshot is a projection of the daybook, not a second decision source. It carries rank, entry/stop/take-profit plans, probability/evidence, risk flags, scoring, and evidence references.
-
-At that 2026-07-13 checkpoint, the evidence architecture was appropriate for a professional decision-support agent, but the observed production data was not fresh enough to issue a professional recommendation. The correct response at that time was `no_trade` until the worker refreshed and validated the next trading-day data; this paragraph is not a claim about the current runtime state.
+- **Source and checked date:** Live `POST https://www.cninfo.com.cn/new/hisAnnouncement/query`, checked 2026-07-17. This is the public CNINFO web-query endpoint used by Serenity, not a paid CNINFO Data Service API.
+- **Observed request/response:** Exact-stock form queries use `stock={symbol},{orgId}`, `column`, `seDate`, pagination fields and `tabName=fulltext`. The complete top-level response contains `classifiedAnnouncements`, `totalSecurities`, `totalAnnouncement`, `totalRecordNum`, `announcements`, `categoryList`, `hasMore`, and `totalpages`. A genuine no-result response returned HTTP 200 with `announcements:null`, all record counts and `totalpages` equal to 0, and `hasMore:false`.
+- **Observed non-empty fields:** Each announcement row includes `announcementId`, `secCode`, `secName`, `orgId`, `announcementTitle`, epoch-millisecond `announcementTime`, `adjunctUrl`, and additional official metadata. `id` was null in observed rows.
+- **Maintenance and applicability:** CNINFO's public web interface has no contractual stability guarantee. The collector now follows this observed v2 shape strictly: only `announcementId` is accepted as the record key, only the official nullable empty representation is accepted, and `hasMore` alone controls continuation because exact-stock queries may report `totalpages:0` even when rows exist.
+- **Decision impact:** The prior `cninfo_announcement_schema_changed` was a local parser defect, not evidence of a provider field rename. A valid empty poll completes with zero evidence and keeps Serenity at its additive 0% contribution.

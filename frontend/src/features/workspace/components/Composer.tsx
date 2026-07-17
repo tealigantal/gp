@@ -1,18 +1,24 @@
-import { Button, Input, Space, Typography } from 'antd'
+import { Alert, Button, Input, Space, Typography } from 'antd'
 
 interface ComposerProps {
   value: string
   onChange: (value: string) => void
   onSubmit: () => void
   disabled?: boolean
-  loading?: boolean
-  disabledReason?: string
+  llmReady?: boolean
 }
 
-export function Composer({ value, onChange, onSubmit, disabled, loading, disabledReason }: ComposerProps) {
-  const inputDisabled = Boolean(disabled || loading)
+export function Composer({ value, onChange, onSubmit, disabled, llmReady }: ComposerProps) {
   return (
     <div className="composer-wrap">
+      {!llmReady ? (
+        <Alert
+          type="warning"
+          showIcon
+          message="自然语言助手当前不可用，请先检查后端配置，并确认 `/api/health` 返回 `llm_ready=true`。"
+          style={{ marginBottom: 12 }}
+        />
+      ) : null}
       <div className="composer-headline">
         <Typography.Text className="section-kicker">Ask Naturally</Typography.Text>
         <Typography.Text className="section-subtitle">
@@ -35,14 +41,14 @@ export function Composer({ value, onChange, onSubmit, disabled, loading, disable
                 onSubmit()
               }
             }}
-            disabled={inputDisabled}
+            disabled={disabled || !llmReady}
           />
-          <Button type="primary" onClick={onSubmit} loading={loading} disabled={disabled}>
+          <Button type="primary" onClick={onSubmit} loading={disabled} disabled={!llmReady}>
             发送问题
           </Button>
         </Space.Compact>
         <div className="composer-footer">
-          <Typography.Text type="secondary">{disabled && disabledReason ? disabledReason : '直接说问题本身，不需要先解释你要调用什么功能。'}</Typography.Text>
+          <Typography.Text type="secondary">直接说问题本身，不需要先解释你要调用什么功能。</Typography.Text>
           <Typography.Text type="secondary">Enter 发送，Shift + Enter 换行</Typography.Text>
         </div>
       </div>

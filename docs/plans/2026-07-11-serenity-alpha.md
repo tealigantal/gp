@@ -17,7 +17,9 @@ Deliver a real free-data official-announcement experiment that is useful on its 
 - [x] 2026-07-11: Executed a real 30-day CNINFO bootstrap for `000001`: 4 HTTP requests, 2 PDF-backed records, complete per-symbol coverage, bootstrap marker `serboot_9006363b1b6de1090d027602`, and zero qualifying facts without fabrication.
 - [x] 2026-07-11: Executed a second isolated real bootstrap for `000977`: 2 PDF-backed records and one verified 0.92-confidence positive fact; the backfill remained reference-only and applied weight stayed 0%.
 - [x] 2026-07-11: Passed the final 119-test targeted checkpoint, all 311 tests in the isolated default suite, changed-file Ruff, compileall, diff check, and both Compose profile renders.
-- [ ] Execute Docker image/runtime and live API smoke when the local Docker Desktop Linux engine is available; the engine pipe was absent during this implementation session.
+- [x] 2026-07-17: Rebuilt the shared backend and Web images locally, recreated the API, market worker, Serenity worker, and Web containers without deleting mounted runtime directories, and verified API health plus backend source provenance.
+- [x] 2026-07-17: Replaced the legacy announcement envelope with the observed CNINFO v2 contract. A successful no-result query is `announcements: null` with zero counts, `hasMore: false`, and `totalpages: 0`; it now completes as zero records rather than opening a schema breaker.
+- [x] 2026-07-17: Cleared only the obsolete pre-repair CNINFO breaker and ran the renewed worker. Its first live poll covered `002594` and `600000` successfully: 3 requests, 0 records, complete metadata/hydration coverage, no errors, and a 0% Serenity weight.
 
 ## Surprises & Discoveries
 
@@ -40,6 +42,7 @@ Deliver a real free-data official-announcement experiment that is useful on its 
 - Preserve nine deterministic counterfactual arms for every frozen decision.
 - Set automatic-learning hard cap to 8%; promotion begins at 1% probation and active learning begins at 2%.
 - LLM receives bounded verified facts after routing and may only explain computed results.
+- Treat the current CNINFO web-query response as one strict versioned contract: no `id` fallback, no empty-list compatibility for an official null empty page, and no pagination inference from `totalpages`.
 - A binding decision is fail-closed if its Serenity reference snapshot or pending evaluation cannot be persisted.
 - T+5 outcomes are evaluated no earlier than the next actual trading day and only with a complete finite five-bar window.
 
