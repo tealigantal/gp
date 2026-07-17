@@ -102,10 +102,10 @@ Market Data
 - `web`：前端单页 Workspace
 - `gp-rebuild-daybook`：按需手工重建 daybook
 - `gp-postclose-archive`：按需执行收盘后归档
-- `gp-serenity-worker`：可选实验 worker，只读取当前 Top10、reserve 与持仓，采集免费官方公告并做前向影子验证
+- `gp-serenity-worker`：常驻 Serenity worker，只读取当前 Top10、reserve 与持仓，采集免费官方公告并做前向影子验证
 - `gp-serenity-bootstrap`：一次性真实 30 日公告 bootstrap，与常驻实验 worker 使用不同 Compose profile
 
-`gp` 和 `gp-worker` 是常驻服务；`gp-rebuild-daybook` 与 `gp-postclose-archive` 位于 Compose 的 `ops` profile 下，按需手工运行。当前仓库没有额外 scheduler / cron / 队列系统。
+`gp`、`gp-worker` 和 `gp-serenity-worker` 是常驻服务，普通 `docker compose up -d` 会一并启动；`gp-rebuild-daybook` 与 `gp-postclose-archive` 位于 Compose 的 `ops` profile 下，按需手工运行。当前仓库没有额外 scheduler / cron / 队列系统。
 
 Serenity 默认配置为 `auto`，但初始状态固定为 `warming/shadow + 0%`；没有完成真实 bootstrap 与前向门槛时，不会改变正式排序。
 
@@ -193,7 +193,7 @@ docker compose --profile serenity-bootstrap run --rm gp-serenity-bootstrap
 确认 bootstrap 成功后，再启动常驻 worker：
 
 ```powershell
-docker compose --profile experiments up -d gp-serenity-worker
+docker compose up -d gp-serenity-worker
 docker compose logs -f gp-serenity-worker
 ```
 

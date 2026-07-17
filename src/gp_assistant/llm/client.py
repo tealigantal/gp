@@ -1,13 +1,18 @@
 from __future__ import annotations
 
+import json
+import os
 from datetime import datetime, timezone
+from pathlib import Path
 from threading import Lock, local
 from time import monotonic
 from typing import Any, Dict, List, Optional, Tuple
+from uuid import uuid4
 
 import requests
 
 from ..core.config import load_config
+from ..core.paths import store_dir
 from ..runtime.context_budget import (
     ROUTING_PAYLOAD_LIMIT_BYTES,
     encode_llm_payload,
@@ -36,6 +41,45 @@ _RUNTIME_STATUS: Dict[str, Any] = {
 
 def _utc_now() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def _runtime_status_path() -> Path:
+    return store_dir() / "llm_runtime_status.json"
+
+
+def _read_persisted_runtime_status() -> Dict[str, Any]:
+    try:
+        value = json.loads(_runtime_status_path().read_text(encoding="utf-8"))
+    except (OSError, TypeError, ValueError):
+        return {}
+    return dict(value) if isinstance(value, dict) else {}
+
+
+def _write_persisted_runtime_status(status: Dict[str, Any]) -> None:
+    path = _runtime_status_path()
+    temporary = path.with_name(f".{path.name}.{uuid4().hex}.tmp")
+    try:
+        with temporary.open("x", encoding="utf-8", newline="\n") as handle:
+            handle.write(json.dumps(status, ensure_ascii=False, sort_keys=True))
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary, path)
+    except OSError:
+        # Health telemetry must not make a completed chat turn fail.
+        pass
+    finally:
+        try:
+            temporary.unlink(missing_ok=True)
+        except OSError:
+            pass
+
+
+def _update_runtime_status(update: Dict[str, Any]) -> None:
+    """Keep LLM health visible across the two Uvicorn worker processes."""
+    with _STATUS_LOCK:
+        merged = {**_RUNTIME_STATUS, **_read_persisted_runtime_status(), **update}
+        _RUNTIME_STATUS.update(merged)
+        _write_persisted_runtime_status(merged)
 
 
 def _record_call(
@@ -70,8 +114,7 @@ def _record_call(
                 "last_error": f"{type(error).__name__}:{error}" if error is not None else "unknown",
             }
         )
-    with _STATUS_LOCK:
-        _RUNTIME_STATUS.update(update)
+    _update_runtime_status(update)
     trace = {
         "stage": str(stage),
         "success": bool(success),
@@ -175,15 +218,14 @@ def record_product_chat(
                 ),
             }
         )
-    with _STATUS_LOCK:
-        _RUNTIME_STATUS.update(update)
+    _update_runtime_status(update)
 
 
 def llm_status() -> Dict[str, Any]:
     client = LLMClient()
     configured, reason = client.available()
     with _STATUS_LOCK:
-        runtime = dict(_RUNTIME_STATUS)
+        runtime = {**_RUNTIME_STATUS, **_read_persisted_runtime_status()}
     success_at = None
     try:
         success_at = datetime.fromisoformat(

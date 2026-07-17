@@ -380,7 +380,7 @@ class AgentStore:
             reference_input_checksum,
             reference_learning_sample_id,
         )
-        from .serenity.models import SerenityReferenceSnapshot
+        from .serenity.models import NATIVE_SERENITY_FORMULA_VERSION, SerenityReferenceSnapshot
         from .serenity.store import pending_evaluation_id
 
         meta = dict(daybook.source_meta or {})
@@ -486,6 +486,7 @@ class AgentStore:
             raise SnapshotIntegrityError("runtime_serenity_policy_binding_invalid") from exc
         if (
             not formula_version
+            or formula_version != NATIVE_SERENITY_FORMULA_VERSION
             or (
                 meta.get("serenity_native_ready") is True
                 and not semantic_revision

@@ -142,8 +142,8 @@ def _explicit_topk(message: str) -> int | None:
         match = re.search(pattern, text, flags=re.IGNORECASE)
         if match:
             return max(1, min(10, int(match.group(1))))
-    chinese = {"一": 1, "二": 2, "三": 3, "四": 4, "五": 5, "六": 6, "七": 7, "八": 8, "九": 9, "十": 10}
-    match = re.search(r"([一二三四五六七八九十])\s*只", text)
+    chinese = {"一": 1, "二": 2, "两": 2, "三": 3, "四": 4, "五": 5, "六": 6, "七": 7, "八": 8, "九": 9, "十": 10}
+    match = re.search(r"([一二两三四五六七八九十])\s*只", text)
     return chinese.get(match.group(1)) if match else None
 
 
@@ -151,6 +151,20 @@ def _sanitize_frame(frame: TurnFrame, user_message: str) -> TurnFrame:
     """Trust the LLM for intent class only; re-derive factual references."""
 
     text = str(user_message or "")
+    explicit_topk = _explicit_topk(text)
+    candidate_plan_requested = (
+        frame.request in {"term_explain", "chat"}
+        and any(token in text for token in ("候选", "推荐", "选股"))
+        and (
+            explicit_topk is not None
+            or any(token in text for token in ("当前", "计划", "给我", "给出", "列出", "哪些"))
+        )
+    )
+    # A provider may focus on the named Serenity term and lose the concrete
+    # request to show candidates.  Candidate scope is a local authority
+    # boundary, so preserve it deterministically before building evidence.
+    request = "recommend" if candidate_plan_requested else frame.request
+    subject = "run" if candidate_plan_requested else frame.subject
     symbols = list(dict.fromkeys(_SYMBOL_RE.findall(text)))
     refs: dict[str, Any] = {}
     if symbols:
@@ -164,17 +178,19 @@ def _sanitize_frame(frame: TurnFrame, user_message: str) -> TurnFrame:
     refresh_requested = any(token in text for token in ("刷新", "重建", "重跑", "重新跑", "更新数据"))
     history_requested = any(token in text for token in ("上一轮", "上次", "此前", "之前", "历史"))
     constraints = {
-        "topk": _explicit_topk(text) or 3,
+        "topk": explicit_topk or 3,
         "require_refresh": refresh_requested,
         "history_mode": history_requested,
         "refresh_intent": "rebuild" if refresh_requested else "none",
         "allow_derived_data": True,
     }
-    if frame.request == "term_explain":
+    if request == "term_explain":
         constraints["term_text"] = text[:200]
     return frame.model_copy(
         update={
             "raw_message": text,
+            "request": request,
+            "subject": subject,
             "references": refs,
             "constraints": constraints,
             "freshness": "rebuild_run" if refresh_requested else frame.freshness,

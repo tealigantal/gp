@@ -17,6 +17,7 @@ from gp_assistant.chat_agent import (
     _number_variants,
     _provider_narration_context,
     _resolve_provider_value_tokens,
+    _sanitize_frame,
     _validate_narration_authority,
     run_chat_turn,
 )
@@ -24,6 +25,30 @@ from gp_assistant.contracts.objects import AdviceRun, Judgment, ReplyBundle, Tur
 from gp_assistant.core.errors import APIError
 from gp_assistant.runtime.grounding import validate_reply
 from tests.agent.test_agent_store import make_book, patch_chat_llm
+
+
+@pytest.mark.parametrize("frame_request", ["term_explain", "chat"])
+def test_named_serenity_term_cannot_hide_explicit_candidate_request(frame_request):
+    frame = TurnFrame(
+        frame_id="frame-term",
+        raw_message="",
+        subject="run",
+        request=frame_request,
+        freshness="active_run",
+        references={},
+        constraints={},
+        ambiguity={"confidence": 0.9, "notes": [], "needs_clarification": False},
+    )
+
+    normalized = _sanitize_frame(
+        frame,
+        "请概括当前两只候选的计划，并说明 Serenity 是否已经接入。",
+    )
+
+    assert normalized.request == "recommend"
+    assert normalized.subject == "run"
+    assert normalized.constraints["topk"] == 2
+    assert "term_text" not in normalized.constraints
 
 
 def test_two_stage_llm_trace_is_committed_with_snapshot(monkeypatch, tmp_path):

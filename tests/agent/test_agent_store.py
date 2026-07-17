@@ -749,6 +749,31 @@ def test_runtime_evidence_mismatch_is_rejected_before_any_sidecar_write(
     assert store.current_snapshot() is None
 
 
+def test_runtime_rejects_pre_native_formula_before_any_sidecar_write(
+    tmp_path, monkeypatch
+):
+    monkeypatch.setenv("GP_MARKET_MEMORY_DIR", str(tmp_path / "market-memory"))
+    monkeypatch.setenv("GP_SERENITY_STORE_DIR", str(tmp_path / "serenity"))
+    store = AgentStore(tmp_path / "agent.db")
+    daybook, artifact, market_time = make_pending_runtime()
+    daybook.source_meta["serenity_formula_version"] = "SerenityAddon.v1"
+    writes = []
+    monkeypatch.setattr(
+        store,
+        "_persist_decision_snapshot",
+        lambda snapshot: writes.append(snapshot) or snapshot["snapshot_id"],
+    )
+
+    with pytest.raises(
+        SnapshotIntegrityError, match="runtime_serenity_policy_binding_invalid"
+    ):
+        store.publish_runtime_artifact(
+            daybook, artifact, market_time=market_time
+        )
+    assert writes == []
+    assert store.current_snapshot() is None
+
+
 def test_ready_runtime_persists_decision_reference_pending_before_visibility(
     tmp_path, monkeypatch
 ):

@@ -26,6 +26,7 @@ from .models import NATIVE_SERENITY_FORMULA_VERSION, SerenityPolicyState
 from .scheduler import trading_day_cooldown_until
 from .store import (
     commit_evaluation_result,
+    ensure_native_formula_epoch,
     list_evaluations,
     list_pending_evaluations,
     load_policy_state,
@@ -36,6 +37,12 @@ from .store import (
 
 
 EVALUATION_FORMULA_VERSION = "SerenityEvaluation.v1"
+_LEGACY_REFERENCE_SNAPSHOT_VALIDATION_ERROR = "reference_snapshot_unreadable:ValidationError"
+_OPERATIONAL_SUSPENSION_REASONS = {
+    "three_consecutive_source_or_parse_failures",
+    "recent_20_source_success_below_90pct",
+    "source_success_below_90pct",
+}
 
 
 def _safe_float(value: Any, default: float = 0.0) -> float:
@@ -461,6 +468,120 @@ def _dedupe_learning_evaluations(rows: Iterable[Dict[str, Any]]) -> List[Dict[st
     return list(unique.values())
 
 
+def _reference_checksum_is_valid(reference) -> bool:
+    """Verify that a persisted reference still represents its frozen inputs."""
+    return reference_input_checksum(
+        decision_context_snapshot_id=reference.decision_context_snapshot_id,
+        decision_day=reference.decision_day,
+        decision_at=reference.decision_at,
+        signals=reference.signals,
+        arms=reference.counterfactual_arms,
+        reference_arms=reference.reference_counterfactual_arms,
+        risk_plans=reference.risk_plans,
+        learning_sample_id=reference.learning_sample_id,
+        actual_weight=reference.actual_weight,
+        policy_state=reference.policy_state,
+        baseline_selected_symbols=reference.baseline_selected_symbols,
+        applied_selected_symbols=reference.applied_selected_symbols,
+        would_change_topk=reference.would_change_topk,
+    ) == reference.input_checksum
+
+
+def _legacy_reference_validation_error_is_resolved(row: Mapping[str, Any]) -> bool:
+    """Recognize only old false positives that validate under the current schema.
+
+    A prior runtime rejected v2 frozen signals because it lacked their additive
+    provenance fields.  The old evaluations stay immutable; this check merely
+    prevents that already-proven parser mismatch from permanently acting as an
+    integrity failure after the schema has been made compatible.
+    """
+    errors = [str(item) for item in list(row.get("integrity_errors") or []) if str(item)]
+    if errors != [_LEGACY_REFERENCE_SNAPSHOT_VALIDATION_ERROR]:
+        return False
+    snapshot_id = str(row.get("reference_snapshot_id") or "")
+    if not snapshot_id:
+        return False
+    try:
+        reference = load_reference_snapshot(snapshot_id)
+    except Exception:  # noqa: BLE001
+        return False
+    return bool(
+        reference is not None
+        and reference.input_checksum == str(row.get("input_hash") or "")
+        and _reference_checksum_is_valid(reference)
+    )
+
+
+def recover_legacy_reference_snapshot_validation_suspension_after_complete_poll() -> SerenityPolicyState:
+    """Clear only the old parser false-positive after a complete live poll.
+
+    This never grants Serenity a non-zero weight.  It requires every affected
+    immutable snapshot to validate and checksum under the current model, then
+    returns the existing epoch to normal shadow observation.  Any other
+    integrity error remains fail-closed.
+    """
+    for _ in range(3):
+        state = load_policy_state()
+        reasons = set(state.suspension_reasons)
+        allowed_reasons = {*_OPERATIONAL_SUSPENSION_REASONS, _LEGACY_REFERENCE_SNAPSHOT_VALIDATION_ERROR}
+        if (
+            state.state != "suspended"
+            or _LEGACY_REFERENCE_SNAPSHOT_VALIDATION_ERROR not in reasons
+            or not reasons <= allowed_reasons
+        ):
+            return state
+        evaluations = list_evaluations(epoch=state.epoch, limit=2000)
+        affected = [
+            row
+            for row in evaluations
+            if _LEGACY_REFERENCE_SNAPSHOT_VALIDATION_ERROR in list(row.get("integrity_errors") or [])
+        ]
+        if not affected or not all(_legacy_reference_validation_error_is_resolved(row) for row in affected):
+            return state
+        if any(
+            list(row.get("integrity_errors") or [])
+            and not _legacy_reference_validation_error_is_resolved(row)
+            for row in evaluations
+        ):
+            return state
+        transition_reason = "legacy_reference_schema_validated"
+        next_state = state.model_copy(
+            update={
+                "state": "shadow",
+                "previous_weight": 0.0,
+                "applied_weight": 0.0,
+                "state_since": now_iso(),
+                "cooldown_until": None,
+                "suspension_reasons": [],
+                "consecutive_failures": 0,
+                "consecutive_passes": 0,
+                "transition_log_hash": _transition_hash(
+                    state,
+                    new_state="shadow",
+                    new_weight=0.0,
+                    reason=transition_reason,
+                ),
+            }
+        )
+        try:
+            return save_policy_state_with_ledger(
+                next_state,
+                expected_version=state.version,
+                evaluation_id="reference_schema_recovered_" + sha256(
+                    f"{state.epoch}|{state.transition_log_hash}".encode("utf-8")
+                ).hexdigest()[:16],
+                ledger_payload={
+                    "transition": "legacy_reference_schema_validated_to_shadow",
+                    "cleared_reasons": sorted(reasons),
+                    "affected_evaluation_count": len(affected),
+                },
+            )
+        except RuntimeError as ex:
+            if not str(ex).startswith("serenity_policy_cas_conflict"):
+                raise
+    raise RuntimeError("serenity_policy_cas_conflict_exhausted")
+
+
 def _suspend(state: SerenityPolicyState, reasons: List[str]) -> SerenityPolicyState:
     now = datetime.now(timezone.utc)
     return state.model_copy(
@@ -483,6 +604,7 @@ def update_policy_from_evaluations(state: SerenityPolicyState, evaluations: List
     integrity_errors = [
         str(error)
         for row in all_epoch_rows
+        if not _legacy_reference_validation_error_is_resolved(row)
         for error in list(row.get("integrity_errors") or [])
         if str(error)
     ] if state.state != "suspended" else []
@@ -714,6 +836,9 @@ def update_policy_from_evaluations(state: SerenityPolicyState, evaluations: List
 
 
 def process_pending_evaluations(*, data_source: Any | None = None, today: date | None = None) -> Dict[str, Any]:
+    # Retire a delayed write from a pre-cutover runtime artifact before it can
+    # be misclassified as a native evaluation and suspend the current epoch.
+    ensure_native_formula_epoch()
     pending = list_pending_evaluations(limit=200)
     saved: List[str] = []
     for item in pending:

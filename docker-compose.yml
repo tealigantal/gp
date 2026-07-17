@@ -33,7 +33,7 @@ x-gp-env: &gp-env
   GP_INTRADAY_SYMBOL_COOLDOWN_SEC: ${GP_INTRADAY_SYMBOL_COOLDOWN_SEC:-90}
   GP_INTRADAY_MODEL_MAX_STALE_SEC: ${GP_INTRADAY_MODEL_MAX_STALE_SEC:-600}
   GP_INTRADAY_CORE_FIRST: ${GP_INTRADAY_CORE_FIRST:-1}
-  GP_SERENITY_MODE: ${GP_SERENITY_MODE:-auto}
+  GP_SERENITY_MODE: ${GP_SERENITY_MODE:-native}
   GP_SERENITY_MAX_WEIGHT: ${GP_SERENITY_MAX_WEIGHT:-0.08}
   GP_SERENITY_UPDATE_MATURE_DAYS: ${GP_SERENITY_UPDATE_MATURE_DAYS:-5}
   GP_SERENITY_EVAL_WINDOW_DAYS: ${GP_SERENITY_EVAL_WINDOW_DAYS:-60}
@@ -100,7 +100,6 @@ services:
   gp-serenity-worker:
     <<: *gp-service
     command: ["python", "-m", "gp_assistant.cli", "serenity-loop"]
-    profiles: ["experiments"]
     restart: unless-stopped
 
   gp-serenity-bootstrap:

@@ -404,9 +404,24 @@ def initialize_store() -> Path:
 
 
 def ensure_native_formula_epoch() -> Dict[str, Any]:
-    """Retire legacy add-on samples and start one auditable native-Alpha epoch."""
+    """Retire legacy add-on samples and start one auditable native-Alpha epoch.
 
-    marker = "native_formula_cutover_v1"
+    The first native cutover retired pending legacy work.  A pre-cutover
+    runtime artifact can still be written after that migration, though.  It
+    is immutable historical evidence, but cannot be evaluated as a current
+    native-Alpha learning sample.
+    """
+
+    marker = "native_formula_cutover_v2"
+    legacy_formula_reasons = {
+        "learning_sample_id_mismatch",
+        "reference_content_checksum_mismatch",
+        "reference_input_hash_mismatch",
+        "reference_decision_snapshot_mismatch",
+        "reference_decision_day_mismatch",
+        "decision_day_mismatch",
+        "formula_version_mismatch",
+    }
     with write_transaction() as conn:
         existing = conn.execute(
             "SELECT update_id,epoch FROM policy_update_ledger WHERE evaluation_id=? LIMIT 1",
@@ -418,14 +433,68 @@ def ensure_native_formula_epoch() -> Dict[str, Any]:
                 "epoch": int(existing["epoch"]),
                 "update_id": str(existing["update_id"]),
             }
-        legacy_pending = conn.execute(
-            "SELECT COUNT(*) AS n FROM pending_evaluations WHERE status='pending' AND formula_version<>?",
+        legacy_pending_rows = conn.execute(
+            "SELECT pending_id,status,formula_version FROM pending_evaluations WHERE formula_version<>?",
             (NATIVE_SERENITY_FORMULA_VERSION,),
-        ).fetchone()
+        ).fetchall()
         evaluation_rows = conn.execute(
-            "SELECT payload_json FROM evaluations"
+            "SELECT evaluation_id,payload_json FROM evaluations"
         ).fetchall()
         legacy_evaluation_count = 0
+        native_integrity_failures_in_current_epoch = False
+        current_policy_row = conn.execute(
+            "SELECT payload_json FROM serenity_policy_state WHERE policy_name='serenity'"
+        ).fetchone()
+        current_epoch = None
+        if current_policy_row is not None:
+            current_epoch = int(
+                SerenityPolicyState.model_validate(
+                    json.loads(current_policy_row["payload_json"] or "{}")
+                ).epoch
+            )
+
+        def native_integrity_failure_is_current(evaluation_payload: Mapping[str, Any]) -> bool:
+            errors = [
+                str(item)
+                for item in list(evaluation_payload.get("integrity_errors") or [])
+                if str(item)
+            ]
+            if not errors:
+                return False
+            # This exact terminal result came from the old runtime parsing a
+            # v2 reference with its v1 model.  Re-validate the frozen payload
+            # before excluding it; all other native integrity failures remain
+            # hard blockers for a shadow recovery.
+            if errors != ["reference_snapshot_unreadable:ValidationError"]:
+                return True
+            try:
+                reference = load_reference_snapshot(
+                    str(evaluation_payload.get("reference_snapshot_id") or "")
+                )
+                if reference is None or reference.input_checksum != str(
+                    evaluation_payload.get("input_hash") or ""
+                ):
+                    return True
+                from ..decision_engine.serenity_policy import reference_input_checksum
+
+                return reference_input_checksum(
+                    decision_context_snapshot_id=reference.decision_context_snapshot_id,
+                    decision_day=reference.decision_day,
+                    decision_at=reference.decision_at,
+                    signals=reference.signals,
+                    arms=reference.counterfactual_arms,
+                    reference_arms=reference.reference_counterfactual_arms,
+                    risk_plans=reference.risk_plans,
+                    learning_sample_id=reference.learning_sample_id,
+                    actual_weight=reference.actual_weight,
+                    policy_state=reference.policy_state,
+                    baseline_selected_symbols=reference.baseline_selected_symbols,
+                    applied_selected_symbols=reference.applied_selected_symbols,
+                    would_change_topk=reference.would_change_topk,
+                ) != reference.input_checksum
+            except Exception:  # noqa: BLE001
+                return True
+
         for evaluation_row in evaluation_rows:
             try:
                 evaluation_payload = json.loads(evaluation_row["payload_json"] or "{}")
@@ -437,7 +506,13 @@ def ensure_native_formula_epoch() -> Dict[str, Any]:
                 != NATIVE_SERENITY_FORMULA_VERSION
             ):
                 legacy_evaluation_count += 1
-        legacy_count = int(legacy_pending["n"] or 0) + legacy_evaluation_count
+            elif (
+                current_epoch is not None
+                and int(evaluation_payload.get("epoch") or 0) == current_epoch
+                and native_integrity_failure_is_current(evaluation_payload)
+            ):
+                native_integrity_failures_in_current_epoch = True
+        legacy_count = len(legacy_pending_rows) + legacy_evaluation_count
         if legacy_count == 0:
             return {"changed": False, "reason": "no_legacy_formula_state"}
 
@@ -448,9 +523,19 @@ def ensure_native_formula_epoch() -> Dict[str, Any]:
         if row is not None:
             prior = SerenityPolicyState.model_validate(json.loads(row["payload_json"] or "{}"))
             epoch = int(prior.epoch) + 1
-            next_stage = "suspended" if prior.state == "suspended" else (
-                "shadow" if prior.bootstrap_run_id else "warming"
-            )
+            legacy_only_suspension = bool(prior.suspension_reasons) and set(
+                prior.suspension_reasons
+            ) <= legacy_formula_reasons
+            if (
+                prior.state == "suspended"
+                and legacy_only_suspension
+                and not native_integrity_failures_in_current_epoch
+            ):
+                next_stage = "shadow"
+            else:
+                next_stage = "suspended" if prior.state == "suspended" else (
+                    "shadow" if prior.bootstrap_run_id else "warming"
+                )
             transition_raw = (
                 f"{prior.transition_log_hash}|{prior.epoch}|{epoch}|"
                 f"{NATIVE_SERENITY_FORMULA_VERSION}|{legacy_count}"
@@ -474,6 +559,8 @@ def ensure_native_formula_epoch() -> Dict[str, Any]:
                     "consecutive_failures": 0,
                     "probation_matured_days": 0,
                     "probation_available_results": 0,
+                    "suspension_reasons": [] if next_stage == "shadow" else list(prior.suspension_reasons),
+                    "cooldown_until": None if next_stage == "shadow" else prior.cooldown_until,
                     "rolling_metrics": {},
                     "transition_log_hash": sha256(transition_raw.encode("utf-8")).hexdigest(),
                     "updated_at": now,
@@ -519,12 +606,15 @@ def ensure_native_formula_epoch() -> Dict[str, Any]:
             (now, NATIVE_SERENITY_FORMULA_VERSION),
         ).rowcount
         ledger_payload = {
-            "transition": "native_formula_epoch_cutover",
+            "transition": "native_formula_epoch_cutover_after_legacy_runtime_artifact",
             "formula_version": NATIVE_SERENITY_FORMULA_VERSION,
             "retired_pending_count": int(retired),
             "legacy_record_count": legacy_count,
+            "legacy_pending_count": len(legacy_pending_rows),
+            "legacy_evaluation_count": legacy_evaluation_count,
             "previous_epoch": int(next_state.epoch) - 1,
             "new_epoch": int(next_state.epoch),
+            "recovered_to_shadow": next_state.state == "shadow",
         }
         update_id = "serupd_" + sha256(
             json.dumps(ledger_payload, sort_keys=True).encode("utf-8")

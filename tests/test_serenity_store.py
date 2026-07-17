@@ -778,7 +778,7 @@ def test_native_formula_cutover_retires_legacy_pending_once(monkeypatch, tmp_pat
             "SELECT status FROM pending_evaluations WHERE pending_id=?", (pending_id,)
         ).fetchone()[0]
         ledger_count = conn.execute(
-            "SELECT COUNT(*) FROM policy_update_ledger WHERE evaluation_id='native_formula_cutover_v1'"
+            "SELECT COUNT(*) FROM policy_update_ledger WHERE evaluation_id='native_formula_cutover_v2'"
         ).fetchone()[0]
     finally:
         conn.close()
@@ -796,6 +796,48 @@ def test_native_formula_cutover_retires_legacy_pending_once(monkeypatch, tmp_pat
     assert list_pending_evaluations() == []
     assert repeated["changed"] is False
     assert ledger_count == 1
+
+
+def test_native_formula_cutover_v2_recovers_shadow_when_only_legacy_artifact_suspended(monkeypatch, tmp_path):
+    monkeypatch.setenv("GP_SERENITY_STORE_DIR", str(tmp_path / "formula-cutover-recovery"))
+    initialize_store()
+    saved = save_policy_state(
+        SerenityPolicyState(
+            epoch=2,
+            state="suspended",
+            applied_weight=0.0,
+            previous_weight=0.0,
+            bootstrap_run_id="serboot_existing",
+            suspension_reasons=[
+                "learning_sample_id_mismatch",
+                "reference_content_checksum_mismatch",
+                "decision_day_mismatch",
+                "formula_version_mismatch",
+            ],
+            cooldown_until="2026-07-30T16:00:00+00:00",
+            state_since="2026-07-17T15:41:30+00:00",
+            updated_at="2026-07-17T15:41:30+00:00",
+        )
+    )
+    enqueue_pending_evaluation(
+        reference_snapshot_id="serref_legacy_after_v1",
+        decision_context_snapshot_id="dcs_legacy_after_v1",
+        decision_day="2026-07-17",
+        epoch=saved.epoch,
+        formula_version="SerenityAddon.v1",
+        input_hash="legacy-input",
+    )
+
+    result = ensure_native_formula_epoch()
+    state = load_policy_state()
+
+    assert result["changed"] is True
+    assert result["recovered_to_shadow"] is True
+    assert state.epoch == 3
+    assert state.state == "shadow"
+    assert state.applied_weight == 0.0
+    assert state.suspension_reasons == []
+    assert state.cooldown_until is None
 
 
 def test_native_evaluation_does_not_trigger_formula_cutover(monkeypatch, tmp_path):
@@ -913,6 +955,26 @@ def test_later_bootstrap_cannot_retroactively_ready_an_earlier_decision(
     before = load_frozen_signals(
         ["000001"], decision_at="2026-07-10T12:00:00+00:00"
     )["000001"]
+    commit_poll(
+        source="cninfo",
+        source_kind="bootstrap",
+        run={
+            "run_id": "bootstrap-later",
+            "started_at": "2026-07-12T10:00:00+00:00",
+            "finished_at": "2026-07-12T10:00:00+00:00",
+            "elapsed_sec": 0.2,
+            "status": "success",
+            "complete": True,
+            "request_count": 1,
+            "item_count": 0,
+            "next_due_at": "2026-07-12T11:00:00+00:00",
+            "stale_after_sec": 1_000_000_000,
+        },
+        records=[],
+        cursor={},
+        schema_fingerprint="schema1",
+        coverage=[],
+    )
     record_bootstrap_run(
         poll_run_id="bootstrap-later",
         source="cninfo",
