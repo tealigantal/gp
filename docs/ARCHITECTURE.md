@@ -38,6 +38,7 @@ free official announcement sources -> gp-serenity-worker
 - Market Memory owns normalized events, decision snapshots, and prediction outcomes.
 - Serenity owns bootstrap markers, source cursors and resumable page/hydration checkpoints, per-symbol coverage, persisted breakers, poll runs, append-only document metadata/content versions, hypotheses, v2 reference snapshots, evaluations, and policy transitions in `store/serenity/`.
 - Decision and chat paths read Serenity locally; only the Serenity worker performs external announcement I/O.
+- The API's provider-health record is atomically shared in `store/llm_runtime_status.json` so either Uvicorn process can report the last committed product chat. It contains only status, timestamps, model/response metadata, and errors—never credentials or prompts.
 
 ## External Integrations
 
@@ -53,7 +54,7 @@ Credentials remain environment-only. PDF bodies never enter routing or LLM paylo
 
 ## Current Architectural Constraints
 
-Shared Docker bind mounts require one Serenity writer, a renewable owner lease, and short SQLite WAL transactions. Existing `history.db` overwrites records and therefore cannot store evidence versions. Current book JSON writes are not atomic, so Serenity target discovery uses validated double reads plus a bounded last-stable-target fallback. Source-level completion is separate from candidate coverage: successful symbols advance independently, local gaps retain their own retry checkpoint, and source-level incomplete polls drive breaker/suspension metrics.
+Shared Docker bind mounts require one Serenity writer, a renewable owner lease, and short SQLite WAL transactions. Existing `history.db` overwrites records and therefore cannot store evidence versions. Current book JSON writes are not atomic, so Serenity target discovery uses validated double reads plus a bounded last-stable-target fallback. Source-level completion is separate from candidate coverage: successful symbols advance independently, local gaps retain their own retry checkpoint, and source-level incomplete polls drive breaker/suspension metrics. Pre-native formula references are immutable historical records; they are retired into a new policy epoch before evaluation and cannot affect native learning or weight promotion.
 
 ## Known Legacy or Transitional Paths
 

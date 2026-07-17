@@ -40,7 +40,10 @@ from .store import (
     clear_source_breaker,
 )
 from .targets import load_stable_targets
-from .evaluation import process_pending_evaluations
+from .evaluation import (
+    process_pending_evaluations,
+    recover_legacy_reference_snapshot_validation_suspension_after_complete_poll,
+)
 
 
 _SCHEMA_CONTRACT_VERSION = "cninfo-announcement-envelope-v2"
@@ -739,8 +742,9 @@ def _run_serenity_once_owned(
     if effective_source_kind == "live" and source_complete:
         try:
             recover_operational_suspension_after_complete_poll()
+            recover_legacy_reference_snapshot_validation_suspension_after_complete_poll()
         except Exception as ex:  # noqa: BLE001
-            logger.error("[serenity] failed to recover source-health suspension: %s", ex)
+            logger.error("[serenity] failed to recover Serenity suspension after complete poll: %s", ex)
     evaluation_report: Dict[str, Any] = {}
     if effective_source_kind == "live":
         try:

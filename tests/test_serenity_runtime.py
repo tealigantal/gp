@@ -3,7 +3,12 @@ from datetime import date, datetime, timezone
 import pytest
 
 from gp_assistant.decision_engine.serenity_policy import build_reference_snapshot, counterfactual_arm_checksum
-from gp_assistant.serenity.evaluation import evaluate_pending_item, process_pending_evaluations, update_policy_from_evaluations
+from gp_assistant.serenity.evaluation import (
+    evaluate_pending_item,
+    process_pending_evaluations,
+    recover_legacy_reference_snapshot_validation_suspension_after_complete_poll,
+    update_policy_from_evaluations,
+)
 from gp_assistant.serenity.models import FrozenSerenitySignal, NATIVE_SERENITY_FORMULA_VERSION, SerenityPolicyState
 from gp_assistant.serenity.sources import SourceError
 from gp_assistant.serenity.store import (
@@ -420,6 +425,67 @@ def test_integrity_error_suspends_and_zeros_weight(monkeypatch):
     assert suspended.state == "suspended"
     assert suspended.applied_weight == 0.0
     assert "reference_input_hash_mismatch" in suspended.suspension_reasons
+
+
+def test_currently_valid_legacy_reference_schema_error_does_not_resuspend(monkeypatch):
+    monkeypatch.setattr(
+        "gp_assistant.serenity.evaluation.recent_poll_outcomes",
+        lambda *args, **kwargs: [{"complete": 1, "status": "success"} for _ in range(20)],
+    )
+    reference = _reference()
+    row = _evaluation(1)
+    row.update(
+        {
+            "integrity_errors": ["reference_snapshot_unreadable:ValidationError"],
+            "reference_snapshot_id": reference.snapshot_id,
+            "input_hash": reference.input_checksum,
+        }
+    )
+    monkeypatch.setattr(
+        "gp_assistant.serenity.evaluation.load_reference_snapshot",
+        lambda _: reference,
+    )
+
+    updated = update_policy_from_evaluations(_state("active", 0.05), [row])
+
+    assert updated.state == "active"
+    assert updated.applied_weight == 0.04
+
+
+def test_complete_poll_recovers_only_the_proven_legacy_schema_false_positive(monkeypatch):
+    reference = _reference()
+    state = _state("suspended", 0.0).model_copy(
+        update={
+            "suspension_reasons": [
+                "reference_snapshot_unreadable:ValidationError",
+                "three_consecutive_source_or_parse_failures",
+            ],
+            "cooldown_until": "2026-02-01T00:00:00+00:00",
+        }
+    )
+    row = _evaluation(1)
+    row.update(
+        {
+            "integrity_errors": ["reference_snapshot_unreadable:ValidationError"],
+            "reference_snapshot_id": reference.snapshot_id,
+            "input_hash": reference.input_checksum,
+        }
+    )
+    saved = []
+    monkeypatch.setattr("gp_assistant.serenity.evaluation.load_policy_state", lambda: state)
+    monkeypatch.setattr("gp_assistant.serenity.evaluation.list_evaluations", lambda **_: [row])
+    monkeypatch.setattr("gp_assistant.serenity.evaluation.load_reference_snapshot", lambda _: reference)
+    monkeypatch.setattr(
+        "gp_assistant.serenity.evaluation.save_policy_state_with_ledger",
+        lambda next_state, **kwargs: saved.append((next_state, kwargs)) or next_state,
+    )
+
+    recovered = recover_legacy_reference_snapshot_validation_suspension_after_complete_poll()
+
+    assert recovered.state == "shadow"
+    assert recovered.applied_weight == 0.0
+    assert recovered.suspension_reasons == []
+    assert saved[0][1]["ledger_payload"]["transition"] == "legacy_reference_schema_validated_to_shadow"
 
 
 def test_source_level_incomplete_partial_poll_blocks_readiness_without_mutating_policy(monkeypatch):

@@ -38,4 +38,4 @@ def test_serenity_is_a_default_compose_service():
 
     assert service["profiles"] == ["experiments"]
     assert service["command"] == ["python", "-m", "gp_assistant.cli", "serenity-loop"]
-    assert compose["x-gp-env"]["GP_SERENITY_MODE"] == "${GP_SERENITY_MODE:-auto}"
+    assert compose["x-gp-env"]["GP_SERENITY_MODE"] == "${GP_SERENITY_MODE:-native}"
