@@ -100,7 +100,6 @@ services:
   gp-serenity-worker:
     <<: *gp-service
     command: ["python", "-m", "gp_assistant.cli", "serenity-loop"]
-    profiles: ["experiments"]
     restart: unless-stopped
 
   gp-serenity-bootstrap:

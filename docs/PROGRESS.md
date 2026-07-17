@@ -53,7 +53,7 @@ The current product direction is:
 - Added an independent 0%–8% add-on after Adaptive scoring. Backfill can produce a labeled reference counterfactual but binding and learning require live verified facts.
 - Added nine frozen arms, v2 reference sidecars with explicit trading-day identity and frozen risk plans, opaque pending refs, next-trading-day T+6 evaluation, decision-day bootstrap statistics, one-standard-error weight selection, CAS transitions, atomic ledgers, and automatic suspension.
 - Disabled Serenity completely for historical replay/backtests to prevent production-store reads/writes and future leakage.
-- Added target-only narration (maximum three facts), no raw Serenity routing context, grounding guards, `/api/health` status, four CLI commands, and separate Compose worker/bootstrap profiles.
+- Added target-only narration (maximum three facts), no raw Serenity routing context, grounding guards, `/api/health` status, four CLI commands, a default resident Compose worker, and a separate one-shot bootstrap profile.
 - Real `000001` bootstrap: 4 requests, 2 PDF records, 3.64 seconds, complete coverage, marker `serboot_9006363b1b6de1090d027602`, zero qualifying facts, state `shadow`, applied weight 0%.
 - Real `000977` bootstrap: 2 PDF records and one verified positive earnings-guidance fact at 0.92 confidence; it remained `backfill_only`, non-learning and non-binding at 0%.
 - Final targeted suite passed 119 tests; the isolated full default suite passed all 311 tests; compileall, changed-file Ruff, diff check, and both Compose profile renders passed. Docker runtime checks remain pending because the local engine was unavailable.

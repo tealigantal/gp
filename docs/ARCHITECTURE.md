@@ -10,7 +10,7 @@ GP combines external market/announcement data, local immutable/runtime stores, d
 - `gp-worker`: unified market runtime through `gp_assistant.cli runtime-loop`.
 - `web`: Workspace frontend.
 - Ops profiles: daybook rebuild and post-close archive.
-- `gp-serenity-worker`: experimental collector/evaluator under the Compose `experiments` profile.
+- `gp-serenity-worker`: resident collector/evaluator, started by the default Compose project alongside the API and market worker.
 - `gp-serenity-bootstrap`: one-shot real 30-day bootstrap under the separate `serenity-bootstrap` profile, so enabling the worker cannot race the bootstrap.
 
 Detailed backend decision ownership is canonical in `src/gp_assistant/ARCHITECTURE.md`; frontend structure is documented in `frontend/ARCHITECTURE.md`; HTTP/domain contracts are canonical in `docs/service_contract.md`.
