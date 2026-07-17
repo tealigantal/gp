@@ -1,5 +1,12 @@
 # Validation Ledger
 
+## 2026-07-18 Workspace gateway and worker observability recovery
+
+- **Cause:** The single-protocol integration commit changed the Web Nginx upstream from Compose service `gp` to nonexistent `api`, deleted the Workspace read endpoints while the frontend still requested them, and left the frontend without the required chat `client_turn_id`. The market worker also emitted no successful-loop summary, making a healthy worker look blank in Docker Desktop.
+- **Change:** Restored only read-only Workspace projections from the current `AgentStore` snapshot and persisted turns; no retired book/run authority or chat fallback was reinstated. Restored Nginx upstream `gp:8000`, added browser-side idempotency keys, and added a bounded worker completion log.
+- **Executed validation:** `python -m compileall -q src tests`; `python -m pytest tests/server/test_single_chat_contract.py tests/agent/test_agent_store.py -q` (18 passed); frontend `npm run typecheck`, `npm test -- --run` (18 passed), and `npm run build`; `docker compose config --quiet`; then rebuilt and force-recreated `gp`, `gp-worker`, `gp-serenity-worker`, and `web` without deleting mounted runtime directories.
+- **Live acceptance:** Browser Workspace loaded with LLM connected, current Top candidates, an enabled composer, and no console errors. A real submitted two-candidate/Serenity question completed `/api/chat` with HTTP 200 and returned rendered `002415` and `601318` plan cards. Health then reported `product_ready=true`, `llm_ready=true`, Serenity available in native shadow mode at 0%, and `gp-worker` logged one artifact publish followed by safe `noop=true` cycles.
+
 ## Executed — Serenity Alpha implementation checks
 
 - **Scenario:** Real official-announcement collection, shadow scoring, counterfactual ranking, causal promotion, bounded active weight, and automatic suspension.

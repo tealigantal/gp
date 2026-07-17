@@ -1,6 +1,8 @@
 # Single-Protocol Service Contract
 
-Only three public endpoints exist.
+The product API has one immutable chat/write protocol and a small Workspace
+read model. The read model is derived from the same `AgentStore` snapshot and
+turn records; it does not restore the retired book/run JSON authority.
 
 ## POST /api/chat
 
@@ -29,3 +31,22 @@ Returns the unified persisted turn records for that session only. A missing sess
 ## GET /api/health
 
 Reports `product_ready`, exact `readiness_reasons`, the `agent.db` counters/current pointer, sole Market Memory history database path/state, current market-time contract, Serenity target/coverage/worker lease, snapshot/active readiness revisions, snapshot/active semantic revisions, and real-LLM verification. `status=ok` means the immutable snapshot passes native-Alpha integrity, matches the current market-time target, the exact active Serenity target is complete/fresh with a live worker lease, its semantic revision still matches the snapshot, and a two-logical-stage chat was committed within the verification TTL. Health never substitutes a cached or older snapshot. HTTP 200 by itself is only API liveness.
+
+For the Workspace, this response also contains `llm_ready`, `storage`, and
+`runtime`. They are UI projections of the exact health, snapshot, and session
+state above; `llm_ready` is true only when the shared real-provider verification
+is ready.
+
+## Workspace read endpoints
+
+- `GET /api/book/current`: returns the `MarketBook` embedded in the current
+  immutable recommendation snapshot, or an empty `book` when no snapshot exists.
+- `GET /api/session/{session_id}`: returns persisted turns from `AgentStore`.
+  An unseen client-generated session ID is represented as an empty, unpersisted
+  session; reading it never creates a database row.
+- `GET /api/session/{session_id}/diagnostics`: returns a bounded, redacted
+  summary derived from those same turns.
+- `GET /api/sessions?limit=20`: returns persisted session titles and previews.
+
+These endpoints are read-only. They do not select symbols, construct a fallback
+plan, or invoke a provider.

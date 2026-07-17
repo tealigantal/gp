@@ -1,5 +1,6 @@
 export interface ChatRequest {
   session_id?: string
+  client_turn_id: string
   message: string
 }
 

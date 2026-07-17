@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState, useTransition } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { ChatResponse, OpsRunResponse, TranscriptEvent } from '../../shared/contracts'
 import { getCurrentBook, getHealth, getSession, getSessionDiagnostics, getSessions, postChat, readApiError, runOpsTool } from '../../shared/api'
-import { loadSessionId, newSessionId, saveSessionId } from '../../shared/session'
+import { loadSessionId, newClientTurnId, newSessionId, saveSessionId } from '../../shared/session'
 
 interface PendingTurn {
   sessionId: string
@@ -93,7 +93,11 @@ export function useAdvisorWorkspace() {
   }
 
   const sendMessageMutation = useMutation({
-    mutationFn: ({ message, sessionId }: SendMessageVariables) => postChat({ session_id: sessionId, message }),
+    mutationFn: ({ message, sessionId }: SendMessageVariables) => postChat({
+      session_id: sessionId,
+      client_turn_id: newClientTurnId(),
+      message,
+    }),
     onMutate: async ({ message, sessionId }) => {
       setLastError(null)
       setPendingTurn({ sessionId, userMessage: message })

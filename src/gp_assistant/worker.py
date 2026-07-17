@@ -616,7 +616,14 @@ def run_runtime_loop() -> Dict[str, Any]:
     poll = max(30, int(getattr(cfg, "intraday_poll_interval_sec", 60) or 60))
     while True:
         try:
-            reconcile_runtime_state()
+            result = reconcile_runtime_state()
+            logger.info(
+                "[worker] runtime loop completed stage=%s noop=%s trade_day=%s artifact_id=%s",
+                result.get("runtime_stage"),
+                bool(result.get("noop")),
+                result.get("trade_day"),
+                result.get("artifact_id"),
+            )
         except Exception as ex:  # noqa: BLE001
             logger.exception("[worker] runtime loop iteration failed: %s", ex)
         time.sleep(poll)

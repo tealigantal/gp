@@ -944,16 +944,88 @@ class AgentStore:
         finally:
             conn.close()
 
+    def session_record(self, session_id: str) -> dict[str, Any] | None:
+        """Return the immutable-chat session header without creating a session."""
+        conn = self._connect_read()
+        if conn is None:
+            return None
+        try:
+            row = conn.execute(
+                """
+                SELECT s.session_id, s.active_snapshot_id, s.created_at, s.updated_at,
+                       (
+                           SELECT t.turn_id
+                           FROM turns t
+                           WHERE t.session_id = s.session_id
+                           ORDER BY t.seq DESC
+                           LIMIT 1
+                       ) AS last_turn_id
+                FROM sessions s
+                WHERE s.session_id = ?
+                """,
+                (session_id,),
+            ).fetchone()
+            return dict(row) if row else None
+        except sqlite3.OperationalError as exc:
+            if self._is_busy(exc):
+                raise StorageBusyError(READ_WAIT_MS) from exc
+            raise
+        finally:
+            conn.close()
+
+    def session_overviews(self, *, limit: int = 20) -> list[dict[str, Any]]:
+        """List persisted chat sessions for the Workspace read model."""
+        conn = self._connect_read()
+        if conn is None:
+            return []
+        try:
+            rows = conn.execute(
+                """
+                SELECT s.session_id, s.active_snapshot_id, s.created_at, s.updated_at,
+                       COALESCE((
+                           SELECT t.content
+                           FROM turns t
+                           WHERE t.session_id = s.session_id AND t.role = 'user'
+                           ORDER BY t.seq DESC
+                           LIMIT 1
+                       ), '') AS title,
+                       COALESCE((
+                           SELECT t.content
+                           FROM turns t
+                           WHERE t.session_id = s.session_id AND t.role = 'assistant'
+                           ORDER BY t.seq DESC
+                           LIMIT 1
+                       ), '') AS preview
+                FROM sessions s
+                ORDER BY s.updated_at DESC
+                LIMIT ?
+                """,
+                (max(1, min(int(limit), 100)),),
+            ).fetchall()
+            return [dict(row) for row in rows]
+        except sqlite3.OperationalError as exc:
+            if self._is_busy(exc):
+                raise StorageBusyError(READ_WAIT_MS) from exc
+            raise
+        finally:
+            conn.close()
+
     def health_snapshot(self) -> dict[str, Any]:
         conn = self._connect_read()
-        empty = {"sessions": 0, "turns": 0, "snapshots": 0, "current_snapshot_id": None, "path": str(self.path), "snapshot": None}
+        empty = {"sessions": 0, "turns": 0, "claims": 0, "snapshots": 0, "current_snapshot_id": None, "path": str(self.path), "snapshot": None}
         if conn is None:
             return empty
         row = None
         current = None
         try:
             conn.execute("BEGIN")
-            row = conn.execute("SELECT (SELECT COUNT(*) FROM sessions) sessions,(SELECT COUNT(*) FROM turns) turns,(SELECT COUNT(*) FROM recommendation_snapshots) snapshots").fetchone()
+            row = conn.execute(
+                "SELECT "
+                "(SELECT COUNT(*) FROM sessions) sessions,"
+                "(SELECT COUNT(*) FROM turns) turns,"
+                "(SELECT COUNT(*) FROM claims) claims,"
+                "(SELECT COUNT(*) FROM recommendation_snapshots) snapshots"
+            ).fetchone()
             current = conn.execute("SELECT s.* FROM current_snapshot c JOIN recommendation_snapshots s ON s.snapshot_id=c.snapshot_id WHERE c.singleton=1").fetchone()
             conn.execute("ROLLBACK")
         except sqlite3.OperationalError as exc:
@@ -965,7 +1037,7 @@ class AgentStore:
                 conn.execute("ROLLBACK")
             conn.close()
         snapshot = self._decode_snapshot(current) if current else None
-        return {"sessions": int(row["sessions"]), "turns": int(row["turns"]), "snapshots": int(row["snapshots"]), "current_snapshot_id": snapshot.snapshot_id if snapshot else None, "path": str(self.path), "snapshot": snapshot}
+        return {"sessions": int(row["sessions"]), "turns": int(row["turns"]), "claims": int(row["claims"]), "snapshots": int(row["snapshots"]), "current_snapshot_id": snapshot.snapshot_id if snapshot else None, "path": str(self.path), "snapshot": snapshot}
 
     def stats(self) -> dict[str, Any]:
         health = self.health_snapshot()

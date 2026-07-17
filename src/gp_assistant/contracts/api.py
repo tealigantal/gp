@@ -156,6 +156,11 @@ class HealthResponse(BaseModel):
     llm: Dict[str, Any] = Field(default_factory=dict)
     serenity: Dict[str, Any] = Field(default_factory=dict)
     worker: Dict[str, Any] = Field(default_factory=dict)
+    # Workspace read-model fields.  They are derived from the same immutable
+    # snapshot as chat rather than from the retired runtime/book stores.
+    llm_ready: bool = False
+    storage: HealthStorageStats = Field(default_factory=HealthStorageStats)
+    runtime: RuntimeStatus = Field(default_factory=RuntimeStatus)
 
 
 class SessionResponse(BaseModel):

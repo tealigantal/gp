@@ -1,13 +1,13 @@
 # Current Progress
 
-Last updated: 2026-07-17
+Last updated: 2026-07-18
 
 ## Active Delivery State
 
 - **Active Goal:** Implement the free official-announcement Serenity Alpha experiment with real bootstrap, immutable evidence, shadow counterfactuals, and gated automatic ranking promotion up to 8%.
 - **Active ExecPlan:** `docs/plans/2026-07-17-deepseek-beta-tool-routing.md` (Serenity forward observation remains governed by its existing plan).
-- **Current Milestone:** The merge regression is repaired and all local Compose services have been rebuilt from the workspace. Serenity native mode is live with a complete 10/10 target poll, a native shadow policy in epoch 3, and an independent 0% weight pending causal maturity. Real chat is again product-ready through the configured DeepSeek Beta path.
-- **Completed and Verified:** Governance, real source bootstrap gate, append-only evidence/metadata versions, per-symbol coverage and page/hydration resume, official verification boundary, independent add-on/counterfactual policy, T+6 causal evaluation, target-only narration, health/CLI/Compose integration, real zero-result and positive-fact CNINFO smokes, restored memory package, native formula-epoch isolation, cross-process product-chat verification, and a real snapshot-bound two-candidate chat response.
+- **Current Milestone:** The Workspace integration regression is repaired and all local Compose services have been rebuilt from the workspace. Serenity native mode is live with a complete 10/10 target poll, a native shadow policy in epoch 3, and an independent 0% weight pending causal maturity. Real chat is again product-ready through the configured DeepSeek Beta path.
+- **Completed and Verified:** Governance, real source bootstrap gate, append-only evidence/metadata versions, per-symbol coverage and page/hydration resume, official verification boundary, independent add-on/counterfactual policy, T+6 causal evaluation, target-only narration, health/CLI/Compose integration, real zero-result and positive-fact CNINFO smokes, restored memory package, native formula-epoch isolation, cross-process product-chat verification, and a real snapshot-bound two-candidate chat response. The Workspace read model now uses the same `AgentStore` snapshot/turn records as chat, and the frontend sends the mandatory idempotency key for every chat turn.
 - **Implemented but Not Verified:** Live multi-day worker continuity and five consecutive forward shadow trading days.
 - **In Progress:** Forward Serenity observation after native epoch 3 begins accumulating mature samples.
 - **Next Work:** Let the renewed worker execute its next scheduled live poll; retain shadow/0% until real forward gates mature.

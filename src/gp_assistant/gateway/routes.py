@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import Any
 
@@ -7,7 +8,17 @@ from fastapi import APIRouter, HTTPException
 
 from ..agent_store import AgentStore, AgentStoreError, SnapshotIntegrityError, StorageBusyError
 from ..chat_agent import _current_serenity_check, run_chat_turn
-from ..contracts.api import ChatHistoryResponse, ChatRequest, ChatResponse, HealthResponse
+from ..contracts.api import (
+    BookResponse,
+    ChatHistoryResponse,
+    ChatRequest,
+    ChatResponse,
+    HealthResponse,
+    HealthStorageStats,
+    RuntimeStatus,
+    RuntimeToolInfo,
+    SessionResponse,
+)
 from ..core.errors import APIError, IntentLLMUnavailable, IntentParseFailed, LLMPayloadBudgetExceeded
 from ..llm.client import llm_status
 from ..runtime.market_time import compare_snapshot_market_time
@@ -18,6 +29,7 @@ from ..runtime.native_snapshot import (
 from ..evidence.daily_freshness import resolve_daily_target
 from ..search.history_store import history_db_path
 from ..serenity.store import status_snapshot as serenity_status_snapshot
+from ..runtime.utils import now_iso
 
 
 router = APIRouter()
@@ -26,6 +38,125 @@ router = APIRouter()
 def _history_health() -> dict[str, Any]:
     path = history_db_path()
     return {"path": str(path), "exists": path.exists(), "bytes": path.stat().st_size if path.exists() else 0}
+
+
+def _workspace_runtime(store: AgentStore, snapshot: Any | None) -> RuntimeStatus:
+    """Expose the current immutable snapshot through the Workspace read model."""
+    book = store.book_for_snapshot(snapshot) if snapshot else None
+    market_phase = str(
+        getattr(book, "market_phase", None)
+        or getattr(snapshot, "market_phase", None)
+        or "UNKNOWN"
+    )
+    target_mode = str(getattr(snapshot, "target_mode", None) or "unavailable")
+    has_book = book is not None
+    return RuntimeStatus(
+        market_phase=market_phase,
+        data_provider=str(os.getenv("DATA_PROVIDER") or "akshare"),
+        auto_update_service="gp-worker",
+        auto_update_expected=True,
+        intraday_runtime_enabled=False,
+        book_freshness=("postclose_ready" if market_phase == "NON_TRADING" else "current") if has_book else "unavailable",
+        book_updated_at=(getattr(book, "updated_at", None) if book else None),
+        artifact_id=(getattr(book, "artifact_id", None) if book else None),
+        daybook_effective_day=(getattr(book, "daybook_effective_day", None) if book else None),
+        pulse_trade_day=(getattr(book, "pulse_trade_day", None) if book else None),
+        pulse_slot_at=(getattr(book, "pulse_slot_at", None) if book else None),
+        last_closed_5m=(getattr(book, "last_closed_5m", None) if book else None),
+        slot_status=(getattr(book, "slot_status", None) if book else None),
+        publish_allowed=bool(getattr(book, "publish_allowed", False)),
+        daily_data_state=target_mode,
+        daily_freshness_ready=has_book,
+        daily_target_day=(getattr(snapshot, "daybook_effective_day", None) if snapshot else None),
+        daily_target_mode=target_mode,
+        artifact_stage=("daily_plan" if has_book else "none"),
+        artifact_freshness=("current" if has_book else "unavailable"),
+        artifact_status=("ready" if has_book else "unavailable"),
+        tradeability_state=("tradeable" if bool(getattr(snapshot, "tradeable", False)) else "no_trade"),
+        services=[
+            RuntimeToolInfo(service="gp", mode="always_on", command="uvicorn gp_assistant.gateway.app:app", description="聊天与快照 API"),
+            RuntimeToolInfo(service="gp-worker", mode="always_on", command="python -m gp_assistant.cli runtime-loop", description="日线计划刷新"),
+            RuntimeToolInfo(service="gp-serenity-worker", mode="always_on", command="python -m gp_assistant.cli serenity-loop", description="Serenity 官方公告采集"),
+        ],
+    )
+
+
+def _workspace_session_payload(store: AgentStore, session_id: str) -> dict[str, Any]:
+    record = store.session_record(session_id)
+    created_at = str((record or {}).get("created_at") or now_iso())
+    updated_at = str((record or {}).get("updated_at") or created_at)
+    snapshot_id = (record or {}).get("active_snapshot_id")
+    snapshot = store.load_snapshot(str(snapshot_id)) if snapshot_id else None
+    book = store.book_for_snapshot(snapshot) if snapshot else None
+    turns: list[dict[str, Any]] = []
+    for turn in store.session_turns(session_id):
+        payload = dict(turn.get("payload") or {}) if turn.get("role") == "assistant" else {}
+        payload.pop("llm_trace", None)
+        turns.append(
+            {
+                "seq": turn["seq"],
+                "turn_id": turn["turn_id"],
+                "session_id": session_id,
+                "role": turn["role"],
+                "content": turn["content"],
+                "created_at": turn["created_at"],
+                "meta": payload,
+            }
+        )
+    return {
+        "session": {
+            "session_id": session_id,
+            "created_at": created_at,
+            "updated_at": updated_at,
+            "active_run_id": snapshot_id,
+            "previous_run_id": None,
+            "focus_subject": {},
+            "compare_set": [],
+            "user_preferences": {},
+            "last_seen_book_version": getattr(book, "book_version", None),
+            "last_turn_id": (record or {}).get("last_turn_id"),
+            "last_claim_ids": [],
+        },
+        "recent_turns": turns,
+        "recent_claims": [],
+    }
+
+
+def _workspace_diagnostics(store: AgentStore, session_id: str) -> dict[str, Any]:
+    session_payload = _workspace_session_payload(store, session_id)
+    assistant_messages: list[dict[str, Any]] = []
+    for turn in reversed(session_payload["recent_turns"]):
+        if turn["role"] != "assistant":
+            continue
+        meta = dict(turn.get("meta") or {})
+        message = dict(meta.get("message") or {})
+        symbols = list(meta.get("symbols") or [])
+        assistant_messages.append(
+            {
+                "turn_id": turn["turn_id"],
+                "seq": turn["seq"],
+                "created_at": turn["created_at"],
+                "message_kind": message.get("message_kind") or meta.get("decision"),
+                "narrative_text": message.get("narrative_text") or meta.get("reply"),
+                "symbol": message.get("symbol") or (symbols[0] if symbols else None),
+                "run_action": (message.get("run") or {}).get("run_action") if isinstance(message.get("run"), dict) else meta.get("decision"),
+                "followup_suggestions": list(message.get("followup_suggestions") or []),
+            }
+        )
+        if len(assistant_messages) == 6:
+            break
+    return {
+        "session_id": session_id,
+        "focus": {
+            "active_run_id": session_payload["session"].get("active_run_id"),
+            "previous_run_id": None,
+            "last_focus_symbol": None,
+            "last_focus_rank": None,
+            "compare_set": [],
+        },
+        "latest_assistant": assistant_messages[0] if assistant_messages else None,
+        "assistant_messages": assistant_messages,
+    }
 
 
 @router.post("/api/chat", response_model=ChatResponse)
@@ -170,6 +301,7 @@ def health() -> HealthResponse:
         "reason": serenity_reason,
         "atomic_readiness": atomic_serenity,
     }
+    session_overviews = store.session_overviews(limit=1)
     return HealthResponse(
         status="ok" if product_ready else "degraded",
         product_ready=product_ready,
@@ -202,4 +334,72 @@ def health() -> HealthResponse:
             "runtime_contract_ready": runtime_contract_ready,
             "expected_market_time": runtime_contract,
         },
+        llm_ready=llm.get("verification") == "ready",
+        storage=HealthStorageStats(
+            session_count=int(health["sessions"]),
+            transcript_count=int(health["turns"]),
+            claim_count=int(health["claims"]),
+            latest_session_at=(session_overviews[0]["updated_at"] if session_overviews else None),
+        ),
+        runtime=_workspace_runtime(store, snapshot),
     )
+
+
+@router.get("/api/book/current", response_model=BookResponse)
+def current_book() -> BookResponse:
+    store = AgentStore()
+    try:
+        book = store.current_book()
+    except StorageBusyError as ex:
+        raise APIError(
+            status_code=503,
+            message="当前推荐快照读取繁忙",
+            detail={"reason": str(ex), "retry_after_ms": ex.retry_after_ms},
+        ) from ex
+    return BookResponse(book=book.model_dump(mode="json") if book else {})
+
+
+@router.get("/api/session/{session_id}", response_model=SessionResponse)
+def session_view(session_id: str) -> SessionResponse:
+    try:
+        return SessionResponse(**_workspace_session_payload(AgentStore(), session_id))
+    except StorageBusyError as ex:
+        raise APIError(
+            status_code=503,
+            message="会话读取繁忙",
+            detail={"reason": str(ex), "retry_after_ms": ex.retry_after_ms},
+        ) from ex
+
+
+@router.get("/api/session/{session_id}/diagnostics")
+def session_diagnostics_view(session_id: str) -> dict[str, Any]:
+    try:
+        return _workspace_diagnostics(AgentStore(), session_id)
+    except StorageBusyError as ex:
+        raise APIError(
+            status_code=503,
+            message="会话诊断读取繁忙",
+            detail={"reason": str(ex), "retry_after_ms": ex.retry_after_ms},
+        ) from ex
+
+
+@router.get("/api/sessions")
+def session_overviews(limit: int = 20) -> list[dict[str, Any]]:
+    try:
+        return [
+            {
+                "session_id": row["session_id"],
+                "created_at": row["created_at"],
+                "updated_at": row["updated_at"],
+                "title": str(row.get("title") or "新会话")[:40],
+                "preview": str(row.get("preview") or "")[:120],
+                "active_run_id": row.get("active_snapshot_id"),
+            }
+            for row in AgentStore().session_overviews(limit=limit)
+        ]
+    except StorageBusyError as ex:
+        raise APIError(
+            status_code=503,
+            message="会话列表读取繁忙",
+            detail={"reason": str(ex), "retry_after_ms": ex.retry_after_ms},
+        ) from ex

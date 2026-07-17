@@ -21,3 +21,10 @@ export function newSessionId() {
   saveSessionId(next)
   return next
 }
+
+export function newClientTurnId() {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return `turn_${crypto.randomUUID()}`
+  }
+  return `turn_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`
+}

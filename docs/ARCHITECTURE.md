@@ -39,6 +39,10 @@ free official announcement sources -> gp-serenity-worker
 - Serenity owns bootstrap markers, source cursors and resumable page/hydration checkpoints, per-symbol coverage, persisted breakers, poll runs, append-only document metadata/content versions, hypotheses, v2 reference snapshots, evaluations, and policy transitions in `store/serenity/`.
 - Decision and chat paths read Serenity locally; only the Serenity worker performs external announcement I/O.
 - The API's provider-health record is atomically shared in `store/llm_runtime_status.json` so either Uvicorn process can report the last committed product chat. It contains only status, timestamps, model/response metadata, and errors—never credentials or prompts.
+- Workspace reads (`/api/book/current`, session views, diagnostics, and session
+  list) are projections of `AgentStore`'s immutable current snapshot and
+  persisted turns. They do not read retired mutable book/run stores or create a
+  session on a GET request.
 
 ## External Integrations
 

@@ -18,6 +18,7 @@ Restore the real `/api/chat` journey for the configured `deepseek-v4-flash` prov
 - [x] 2026-07-18: Ran a real current `/api/chat` request after publication. It committed a native two-candidate plan for `002415` and `601318`; intent routing, narration, and narration repair each returned provider HTTP 200 with response IDs.
 - [x] 2026-07-18: Made product-chat verification shared across the two Uvicorn processes, so `/api/health` reports the committed real chat instead of a process-local false `unverified` state.
 - [x] 2026-07-18: Promoted `gp-serenity-worker` to a default resident Compose service. A plain `docker compose up -d --build` started the API, market worker, Serenity worker, and Web service; real chat subsequently restored LLM readiness.
+- [x] 2026-07-18: Repaired the Workspace integration contract after the single-protocol cutover: Nginx now targets the Compose `gp` service, Workspace reads project the current `AgentStore` snapshot/turns, and each frontend chat turn carries a generated idempotency key. Browser acceptance completed a real two-candidate Serenity question with HTTP 200; the market worker emitted a publish followed by safe no-op cycles.
 
 ## Surprises & Discoveries
 
