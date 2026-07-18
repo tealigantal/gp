@@ -33,13 +33,21 @@ def test_http_chat_and_history_bind_one_published_snapshot(monkeypatch, tmp_path
     client = TestClient(app)
     response = client.post("/api/chat", json={"session_id": "s1", "client_turn_id": "c1", "message": "600519 为什么"})
     assert response.status_code == 200, response.text
-    assert response.json()["snapshot_id"] == "http-snapshot"
+    response_body = response.json()
+    assert response_body["snapshot_id"] == "http-snapshot"
+    assert response_body["message"]["narrative_text"] == response_body["reply"]
+    replay = client.post("/api/chat", json={"session_id": "s1", "client_turn_id": "c1", "message": "600519 为什么"})
+    assert replay.status_code == 200, replay.text
+    assert replay.json()["message"]["narrative_text"] == response_body["reply"]
     history = client.get("/api/chat/s1")
     assert history.status_code == 200
     assert [turn["role"] for turn in history.json()["turns"]] == ["user", "assistant"]
+    assert history.json()["turns"][-1]["payload"]["message"]["narrative_text"] == response_body["reply"]
     session = client.get("/api/session/s1")
     assert session.status_code == 200
     assert [turn["role"] for turn in session.json()["recent_turns"]] == ["user", "assistant"]
+    assert session.json()["recent_turns"][-1]["content"] == response_body["reply"]
+    assert session.json()["recent_turns"][-1]["meta"]["message"]["narrative_text"] == response_body["reply"]
     assert client.get("/api/sessions").json()[0]["session_id"] == "s1"
 
 

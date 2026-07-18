@@ -25,13 +25,13 @@ Individual researchers and traders who want evidence-backed candidate plans and 
 
 ## Expected User-visible Behavior
 
-All market-facing answers use the same active run and structured judgment. The LLM translates facts into Chinese but cannot change selection or numbers. DeepSeek tool routing uses the provider's strict Beta interface; unavailable provider calls fail explicitly rather than silently using a different router. Serenity is visible immediately as real evidence and shadow/counterfactual impact; it affects production ranking only after automatic causal validation.
+All market-facing answers use the same active run and structured judgment. The LLM translates facts into Chinese but cannot change selection or numbers. DeepSeek tool routing uses the provider's strict Beta interface; unavailable provider calls fail explicitly rather than silently using a different router. Obsolete routing labels are not silently reinterpreted as a different user request: the normal real-LLM repair runs once, then the turn fails closed if it remains invalid. A rejected LLM narration is fail-closed for that one answer: it is neither displayed nor saved, while a configured real provider remains available for the user's next direct question. Once an answer commits, its exact validated body remains visible in the immediate response, idempotent retry, and later Workspace history; a malformed historical record is shown as an explicit recovery warning, never as a blank reply. Serenity is visible immediately as real evidence and shadow/counterfactual impact; it affects production ranking only after automatic causal validation.
 
 During the lunch break, the runtime status card shows whether the 11:30 intraday data artifact has updated. This is a data-completion signal only; it does not imply a trading recommendation.
 
 ## Failure and Recovery Experience
 
-Critical market-data failures produce explicit blocked/no-trade behavior. Serenity collection failures degrade only the experiment: the base recommendation remains available, the answer must not claim that no announcement exists, and health exposes the reason and recovery state.
+Critical market-data failures produce explicit blocked/no-trade behavior. Serenity collection failures degrade only the experiment: the base recommendation remains available, the answer must not claim that no announcement exists, and health exposes the reason and recovery state. If a real LLM answer fails evidence validation, the Workspace says it may be retried and keeps the composer available; only an unconfigured provider disables new natural-language requests.
 
 ## Product Constraints
 

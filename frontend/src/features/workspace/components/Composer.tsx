@@ -6,16 +6,23 @@ interface ComposerProps {
   onSubmit: () => void
   disabled?: boolean
   llmReady?: boolean
+  llmRetryable?: boolean
 }
 
-export function Composer({ value, onChange, onSubmit, disabled, llmReady }: ComposerProps) {
+export function Composer({ value, onChange, onSubmit, disabled, llmReady, llmRetryable }: ComposerProps) {
+  const canRetry = llmRetryable ?? llmReady ?? false
+
   return (
     <div className="composer-wrap">
       {!llmReady ? (
         <Alert
           type="warning"
           showIcon
-          message="自然语言助手当前不可用，请先检查后端配置，并确认 `/api/health` 返回 `llm_ready=true`。"
+          message={
+            canRetry
+              ? '上一次回答未通过证据校验，未展示也未保存。可直接重新发送问题，系统会再次调用真实 LLM。'
+              : '自然语言助手尚未配置，无法发起新的 LLM 请求。请检查后端配置。'
+          }
           style={{ marginBottom: 12 }}
         />
       ) : null}
@@ -41,9 +48,9 @@ export function Composer({ value, onChange, onSubmit, disabled, llmReady }: Comp
                 onSubmit()
               }
             }}
-            disabled={disabled || !llmReady}
+            disabled={disabled || !canRetry}
           />
-          <Button type="primary" onClick={onSubmit} loading={disabled} disabled={!llmReady}>
+          <Button type="primary" onClick={onSubmit} loading={disabled} disabled={!canRetry}>
             发送问题
           </Button>
         </Space.Compact>

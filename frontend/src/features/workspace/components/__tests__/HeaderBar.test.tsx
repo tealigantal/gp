@@ -8,6 +8,7 @@ function health(overrides: Partial<HealthResponse['runtime']> = {}): HealthRespo
     trading_day: '20260513',
     book_version: 'daily_old',
     llm_ready: true,
+    llm_retryable: true,
     storage: {
       session_count: 1,
       transcript_count: 2,
@@ -42,6 +43,26 @@ function health(overrides: Partial<HealthResponse['runtime']> = {}): HealthRespo
     },
   }
 }
+
+it('shows retryable LLM state without calling it disconnected', () => {
+  const retryable = {
+    ...health(),
+    llm_ready: false,
+    llm_retryable: true,
+  }
+
+  render(
+    <HeaderBar
+      sessionId="s1"
+      onSessionIdChange={() => undefined}
+      onNewSession={() => undefined}
+      health={retryable}
+      sessions={[]}
+    />,
+  )
+
+  expect(screen.getByText('自然语言可重试')).toBeInTheDocument()
+})
 
 it('uses daily_status instead of publish_allowed for the header state pill', () => {
   render(

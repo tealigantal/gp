@@ -1,5 +1,68 @@
 # Validation Ledger
 
+## 2026-07-18 runtime contract consolidation
+
+- **Cause addressed:** The default suite retained eight worker tests that
+  monkeypatched deleted file-store and portfolio functions. Market-time
+  consumers also relied on implicit mapping aliases such as target_day, so
+  removal of the aliases could break freshness paths rather than expose a
+  single explicit boundary.
+- **Change:** Added contracts/runtime.py as the sole operation contract,
+  removed retired worker loop/replay aliases, made intent literals strict,
+  removed market-time mapping aliases, and added
+  daily_freshness_target_fields() as the only projection into the persisted
+  daily-freshness schema. Replaced the stale worker suite with current
+  AgentStore plus MarketTimeContext coverage; it verifies rejected retired
+  operations/intent labels, pending and blocked branches, no-op binding, and
+  resident dispatch.
+- **Executed validation:** python -m compileall -q src tests passed;
+  python -m pytest tests/test_daily_freshness.py tests/test_worker_reconcile.py tests/agent/test_market_time_storage_contract.py -q passed (35 tests);
+  default python -m pytest -q passed (263 tests); and git diff --check passed.
+  Test cleanup removed tracked fixtures under .pytest-tmp/; they were restored
+  byte-for-byte from HEAD before the final default run.
+- **Frontend and container acceptance:** frontend lint, typecheck, all 25
+  Vitest cases, and production build passed; docker compose config --quiet
+  passed. Rebuilt and force-recreated gp, gp-worker, gp-serenity-worker, and
+  web without removing mounted runtime data. The local and container SHA-256
+  values matched for contracts/runtime.py, contracts/intents.py,
+  runtime/market_time.py, evidence/daily_freshness.py, and worker.py. A real
+  POST /api/chat committed a 214-character response with narrative_text equal
+  to reply; health then returned product_ready=true, llm_ready=true, and
+  llm_retryable=true. Serenity remained native/shadow at 0%.
+- **Final end-to-end acceptance:** After the final source-compatible Compose
+  rebuild, the real DeepSeek session `e2e-final-20260718-2215` committed a
+  current three-candidate answer and a same-session follow-up about the first
+  candidate's wait and cancellation conditions. The first answer kept all
+  candidates in the next-session, non-executable state and used local value
+  capsules for plan numbers; the follow-up correctly kept `002415` in wait,
+  described the after-open confirmation conditions, stated Serenity shadow has
+  no relevant evidence and zero contribution, and used the locally projected
+  `31.29` stop. Both persisted assistant contents exactly equalled
+  `message.narrative_text`; traces contained only real `intent_routing`,
+  `tool_evidence`, and, where needed, one `tool_evidence_repair` call. Final
+  health was `status=ok`, `product_ready=true`, `llm_ready=true`, and
+  `llm_retryable=true`; Serenity was `native/shadow/0%` with a live worker and
+  the Web returned HTTP 200. Host/container SHA-256 values matched for the
+  chat, runtime-contract, intent, market-time, freshness, and worker files.
+- **Regression after final repairs:** The default backend suite, compileall,
+  and `git diff --check` passed. Frontend lint, typecheck, all 25 Vitest cases,
+  and production build passed. The test runner's tracked `.pytest-tmp`
+  fixtures were restored from HEAD before staging.
+
+## 2026-07-18 assistant-turn presentation contract recovery
+
+- **Root cause:** The DeepSeek call for the reported `你好` turn succeeded (HTTP 200) and committed a non-empty reply. The single-protocol writer stored that text in `turn.content`/`payload.reply`, but `message.narrative_text` was absent. Commit `268b43c` restored Workspace session reads by exposing that raw payload, while the older `ChatThread` rendered only `meta.message.narrative_text`; the result was a blank body for a valid real LLM answer. The later retryability repair did not modify provider configuration, tool calls, request payloads, or reply generation.
+- **Change:** `src/gp_assistant/contracts/api.py::ChatResponse` is now the single assistant-turn presentation contract. It binds `message.narrative_text` exactly to the validated committed `reply`; `AgentStore` uses it before write, during idempotent replay, and for every persisted-turn read. Frontend rendering uses committed content only for legacy/malformed-metadata visibility and shows a warning for a truly corrupt empty row. No database migration, runtime-state deletion, LLM fallback/template, selection change, or Serenity policy change was introduced.
+- **Executed validation:** targeted backend chat/health tests plus the assistant-contract suite passed (61 passed, 6 deselected); full frontend suite passed (25 tests), `npm run typecheck`, and `npm run build` passed; `git diff --check` passed. The former eight `tests/test_worker_reconcile.py` failures were subsequently repaired by the runtime-contract consolidation recorded above; the default backend suite is now green.
+- **Live acceptance:** Rebuilt and force-recreated `gp`, `gp-worker`, `gp-serenity-worker`, and `web` without deleting mounted runtime data. The reported legacy session `session_ohi12fto` now projects its 426-byte committed reply into `message.narrative_text` exactly. A new real DeepSeek chat then committed a 340-byte answer; the POST response, same-key idempotent replay, `GET /api/chat/{session_id}`, and `GET /api/session/{session_id}` all carried the identical narrative. Final health was `status=ok`, `product_ready=true`, `llm_ready=true`, `llm_retryable=true`; Serenity stayed native/shadow at 0%.
+
+## 2026-07-18 LLM narration retryability and numeric-label repair
+
+- **Cause:** The generic `第一目标` numeric-label matcher ran before the distinct `第一目标盈亏比` matcher, so the valid displayed risk/reward `0.73` was treated as a `take1` price. Its rejected repair wrote product-chat verification `error`, and the Workspace incorrectly used that committed-chat signal to disable every future request.
+- **Change:** Match `第一目标盈亏比` as its own higher-priority field while retaining strict `take1` validation. Expose `llm_retryable` separately from `llm_ready`; only a committed, fully validated real chat sets readiness, while a configured provider permits the user's next real request after a rejected response. The frontend keeps the composer enabled only in that retryable state and refreshes health immediately after a successful submission. No database schema, persisted runtime state, fallback/template answer, automatic LLM probe, or Serenity policy changed.
+- **Executed validation:** `python -m compileall -q src tests`; `python -m pytest tests/agent/test_agent_llm_chat.py tests/test_llm_runtime_status.py tests/test_health_storage_stats.py tests/server/test_single_chat_contract.py --basetemp <isolated-temp>` (61 passed, 2 deselected); frontend `npm test -- --run` (22 passed), `npm run typecheck`, and `npm run build`; `git diff --check` passed before container acceptance. The hook regression verifies that a committed chat invalidates `['health']` and moves the rendered health state from retryable to ready without waiting for the polling interval.
+- **Live acceptance:** Rebuilt and force-recreated `gp`, `gp-worker`, `gp-serenity-worker`, and `web` without deleting any mounted runtime directory. Directly after the rebuild health correctly reported the persisted rejected turn as `llm_ready=false`, `llm_retryable=true`; after the worker published a source-compatible native snapshot, a real DeepSeek `POST /api/chat` committed. Its same-session natural-language follow-up also committed with real `intent_routing`, `tool_evidence`, and validator-directed `tool_evidence_repair` traces. Health then reported `status=ok`, `product_ready=true`, `llm_ready=true`, and `llm_retryable=true`; Serenity remained native/shadow at its causal baseline `0%`.
+
 ## 2026-07-18 Workspace gateway and worker observability recovery
 
 - **Cause:** The single-protocol integration commit changed the Web Nginx upstream from Compose service `gp` to nonexistent `api`, deleted the Workspace read endpoints while the frontend still requested them, and left the frontend without the required chat `client_turn_id`. The market worker also emitted no successful-loop summary, making a healthy worker look blank in Docker Desktop.

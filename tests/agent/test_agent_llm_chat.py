@@ -13,21 +13,26 @@ from gp_assistant.agent_store import (
 from gp_assistant.chat_agent import (
     _current_serenity_reason,
     _display_number,
+    _explicit_topk,
     _narration_entry_payload,
     _number_variants,
     _provider_narration_context,
     _resolve_provider_value_tokens,
     _sanitize_frame,
     _validate_narration_authority,
+    _validate_narrated_symbols,
     run_chat_turn,
 )
 from gp_assistant.contracts.objects import AdviceRun, Judgment, ReplyBundle, TurnFrame
 from gp_assistant.core.errors import APIError
+from gp_assistant.runtime.concern_parser import normalize_turn_frame
 from gp_assistant.runtime.grounding import validate_reply
 from tests.agent.test_agent_store import make_book, patch_chat_llm
 
 
-@pytest.mark.parametrize("frame_request", ["term_explain", "chat"])
+@pytest.mark.parametrize(
+    "frame_request", ["term_explain", "chat", "no_trade_explain"]
+)
 def test_named_serenity_term_cannot_hide_explicit_candidate_request(frame_request):
     frame = TurnFrame(
         frame_id="frame-term",
@@ -49,6 +54,35 @@ def test_named_serenity_term_cannot_hide_explicit_candidate_request(frame_reques
     assert normalized.subject == "run"
     assert normalized.constraints["topk"] == 2
     assert "term_text" not in normalized.constraints
+
+
+def test_explicit_topk_recognizes_chinese_candidate_count():
+    assert _explicit_topk("当前前三个候选") == 3
+
+
+def test_explicit_candidate_plan_wins_after_keyword_normalization():
+    message = "请给出当前前三个候选的买入区、止损和第一目标。"
+    frame = TurnFrame(
+        frame_id="frame-plan",
+        raw_message="",
+        subject="holding",
+        request="exit_decision",
+        freshness="next_session_plan",
+        references={"symbol": "002415"},
+        constraints={},
+        ambiguity={},
+    )
+
+    # The generic normalizer sees "止损" and classifies an exit request.
+    generic = normalize_turn_frame(_sanitize_frame(frame, message))
+    assert generic.request == "exit_decision"
+    # The final local candidate-scope pass used by run_chat_turn restores the
+    # user's concrete Top-N request and removes provider-invented references.
+    resolved = _sanitize_frame(generic, message)
+    assert resolved.request == "recommend"
+    assert resolved.subject == "run"
+    assert resolved.references == {}
+    assert resolved.constraints["topk"] == 3
 
 
 def test_two_stage_llm_trace_is_committed_with_snapshot(monkeypatch, tmp_path):
@@ -672,6 +706,27 @@ def test_rank_label_cannot_capture_a_later_target_price():
         )
 
 
+def test_first_target_rr_does_not_bind_as_a_first_target_price():
+    context = {
+        "judgment_result": {"decision": "recommend", "tradeable": False},
+        "candidate_details": [
+            {
+                "symbol": "002415",
+                # Narration certificates round this field to the display value
+                # that the provider token resolves to.
+                "execution_plan": {"take1": 41.25, "rr_to_take1": 0.73},
+                "action": "WATCH",
+                "can_open": False,
+                "invalidated": False,
+            }
+        ],
+    }
+
+    _validate_narration_authority("002415第一目标盈亏比0.73。", context)
+    with pytest.raises(RuntimeError, match="misbound_take1_numeric:0.73"):
+        _validate_narration_authority("002415第一目标0.73。", context)
+
+
 def test_provider_receives_opaque_value_tokens_and_local_code_resolves_them():
     context = {
         "candidate_details": [
@@ -853,6 +908,14 @@ def test_provider_structural_numbers_do_not_bypass_numeric_authority():
     )
     dated = "记录于2026-07-14 20:23，600519保持观察。"
     assert _resolve_provider_value_tokens(dated, {}, context) == dated
+    # Security codes are identifiers.  Their authorization is enforced by
+    # _validate_narrated_symbols, after the numeric gate, so an unknown code
+    # produces the correct symbol-boundary error rather than a false numeric
+    # authority error.
+    unknown_symbol = "002415保持观察。"
+    assert _resolve_provider_value_tokens(unknown_symbol, {}, context) == unknown_symbol
+    with pytest.raises(RuntimeError, match="contains_symbol_outside_snapshot"):
+        _validate_narrated_symbols(unknown_symbol, {"600519"}, "")
     for raw in (
         "19.48. 600519保持观察。",
         "1.5. 600519保持观察。",
@@ -982,6 +1045,13 @@ def test_narration_action_and_position_sizing_have_no_phrase_bypass():
     _validate_narration_authority("当前Serenity参与正式评分。", no_trade)
     _validate_narration_authority("600519当前不能买入。", no_trade)
     _validate_narration_authority("600519等待突破后再买入。", no_trade)
+    for text in (
+        "600519盘后不宜直接开仓。",
+        "600519在信号确认前不能执行买入。",
+        "600519当前不适合立即买进。",
+        "600519条件不满足时不要建仓。",
+    ):
+        _validate_narration_authority(text, no_trade)
     _validate_narration_authority(
         "600519是下一窗口优先跟进对象，当前仍需等待确认。", no_trade
     )

@@ -137,7 +137,9 @@ def active_freshness_for_current_target(freshness: dict[str, Any] | None, *, boo
     """
     raw = dict(freshness or {})
     try:
-        target_info = resolve_daily_target(allow_probe=False)
+        target_info = daily_freshness_target_fields(
+            resolve_daily_target(allow_probe=False)
+        )
     except Exception:
         return raw
 
@@ -353,8 +355,31 @@ def resolve_daily_target(
     return context(effective_ymd=target_ymd, mode=mode)
 
 
+def daily_freshness_target_fields(target: MarketTimeContext) -> dict[str, Any]:
+    """Project market time into the persisted daily-freshness schema.
+
+    The report schema deliberately names its data day target_day. Keeping that
+    projection here makes the boundary explicit instead of relying on retired
+    mapping aliases on MarketTimeContext.
+    """
+
+    return {
+        "target_day": target.daybook_effective_day,
+        "target_mode": target.target_mode,
+        "daybook_trading_day": target.decision_trade_day,
+        "pending_eod_day": target.pending_eod_day,
+        "eod_probe": target.eod_probe,
+        "calendar_status": target.calendar_status,
+        "calendar_source": target.calendar_source,
+        "calendar_range": target.calendar_range or {},
+        "calendar_error": target.calendar_error,
+        "next_trading_day": target.next_trading_day,
+        "calendar_blocking_reason": target.calendar_blocking_reason,
+    }
+
+
 def resolve_target_trading_day(as_of: str | None = None) -> str:
-    return str(resolve_daily_target(as_of).get("target_ymd") or "")
+    return resolve_daily_target(as_of).daybook_effective_ymd
 
 
 def target_day_iso(as_of: str | None = None) -> str:
@@ -434,7 +459,7 @@ def reconcile_daily_freshness(
     min_len: int = 250,
     strict: bool = True,
 ) -> dict[str, Any]:
-    target_info = resolve_daily_target(as_of)
+    target_info = daily_freshness_target_fields(resolve_daily_target(as_of))
     target_iso = str(target_info["target_day"])
     checked = normalize_symbols(symbols)
     calendar_reason = target_info.get("calendar_blocking_reason")

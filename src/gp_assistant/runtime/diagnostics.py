@@ -7,7 +7,11 @@ from typing import Any
 from ..book.repo import load_current_book, load_current_pointer, load_current_slot_artifact
 from ..core.config import load_config
 from ..core.paths import store_dir
-from ..evidence.daily_freshness import load_latest_daily_freshness_report, resolve_daily_target
+from ..evidence.daily_freshness import (
+    daily_freshness_target_fields,
+    load_latest_daily_freshness_report,
+    resolve_daily_target,
+)
 from ..runtime.market_clock import compute_market_state
 from ..runtime.slot_state import build_runtime_state_snapshot, trade_day_iso
 from ..selection_engine.datahub import MarketDataHub
@@ -55,7 +59,12 @@ def diagnose_runtime_slot_state(*, trade_day: str | None = None, symbols: list[s
     pointer = load_current_pointer()
     artifact = load_current_slot_artifact()
     book = load_current_book()
-    daily_target = resolve_daily_target(target_day or getattr(ms, "target_daybook_effective_day", None), allow_probe=False)
+    daily_target = daily_freshness_target_fields(
+        resolve_daily_target(
+            target_day or getattr(ms, "target_daybook_effective_day", None),
+            allow_probe=False,
+        )
+    )
     latest_freshness = load_latest_daily_freshness_report() or {}
     runtime_state = build_runtime_state_snapshot(
         book=book,

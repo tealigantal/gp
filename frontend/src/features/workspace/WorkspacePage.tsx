@@ -59,8 +59,12 @@ export function WorkspacePage() {
                         className="workspace-alert workspace-alert-warning"
                         type="warning"
                         showIcon
-                        message="自然语言助手当前不可用"
-                        description="结构化卡片和历史会话仍可查看，但连续追问、解释和口语化改写会明显变弱。"
+                        message={workspace.health?.llm_retryable ? '上一次自然语言回答未通过校验' : '自然语言助手尚未配置'}
+                        description={
+                          workspace.health?.llm_retryable
+                            ? '被拒绝回答未展示也未保存。可直接重新提问，下一次仍走真实 LLM 与证据校验。'
+                            : '请检查后端 LLM 配置后再发起对话。'
+                        }
                       />
                     ) : null}
                     {showRuntimeAlert ? (
@@ -106,6 +110,7 @@ export function WorkspacePage() {
                     onSubmit={() => workspace.submitMessage(workspace.composerValue)}
                     disabled={workspace.isSending}
                     llmReady={workspace.health?.llm_ready}
+                    llmRetryable={workspace.health?.llm_retryable}
                   />
                 </Card>
               </section>

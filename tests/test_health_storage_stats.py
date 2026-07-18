@@ -71,7 +71,7 @@ def test_health_is_ready_only_when_snapshot_runtime_serenity_and_llm_all_match(
     )
     monkeypatch.setattr(
         "gp_assistant.gateway.routes.llm_status",
-        lambda: {"verification": "ready", "verification_fresh": True},
+        lambda: {"verification": "ready", "verification_fresh": True, "configured": True},
     )
 
     payload = TestClient(app).get("/api/health").json()
@@ -80,8 +80,21 @@ def test_health_is_ready_only_when_snapshot_runtime_serenity_and_llm_all_match(
     assert payload["product_ready"] is True
     assert payload["readiness_reasons"] == []
     assert payload["worker"]["runtime_contract_ready"] is True
+    assert payload["llm_ready"] is True
+    assert payload["llm_retryable"] is True
     assert payload["serenity"]["snapshot_readiness_revision"] != payload["serenity"]["active_readiness_revision"]
     assert payload["serenity"]["snapshot_semantic_revision"] == payload["serenity"]["active_semantic_revision"]
+
+    monkeypatch.setattr(
+        "gp_assistant.gateway.routes.llm_status",
+        lambda: {"verification": "error", "verification_fresh": False, "configured": True},
+    )
+
+    retryable_payload = TestClient(app).get("/api/health").json()
+
+    assert retryable_payload["status"] == "degraded"
+    assert retryable_payload["llm_ready"] is False
+    assert retryable_payload["llm_retryable"] is True
 
 
 def test_health_degrades_when_same_target_has_new_serenity_semantics(

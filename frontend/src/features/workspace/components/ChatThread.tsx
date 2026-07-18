@@ -25,13 +25,58 @@ interface ChatThreadProps {
   onPrompt?: (text: string) => void
 }
 
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null
+}
+
+function renderableMessage(
+  rawMessage: unknown,
+  persistedContent: string,
+): CanonicalMessage | undefined {
+  const raw = asRecord(rawMessage) || {}
+  const narrative = typeof raw.narrative_text === 'string' && raw.narrative_text.trim()
+    ? raw.narrative_text.trim()
+    : persistedContent.trim()
+  if (!narrative) return undefined
+
+  const messageKind = typeof raw.message_kind === 'string' && raw.message_kind.trim()
+    ? raw.message_kind
+    : 'chat'
+  const structuredRequirements: Record<string, string> = {
+    pick_detail: 'pick',
+    single_stock_query: 'analysis',
+    live_entry_check: 'live_check',
+    compare: 'compare',
+    candidate_compare: 'compare',
+    exit_decision: 'exit_decision',
+    run_change: 'run_change',
+  }
+  const required = structuredRequirements[messageKind]
+  if (required && !asRecord(raw[required])) {
+    return { message_kind: 'chat', narrative_text: narrative }
+  }
+  return { ...raw, message_kind: messageKind, narrative_text: narrative } as CanonicalMessage
+}
 
 function renderFromCanonical(
-  message: CanonicalMessage | undefined,
+  rawMessage: unknown,
+  persistedContent: string,
   runtime?: RuntimeStatus | null,
   onPrompt?: (t: string) => void,
 ) {
-  if (!message) return null
+  const message = renderableMessage(rawMessage, persistedContent)
+  if (!message) {
+    return (
+      <Alert
+        type="warning"
+        showIcon
+        message="该助手回合缺少可展示的正文"
+        description="系统不会把空白内容当作有效回答；请刷新会话或重新提问。"
+      />
+    )
+  }
   if (message.message_kind === 'recommend') {
     const recommendMessage = message as CanonicalRecommendMessage
     const blocked = recommendMessage.run?.run_action === 'NO_TRADE' || (recommendMessage.picks || []).length === 0
@@ -168,7 +213,6 @@ export function ChatThread({ turns, error, sending, runtime, onPrompt }: ChatThr
           const isAssistant = turn.role === 'assistant'
           const meta = (turn.meta || {}) as Record<string, unknown>
           const symbols = Array.isArray(meta.symbols) ? (meta.symbols as string[]) : []
-          const canonical = meta.message as CanonicalMessage | undefined
           const runId = typeof meta.run_id === 'string' ? meta.run_id : undefined
           const header = (
             <Space wrap className="message-meta">
@@ -184,7 +228,7 @@ export function ChatThread({ turns, error, sending, runtime, onPrompt }: ChatThr
             return (
               <div key={`${turn.turn_id}-${turn.seq}`} className="assistant-turn">
                 {header}
-                {renderFromCanonical(canonical, runtime, onPrompt)}
+                {renderFromCanonical(meta.message, turn.content, runtime, onPrompt)}
               </div>
             )
           }

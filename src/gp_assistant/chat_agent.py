@@ -143,23 +143,39 @@ def _explicit_topk(message: str) -> int | None:
         if match:
             return max(1, min(10, int(match.group(1))))
     chinese = {"一": 1, "二": 2, "两": 2, "三": 3, "四": 4, "五": 5, "六": 6, "七": 7, "八": 8, "九": 9, "十": 10}
-    match = re.search(r"([一二两三四五六七八九十])\s*只", text)
+    match = re.search(
+        r"(?:前|top\s*)?([一二两三四五六七八九十])\s*(?:个|只)?",
+        text,
+        flags=re.IGNORECASE,
+    )
     return chinese.get(match.group(1)) if match else None
 
+
+def _is_explicit_candidate_plan_request(message: str) -> bool:
+    text = str(message or "")
+    if any(token in text for token in ("上一轮", "上次", "此前", "之前", "历史")):
+        return False
+    explicit_topk = _explicit_topk(text)
+    return bool(
+        any(token in text for token in ("候选", "推荐", "选股"))
+        and (
+            explicit_topk is not None
+            or any(
+                token in text
+                for token in ("当前", "计划", "给我", "给出", "列出", "哪些")
+            )
+        )
+    )
 
 def _sanitize_frame(frame: TurnFrame, user_message: str) -> TurnFrame:
     """Trust the LLM for intent class only; re-derive factual references."""
 
     text = str(user_message or "")
     explicit_topk = _explicit_topk(text)
-    candidate_plan_requested = (
-        frame.request in {"term_explain", "chat"}
-        and any(token in text for token in ("候选", "推荐", "选股"))
-        and (
-            explicit_topk is not None
-            or any(token in text for token in ("当前", "计划", "给我", "给出", "列出", "哪些"))
-        )
+    history_requested = any(
+        token in text for token in ("上一轮", "上次", "此前", "之前", "历史")
     )
+    candidate_plan_requested = _is_explicit_candidate_plan_request(text)
     # A provider may focus on the named Serenity term and lose the concrete
     # request to show candidates.  Candidate scope is a local authority
     # boundary, so preserve it deterministically before building evidence.
@@ -176,7 +192,6 @@ def _sanitize_frame(frame: TurnFrame, user_message: str) -> TurnFrame:
     if rank_match:
         refs["rank"] = max(1, min(10, int(rank_match.group(1))))
     refresh_requested = any(token in text for token in ("刷新", "重建", "重跑", "重新跑", "更新数据"))
-    history_requested = any(token in text for token in ("上一轮", "上次", "此前", "之前", "历史"))
     constraints = {
         "topk": explicit_topk or 3,
         "require_refresh": refresh_requested,
@@ -284,7 +299,9 @@ _FIELD_LABEL_PATTERNS = {
     "entry_high": r"(?:entry_high|买入区间上限|入场上限|买点上限|买入高位)",
     "trigger_price": r"(?:trigger_price|触发价|触发价格|确认价)",
     "stop_price": r"(?:stop_price|止损价|止损位|失效价|失效位)",
-    "take1": r"(?:take1|第一目标|首个目标|第一止盈|止盈一|目标价|止盈价)",
+    # "第一目标盈亏比" is its own RR field.  Do not let its "第一目标"
+    # prefix get validated as a take-profit price before the RR rule sees it.
+    "take1": r"(?:take1|第一目标(?!盈亏比)|首个目标|第一止盈|止盈一|目标价|止盈价)",
     "take2": r"(?:take2|第二目标|第二止盈|止盈二)",
     "final_score": r"(?:final(?:_score)?|最终评分|最终分数|最终得分|综合评分|综合分数|综合得分|(?<!自适应)(?<!排名)(?<!排序)(?<!执行质量)(?<!数据质量)(?<!决策)(?<!实时)(?<!盘中)(?<!日线)(?<!执行)(?:评分|得分))",
     "decision_score": r"(?:decision_score|决策评分|决策分数|决策得分|决策分)",
@@ -491,6 +508,16 @@ def _numeric_is_structural(
     token = str(match.group(0) or "")
     unsigned = token.lstrip("+-").rstrip("%")
     if unsigned in symbols:
+        return True
+    # A six-digit mainland security code is an entity identifier, not a price
+    # or a model-authored metric.  It deliberately passes through this numeric
+    # gate even when it is *not* in the scoped candidate list: the dedicated
+    # symbol validator runs afterwards and decides whether the identifier is
+    # permitted by the snapshot or the user's question.  Keeping those two
+    # concerns separate prevents an unknown code from being reported as a
+    # numeric-authority violation and lets the one-shot real-LLM repair receive
+    # the actionable ``symbol_outside_snapshot`` reason.
+    if _SYMBOL_RE.fullmatch(unsigned):
         return True
     before = str(text or "")[: match.start()]
     after = str(text or "")[match.end() :]
@@ -831,6 +858,18 @@ def _action_is_negated_or_conditional(
         or re.search(
             r"(?:若|如果|只有|除非|等待|等到|待到|待|条件满足后|触发后)"
             r"[^。；，,]{0,18}(?:后|才|再)?\s*$",
+            prefix,
+        )
+        # Natural Chinese often inserts a time or condition phrase between a
+        # negative predicate and the action (for example, "盘后不宜直接
+        # 开仓" or "未确认前不能执行买入").  These are explanations for
+        # *not* acting, not an execution recommendation.  The affirmative
+        # counterexamples above stay explicitly rejected before this rule.
+        or re.search(
+            r"(?:不要|不能|不可|不应|不宜|无需|不必|勿|别|未能|尚未|"
+            r"尚不能|尚不可|暂不|先不|并未|没有|不适合|不支持|不允许|"
+            r"不具备|不满足|缺少|缺乏|无)"
+            r"[^。；，,]{0,16}$",
             prefix,
         )
     )
@@ -2202,6 +2241,14 @@ def run_chat_turn(
         frame = normalize_turn_frame(frame, book=book)
         frame = inject_entity_hints(frame, {"session": session}, book)
         frame = normalize_turn_frame(frame, book=book)
+        # ``normalize_turn_frame`` may correctly recognize words such as
+        # "止损" inside a request, but a concrete request for a ranked
+        # candidate plan must still win over that generic exit-keyword rule.
+        # Reapply the local, user-text-derived candidate scope after the last
+        # semantic normalizer so the provider cannot turn a Top-N request into
+        # a holding/exit query and thereby lose all candidate evidence.
+        if _is_explicit_candidate_plan_request(user_message):
+            frame = _sanitize_frame(frame, user_message)
         frame = validate_turn_frame(frame)
 
         subject, compared, targets = _target_entries(frame, session, book)

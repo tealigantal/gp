@@ -38,7 +38,16 @@ free official announcement sources -> gp-serenity-worker
 - Market Memory owns normalized events, decision snapshots, and prediction outcomes.
 - Serenity owns bootstrap markers, source cursors and resumable page/hydration checkpoints, per-symbol coverage, persisted breakers, poll runs, append-only document metadata/content versions, hypotheses, v2 reference snapshots, evaluations, and policy transitions in `store/serenity/`.
 - Decision and chat paths read Serenity locally; only the Serenity worker performs external announcement I/O.
-- The API's provider-health record is atomically shared in `store/llm_runtime_status.json` so either Uvicorn process can report the last committed product chat. It contains only status, timestamps, model/response metadata, and errors—never credentials or prompts.
+- The API's provider-health record is atomically shared in `store/llm_runtime_status.json` so either Uvicorn process can report the last committed product chat. It contains only status, timestamps, model/response metadata, and errors—never credentials or prompts. `llm_ready` represents a recent committed, validated real chat; a configured provider remains `llm_retryable` after an individual narration is rejected, so a per-turn evidence failure cannot globally lock the Workspace composer.
+- `src/gp_assistant/contracts/api.py::ChatResponse` owns the single assistant-turn presentation contract. It binds the validated LLM `reply` to `message.narrative_text`; `AgentStore` applies that contract before persistence, during idempotent replay, and while projecting stored turns. Workspace uses the committed turn content only as a defensive rendering fallback for legacy metadata, never as a generated answer.
+- Contract ownership is split by category, not duplicated by caller:
+  `contracts/api.py` for HTTP/presentation, `contracts/intents.py` for
+  semantic routing, `contracts/runtime.py` for worker operations,
+  `runtime/market_time.py` for market-time identity,
+  `evidence/daily_freshness.py` for the persisted daily-freshness projection,
+  `contracts/objects.py` for domain objects, and `runtime/producer.py` for
+  artifact provenance. Cross-category code consumes these sources rather than
+  preserving compatibility aliases.
 - Workspace reads (`/api/book/current`, session views, diagnostics, and session
   list) are projections of `AgentStore`'s immutable current snapshot and
   persisted turns. They do not read retired mutable book/run stores or create a
@@ -54,7 +63,7 @@ Source adapters depend on HTTP and storage contracts. Decision policy depends on
 
 ## Security and Trust Boundaries
 
-Credentials remain environment-only. PDF bodies never enter routing or LLM payloads. PDFs are size-bounded and parsed in a disposable process with a 20-second wall-clock limit. Only the selected target's maximum three compact verified facts may enter narration. Evidence IDs, timestamps, hashes, source state, target coverage, and target symbols are validated before narration. Public source failures never weaken core market-data hard blocks.
+Credentials remain environment-only. PDF bodies never enter routing or LLM payloads. PDFs are size-bounded and parsed in a disposable process with a 20-second wall-clock limit. Only the selected target's maximum three compact verified facts may enter narration. Evidence IDs, timestamps, hashes, source state, target coverage, and target symbols are validated before narration. Numeric narration fields resolve the more specific `第一目标盈亏比` label before `第一目标`; take-profit prices still accept only the deterministic `take1` value. Public source failures never weaken core market-data hard blocks.
 
 ## Current Architectural Constraints
 
@@ -63,6 +72,11 @@ Shared Docker bind mounts require one Serenity writer, a renewable owner lease, 
 ## Known Legacy or Transitional Paths
 
 `selection_engine/` remains for migration reference and low-level helpers. Historical archive docs are not current contracts. Historical replay/backtest explicitly disables Serenity and cannot read or write its production store. Backfilled announcement facts may appear in narration and a clearly non-binding reference counterfactual, but binding arms and promotion statistics require a live forward fact. Every learning reference freezes the pipeline trading day separately from its generation timestamp, preventing UTC/calendar rebuilds from creating duplicate samples.
+
+The retired worker entry aliases (daily loop, replay, pre-open, and old
+post-close wrappers) are no longer importable. They must not be restored to
+support stale tests: all current callers use the explicit operation contract
+and the `runtime-loop` resident process.
 
 ## Target Direction
 

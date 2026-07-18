@@ -462,6 +462,7 @@ export interface HealthResponse {
   trading_day?: string | null
   book_version?: string | null
   llm_ready: boolean
+  llm_retryable?: boolean
   storage: HealthStorageStats
   runtime: RuntimeStatus
 }

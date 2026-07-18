@@ -11,11 +11,13 @@ from .book.readonly import build_daily_plan_artifact, tracked_universe_from_dayb
 from .agent_store import AgentStore
 from .book.side_results import detect_side_results
 from .contracts.objects import DayBook, LiveSlotArtifact, SlotDataQuality, SlotGate, TrackedUniverse
+from .contracts.runtime import RuntimeOperation, require_runtime_operation
 from .core.config import load_config
 from .core.logging import logger
 from .evidence.daily_freshness import (
     TARGET_CURRENT_PENDING,
     TARGET_CURRENT_READY,
+    daily_freshness_target_fields,
     daybook_symbols,
     reconcile_daily_freshness,
     resolve_daily_target,
@@ -71,34 +73,6 @@ def _trade_day_iso(trade_day: Any) -> str:
     if len(digits) >= 8:
         return f"{digits[:4]}-{digits[4:6]}-{digits[6:8]}"
     return raw
-
-
-def _refresh_pending_freshness_meta(
-    daybook: DayBook,
-    freshness: Dict[str, Any],
-    target_info: Dict[str, Any],
-) -> Dict[str, Any]:
-    if (
-        str(target_info.get("target_mode") or "") != TARGET_CURRENT_PENDING
-        or str(freshness.get("target_day") or "") != str(target_info.get("target_day") or "")
-    ):
-        return freshness
-    merged = dict(freshness)
-    for key in (
-        "target_mode",
-        "pending_eod_day",
-        "eod_probe",
-        "calendar_status",
-        "calendar_source",
-        "calendar_range",
-        "calendar_error",
-        "next_trading_day",
-    ):
-        if key in target_info:
-            merged[key] = target_info.get(key)
-    if merged != freshness:
-        daybook.source_meta["daily_freshness"] = merged
-    return merged
 
 
 def _save_artifact(daybook: DayBook, artifact: LiveSlotArtifact, *, market_time: MarketTimeContext) -> Dict[str, Any]:
@@ -451,26 +425,7 @@ def _slot_id(slot_at: str | None) -> str | None:
     return "".join(ch for ch in str(slot_at) if ch.isdigit())[:12] or None
 
 
-def run_preopen_init(*, now=None, force: bool = False) -> Dict[str, Any]:
-    return run_runtime_chain(now=now, operation="rebuild_daybook" if force else "auto")
-
-
-def boot_replay_to_current_slot(*, now=None, force: bool = False) -> Dict[str, Any]:
-    result = run_preopen_init(now=now, force=force)
-    result["replay_disabled"] = True
-    result.setdefault("message", "本次按日线计划链路处理。")
-    return result
-
-
-def replay_today_once() -> Dict[str, Any]:
-    return boot_replay_to_current_slot(force=True)
-
-
-def run_postclose_archive(*, now=None, force: bool = False) -> Dict[str, Any]:
-    return run_runtime_chain(now=now, operation="postclose_archive" if force else "auto")
-
-
-def _runtime_capabilities(cfg, ms, *, operation: str) -> Dict[str, bool]:
+def _runtime_capabilities(cfg, ms, *, operation: RuntimeOperation) -> Dict[str, bool]:
     minutes_enabled = (
         operation == "auto"
         and bool(getattr(cfg, "intraday_runtime_enabled", False))
@@ -484,11 +439,12 @@ def _runtime_capabilities(cfg, ms, *, operation: str) -> Dict[str, bool]:
     }
 
 
-def run_runtime_chain(*, now=None, operation: str = "auto") -> Dict[str, Any]:
+def run_runtime_chain(*, now=None, operation: RuntimeOperation | str = "auto") -> Dict[str, Any]:
+    operation = require_runtime_operation(operation)
     cfg = load_config()
     ms = compute_market_state(now)
     market_time = resolve_daily_target(now=now)
-    force_daybook = operation in {"rebuild_daybook", "replay_today", "postclose_archive"}
+    force_daybook = operation in {"rebuild_daybook", "postclose_archive"}
     if market_time.target_mode == TARGET_CURRENT_PENDING:
         return {
             "trade_day": market_time.decision_trade_ymd,
@@ -503,7 +459,7 @@ def run_runtime_chain(*, now=None, operation: str = "auto") -> Dict[str, Any]:
             "reason": "eod_daily_pending",
             "daily_data_state": DAILY_EOD_PENDING,
             "daily_status": DAILY_EOD_PENDING,
-            "daily_freshness": market_time.as_dict(),
+            "daily_freshness": daily_freshness_target_fields(market_time),
             "daily_plan_only": True,
             "message": "今日收盘日线尚未就绪，后台会按探测 TTL 自动重试。",
         }
@@ -603,7 +559,8 @@ def run_runtime_chain(*, now=None, operation: str = "auto") -> Dict[str, Any]:
     return saved
 
 
-def reconcile_runtime_state(*, now=None, operation: str = "auto", lock_timeout_sec: float | None = None) -> Dict[str, Any]:
+def reconcile_runtime_state(*, now=None, operation: RuntimeOperation | str = "auto", lock_timeout_sec: float | None = None) -> Dict[str, Any]:
+    operation = require_runtime_operation(operation)
     with book_lane(timeout_sec=lock_timeout_sec):
         result = run_runtime_chain(now=now, operation=operation)
         result.setdefault("daily_plan_only", not bool(result.get("intraday_pulse")))
@@ -627,19 +584,8 @@ def run_runtime_loop() -> Dict[str, Any]:
         except Exception as ex:  # noqa: BLE001
             logger.exception("[worker] runtime loop iteration failed: %s", ex)
         time.sleep(poll)
-
-
-def run_daily_loop() -> Dict[str, Any]:
-    return run_runtime_loop()
-
-
 __all__ = [
-    "boot_replay_to_current_slot",
-    "replay_today_once",
     "reconcile_runtime_state",
     "run_runtime_chain",
     "run_runtime_loop",
-    "run_daily_loop",
-    "run_postclose_archive",
-    "run_preopen_init",
 ]

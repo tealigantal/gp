@@ -40,7 +40,7 @@ def test_monday_preopen_separates_planned_and_completed_days(monkeypatch):
 
     assert context.decision_trade_day == "2026-07-13"
     assert context.daybook_effective_day == "2026-07-10"
-    assert context["target_day"] == "2026-07-10"  # compatibility boundary only
+    assert context.daybook_effective_day == "2026-07-10"
 
 
 def test_readers_do_not_wait_for_a_writer_transaction(tmp_path):

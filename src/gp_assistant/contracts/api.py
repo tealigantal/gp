@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
-from pydantic import BaseModel, Field, field_validator
+from typing import Any, Dict, List, Mapping, Optional
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 class ChatRequest(BaseModel):
@@ -19,6 +19,14 @@ class ChatRequest(BaseModel):
 
 
 class ChatResponse(BaseModel):
+    """The single presentation contract for a committed assistant turn.
+
+    The real LLM narration has one authoritative representation: ``reply``.
+    ``message.narrative_text`` is a required rendering projection of that same
+    text, never a second independently produced answer.  Writers, idempotent
+    replays, and Workspace read projections all normalize through this model.
+    """
+
     session_id: str
     client_turn_id: str
     snapshot_id: Optional[str] = None
@@ -26,6 +34,74 @@ class ChatResponse(BaseModel):
     reply: str
     message: Dict[str, Any] = Field(default_factory=dict)
     symbols: List[str] = Field(default_factory=list)
+
+    @field_validator("session_id", "client_turn_id", "decision", "reply")
+    @classmethod
+    def _required_text(cls, value: str) -> str:
+        text = str(value or "").strip()
+        if not text:
+            raise ValueError("assistant_turn_required_text_missing")
+        return text
+
+    @model_validator(mode="after")
+    def _bind_narrative_to_reply(self) -> "ChatResponse":
+        message = dict(self.message or {})
+        message["message_kind"] = str(message.get("message_kind") or "chat").strip() or "chat"
+        # The body shown to the user is exactly the validated provider output.
+        # No display-only fallback text is generated here.
+        message["narrative_text"] = self.reply
+        self.message = message
+        return self
+
+    @classmethod
+    def project_persisted(
+        cls,
+        payload: Mapping[str, Any] | None,
+        *,
+        assistant_content: str,
+        session_id: str,
+        client_turn_id: str,
+    ) -> dict[str, Any]:
+        """Project old or new stored turns into the sole renderable contract.
+
+        This is intentionally read/write compatible: legacy rows are repaired
+        in the API projection only, while new rows are normalized before they
+        are committed.  The function never creates prose; it can only reuse
+        the already committed assistant content.
+        """
+
+        projected = dict(payload or {})
+        reply = str(projected.get("reply") or assistant_content or "").strip()
+        raw_message = projected.get("message")
+        message = dict(raw_message) if isinstance(raw_message, Mapping) else {}
+        raw_symbols = projected.get("symbols")
+        symbols = (
+            [str(symbol) for symbol in raw_symbols if str(symbol)]
+            if isinstance(raw_symbols, (list, tuple, set))
+            else []
+        )
+        projected.update(
+            {
+                "session_id": str(projected.get("session_id") or session_id),
+                "client_turn_id": str(
+                    projected.get("client_turn_id") or client_turn_id
+                ),
+                "decision": str(
+                    projected.get("decision")
+                    or message.get("message_kind")
+                    or "chat"
+                ),
+                "reply": reply,
+                "message": message,
+                "symbols": symbols,
+            }
+        )
+        # Keep persistence-only fields (for example the redacted-at-read
+        # ``llm_trace``) intact in storage while the FastAPI response model
+        # continues to expose only its declared public fields.
+        normalized = cls.model_validate(projected)
+        projected.update(normalized.model_dump(mode="json"))
+        return projected
 
 
 class ChatHistoryResponse(BaseModel):
@@ -159,6 +235,9 @@ class HealthResponse(BaseModel):
     # Workspace read-model fields.  They are derived from the same immutable
     # snapshot as chat rather than from the retired runtime/book stores.
     llm_ready: bool = False
+    # A rejected narration must not prevent a user from issuing the next real
+    # LLM request.  This reflects configuration only, not a local fallback.
+    llm_retryable: bool = False
     storage: HealthStorageStats = Field(default_factory=HealthStorageStats)
     runtime: RuntimeStatus = Field(default_factory=RuntimeStatus)
 

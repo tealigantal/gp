@@ -122,18 +122,6 @@ def _looks_like_live_price_question(raw: str) -> bool:
 
 
 def normalize_turn_frame(frame: TurnFrame, book: MarketBook | None = None) -> TurnFrame:
-    request_alias = {
-        "explain": "pick_detail",
-        "live_check": "live_entry_check",
-        "exit": "exit_decision",
-    }
-    freshness_alias = {
-        "current_book": "active_run",
-        "rebuild_daybook": "rebuild_run",
-        "latest_5m": "active_run",
-    }
-    frame.request = request_alias.get(frame.request, frame.request)
-    frame.freshness = freshness_alias.get(frame.freshness, frame.freshness)
     frame.references = frame.references or {}
     frame.constraints = frame.constraints or {}
     frame = _promote_explain_followups(frame)

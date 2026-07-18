@@ -207,3 +207,56 @@ it('quick action click sends natural prompt', () => {
   expect(onPrompt).toHaveBeenCalled()
   expect(String(onPrompt.mock.calls[0][0])).toContain('000001')
 })
+
+it('renders a committed reply even when legacy structured metadata lacks narrative_text', () => {
+  const content = '这是已经提交的真实 LLM 回答，不能被页面静默丢弃。'
+  const turn: TranscriptEvent = {
+    seq: 1,
+    turn_id: 'legacy-turn',
+    session_id: 'legacy-session',
+    role: 'assistant',
+    content,
+    created_at: new Date().toISOString(),
+    meta: {
+      reply: content,
+      message: { message_kind: 'chat' },
+    },
+  }
+
+  render(<ChatThread {...baseProps} turns={[turn]} />)
+
+  expect(screen.getByText(content)).toBeInTheDocument()
+})
+
+it('degrades malformed structured metadata to the committed reply instead of a blank card', () => {
+  const content = '结构化详情缺失时，仍应展示这段真实回答。'
+  const turn: TranscriptEvent = {
+    seq: 1,
+    turn_id: 'malformed-turn',
+    session_id: 'malformed-session',
+    role: 'assistant',
+    content,
+    created_at: new Date().toISOString(),
+    meta: { message: { message_kind: 'pick_detail' } },
+  }
+
+  render(<ChatThread {...baseProps} turns={[turn]} />)
+
+  expect(screen.getByText(content)).toBeInTheDocument()
+})
+
+it('makes a corrupt empty persisted assistant turn visible as an error instead of rendering a blank body', () => {
+  const turn: TranscriptEvent = {
+    seq: 1,
+    turn_id: 'empty-turn',
+    session_id: 'empty-session',
+    role: 'assistant',
+    content: '',
+    created_at: new Date().toISOString(),
+    meta: { message: { message_kind: 'chat' } },
+  }
+
+  render(<ChatThread {...baseProps} turns={[turn]} />)
+
+  expect(screen.getByText('该助手回合缺少可展示的正文')).toBeInTheDocument()
+})

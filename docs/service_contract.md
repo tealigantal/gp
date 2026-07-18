@@ -4,6 +4,30 @@ The product API has one immutable chat/write protocol and a small Workspace
 read model. The read model is derived from the same `AgentStore` snapshot and
 turn records; it does not restore the retired book/run JSON authority.
 
+## Contract Ownership
+
+Each runtime-facing contract category has exactly one authoritative source:
+
+- HTTP models and committed assistant-turn presentation:
+  `src/gp_assistant/contracts/api.py`.
+- LLM semantic routing labels: `src/gp_assistant/contracts/intents.py`.
+- Resident worker operations: `src/gp_assistant/contracts/runtime.py`.
+- Market-time identity and snapshot comparison:
+  `src/gp_assistant/runtime/market_time.py`.
+- Daily-freshness report projection:
+  `src/gp_assistant/evidence/daily_freshness.py`.
+- Persisted product/domain objects: `src/gp_assistant/contracts/objects.py`.
+- Produced-artifact identity: `src/gp_assistant/runtime/producer.py`.
+
+No layer may silently translate retired labels. Intent routing accepts only the
+current request and freshness literals; a provider response using an obsolete
+value receives the existing real-LLM repair attempt and otherwise fails closed.
+The worker accepts only `auto`, `rebuild_daybook`, and
+`postclose_archive`; its only resident command is `runtime-loop`.
+Market-time serialization contains canonical named fields only. The
+daily-freshness module is the explicit boundary that projects those fields
+into the durable report keys such as `target_day`.
+
 ## POST /api/chat
 
 ```json
@@ -13,8 +37,17 @@ turn records; it does not restore the retired book/run JSON authority.
 `message` and `client_turn_id` are required. A new session binds to the current valid `RecommendationSnapshot.v1`; every later turn in that session uses the same immutable snapshot. Retrying the same `client_turn_id` returns the already committed assistant turn without another write. Each successful new turn has two required logical provider stages: routing must contain a valid `intent_routing` result (optionally after `intent_routing_repair`), and narration must contain `tool_evidence` (optionally followed by one `tool_evidence_repair` when the first draft fails authority validation). Every provider call required by the committed turn must have a 2xx status, request/response model and provider response ID.
 
 ```json
-{"session_id":"session_x","client_turn_id":"turn_x","snapshot_id":"snapshot_x","decision":"recommend|no_trade","reply":"...","message":{},"symbols":[]}
+{"session_id":"session_x","client_turn_id":"turn_x","snapshot_id":"snapshot_x","decision":"recommend|no_trade","reply":"...","message":{"message_kind":"...","narrative_text":"..."},"symbols":[]}
 ```
+
+`src/gp_assistant/contracts/api.py::ChatResponse` is the sole assistant-turn
+presentation contract. On every committed response,
+`message.narrative_text` is required and exactly equals the validated `reply`;
+it is not independently generated prose. The same contract is applied before
+write, to idempotent replay, and to persisted-turn reads. Old non-empty rows
+are projected at read time from their committed `content` without a database
+migration. A new empty assistant body is rejected before commit, and a corrupt
+historical empty body is an explicit UI warning rather than a blank answer.
 
 If no current snapshot exists, the service returns HTTP `503` with `current_snapshot_unavailable`. Invalid/incomplete current snapshots return grounded `no_trade`; a valid next-session plan may return `decision=recommend` with `message.tradeable=false`. The service never reads legacy book/run JSON, V1/V2 artifacts, a fallback snapshot, or live Serenity evidence during chat.
 
@@ -26,22 +59,30 @@ Routing/provider unavailability is `503`; invalid routing after one repair is `5
 
 ## GET /api/chat/{session_id}
 
-Returns the unified persisted turn records for that session only. A missing session is `404`.
+Returns the unified persisted turn records for that session only, using the
+same assistant-turn presentation contract as `POST /api/chat`. A missing
+session is `404`.
 
 ## GET /api/health
 
 Reports `product_ready`, exact `readiness_reasons`, the `agent.db` counters/current pointer, sole Market Memory history database path/state, current market-time contract, Serenity target/coverage/worker lease, snapshot/active readiness revisions, snapshot/active semantic revisions, and real-LLM verification. `status=ok` means the immutable snapshot passes native-Alpha integrity, matches the current market-time target, the exact active Serenity target is complete/fresh with a live worker lease, its semantic revision still matches the snapshot, and a two-logical-stage chat was committed within the verification TTL. Health never substitutes a cached or older snapshot. HTTP 200 by itself is only API liveness.
 
-For the Workspace, this response also contains `llm_ready`, `storage`, and
-`runtime`. They are UI projections of the exact health, snapshot, and session
-state above; `llm_ready` is true only when the shared real-provider verification
-is ready.
+For the Workspace, this response also contains `llm_ready`, `llm_retryable`,
+`storage`, and `runtime`. They are UI projections of the exact health,
+snapshot, and session state above. `llm_ready` is true only after a shared,
+recent, fully validated real-provider product chat commits. `llm_retryable` is
+true when the real provider is configured and the user may submit the next
+normal chat request. A rejected narration leaves `llm_ready=false` because no
+answer committed, but keeps `llm_retryable=true`; the rejected text is neither
+shown nor persisted, no hidden probe is sent, and the next request still uses
+the real LLM. A missing provider configuration makes both fields false.
 
 ## Workspace read endpoints
 
 - `GET /api/book/current`: returns the `MarketBook` embedded in the current
   immutable recommendation snapshot, or an empty `book` when no snapshot exists.
-- `GET /api/session/{session_id}`: returns persisted turns from `AgentStore`.
+- `GET /api/session/{session_id}`: returns persisted turns from `AgentStore`
+  using the same assistant-turn presentation contract as write/replay.
   An unseen client-generated session ID is represented as an empty, unpersisted
   session; reading it never creates a database row.
 - `GET /api/session/{session_id}/diagnostics`: returns a bounded, redacted

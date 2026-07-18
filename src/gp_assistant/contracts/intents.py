@@ -2,9 +2,8 @@ from __future__ import annotations
 
 from typing import Literal
 
-# Primary semantic contract used by the assistant.
-# Legacy aliases are still accepted so older tests and fixtures can be normalized
-# into the new request model without breaking the runtime.
+# Primary semantic contract used by the assistant. Router output is strict:
+# retired V1/V2 labels are rejected instead of being translated at runtime.
 
 RequestType = Literal[
     "chat",
@@ -19,10 +18,6 @@ RequestType = Literal[
     "intraday_situation",
     "exit_decision",
     "run_change",
-    # legacy aliases
-    "explain",
-    "live_check",
-    "exit",
 ]
 
 SubjectType = Literal[
@@ -38,8 +33,4 @@ FreshnessType = Literal[
     "active_run",
     "rebuild_run",
     "next_session_plan",
-    # legacy aliases
-    "current_book",
-    "rebuild_daybook",
-    "latest_5m",
 ]

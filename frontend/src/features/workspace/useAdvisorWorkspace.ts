@@ -113,6 +113,7 @@ export function useAdvisorWorkspace() {
         queryClient.invalidateQueries({ queryKey: ['session-diagnostics', variables.sessionId] }),
         queryClient.invalidateQueries({ queryKey: ['book', 'current'] }),
         queryClient.invalidateQueries({ queryKey: ['sessions', 20] }),
+        queryClient.invalidateQueries({ queryKey: ['health'] }),
       ])
     },
     onError: (error, variables) => {

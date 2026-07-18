@@ -335,6 +335,7 @@ def health() -> HealthResponse:
             "expected_market_time": runtime_contract,
         },
         llm_ready=llm.get("verification") == "ready",
+        llm_retryable=bool(llm.get("configured")),
         storage=HealthStorageStats(
             session_count=int(health["sessions"]),
             transcript_count=int(health["turns"]),

@@ -16,6 +16,7 @@ import sqlite3
 import threading
 from typing import Any, Iterator
 
+from .contracts.api import ChatResponse
 from .contracts.objects import DayBook, LiveSlotArtifact, MarketBook
 from .core.paths import store_dir
 from .runtime.market_time import iso_day
@@ -840,7 +841,7 @@ class AgentStore:
         try:
             row = conn.execute(
                 """
-                SELECT a.payload_json,u.content AS user_content
+                SELECT a.payload_json,a.content AS assistant_content,u.content AS user_content
                 FROM turns a
                 JOIN turns u
                   ON u.session_id=a.session_id
@@ -852,7 +853,14 @@ class AgentStore:
             ).fetchone()
             if row is not None and user_content is not None and str(row["user_content"]) != str(user_content):
                 raise AgentStoreError("client_turn_id_content_conflict")
-            return json.loads(row["payload_json"]) if row is not None else None
+            if row is None:
+                return None
+            return ChatResponse.project_persisted(
+                json.loads(row["payload_json"]),
+                assistant_content=str(row["assistant_content"] or ""),
+                session_id=session_id,
+                client_turn_id=client_turn_id,
+            )
         except sqlite3.OperationalError as exc:
             if self._is_busy(exc):
                 raise StorageBusyError(READ_WAIT_MS) from exc
@@ -885,10 +893,19 @@ class AgentStore:
     ) -> dict[str, Any]:
         if not session_id or not client_turn_id or not user_content.strip():
             raise AgentStoreError("turn_identity_or_content_invalid")
+        try:
+            normalized_payload = ChatResponse.project_persisted(
+                assistant_payload,
+                assistant_content=assistant_content,
+                session_id=session_id,
+                client_turn_id=client_turn_id,
+            )
+        except ValueError as exc:
+            raise AgentStoreError("assistant_turn_presentation_invalid") from exc
         with self._transaction() as conn:
             prior = conn.execute(
                 """
-                SELECT a.payload_json,u.content AS user_content
+                SELECT a.payload_json,a.content AS assistant_content,u.content AS user_content
                 FROM turns a
                 JOIN turns u
                   ON u.session_id=a.session_id
@@ -901,7 +918,12 @@ class AgentStore:
             if prior is not None:
                 if str(prior["user_content"]) != str(user_content):
                     raise AgentStoreError("client_turn_id_content_conflict")
-                return json.loads(prior["payload_json"])
+                return ChatResponse.project_persisted(
+                    json.loads(prior["payload_json"]),
+                    assistant_content=str(prior["assistant_content"] or ""),
+                    session_id=session_id,
+                    client_turn_id=client_turn_id,
+                )
             if expected_current_snapshot_id is not None:
                 current = conn.execute(
                     "SELECT snapshot_id FROM current_snapshot WHERE singleton=1"
@@ -925,18 +947,41 @@ class AgentStore:
             conn.execute("UPDATE sessions SET next_seq=?,updated_at=? WHERE session_id=?", (seq + 2, ts, session_id))
             user_turn, assistant_turn = gen_id("turn"), gen_id("turn")
             conn.execute("INSERT INTO turns(turn_id,session_id,seq,client_turn_id,role,content,snapshot_id,payload_json,created_at) VALUES(?,?,?,?,?,?,?,?,?)", (user_turn, session_id, seq, client_turn_id, "user", user_content, snapshot_id, "{}", ts))
-            conn.execute("INSERT INTO turns(turn_id,session_id,seq,client_turn_id,role,content,snapshot_id,payload_json,created_at) VALUES(?,?,?,?,?,?,?,?,?)", (assistant_turn, session_id, seq + 1, client_turn_id, "assistant", assistant_content, snapshot_id, _canonical_json(assistant_payload), ts))
+            conn.execute("INSERT INTO turns(turn_id,session_id,seq,client_turn_id,role,content,snapshot_id,payload_json,created_at) VALUES(?,?,?,?,?,?,?,?,?)", (assistant_turn, session_id, seq + 1, client_turn_id, "assistant", assistant_content, snapshot_id, _canonical_json(normalized_payload), ts))
             for claim in claims:
                 conn.execute("INSERT INTO claims(claim_id,turn_id,payload_json,created_at) VALUES(?,?,?,?)", (str(claim.get("claim_id") or gen_id("claim")), assistant_turn, _canonical_json(claim), ts))
-            return assistant_payload
+            return normalized_payload
 
     def session_turns(self, session_id: str) -> list[dict[str, Any]]:
         conn = self._connect_read()
         if conn is None:
             return []
         try:
-            rows = conn.execute("SELECT turn_id,seq,role,content,snapshot_id,payload_json,created_at FROM turns WHERE session_id=? ORDER BY seq", (session_id,)).fetchall()
-            return [{"turn_id": row["turn_id"], "seq": int(row["seq"]), "role": row["role"], "content": row["content"], "snapshot_id": row["snapshot_id"], "payload": json.loads(row["payload_json"]), "created_at": row["created_at"]} for row in rows]
+            rows = conn.execute("SELECT turn_id,seq,client_turn_id,role,content,snapshot_id,payload_json,created_at FROM turns WHERE session_id=? ORDER BY seq", (session_id,)).fetchall()
+            turns: list[dict[str, Any]] = []
+            for row in rows:
+                payload = json.loads(row["payload_json"])
+                if row["role"] == "assistant":
+                    payload = ChatResponse.project_persisted(
+                        payload,
+                        assistant_content=str(row["content"] or ""),
+                        session_id=session_id,
+                        client_turn_id=str(
+                            row["client_turn_id"] or f"persisted-{row['turn_id']}"
+                        ),
+                    )
+                turns.append(
+                    {
+                        "turn_id": row["turn_id"],
+                        "seq": int(row["seq"]),
+                        "role": row["role"],
+                        "content": row["content"],
+                        "snapshot_id": row["snapshot_id"],
+                        "payload": payload,
+                        "created_at": row["created_at"],
+                    }
+                )
+            return turns
         except sqlite3.OperationalError as exc:
             if self._is_busy(exc):
                 raise StorageBusyError(READ_WAIT_MS) from exc

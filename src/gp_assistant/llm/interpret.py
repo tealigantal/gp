@@ -101,8 +101,6 @@ def _normalize_turn_obj(obj: Dict[str, Any], user_message: str) -> TurnFrame:
     obj["references"] = refs
     obj["constraints"] = constraints
     obj["ambiguity"] = ambiguity
-    if str(obj.get("freshness") or "") == "latest_5m":
-        obj["freshness"] = "active_run"
     obj["frame_id"] = gen_id("frame")
     obj["raw_message"] = user_message
     return TurnFrame.model_validate(obj)

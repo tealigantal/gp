@@ -1,13 +1,12 @@
 from __future__ import annotations
 
-"""One explicit market-time contract for the recommendation runtime.
+"""The sole market-time contract for the recommendation runtime.
 
-The old runtime used ``as_of``/``trade_day`` for both the day a plan targets
-and the most recent daily bar that is allowed to influence it.  This mapping
-keeps compatibility aliases at the boundary while core code uses named fields.
+The old runtime overloaded as-of and trade-day. This model keeps the decision
+day and completed-data day explicit, with no compatibility aliases.
 """
 
-from collections.abc import Iterator, Mapping
+from collections.abc import Mapping
 from dataclasses import dataclass
 from hashlib import sha256
 import json
@@ -76,7 +75,7 @@ def compare_snapshot_market_time(snapshot: Any, current: Any) -> dict[str, Any]:
 
 
 @dataclass(frozen=True)
-class MarketTimeContext(Mapping[str, Any]):
+class MarketTimeContext:
     """Named dates for one market observation and recommendation decision."""
 
     decision_trade_day: str
@@ -104,8 +103,7 @@ class MarketTimeContext(Mapping[str, Any]):
         return ymd(self.daybook_effective_day) or ""
 
     def as_dict(self) -> dict[str, Any]:
-        # Legacy keys are deliberately aliases for callers still crossing the
-        # old contract; new core code must use the named attributes above.
+        """Serialize canonical field names for diagnostics and persistence."""
         return {
             "decision_trade_day": self.decision_trade_day,
             "daybook_effective_day": self.daybook_effective_day,
@@ -122,16 +120,4 @@ class MarketTimeContext(Mapping[str, Any]):
             "calendar_error": self.calendar_error,
             "next_trading_day": self.next_trading_day,
             "calendar_blocking_reason": self.calendar_blocking_reason,
-            "target_ymd": self.daybook_effective_ymd,
-            "target_day": self.daybook_effective_day,
-            "daybook_trading_day": self.decision_trade_ymd,
         }
-
-    def __getitem__(self, key: str) -> Any:
-        return self.as_dict()[key]
-
-    def __iter__(self) -> Iterator[str]:
-        return iter(self.as_dict())
-
-    def __len__(self) -> int:
-        return len(self.as_dict())

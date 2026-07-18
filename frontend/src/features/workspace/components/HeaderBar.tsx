@@ -57,6 +57,11 @@ export function HeaderBar({
   const storage = health?.storage
   const stateTag = currentBookState(book, health)
   const freshness = runtimeFreshnessMeta(health?.runtime)
+  const llmStatus = health?.llm_ready
+    ? { color: 'green' as const, text: '自然语言已验证' }
+    : health?.llm_retryable
+      ? { color: 'gold' as const, text: '自然语言可重试' }
+      : { color: 'red' as const, text: '自然语言未配置' }
 
   return (
     <div className="header-bar">
@@ -75,7 +80,7 @@ export function HeaderBar({
           围绕日线计划回答候选、买入区、失效位、止盈位和条件变化。
         </Typography.Paragraph>
         <Space size={[8, 8]} wrap className="header-status-grid">
-          <Tag color={health?.llm_ready ? 'green' : 'red'}>{health?.llm_ready ? '自然语言已接通' : '自然语言未接通'}</Tag>
+          <Tag color={llmStatus.color}>{llmStatus.text}</Tag>
           <Tag>数据源 {health?.runtime?.data_provider || '--'}</Tag>
           <Tag>自动更新 {health?.runtime?.auto_update_service || 'gp-worker'}</Tag>
           <Tag color={freshness.color}>{freshness.label}</Tag>

@@ -183,7 +183,7 @@ def test_exit_decision_returns_structured_action():
         slot_status="OK",
         publish_allowed=True,
     )
-    frame = TurnFrame(frame_id="f", raw_message="600519 现在该不该卖", subject="holding", request="exit_decision", freshness="latest_5m", references={"symbol": "600519"})
+    frame = TurnFrame(frame_id="f", raw_message="600519 现在该不该卖", subject="holding", request="exit_decision", freshness="active_run", references={"symbol": "600519"})
     ev = EvidencePack(frame=frame, session=SessionState(session_id="s1", created_at="t", updated_at="t"), book=book, subject_entry=entry)
     judgment = make_judgment("s1", frame, ev)
     assert judgment.kind == "exit_decision"
@@ -225,7 +225,7 @@ def test_stale_daily_symbol_blocks_formal_pick_decisions():
         slot_status="OK",
         publish_allowed=True,
     )
-    frame = TurnFrame(frame_id="f", raw_message="这只现在还能买吗", subject="symbol", request="live_entry_check", freshness="latest_5m", references={"symbol": "600519"})
+    frame = TurnFrame(frame_id="f", raw_message="这只现在还能买吗", subject="symbol", request="live_entry_check", freshness="active_run", references={"symbol": "600519"})
     run = AdviceRun(run_id="run1", session_id="s1", book_version="book1", created_at="t", trading_day="20240320", picks=[entry])
     ev = EvidencePack(frame=frame, session=SessionState(session_id="s1", created_at="t", updated_at="t"), book=book, active_run=run, subject_entry=entry)
 

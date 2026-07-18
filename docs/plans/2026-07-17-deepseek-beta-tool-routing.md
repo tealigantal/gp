@@ -19,6 +19,10 @@ Restore the real `/api/chat` journey for the configured `deepseek-v4-flash` prov
 - [x] 2026-07-18: Made product-chat verification shared across the two Uvicorn processes, so `/api/health` reports the committed real chat instead of a process-local false `unverified` state.
 - [x] 2026-07-18: Promoted `gp-serenity-worker` to a default resident Compose service. A plain `docker compose up -d --build` started the API, market worker, Serenity worker, and Web service; real chat subsequently restored LLM readiness.
 - [x] 2026-07-18: Repaired the Workspace integration contract after the single-protocol cutover: Nginx now targets the Compose `gp` service, Workspace reads project the current `AgentStore` snapshot/turns, and each frontend chat turn carries a generated idempotency key. Browser acceptance completed a real two-candidate Serenity question with HTTP 200; the market worker emitted a publish followed by safe no-op cycles.
+- [x] 2026-07-18: Repaired the narration field-label precedence that misread `第一目标盈亏比 0.73` as a target price. Rejected answers now remain fail-closed per turn while a configured real provider stays directly retryable; the Workspace distinguishes `已验证`, `可重试`, and `未配置` without adding a probe, template, or fallback.
+- [x] 2026-07-18: Closed the end-to-end assistant-response presentation contract in `src/gp_assistant/contracts/api.py`. Every committed non-empty reply now carries the same narrative through POST, idempotent replay, persisted-session projection, and Workspace rendering; legacy persisted turns are projected without a database rewrite, and malformed/empty metadata is visibly degraded rather than rendered as a blank reply.
+- [x] 2026-07-18: Retired the remaining runtime-affecting compatibility contracts. Worker operations now have one strict source in `contracts/runtime.py`; routing intents and market time reject obsolete aliases; daily-freshness report fields are explicitly projected in their owning module. The default worker and daily-freshness tests now exercise `AgentStore + MarketTimeContext + runtime-loop` rather than removed file-store/portfolio seams.
+- [x] 2026-07-18: Completed final live Top-N and same-session follow-up acceptance after rebuilding every Compose service from the same source digest. Explicit candidate-list wording now wins over generic exit-keyword normalization; mainland security identifiers are checked by the symbol boundary rather than misclassified as price numbers; and natural negative action explanations such as “盘后不宜直接开仓” remain allowed while affirmative execution instructions stay fail-closed.
 
 ## Surprises & Discoveries
 
@@ -29,12 +33,17 @@ Restore the real `/api/chat` journey for the configured `deepseek-v4-flash` prov
 - A clean Git source-status check does not prove the merged source is runnable. Here, `af90e6a` created a tracked inconsistency: it preserved a `turn_loop` import while deleting its package. Compilation alone does not detect this missing import target; chat-related pytest collection does.
 - A late write from a pre-native `SerenityAddon.v1` runtime artifact was evaluated as a native sample after the first formula cutover. That correctly failed integrity checks, but incorrectly left the current policy suspended. Formula epochs must isolate such immutable legacy evidence before evaluation.
 - Chat commit uses an optimistic current-snapshot check. A worker publication during a provider round-trip produces an explicit 503 rather than committing a stale answer; a subsequent request on a stable snapshot commits normally.
+- `第一目标` is a prefix of the distinct `第一目标盈亏比` field. Generic label matching therefore bound the latter's display value as `take1` before the correct risk/reward field, rejecting an otherwise grounded repair. Specific numeric labels must take precedence over their prefixes.
+- Commit `268b43c` restored Workspace reads by exposing the persisted `AgentStore` payload verbatim. The single-protocol chat payload keeps the real LLM answer in `reply`/turn `content`, while the old `ChatThread` assumed `meta.message.narrative_text`; ordinary `chat` turns therefore rendered an empty body despite a committed provider response. The failure is a read-model/presentation-contract gap, not a provider-call failure.
+- Producer compatibility covers the complete backend source digest. Recreating only `gp` after a backend edit correctly makes the running worker's old snapshot incompatible; a source change therefore requires a single rebuild of `gp`, `gp-worker`, and `gp-serenity-worker` before live-chat acceptance.
+- A user asking for a Top-N plan can mention plan fields such as `止损`. Generic concern parsing must not convert that concrete list request into an exit decision after local candidate scope is derived. Similarly, negative action phrases need their own grammar so they do not become false execution recommendations.
 
 ## Decision Log
 
 - Use DeepSeek Beta directly for all GP LLM calls; do not retain a `/v1` compatibility fallback.
 - Preserve strict tools. Unknown optional business inputs are required fields with a `null` value, not omitted fields.
 - Keep Serenity at shadow/0% after a formula-epoch recovery. Its own causal controller may move it to 1% probation only after the documented 40 mature-day, 300-result and performance gates; no manual weight override is permitted.
+- Preserve a committed-chat signal separately from retry eligibility: only a committed validated turn makes `llm_ready=true`, while an already configured provider exposes `llm_retryable=true` after a rejected turn. Recovery happens only through the user's next real question.
 
 ## Validation and Acceptance
 
@@ -42,6 +51,7 @@ Restore the real `/api/chat` journey for the configured `deepseek-v4-flash` prov
 - `python -m compileall -q src tests` passes.
 - `docker compose config --quiet` resolves the Beta URL for every Python service.
 - A real `/api/chat` request commits a snapshot-bound business response with a complete, real two-stage LLM trace (including any validator-directed repair), and `/api/health` reports `product_ready=true`.
+- The `第一目标盈亏比` display value passes its own field validation while the same value presented as `第一目标` still fails. A failed narration yields `llm_ready=false` and `llm_retryable=true`; missing configuration yields both false; a subsequent real committed turn immediately restores `llm_ready=true` in Workspace.
 
 ## Idempotence and Recovery
 

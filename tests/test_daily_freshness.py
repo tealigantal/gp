@@ -25,9 +25,9 @@ def test_resolve_daily_target_intraday_uses_previous_completed(monkeypatch):
 
     target = daily_freshness.resolve_daily_target("2026-04-30")
 
-    assert target["target_day"] == "2026-04-29"
-    assert target["target_mode"] == "previous_completed"
-    assert target["daybook_trading_day"] == "20260430"
+    assert target.daybook_effective_day == "2026-04-29"
+    assert target.target_mode == "previous_completed"
+    assert target.decision_trade_ymd == "20260430"
 
 
 def test_resolve_daily_target_postclose_pending_waits_for_eod(monkeypatch):
@@ -47,9 +47,9 @@ def test_resolve_daily_target_postclose_pending_waits_for_eod(monkeypatch):
 
     target = daily_freshness.resolve_daily_target("2026-04-30")
 
-    assert target["target_day"] == "2026-04-29"
-    assert target["target_mode"] == "current_pending"
-    assert target["pending_eod_day"] == "2026-04-30"
+    assert target.daybook_effective_day == "2026-04-29"
+    assert target.target_mode == "current_pending"
+    assert target.pending_eod_day == "2026-04-30"
 
 
 def test_resolve_daily_target_postclose_ready_uses_current_day(monkeypatch):
@@ -68,9 +68,9 @@ def test_resolve_daily_target_postclose_ready_uses_current_day(monkeypatch):
 
     target = daily_freshness.resolve_daily_target("2026-04-30")
 
-    assert target["target_day"] == "2026-04-30"
-    assert target["target_mode"] == "current_ready"
-    assert target["pending_eod_day"] is None
+    assert target.daybook_effective_day == "2026-04-30"
+    assert target.target_mode == "current_ready"
+    assert target.pending_eod_day is None
 
 
 def test_resolve_daily_target_rejects_partial_positive_eod_probe(monkeypatch):
@@ -99,9 +99,9 @@ def test_resolve_daily_target_rejects_partial_positive_eod_probe(monkeypatch):
 
     target = daily_freshness.resolve_daily_target("2026-04-30")
 
-    assert target["target_day"] == "2026-04-29"
-    assert target["target_mode"] == "current_pending"
-    assert target["pending_eod_day"] == "2026-04-30"
+    assert target.daybook_effective_day == "2026-04-29"
+    assert target.target_mode == "current_pending"
+    assert target.pending_eod_day == "2026-04-30"
 
 
 def test_resolve_daily_target_holiday_uses_previous_completed_day(monkeypatch):
@@ -120,10 +120,10 @@ def test_resolve_daily_target_holiday_uses_previous_completed_day(monkeypatch):
 
     target = daily_freshness.resolve_daily_target(now=datetime(2026, 5, 4, 10, 0))
 
-    assert target["target_day"] == "2026-04-30"
-    assert target["target_mode"] == "previous_completed"
-    assert target["daybook_trading_day"] == "20260430"
-    assert target["next_trading_day"] == "2026-05-06"
+    assert target.daybook_effective_day == "2026-04-30"
+    assert target.target_mode == "previous_completed"
+    assert target.decision_trade_ymd == "20260430"
+    assert target.next_trading_day == "2026-05-06"
 
 
 def test_active_freshness_discards_stale_holiday_target_when_book_matches_current(monkeypatch):
@@ -169,9 +169,9 @@ def test_resolve_daily_target_reads_cached_eod_probe_without_network(monkeypatch
 
     target = daily_freshness.resolve_daily_target("2026-04-30", allow_probe=False)
 
-    assert target["target_day"] == "2026-04-30"
-    assert target["target_mode"] == "current_ready"
-    assert target["eod_probe"] == cached_probe
+    assert target.daybook_effective_day == "2026-04-30"
+    assert target.target_mode == "current_ready"
+    assert target.eod_probe == cached_probe
 
 
 def test_expired_positive_eod_probe_stays_ready_for_same_target(monkeypatch, tmp_path):
