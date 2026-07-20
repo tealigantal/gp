@@ -1,28 +1,18 @@
 import { Alert, Card, Space, Tag, Typography } from 'antd'
-import type {
-  CanonicalMessage,
-  CanonicalRecommendMessage,
-  RuntimeStatus,
-  TranscriptEvent,
-} from '../../../shared/contracts'
+import type { TranscriptEvent } from '../../../shared/contracts'
 import { fmtTime } from '../../../shared/format'
-import { AssistantNarrativeBlock } from './AssistantNarrativeBlock'
-import { CompareMessageCard } from './CompareMessageCard'
-import { ExitDecisionMessage } from './ExitDecisionMessage'
-import { FollowupTextMessage } from './FollowupTextMessage'
-import { LiveCheckMessageCard } from './LiveCheckMessageCard'
-import { NoTradeMessageCard } from './NoTradeMessageCard'
-import { PickDetailMessageCard } from './PickDetailMessageCard'
-import { RecommendationMessageCard } from './RecommendationMessageCard'
-import { RunChangeMessageCard } from './RunChangeMessageCard'
 import { SuggestedFollowups } from './SuggestedFollowups'
 
 interface ChatThreadProps {
   turns: TranscriptEvent[]
   error?: string | null
   sending: boolean
-  runtime?: RuntimeStatus | null
   onPrompt?: (text: string) => void
+}
+
+interface RenderableAssistantMessage {
+  narrative_text: string
+  followup_suggestions: string[]
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {
@@ -34,37 +24,23 @@ function asRecord(value: unknown): Record<string, unknown> | null {
 function renderableMessage(
   rawMessage: unknown,
   persistedContent: string,
-): CanonicalMessage | undefined {
+): RenderableAssistantMessage | undefined {
   const raw = asRecord(rawMessage) || {}
   const narrative = typeof raw.narrative_text === 'string' && raw.narrative_text.trim()
     ? raw.narrative_text.trim()
     : persistedContent.trim()
   if (!narrative) return undefined
 
-  const messageKind = typeof raw.message_kind === 'string' && raw.message_kind.trim()
-    ? raw.message_kind
-    : 'chat'
-  const structuredRequirements: Record<string, string> = {
-    pick_detail: 'pick',
-    single_stock_query: 'analysis',
-    live_entry_check: 'live_check',
-    compare: 'compare',
-    candidate_compare: 'compare',
-    exit_decision: 'exit_decision',
-    run_change: 'run_change',
-  }
-  const required = structuredRequirements[messageKind]
-  if (required && !asRecord(raw[required])) {
-    return { message_kind: 'chat', narrative_text: narrative }
-  }
-  return { ...raw, message_kind: messageKind, narrative_text: narrative } as CanonicalMessage
+  const followupSuggestions = Array.isArray(raw.followup_suggestions)
+    ? raw.followup_suggestions.filter((item): item is string => typeof item === 'string' && Boolean(item.trim()))
+    : []
+  return { narrative_text: narrative, followup_suggestions: followupSuggestions }
 }
 
-function renderFromCanonical(
+function renderAssistantReply(
   rawMessage: unknown,
   persistedContent: string,
-  runtime?: RuntimeStatus | null,
-  onPrompt?: (t: string) => void,
+  onPrompt?: (text: string) => void,
 ) {
   const message = renderableMessage(rawMessage, persistedContent)
   if (!message) {
@@ -77,130 +53,15 @@ function renderFromCanonical(
       />
     )
   }
-  if (message.message_kind === 'recommend') {
-    const recommendMessage = message as CanonicalRecommendMessage
-    const blocked = recommendMessage.run?.run_action === 'NO_TRADE' || (recommendMessage.picks || []).length === 0
-    if (blocked) {
-      return (
-        <Space direction="vertical" size={10} style={{ width: '100%' }}>
-          <NoTradeMessageCard
-            reason={recommendMessage.run?.status_reason || recommendMessage.narrative_text}
-            text={recommendMessage.narrative_text}
-            noTradeReasons={recommendMessage.run?.no_trade_reasons || []}
-            recoveryConditions={recommendMessage.run?.recovery_conditions || []}
-            marketSummary={recommendMessage.run?.status_reason || recommendMessage.narrative_text}
-          />
-          <SuggestedFollowups suggestions={recommendMessage.followup_suggestions} onPick={(text) => onPrompt?.(text)} />
-        </Space>
-      )
-    }
-    return (
-      <Space direction="vertical" size={10} style={{ width: '100%' }}>
-        <RecommendationMessageCard picks={recommendMessage.picks} run={recommendMessage.run} runtime={runtime} onPrompt={onPrompt} />
-        <AssistantNarrativeBlock text={recommendMessage.narrative_text} />
-        <SuggestedFollowups suggestions={recommendMessage.followup_suggestions} onPick={(text) => onPrompt?.(text)} />
-      </Space>
-    )
-  }
-  if (message.message_kind === 'no_trade') {
-    return (
-      <Space direction="vertical" size={10} style={{ width: '100%' }}>
-        <NoTradeMessageCard
-          reason={message.reason}
-          text={message.narrative_text}
-          noTradeReasons={message.no_trade_reasons}
-          recoveryConditions={message.recovery_conditions}
-          marketSummary={message.market_summary}
-        />
-        <SuggestedFollowups suggestions={message.followup_suggestions} onPick={(text) => onPrompt?.(text)} />
-      </Space>
-    )
-  }
-  if (message.message_kind === 'pick_detail') {
-    return (
-      <Space direction="vertical" size={10} style={{ width: '100%' }}>
-        <PickDetailMessageCard detail={message.pick} text={message.narrative_text} />
-        <SuggestedFollowups suggestions={message.followup_suggestions} onPick={(text) => onPrompt?.(text)} />
-      </Space>
-    )
-  }
-  if (message.message_kind === 'single_stock_query') {
-    return (
-      <Space direction="vertical" size={10} style={{ width: '100%' }}>
-        <FollowupTextMessage content={message.narrative_text} label="单票分析" />
-        <SuggestedFollowups suggestions={message.followup_suggestions} onPick={(text) => onPrompt?.(text)} />
-      </Space>
-    )
-  }
-  if (message.message_kind === 'live_entry_check') {
-    return (
-      <Space direction="vertical" size={10} style={{ width: '100%' }}>
-        <LiveCheckMessageCard view={message.live_check} text={message.narrative_text} />
-        <SuggestedFollowups suggestions={message.followup_suggestions} onPick={(text) => onPrompt?.(text)} />
-      </Space>
-    )
-  }
-  if (message.message_kind === 'intraday_situation') {
-    return (
-      <Space direction="vertical" size={10} style={{ width: '100%' }}>
-        {message.live_check ? (
-          <LiveCheckMessageCard view={message.live_check} text={message.narrative_text} />
-        ) : (
-          <FollowupTextMessage content={message.narrative_text} label="盘中分析" />
-        )}
-        <SuggestedFollowups suggestions={message.followup_suggestions} onPick={(text) => onPrompt?.(text)} />
-      </Space>
-    )
-  }
-  if (message.message_kind === 'compare') {
-    return (
-      <Space direction="vertical" size={10} style={{ width: '100%' }}>
-        <CompareMessageCard compare={message.compare} text={message.narrative_text} />
-        <SuggestedFollowups suggestions={message.followup_suggestions} onPick={(text) => onPrompt?.(text)} />
-      </Space>
-    )
-  }
-  if (message.message_kind === 'candidate_compare') {
-    return (
-      <Space direction="vertical" size={10} style={{ width: '100%' }}>
-        <CompareMessageCard compare={message.compare} text={message.narrative_text} />
-        <SuggestedFollowups suggestions={message.followup_suggestions} onPick={(text) => onPrompt?.(text)} />
-      </Space>
-    )
-  }
-  if (message.message_kind === 'exit_decision') {
-    return (
-      <Space direction="vertical" size={10} style={{ width: '100%' }}>
-        <ExitDecisionMessage view={message.exit_decision} text={message.narrative_text} />
-        <SuggestedFollowups suggestions={message.followup_suggestions} onPick={(text) => onPrompt?.(text)} />
-      </Space>
-    )
-  }
-  if (message.message_kind === 'run_change') {
-    return (
-      <Space direction="vertical" size={10} style={{ width: '100%' }}>
-        <RunChangeMessageCard text={message.narrative_text} change={message.run_change} />
-        <SuggestedFollowups suggestions={message.followup_suggestions} onPick={(text) => onPrompt?.(text)} />
-      </Space>
-    )
-  }
-  if (message.message_kind === 'term_explain') {
-    return (
-      <Space direction="vertical" size={10} style={{ width: '100%' }}>
-        <FollowupTextMessage content={message.narrative_text} label="继续解释" />
-        <SuggestedFollowups suggestions={message.followup_suggestions} onPick={(text) => onPrompt?.(text)} />
-      </Space>
-    )
-  }
   return (
     <Space direction="vertical" size={10} style={{ width: '100%' }}>
-      <FollowupTextMessage content={message.narrative_text} label="助手回复" />
+      <Typography.Paragraph className="assistant-message-text">{message.narrative_text}</Typography.Paragraph>
       <SuggestedFollowups suggestions={message.followup_suggestions} onPick={(text) => onPrompt?.(text)} />
     </Space>
   )
 }
 
-export function ChatThread({ turns, error, sending, runtime, onPrompt }: ChatThreadProps) {
+export function ChatThread({ turns, error, sending, onPrompt }: ChatThreadProps) {
   return (
     <div className="chat-thread">
       {error ? (
@@ -228,7 +89,7 @@ export function ChatThread({ turns, error, sending, runtime, onPrompt }: ChatThr
             return (
               <div key={`${turn.turn_id}-${turn.seq}`} className="assistant-turn">
                 {header}
-                {renderFromCanonical(meta.message, turn.content, runtime, onPrompt)}
+                {renderAssistantReply(meta.message, turn.content, onPrompt)}
               </div>
             )
           }

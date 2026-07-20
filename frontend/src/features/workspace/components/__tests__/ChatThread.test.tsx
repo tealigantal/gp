@@ -109,11 +109,10 @@ const baseProps: React.ComponentProps<typeof ChatThread> = {
   turns: [],
   error: null,
   sending: false,
-  book: undefined,
   onPrompt: () => {},
 }
 
-it('renders recommendation picks with entry stop take and execution state', () => {
+it('renders a recommendation as narration without exposing structured candidate cards', () => {
   const run = makeRun()
   const message: CanonicalMessage = {
     message_kind: 'recommend',
@@ -122,17 +121,13 @@ it('renders recommendation picks with entry stop take and execution state', () =
     run,
   }
   render(<ChatThread {...baseProps} turns={[assistantTurn(message)]} />)
-  expect(screen.getByText(/10.20 - 10.35/)).toBeInTheDocument()
-  expect(screen.getByText(/9.98/)).toBeInTheDocument()
-  expect(screen.getByText(/10.88/)).toBeInTheDocument()
-  expect(screen.getAllByText('交易信号').length).toBeGreaterThan(0)
-  expect(screen.getAllByText('TREND_CONTINUATION_5M').length).toBeGreaterThan(0)
-  expect(screen.getAllByText('PULLBACK_RECLAIM').length).toBeGreaterThan(0)
-  expect(screen.getAllByText('计划区间内').length).toBeGreaterThan(0)
-  expect(screen.getAllByText(/日线截至 2026-01-01/).length).toBeGreaterThan(0)
+  expect(screen.getByText('今天优先看 2 只。')).toBeInTheDocument()
+  expect(screen.queryByText(/10.20 - 10.35/)).toBeNull()
+  expect(screen.queryByText(/下一交易窗口策略计划/)).toBeNull()
+  expect(screen.queryByText('Why This Answer')).toBeNull()
 })
 
-it('postclose recommend still renders recommendation card', () => {
+it('renders postclose recommendation narration without a plan card', () => {
   const run = {
     ...makeRun(),
     recommendation_state: 'NEXT_SESSION_PLAN',
@@ -161,11 +156,11 @@ it('postclose recommend still renders recommendation card', () => {
   }
   render(<ChatThread {...baseProps} turns={[assistantTurn(message)]} />)
   expect(screen.getByText('日线计划。')).toBeInTheDocument()
-  expect(screen.getAllByText('下个交易窗口').length).toBeGreaterThan(0)
+  expect(screen.queryByText('下个交易窗口')).toBeNull()
   expect(screen.queryByText(/空仓 \/ 暂不入场/)).toBeNull()
 })
 
-it('renders live entry card', () => {
+it('renders live-entry analysis as narration without a detail card', () => {
   const message: CanonicalMessage = {
     message_kind: 'live_entry_check',
     narrative_text: '逻辑还在，但等回踩。',
@@ -189,11 +184,11 @@ it('renders live entry card', () => {
     run: makeRun(),
   }
   render(<ChatThread {...baseProps} turns={[assistantTurn(message)]} />)
-  expect(screen.getAllByText(/等回踩/).length).toBeGreaterThan(0)
-  expect(screen.getByText(/等回踩买入区/)).toBeInTheDocument()
+  expect(screen.getByText('逻辑还在，但等回踩。')).toBeInTheDocument()
+  expect(screen.queryByText(/等回踩买入区/)).toBeNull()
 })
 
-it('quick action click sends natural prompt', () => {
+it('suggested followup click sends a natural prompt without a recommendation card', () => {
   const run = makeRun()
   const onPrompt = vi.fn()
   const message: CanonicalMessage = {
@@ -201,9 +196,10 @@ it('quick action click sends natural prompt', () => {
     narrative_text: '今天优先看 2 只。',
     picks: run.picks,
     run,
+    followup_suggestions: ['为什么推荐 000001'],
   }
   render(<ChatThread {...baseProps} onPrompt={onPrompt} turns={[assistantTurn(message)]} />)
-  fireEvent.click(screen.getAllByText('现在还能买吗')[0])
+  fireEvent.click(screen.getByText('为什么推荐 000001'))
   expect(onPrompt).toHaveBeenCalled()
   expect(String(onPrompt.mock.calls[0][0])).toContain('000001')
 })

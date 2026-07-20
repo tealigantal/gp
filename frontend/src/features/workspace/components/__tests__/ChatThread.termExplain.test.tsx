@@ -20,7 +20,7 @@ it('renders term explain followup text', () => {
     narrative_text: '“收盘有效跌破支撑带”是在解释风控边界，不是盘中一下跌破就立刻追着卖。',
     followup_suggestions: ['这只现在还能买吗'],
   }
-  render(<ChatThread turns={[assistantTurn(message)]} error={null} sending={false} book={undefined} onPrompt={() => {}} />)
+  render(<ChatThread turns={[assistantTurn(message)]} error={null} sending={false} onPrompt={() => {}} />)
   expect(screen.getByText(/风控边界/)).toBeInTheDocument()
   expect(screen.getByText('这只现在还能买吗')).toBeInTheDocument()
 })

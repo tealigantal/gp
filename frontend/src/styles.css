@@ -443,6 +443,14 @@ h4 {
   gap: 8px;
 }
 
+.assistant-message-text {
+  margin: 0 !important;
+  padding: 2px 4px;
+  color: var(--text-main);
+  line-height: 1.75;
+  white-space: pre-wrap;
+}
+
 .message-meta {
   gap: 6px !important;
 }
@@ -501,34 +509,6 @@ h4 {
 }
 
 
-.recommendation-pick-card,
-.recommendation-message-card,
-.detail-card,
-.snapshot-card,
-.ops-subcard,
-.narrative-card {
-  border-radius: 20px !important;
-  border: 1px solid var(--line-soft) !important;
-  background: var(--bg-surface-strong) !important;
-  box-shadow: var(--shadow-md);
-}
-
-.snapshot-card .ant-card-head {
-  min-height: 48px;
-  border-bottom-color: rgba(17, 35, 59, 0.08) !important;
-}
-
-.snapshot-card .ant-card-head-title {
-  font-weight: 700;
-}
-
-.snapshot-summary {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-
 .snapshot-section {
   padding: 16px;
   border-radius: 18px;
@@ -551,53 +531,6 @@ h4 {
 .snapshot-fact-list > div:last-child,
 .ops-compact-grid > div:last-child {
   border-bottom: 0;
-}
-
-.followup-text-card {
-  border-radius: 18px !important;
-  border: 1px solid var(--line-soft) !important;
-  background: rgba(255, 255, 255, 0.9) !important;
-}
-
-.message-card-header,
-.pick-card-topline {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: 12px;
-}
-
-.rank-dot {
-  width: 30px;
-  height: 30px;
-  border-radius: 50%;
-  background: linear-gradient(135deg, #10223c, #2857c5);
-  color: #eff6ff;
-  display: grid;
-  place-items: center;
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.micro-copy {
-  color: var(--text-muted);
-  font-size: 12px;
-  margin-top: 2px;
-}
-
-.fact-strip {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-.fact-strip .ant-tag,
-.snapshot-row .ant-tag {
-  margin-inline-end: 0;
-}
-
-.pick-grid .ant-descriptions-item-label {
-  width: 112px;
 }
 
 .ops-card .ant-card-head-title {
@@ -825,9 +758,7 @@ h4 {
 
   .snapshot-symbol-row,
   .chat-card-header,
-  .header-bar,
-  .message-card-header,
-  .pick-card-topline {
+  .header-bar {
     flex-direction: column;
   }
 

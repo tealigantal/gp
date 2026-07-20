@@ -101,7 +101,6 @@ export function WorkspacePage() {
                     turns={workspace.turns}
                     error={workspace.lastError}
                     sending={workspace.isSending}
-                    runtime={workspace.health?.runtime}
                     onPrompt={prompt}
                   />
                   <Composer

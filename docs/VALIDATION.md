@@ -1,5 +1,28 @@
 # Validation Ledger
 
+## 2026-07-18 plain assistant-transcript output
+
+- **Decision:** The Workspace transcript is a conversation surface, not a
+  second structured decision dashboard. The right-side snapshot remains the
+  single structured operational view.
+- **Change:** Replaced every assistant message-kind renderer in `ChatThread`
+  with one presentation projection: validated `narrative_text` (or the
+  committed legacy content when metadata is absent) plus optional
+  LLM-provided follow-up prompts. Removed the retired recommendation,
+  comparison, live-entry, exit, run-change, no-trade, detail, and narrative
+  card components. This does not change the API contract, selection, numeric
+  validation, persisted data, or Serenity's native shadow/0% policy.
+- **Executed validation:** Targeted ChatThread Vitest tests passed (8 tests);
+  the complete frontend suite passed (25 tests); `npm run lint`, `npm run
+  typecheck`, `npm run build`, `docker compose config --quiet`, and `git diff
+  --check` passed.
+- **Container acceptance:** Rebuilt and force-recreated `web` without
+  removing runtime data. Compose also recreated its unchanged `gp` dependency;
+  `gp-worker` and `gp-serenity-worker` remained running. `GET /` returned 200,
+  `/api/health` returned `status=ok`, `product_ready=true`, and
+  `llm_ready=true`; Serenity remained `native/shadow/0%`. The deployed Nginx
+  assets no longer contain the retired `下一交易窗口策略计划` card copy.
+
 ## 2026-07-18 runtime contract consolidation
 
 - **Cause addressed:** The default suite retained eight worker tests that
