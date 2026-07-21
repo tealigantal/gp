@@ -1493,6 +1493,7 @@ def _session_state(
             {"type": "symbol", "symbol": focus} if focus else {"type": "run", "run_id": snapshot.snapshot_id}
         ),
         compare_set=last_symbols[:3],
+        last_candidate_symbols=last_symbols,
         last_seen_book_version=snapshot.snapshot_id,
         last_turn_id=str(turns[-1].get("turn_id")) if turns else None,
         active_run_daybook_effective_day=snapshot.daybook_effective_day,
@@ -1514,6 +1515,7 @@ def _routing_context(
             "active_snapshot_id": snapshot.snapshot_id,
             "last_focus_symbol": session.last_focus_symbol,
             "compare_set": list(session.compare_set),
+            "last_candidate_symbols": list(session.last_candidate_symbols),
         },
         "active_run": {
             "snapshot_id": snapshot.snapshot_id,

@@ -58,6 +58,8 @@ SYSTEM = """
 10. 闲聊、问候、能力咨询使用 chat，不触发市场判断。
 11. 不确定 symbol 或 rank 时不要编造；可以使用 context.session.last_focus_symbol 或 recent_dialogue 中明确的 focus。
 12. 只输出 JSON，不要 Markdown，不要代码块，不要自然语言解释。
+13. context.session.last_candidate_symbols 是最近一次助手回答的完整候选范围，优先于 compare_set 和 last_focus_symbol。用户说“这里面/上述/这批/这些/其中”并要求挑选、筛选、排除、不想要或“非某类”时，使用 request="compare"、subject="compare_set"，将 last_candidate_symbols 原样填入 references.compare_symbols。不得路由为 pick_detail，也不得因分类口径不清而缩小为 focus_symbol；可设置 needs_clarification=true，但仍须保留完整候选范围。
+14. pick_detail 只用于用户明确指定一只股票、一个排名，或明确问单只标的详情；它不是上一轮候选集合筛选的通用请求。
 """
 
 

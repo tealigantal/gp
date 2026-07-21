@@ -14,6 +14,13 @@
 - **Executed validation:** `python -m pytest -q tests/agent/test_agent_llm_chat.py -k 'llm_owned_scope or two_stage_llm_trace'`, `python -m compileall -q src tests`, and `git diff --check` passed.
 - **Runtime acceptance:** Rebuilt and recreated `gp`, `gp-worker`, and `gp-serenity-worker`; health recovered with `status=ok`, `product_ready=true`, and compatible `daily_6368ec2ad3be`. In a fresh real session, “今天给我10只” committed ten candidates; the immediate “我想要预期收益大一点的” follow-up was routed by the LLM with `topk=10` and returned all ten, reordered by their supplied expected return.
 
+## 2026-07-21 prior candidate-set routing
+
+- **Cause addressed:** A filtering request using “这里面” was routed as `pick_detail`; the focus fallback then supplied only the first candidate despite the preceding Top-10 response.
+- **Change:** `SessionState` now retains the complete prior assistant candidate list for routing, and the strict router prompt mandates `compare` plus the full `compare_symbols` set for “这里面/上述/这批” filtering or exclusion requests.
+- **Executed validation:** Focused agent tests verify complete prior-scope preservation and prompt policy; `python -m compileall -q src tests` and `git diff --check` passed.
+- **Runtime acceptance:** Rebuilt and recreated `gp`, `gp-worker`, and `gp-serenity-worker`; health recovered with `status=ok`, `product_ready=true`, and compatible `daily_77d99fd48f4b`. In a fresh real Top-10 session, “帮我把这里面的非老登股挑选出来，并附上他们的评分” routed to `compare` with all ten `compare_symbols`, returned ten candidate certificates, and listed all ten comprehensive scores.
+
 ## 2026-07-21 lunch-board projection and narration freedom recovery
 
 - **Cause addressed:** A lunch board legitimately reorders symbols by live

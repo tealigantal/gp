@@ -31,6 +31,8 @@ Restore the real `/api/chat` journey for the configured `deepseek-v4-flash` prov
 - [x] 2026-07-21: Rebuilt `gp`, `gp-worker`, and `gp-serenity-worker` from the local workspace. After the worker published compatible `daily_417a5311b334`, a real Top-3 `/api/chat` response named the three candidate comprehensive scores: 52.75, 52.09, and 50.62.
 - [x] 2026-07-21: Removed local hard-field reconstruction from `/api/chat` routing at user direction. Candidate quantity, scope, references, and refresh intent now remain the strict LLM router's frame; local code only validates and resolves it against the current immutable snapshot.
 - [x] 2026-07-21: Rebuilt the shared backend services and verified a real same-session Top-10 → “预期收益大一点” conversation. The LLM selected `topk=10`, all ten candidate certificates stayed in scope, and the reply reordered them by supplied expected return instead of collapsing to the first symbol.
+- [x] 2026-07-21: Added the complete prior candidate-symbol set to routing context and instructed the LLM that “这里面/上述/这批” filtering requests must use multi-candidate comparison rather than a focused `pick_detail` turn.
+- [x] 2026-07-21: Rebuilt the backend services and verified a real Top-10 → “帮我把这里面的非老登股挑选出来，并附上他们的评分” conversation. The follow-up routed to `compare` with all ten symbols and returned all ten scores rather than collapsing to 000858.
 
 ## Surprises & Discoveries
 

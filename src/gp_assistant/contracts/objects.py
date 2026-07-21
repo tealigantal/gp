@@ -41,6 +41,7 @@ class SessionState(GPModel):
     previous_run_id: Optional[str] = None
     focus_subject: Dict[str, Any] = Field(default_factory=dict)
     compare_set: List[str] = Field(default_factory=list)
+    last_candidate_symbols: List[str] = Field(default_factory=list)
     user_preferences: Dict[str, Any] = Field(default_factory=dict)
     last_seen_book_version: Optional[str] = None
     last_turn_id: Optional[str] = None

@@ -17,12 +17,15 @@ from gp_assistant.chat_agent import (
     _number_variants,
     _provider_narration_context,
     _resolve_provider_value_tokens,
+    _routing_context,
+    _session_state,
     _validate_narration_authority,
     _validate_narrated_symbols,
     run_chat_turn,
 )
 from gp_assistant.contracts.objects import AdviceRun, Judgment, ReplyBundle, TurnFrame
 from gp_assistant.core.errors import APIError
+from gp_assistant.llm.interpret import SYSTEM as INTERPRET_SYSTEM
 from gp_assistant.runtime.grounding import validate_reply
 from tests.agent.test_agent_store import make_book, patch_chat_llm
 
@@ -52,6 +55,24 @@ def test_chat_keeps_the_llm_candidate_scope(monkeypatch, tmp_path):
 
     assert result.message["intent"]["constraints"]["topk"] == 1
     assert len(result.symbols) == 1
+
+
+def test_routing_context_preserves_the_complete_previous_candidate_scope(tmp_path):
+    store = AgentStore(tmp_path / "agent.db")
+    store.publish_book(make_book())
+    snapshot = store.current_snapshot()
+    assert snapshot is not None
+    symbols = ["000001", "000002", "000003", "000004"]
+    session = _session_state(
+        "candidate-scope-session",
+        snapshot,
+        [{"role": "assistant", "payload": {"symbols": symbols}}],
+    )
+    context = _routing_context(snapshot, store.book_for_snapshot(snapshot), session, [])
+
+    assert context["session"]["compare_set"] == symbols[:3]
+    assert context["session"]["last_candidate_symbols"] == symbols
+    assert "last_candidate_symbols 是最近一次助手回答的完整候选范围" in INTERPRET_SYSTEM
 
 
 def test_two_stage_llm_trace_is_committed_with_snapshot(monkeypatch, tmp_path):
