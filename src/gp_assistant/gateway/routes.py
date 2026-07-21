@@ -15,6 +15,7 @@ from ..contracts.api import (
     ChatResponse,
     HealthResponse,
     HealthStorageStats,
+    LunchResponse,
     RuntimeStatus,
     RuntimeToolInfo,
     SessionResponse,
@@ -358,6 +359,60 @@ def current_book() -> BookResponse:
             detail={"reason": str(ex), "retry_after_ms": ex.retry_after_ms},
         ) from ex
     return BookResponse(book=book.model_dump(mode="json") if book else {})
+
+
+@router.get("/api/lunch/current", response_model=LunchResponse)
+def current_lunch() -> LunchResponse:
+    """Expose the completed morning session without conflating it with daily data."""
+    store = AgentStore()
+    try:
+        book = store.current_book()
+    except StorageBusyError as ex:
+        raise APIError(
+            status_code=503,
+            message="午盘快照读取繁忙",
+            detail={"reason": str(ex), "retry_after_ms": ex.retry_after_ms},
+        ) from ex
+    market_time = resolve_daily_target(allow_probe=False)
+    phase = str(market_time.market_phase or "UNKNOWN")
+    target_day = market_time.pulse_trade_day
+    target_slot = market_time.pulse_slot_closed_at
+    pulse_day = getattr(book, "pulse_trade_day", None) if book else None
+    pulse_slot = getattr(book, "pulse_slot_at", None) if book else None
+    slot_ok = str(getattr(book, "slot_status", "") or "").upper() == "OK"
+    ready = bool(
+        phase == "LUNCH_BREAK"
+        and book is not None
+        and target_day
+        and pulse_day == target_day
+        and target_slot
+        and pulse_slot
+        and str(pulse_slot) >= str(target_slot)
+        and slot_ok
+    )
+    state = "READY" if ready else "PENDING" if phase == "LUNCH_BREAK" else "NOT_APPLICABLE"
+    return LunchResponse(
+        trade_day=target_day or market_time.decision_trade_day,
+        market_phase=phase,
+        state=state,
+        generated_at=getattr(book, "updated_at", None) if book else None,
+        session={
+            "name": "morning_session",
+            "target_closed_at": target_slot,
+            "completed_at": pulse_slot if ready else None,
+            "complete": ready,
+        },
+        daily={
+            "effective_day": market_time.daybook_effective_day,
+            "target_mode": market_time.target_mode,
+            "today_complete": False,
+        },
+        market={
+            "gate_state": getattr(getattr(book, "gate", None), "state", None),
+            "gate_score": getattr(getattr(book, "gate", None), "score", None),
+            "gate_reasons": list(getattr(getattr(book, "gate", None), "reasons", None) or []),
+        },
+    )
 
 
 @router.get("/api/session/{session_id}", response_model=SessionResponse)

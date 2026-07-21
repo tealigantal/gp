@@ -250,6 +250,13 @@ def test_ready_snapshot_binds_decision_context_rank_and_board_score(tmp_path):
         AgentStore(tmp_path / "wrong-score.db").publish_book(wrong_score)
 
 
+def test_native_snapshot_allows_live_board_display_rank_to_differ(tmp_path):
+    book = make_book()
+    book.board[0].rank = 7
+
+    AgentStore(tmp_path / "live-board-rank.db").publish_book(book)
+
+
 def test_native_attestation_rejects_future_facts_and_fact_lineage_mismatch(tmp_path):
     store, snapshot = _published(tmp_path)
     future = store.book_for_snapshot(snapshot)

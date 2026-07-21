@@ -126,6 +126,7 @@ export function WorkspacePage() {
               <div className="panel-scroll">
                 <DecisionSnapshot
                   book={workspace.book}
+                  lunch={workspace.lunch}
                   latest={workspace.latestResponse}
                   health={workspace.health}
                   onRunTool={workspace.runTool}

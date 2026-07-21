@@ -252,5 +252,19 @@ class BookResponse(BaseModel):
     book: Dict[str, Any]
 
 
+class LunchResponse(BaseModel):
+    """Morning-session data only; never a declaration of daily completion."""
+
+    schema_version: str = "lunch_snapshot.v1"
+    kind: str = "lunch_snapshot"
+    trade_day: Optional[str] = None
+    market_phase: str = "UNKNOWN"
+    state: str = "NOT_APPLICABLE"
+    generated_at: Optional[str] = None
+    session: Dict[str, Any] = Field(default_factory=dict)
+    daily: Dict[str, Any] = Field(default_factory=dict)
+    market: Dict[str, Any] = Field(default_factory=dict)
+
+
 class RunResponse(BaseModel):
     run: Dict[str, Any]

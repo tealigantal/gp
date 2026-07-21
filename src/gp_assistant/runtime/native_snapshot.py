@@ -797,7 +797,12 @@ def native_snapshot_integrity_errors(snapshot: Any, book: MarketBook) -> list[st
     ):
         return ["native_snapshot_reserve_projection_invalid"]
     board_symbols = [entry.symbol for entry in book.board]
-    if board_symbols != selected_symbols:
+    # The daily decision's selected_symbols order is immutable selection
+    # authority.  A live board is a separate execution projection: it may
+    # reorder those same symbols as intraday readiness changes.  Publishing
+    # must still cover exactly the selected set, while entry.pick retains the
+    # immutable decision rank checked below.
+    if len(board_symbols) != len(set(board_symbols)) or set(board_symbols) != set(selected_symbols):
         return ["native_snapshot_board_projection_invalid"]
     projected_picks = [
         *book.daybook.picks,
@@ -877,15 +882,13 @@ def native_snapshot_integrity_errors(snapshot: Any, book: MarketBook) -> list[st
         if entry_serenity != _serenity(entry.pick):
             return [f"native_snapshot_board_serenity_mirror_invalid:{entry.symbol}"]
         record = candidates.get(entry.symbol) or {}
-        expected_rank = expected_ranked.index(entry.symbol) + 1
         expected_final = (
             float(entry.pulse.live_score)
             if entry.pulse is not None and float(entry.pulse.live_score or 0.0)
             else float(record.get("decision_score") or 0.0)
         )
         if (
-            int(entry.rank or 0) != expected_rank
-            or int(entry.pick.rank or 0) != expected_rank
+            int(entry.pick.rank or 0) != expected_ranked.index(entry.symbol) + 1
             or not _close(entry.final_score, expected_final)
         ):
             return [f"native_snapshot_board_projection_invalid:{entry.symbol}"]

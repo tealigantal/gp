@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, useTransition } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { ChatResponse, OpsRunResponse, TranscriptEvent } from '../../shared/contracts'
-import { getCurrentBook, getHealth, getSession, getSessionDiagnostics, getSessions, postChat, readApiError, runOpsTool } from '../../shared/api'
+import { getCurrentBook, getCurrentLunch, getHealth, getSession, getSessionDiagnostics, getSessions, postChat, readApiError, runOpsTool } from '../../shared/api'
 import { loadSessionId, newClientTurnId, newSessionId, saveSessionId } from '../../shared/session'
 
 interface PendingTurn {
@@ -58,6 +58,15 @@ export function useAdvisorWorkspace() {
     refetchOnReconnect: false,
   })
 
+  const lunchQuery = useQuery({
+    queryKey: ['lunch', 'current'],
+    queryFn: getCurrentLunch,
+    staleTime: BOOK_POLL_MS,
+    refetchInterval: BOOK_POLL_MS,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+  })
+
   const sessionQuery = useQuery({
     queryKey: ['session', sessionId],
     queryFn: () => getSession(sessionId),
@@ -86,6 +95,7 @@ export function useAdvisorWorkspace() {
     await Promise.all([
       healthQuery.refetch(),
       bookQuery.refetch(),
+      lunchQuery.refetch(),
       sessionQuery.refetch(),
       diagnosticsQuery.refetch(),
       sessionsListQuery.refetch(),
@@ -112,6 +122,7 @@ export function useAdvisorWorkspace() {
         queryClient.invalidateQueries({ queryKey: ['session', variables.sessionId] }),
         queryClient.invalidateQueries({ queryKey: ['session-diagnostics', variables.sessionId] }),
         queryClient.invalidateQueries({ queryKey: ['book', 'current'] }),
+        queryClient.invalidateQueries({ queryKey: ['lunch', 'current'] }),
         queryClient.invalidateQueries({ queryKey: ['sessions', 20] }),
         queryClient.invalidateQueries({ queryKey: ['health'] }),
       ])
@@ -220,6 +231,7 @@ export function useAdvisorWorkspace() {
     turns,
     health: healthQuery.data,
     book: bookQuery.data?.book,
+    lunch: lunchQuery.data,
     session: sessionQuery.data,
     diagnostics: diagnosticsQuery.data,
     sessions: sessionsListQuery.data || [],
@@ -229,6 +241,6 @@ export function useAdvisorWorkspace() {
     runningToolService: runToolMutation.variables?.service || null,
     isRunningTool: runToolMutation.isPending,
     isInitialLoading:
-      healthQuery.isLoading || bookQuery.isLoading || sessionQuery.isLoading || diagnosticsQuery.isLoading,
+      healthQuery.isLoading || bookQuery.isLoading || lunchQuery.isLoading || sessionQuery.isLoading || diagnosticsQuery.isLoading,
   }
 }

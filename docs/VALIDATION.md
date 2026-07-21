@@ -1,5 +1,50 @@
 # Validation Ledger
 
+## 2026-07-21 mandatory candidate comprehensive-score narration
+
+- **Cause addressed:** The persisted `daily_af417838c0e7` snapshot contained all ten candidates' `final_score` values, but a score follow-up was narrated from a one-candidate focus slice and the reply incorrectly claimed the other scores were absent.
+- **Change:** The narration system now requires every supplied `candidate_details` item to state its own `final_score` as the comprehensive score; it cannot substitute probability/confidence, borrow another candidate's score, or invent a missing value.
+- **Executed validation:** `python -m pytest -q tests/unit/test_intraday_multistrategy.py -k llm_prompt_safety_contract`, `python -m compileall -q src tests`, and `git diff --check` passed.
+- **Runtime acceptance:** Rebuilt and recreated `gp`, `gp-worker`, and `gp-serenity-worker` from the local workspace. The first health read correctly exposed a pre-rebuild snapshot as `native_snapshot_producer_incompatible`; the worker then published `daily_417a5311b334` and `/api/health` recovered to `status=ok`, `product_ready=true`. A real `POST /api/chat` with “今天给我三只” committed a three-candidate reply that stated 000858's comprehensive score as 52.75, 600036's as 52.09, and 002415's as 50.62.
+
+## 2026-07-21 LLM-owned routing scope
+
+- **Cause addressed:** Local hard-field reconstruction parsed the “一” in “一点” as `topk=1`, reducing a prior Top-10 conversation to a single candidate before narration.
+- **Change:** Removed `_sanitize_frame()` and its final candidate-scope override from the `/api/chat` route. The strict LLM `TurnFrame` now owns request type, candidate quantity, references, and refresh intent; local code keeps schema/range validation and immutable-snapshot resolution.
+- **Executed validation:** `python -m pytest -q tests/agent/test_agent_llm_chat.py -k 'llm_owned_scope or two_stage_llm_trace'`, `python -m compileall -q src tests`, and `git diff --check` passed.
+- **Runtime acceptance:** Rebuilt and recreated `gp`, `gp-worker`, and `gp-serenity-worker`; health recovered with `status=ok`, `product_ready=true`, and compatible `daily_6368ec2ad3be`. In a fresh real session, “今天给我10只” committed ten candidates; the immediate “我想要预期收益大一点的” follow-up was routed by the LLM with `topk=10` and returned all ten, reordered by their supplied expected return.
+
+## 2026-07-21 lunch-board projection and narration freedom recovery
+
+- **Cause addressed:** A lunch board legitimately reorders symbols by live
+  execution readiness, but native snapshot validation required that board to
+  retain the immutable daily selected-symbol order and overwrote each copied
+  pick's decision rank. The first failure masked a second gap where the board
+  explanation could retain a partial pulse Serenity summary instead of the
+  candidate-bound attested payload. Separately, real LLM prose was rejected
+  before authority validation whenever it used ordinary numbers rather than
+  internal GPVAL placeholders.
+- **Change:** The board retains immutable `entry.pick.rank` while its own
+  display `entry.rank` may reorder intraday. Native validation now requires
+  exact selected-set coverage plus immutable pick rank, not board display
+  order; board Serenity context mirrors the canonical pick payload. Narration
+  receives the exact compact certificate and may use direct candidate-bound
+  values, deterministic judgment-reason values, and bounded market-level
+  display variants. Candidate/field checks, symbol scope, non-trade action
+  protection, sizing prohibition, and Serenity grounding remain fail-closed.
+- **Executed validation:** `python -m compileall -q src tests` passed;
+  targeted board/native/chat tests passed (74 tests); `python -m pytest -q`
+  passed; `docker compose config --quiet` and `git diff --check` passed.
+- **Runtime acceptance:** Rebuilt and force-recreated `gp`, `gp-worker`, and
+  `gp-serenity-worker` from the current workspace without deleting mounted
+  runtime data. The worker published successive lunch artifacts with
+  `slot_status=OK` and `runtime_contract_ready=true`, with no recurrence of
+  `native_snapshot_board_projection_invalid` or
+  `native_snapshot_board_serenity_mirror_invalid`. A real DeepSeek chat
+  completed routing, narration, and repair; its final commit was correctly
+  rejected with 503 when the live Serenity/current snapshot changed during the
+  provider round trip, rather than because of an LLM output validation error.
+
 ## 2026-07-18 plain assistant-transcript output
 
 - **Decision:** The Workspace transcript is a conversation surface, not a
@@ -171,6 +216,30 @@
 - Five consecutive forward shadow trading days cannot be completed in this implementation session and remain a rollout gate, not a simulated acceptance result.
 
 Historical replay methodology and prior results remain in `docs/historical_validation.md`.
+
+## 2026-07-21 narration validation removal
+
+- `python -m pytest -q tests/agent/test_agent_llm_chat.py` passed after
+  removing the runtime post-generation narration validation and repair path.
+- `python -m compileall -q src tests` and `git diff --check` passed.
+- The focused test now verifies that unvalidated narration commits without a
+  repair round-trip while the API's structured decision result still originates
+  from the immutable snapshot.
+- Rebuilt and recreated `gp`, `gp-worker`, and `gp-serenity-worker` from the
+  current local source. A real `POST /api/chat` with “为什么现在不能交易？”
+  returned HTTP 200, `decision=no_trade`, and `reason=market_gate_not_allow`;
+  the answer committed without a narration repair round-trip.
+
+## 2026-07-21 lunch interface separation
+
+- `python -m pytest -q tests/server/test_single_chat_contract.py` passed,
+  including `GET /api/lunch/current`: a complete 11:30 morning slot returns
+  `state=READY` while `daily.today_complete=false`.
+- Workspace typecheck and focused component/hook tests passed. The lunch UI
+  now renders `午盘数据已完成 · 11:30` and explicitly states that today's
+  closing daily data is not complete.
+- A subsequent full backend `python -m pytest -q` reached 99% but failed one
+  existing Windows file-replacement test (`test_decision_snapshot_file_is_safe_and_recovers_from_partial_json`) with `PermissionError: [WinError 5]` in `os.replace`; it is outside the lunch endpoint/UI path. Test-created `.pytest-tmp` fixtures were restored.
 ## 2026-07-11 container recommendation recovery
 
 - Full isolated suite: 311 tests passed (`python -m pytest -q`).

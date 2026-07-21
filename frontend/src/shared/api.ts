@@ -4,6 +4,7 @@ import type {
   ChatRequest,
   ChatResponse,
   HealthResponse,
+  LunchResponse,
   OpsRunResponse,
   RunResponse,
   SessionDiagnosticsResponse,
@@ -24,6 +25,11 @@ export async function getHealth() {
 
 export async function getCurrentBook() {
   const { data } = await api.get<BookResponse>('/api/book/current')
+  return data
+}
+
+export async function getCurrentLunch() {
+  const { data } = await api.get<LunchResponse>('/api/lunch/current')
   return data
 }
 

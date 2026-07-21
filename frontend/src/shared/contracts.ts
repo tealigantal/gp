@@ -716,6 +716,31 @@ export interface BookResponse {
   book: MarketBook
 }
 
+export interface LunchResponse {
+  schema_version: 'lunch_snapshot.v1'
+  kind: 'lunch_snapshot'
+  trade_day?: string | null
+  market_phase: string
+  state: 'READY' | 'PENDING' | 'NOT_APPLICABLE' | string
+  generated_at?: string | null
+  session: {
+    name: 'morning_session' | string
+    target_closed_at?: string | null
+    completed_at?: string | null
+    complete: boolean
+  }
+  daily: {
+    effective_day?: string | null
+    target_mode?: string | null
+    today_complete: false
+  }
+  market: {
+    gate_state?: string | null
+    gate_score?: number | null
+    gate_reasons: string[]
+  }
+}
+
 export interface RunResponse {
   run: AdviceRun
 }

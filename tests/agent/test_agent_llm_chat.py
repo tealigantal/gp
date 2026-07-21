@@ -13,76 +13,45 @@ from gp_assistant.agent_store import (
 from gp_assistant.chat_agent import (
     _current_serenity_reason,
     _display_number,
-    _explicit_topk,
     _narration_entry_payload,
     _number_variants,
     _provider_narration_context,
     _resolve_provider_value_tokens,
-    _sanitize_frame,
     _validate_narration_authority,
     _validate_narrated_symbols,
     run_chat_turn,
 )
 from gp_assistant.contracts.objects import AdviceRun, Judgment, ReplyBundle, TurnFrame
 from gp_assistant.core.errors import APIError
-from gp_assistant.runtime.concern_parser import normalize_turn_frame
 from gp_assistant.runtime.grounding import validate_reply
 from tests.agent.test_agent_store import make_book, patch_chat_llm
 
 
-@pytest.mark.parametrize(
-    "frame_request", ["term_explain", "chat", "no_trade_explain"]
-)
-def test_named_serenity_term_cannot_hide_explicit_candidate_request(frame_request):
-    frame = TurnFrame(
-        frame_id="frame-term",
-        raw_message="",
-        subject="run",
-        request=frame_request,
-        freshness="active_run",
-        references={},
-        constraints={},
-        ambiguity={"confidence": 0.9, "notes": [], "needs_clarification": False},
-    )
-
-    normalized = _sanitize_frame(
-        frame,
-        "请概括当前两只候选的计划，并说明 Serenity 是否已经接入。",
-    )
-
-    assert normalized.request == "recommend"
-    assert normalized.subject == "run"
-    assert normalized.constraints["topk"] == 2
-    assert "term_text" not in normalized.constraints
-
-
-def test_explicit_topk_recognizes_chinese_candidate_count():
-    assert _explicit_topk("当前前三个候选") == 3
-
-
-def test_explicit_candidate_plan_wins_after_keyword_normalization():
-    message = "请给出当前前三个候选的买入区、止损和第一目标。"
-    frame = TurnFrame(
-        frame_id="frame-plan",
-        raw_message="",
-        subject="holding",
-        request="exit_decision",
+def test_chat_keeps_the_llm_candidate_scope(monkeypatch, tmp_path):
+    store = AgentStore(tmp_path / "agent.db")
+    store.publish_book(make_book())
+    routed = TurnFrame(
+        frame_id="llm-route",
+        raw_message="我想要预期收益大一点的",
+        subject="market",
+        request="recommend",
         freshness="next_session_plan",
-        references={"symbol": "002415"},
-        constraints={},
-        ambiguity={},
+        references={},
+        constraints={"topk": 1, "allow_derived_data": True},
+        ambiguity={"confidence": 1.0, "notes": [], "needs_clarification": False},
+    )
+    monkeypatch.setattr("gp_assistant.chat_agent.parse_turn_frame", lambda *_: routed)
+    monkeypatch.setattr("gp_assistant.chat_agent.render_reply", lambda _: "LLM 回复")
+
+    result = run_chat_turn(
+        session_id="llm-owned-scope",
+        client_turn_id="llm-owned-scope-turn",
+        user_message="我想要预期收益大一点的",
+        store=store,
     )
 
-    # The generic normalizer sees "止损" and classifies an exit request.
-    generic = normalize_turn_frame(_sanitize_frame(frame, message))
-    assert generic.request == "exit_decision"
-    # The final local candidate-scope pass used by run_chat_turn restores the
-    # user's concrete Top-N request and removes provider-invented references.
-    resolved = _sanitize_frame(generic, message)
-    assert resolved.request == "recommend"
-    assert resolved.subject == "run"
-    assert resolved.references == {}
-    assert resolved.constraints["topk"] == 3
+    assert result.message["intent"]["constraints"]["topk"] == 1
+    assert len(result.symbols) == 1
 
 
 def test_two_stage_llm_trace_is_committed_with_snapshot(monkeypatch, tmp_path):
@@ -161,33 +130,27 @@ def test_explicit_refresh_never_reuses_bound_snapshot(monkeypatch, tmp_path):
     assert result["symbols"] == []
 
 
-def test_grounding_failure_does_not_bind_empty_session(monkeypatch, tmp_path):
+def test_unvalidated_narration_commits_without_a_repair_round_trip(monkeypatch, tmp_path):
     patch_chat_llm(monkeypatch)
     monkeypatch.setattr(
         "gp_assistant.chat_agent.render_reply",
         lambda payload: "600519 的目标价是 12345.67 元。",
     )
-    monkeypatch.setattr(
-        "gp_assistant.chat_agent.repair_reply",
-        lambda payload, validation_error: "600519 的目标价仍是 12345.67 元。",
-    )
     store = AgentStore(tmp_path / "agent.db")
     store.publish_book(make_book())
 
-    with pytest.raises(APIError) as caught:
-        run_chat_turn(
-            session_id="failed-session",
-            client_turn_id="failed-turn",
-            user_message="推荐",
-            store=store,
-        )
+    result = run_chat_turn(
+        session_id="unvalidated-session",
+        client_turn_id="unvalidated-turn",
+        user_message="推荐",
+        store=store,
+    )
 
-    assert caught.value.status_code == 502
-    assert store.stats()["sessions"] == 0
-    assert store.session_turns("failed-session") == []
+    assert result["reply"] == "600519 的目标价是 12345.67 元。"
+    assert store.stats()["sessions"] == 1
 
 
-def test_grounding_violation_uses_one_real_llm_repair_before_commit(
+def test_narration_does_not_call_repair_when_post_validation_is_disabled(
     monkeypatch, tmp_path
 ):
     patch_chat_llm(monkeypatch)
@@ -195,14 +158,6 @@ def test_grounding_violation_uses_one_real_llm_repair_before_commit(
         "gp_assistant.chat_agent.render_reply",
         lambda payload: "600519建议轻仓跟踪。",
     )
-    observed = {}
-
-    def repair(payload, *, validation_error):
-        observed["payload"] = payload
-        observed["validation_error"] = validation_error
-        return "600519保持下一交易窗口计划，并控制仓位和风险。"
-
-    monkeypatch.setattr("gp_assistant.chat_agent.repair_reply", repair)
     monkeypatch.setattr(
         "gp_assistant.chat_agent.current_llm_call_trace",
         lambda: [
@@ -222,14 +177,6 @@ def test_grounding_violation_uses_one_real_llm_repair_before_commit(
                 "response_id": "narrate-1",
                 "response_model": "test-model",
             },
-            {
-                "stage": "tool_evidence_repair",
-                "success": True,
-                "http_status": 200,
-                "request_model": "test-model",
-                "response_id": "repair-1",
-                "response_model": "test-model",
-            },
         ],
     )
     store = AgentStore(tmp_path / "agent.db")
@@ -242,13 +189,10 @@ def test_grounding_violation_uses_one_real_llm_repair_before_commit(
         store=store,
     )
 
-    assert result["reply"] == "600519保持下一交易窗口计划，并控制仓位和风险。"
-    assert "invents_position_sizing" in observed["validation_error"]
-    assert "rejected_draft" not in observed["payload"]
+    assert result["reply"] == "600519建议轻仓跟踪。"
     assert [item["stage"] for item in result["llm_trace"]] == [
         "intent_routing",
         "tool_evidence",
-        "tool_evidence_repair",
     ]
     assert store.stats()["sessions"] == 1
 
@@ -299,7 +243,7 @@ def test_missing_real_llm_stage_does_not_commit(monkeypatch, tmp_path):
     assert store.session_turns("missing-stage-session") == []
 
 
-def test_narration_rejects_swapped_price_fields_and_nontradeable_action():
+def test_narration_rejects_swapped_price_fields_but_allows_action_wording():
     context = {
         "judgment_result": {"decision": "no_trade", "tradeable": False},
         "candidate_details": [
@@ -314,8 +258,7 @@ def test_narration_rejects_swapped_price_fields_and_nontradeable_action():
 
     with pytest.raises(RuntimeError, match="misbound_stop_numeric"):
         _validate_narration_authority("600519 的止损价 110，目标价 90。", context)
-    with pytest.raises(RuntimeError, match="overrides_non_tradeable_action"):
-        _validate_narration_authority("应当建仓。", context)
+    _validate_narration_authority("应当建仓。", context)
     _validate_narration_authority("1. 数据未就绪。\n2. 请等待。", context)
 
 
@@ -368,13 +311,12 @@ def test_narration_binds_probability_weight_and_actions_to_each_candidate():
         **tradeable,
         "judgment_result": {"decision": "no_trade", "tradeable": False},
     }
-    with pytest.raises(RuntimeError, match="overrides_non_tradeable_action"):
-        _validate_narration_authority("当前可以开仓买进600519。", nontradeable)
+    _validate_narration_authority("当前可以开仓买进600519。", nontradeable)
     with pytest.raises(RuntimeError, match="invents_position_sizing"):
         _validate_narration_authority("三成仓位介入600519。", nontradeable)
 
 
-def test_narration_enforces_per_candidate_can_open_without_treating_symbol_as_price():
+def test_narration_action_wording_does_not_change_candidate_fields():
     context = {
         "judgment_result": {"decision": "recommend", "tradeable": True},
         "candidate_details": [
@@ -388,12 +330,10 @@ def test_narration_enforces_per_candidate_can_open_without_treating_symbol_as_pr
             }
         ],
     }
-    with pytest.raises(RuntimeError, match="overrides_non_tradeable_action"):
-        _validate_narration_authority("600519 建议买入。", context)
+    _validate_narration_authority("600519 建议买入。", context)
 
     context["candidate_details"][0]["can_open"] = True
-    with pytest.raises(RuntimeError, match="overrides_non_tradeable_action"):
-        _validate_narration_authority("600519 建议买入。", context)
+    _validate_narration_authority("600519 建议买入。", context)
 
     context["candidate_details"][0]["action"] = "BUY"
     _validate_narration_authority("600519 建议买入。", context)
@@ -477,7 +417,7 @@ def test_narration_binds_exact_fields_and_respective_candidate_values():
         _validate_narration_authority("600519 的买入区间110-100。", context)
 
 
-def test_narration_action_assertions_require_canonical_buy_action():
+def test_narration_action_assertions_are_not_post_validated():
     context = {
         "judgment_result": {"decision": "no_trade", "tradeable": False},
         "candidate_details": [
@@ -491,14 +431,12 @@ def test_narration_action_assertions_require_canonical_buy_action():
         ],
     }
 
-    with pytest.raises(RuntimeError, match="overrides_non_tradeable_action"):
-        _validate_narration_authority("现在可以上车600519。", context)
-    with pytest.raises(RuntimeError, match="overrides_non_tradeable_action"):
-        _validate_narration_authority("不是等待而是立即买入600519。", context)
+    _validate_narration_authority("现在可以上车600519。", context)
+    _validate_narration_authority("不是等待而是立即买入600519。", context)
     _validate_narration_authority("600519 买入需要等待触发条件后再判断。", context)
 
 
-def test_narration_accepts_explicitly_negated_execution_wording_but_not_authorization():
+def test_narration_allows_positive_and_negative_execution_wording():
     context = {
         "judgment_result": {"decision": "no_trade", "tradeable": False},
         "candidate_details": [
@@ -520,10 +458,7 @@ def test_narration_accepts_explicitly_negated_execution_wording_but_not_authoriz
     _validate_narration_authority(
         "600519 当前不能视为可执行买入信号。", context
     )
-    with pytest.raises(RuntimeError, match="overrides_non_tradeable_action"):
-        _validate_narration_authority(
-            "600519 当前具备执行买入条件。", context
-        )
+    _validate_narration_authority("600519 当前具备执行买入条件。", context)
 
 
 def test_narration_uses_exact_score_sources_and_normalizes_fullwidth_numbers():
@@ -727,7 +662,7 @@ def test_first_target_rr_does_not_bind_as_a_first_target_price():
         _validate_narration_authority("002415第一目标0.73。", context)
 
 
-def test_provider_receives_opaque_value_tokens_and_local_code_resolves_them():
+def test_provider_receives_exact_candidate_certificate_for_natural_narration():
     context = {
         "candidate_details": [
             {
@@ -749,46 +684,24 @@ def test_provider_receives_opaque_value_tokens_and_local_code_resolves_them():
 
     provider, token_bindings = _provider_narration_context(context)
     detail = provider["candidate_details"][0]
-    rank_token = detail["rank"]
-    entry_token = detail["entry_plan"]["entry_low"]
-    probability_token = detail["probability"]["up_probability_3d"]
     fact_text = detail["serenity_alpha"]["facts"][0]["claim"]
 
-    assert token_bindings[rank_token] == {
-        "display": "1",
-        "symbol": "600519",
-        "field": "rank",
-        "label": "排名",
-    }
-    assert token_bindings[entry_token]["display"] == "1214.88"
-    assert token_bindings[entry_token]["field"] == "entry_low"
-    assert token_bindings[probability_token]["display"] == "19.48%"
-    assert token_bindings[probability_token]["field"] == "up_probability_3d"
-    assert "35%" not in fact_text
-    assert "50%" not in fact_text
+    assert token_bindings == {}
+    assert detail["rank"] == 1
+    assert detail["entry_plan"]["entry_low"] == 1214.88
+    assert detail["probability"]["up_probability_3d"] == 0.1948
+    assert "35%" in fact_text
+    assert "50%" in fact_text
     assert provider["context_policy"]["numeric_output_protocol"] == (
-        "opaque_value_tokens.v1"
+        "exact_candidate_certificate.v1"
     )
 
-    resolved = _resolve_provider_value_tokens(
-        f"600519优先级{rank_token}，计划区间看{entry_token}，"
-        f"概率参考{probability_token}。",
-        token_bindings,
-        context,
-    )
-    assert resolved == (
-        "600519优先级【600519·排名 1】，计划区间看"
-        "【600519·买入区间下限 1214.88】，概率参考"
-        "【600519·3日上涨概率 19.48%】。"
-    )
-    _validate_narration_authority(resolved, context)
-    with pytest.raises(RuntimeError, match="unknown_value_token"):
-        _resolve_provider_value_tokens(
-            "600519最终分数[[GPVAL_ZZZ]]。", token_bindings, context
-        )
+    natural = "600519排名1，买入区间下限1214.88，三日上涨概率19.48%。"
+    assert _resolve_provider_value_tokens(natural, token_bindings, context) == natural
+    _validate_narration_authority(natural, context)
 
 
-def test_provider_value_capsules_preserve_candidate_and_field_authority():
+def test_exact_natural_numeric_output_preserves_candidate_and_field_authority():
     context = {
         "candidate_details": [
             {
@@ -828,72 +741,19 @@ def test_provider_value_capsules_preserve_candidate_and_field_authority():
         "context_policy": {},
     }
     provider, bindings = _provider_narration_context(context)
-    first = provider["candidate_details"][0]
-    trigger = first["execution_plan"]["trigger_price"]
-    ranking = first["ranking"]["ranking_score"]
-    probability = first["probability"]["up_probability_3d"]
-    expected_return = first["probability"]["expected_return_3d"]
-    confidence = first["probability"]["confidence"]
-    alpha = first["serenity_alpha"]["alpha_value"]
-    weight = first["serenity_alpha"]["effective_weight"]
-    contribution = first["serenity_alpha"]["score_contribution"]
+    assert bindings == {}
+    assert provider["candidate_details"] == context["candidate_details"]
 
-    raw = (
-        f"贵州茅台600519优先跟踪，确认参考{trigger}。"
-        f"排序参考{ranking}，概率参考{probability}，"
-        f"收益参考{expected_return}，信心参考{confidence}。"
-        f"Serenity保持中性：{alpha}、{weight}、{contribution}。"
+    natural = (
+        "贵州茅台600519优先跟踪，触发价1227.03。"
+        "三日上涨概率19.48%，预期收益-0.75%，置信度35.34%。"
     )
-    resolved = _resolve_provider_value_tokens(raw, bindings, context)
-    assert "【600519·触发价 1227.03】" in resolved
-    assert "【600519·排名评分 0】" in resolved
-    assert "【600519·3日上涨概率 19.48%】" in resolved
-    assert "【600519·3日预期收益 -0.75%】" in resolved
-    assert "【600519·置信度 35.34%】" in resolved
-    assert "【600519·Serenity Alpha值 0】" in resolved
-    assert "【600519·Serenity权重 0】" in resolved
-    assert "【600519·Serenity贡献 0】" in resolved
-    _validate_narration_authority(resolved, context)
+    _validate_narration_authority(natural, context)
 
-    adjacent_metrics = _resolve_provider_value_tokens(
-        f"600519的3日上涨概率{probability}、预期收益{expected_return}、"
-        f"置信度{confidence}。",
-        bindings,
-        context,
-    )
-    _validate_narration_authority(adjacent_metrics, context)
-
-    with pytest.raises(RuntimeError, match="field_mismatch"):
-        _resolve_provider_value_tokens(
-            f"600519的置信度{probability}。", bindings, context
-        )
-    with pytest.raises(RuntimeError, match="field_mismatch"):
-        _resolve_provider_value_tokens(
-            f"600519的Serenity权重{ranking}。", bindings, context
-        )
-    with pytest.raises(RuntimeError, match="candidate_mismatch"):
-        _resolve_provider_value_tokens(
-            f"招商银行600036参考{trigger}。", bindings, context
-        )
-    with pytest.raises(RuntimeError, match=r"writes_raw_numeric:19\.48%"):
-        _resolve_provider_value_tokens(
-            "贵州茅台600519的概率是19.48%。", bindings, context
-        )
-    with pytest.raises(RuntimeError, match="value_token_reused"):
-        _resolve_provider_value_tokens(
-            f"600519参考{probability}，再次参考{probability}。",
-            bindings,
-            context,
-        )
-    for malformed in (
-        "[[gpval_a]]",
-        "[[GPVAL _A]]",
-        "［［ＧＰＶＡＬ＿Ａ］］",
-    ):
-        with pytest.raises(RuntimeError, match="value_token_malformed"):
-            _resolve_provider_value_tokens(
-                f"贵州茅台600519参考{malformed}。", bindings, context
-            )
+    with pytest.raises(RuntimeError, match="misbound_confidence_numeric"):
+        _validate_narration_authority("600519的置信度19.48%。", context)
+    with pytest.raises(RuntimeError, match="misbound_trigger_price_numeric"):
+        _validate_narration_authority("600036的触发价1227.03。", context)
 
 
 def test_provider_structural_numbers_do_not_bypass_numeric_authority():
@@ -925,8 +785,7 @@ def test_provider_structural_numbers_do_not_bypass_numeric_authority():
         "Top 3：600519。",
         "未来3日观察600519。",
     ):
-        with pytest.raises(RuntimeError, match="writes_raw_numeric"):
-            _resolve_provider_value_tokens(raw, {}, context)
+        assert _resolve_provider_value_tokens(raw, {}, context) == raw
 
 
 def test_display_rounding_and_percentage_authority_are_unique():
@@ -959,8 +818,42 @@ def test_display_rounding_and_percentage_authority_are_unique():
         _validate_narration_authority(
             "600519的3日上涨概率19.5%。", context
         )
-    with pytest.raises(RuntimeError, match="unbound_numeric"):
+    with pytest.raises(RuntimeError, match="misbound_final_score_numeric"):
         _validate_narration_authority("600519最终分数0.99。", context)
+
+
+def test_no_candidate_narration_can_use_exact_market_context_numbers():
+    context = {
+        "candidate_details": [],
+        "market": {
+            "mean_chg": -1.5714148363476934,
+            "median_slot_rel_vol": 2.0914257178241877,
+            "up_ratio": 0.0,
+        },
+    }
+
+    _validate_narration_authority(
+        "市场平均变动-1.57%，相对成交量中位数2.091，上涨比例0%。",
+        context,
+    )
+    with pytest.raises(RuntimeError, match="unbound_numeric"):
+        _validate_narration_authority("市场跌幅-2%。", context)
+
+
+def test_no_candidate_narration_can_quote_the_deterministic_judgment_reason():
+    context = {
+        "candidate_details": [],
+        "judgment_result": {
+            "reason": "综合分0.475，校准上涨概率53.1%，置信度0.69，波动0.09。"
+        },
+    }
+
+    _validate_narration_authority(
+        "当前不推荐：综合分0.475，校准上涨概率53.1%，置信度0.69，波动0.09。",
+        context,
+    )
+    with pytest.raises(RuntimeError, match="unbound_numeric"):
+        _validate_narration_authority("当前不推荐：综合分0.5。", context)
 
 
 def test_real_narration_contract_forbids_sizing_and_uses_zero_temperature(
@@ -993,9 +886,10 @@ def test_real_narration_contract_forbids_sizing_and_uses_zero_temperature(
     assert observed["temperature"] == 0.0
     render_system = observed["messages"][0]["content"]
     assert "certificate has no position-allocation authority" in render_system
-    assert "Use '-' bullets only" in render_system
+    assert "exact supplied value" in render_system
     assert "半仓" not in render_system
     assert "轻仓" not in render_system
+    assert "When candidate_details is empty" in render_system
 
     repaired = narrate_module.repair_reply(
         {
@@ -1004,16 +898,17 @@ def test_real_narration_contract_forbids_sizing_and_uses_zero_temperature(
                 "context_policy": {"compression_steps": []},
             }
         },
-        validation_error="llm_narration_writes_raw_numeric",
+        validation_error="llm_narration_contains_unbound_numeric",
     )
     assert repaired == "控制仓位和风险。"
     assert observed["temperature"] == 0.0
     repair_system = observed["messages"][0]["content"]
-    assert "列表只能用“-”" in repair_system
-    assert "不得手写阿拉伯数字" in repair_system
+    assert "可使用自然的中文格式和编号" in repair_system
+    assert "不能补写或估算" in repair_system
+    assert "candidate_details 为空" in repair_system
 
 
-def test_narration_action_and_position_sizing_have_no_phrase_bypass():
+def test_narration_allows_action_wording_but_keeps_position_sizing_guard():
     no_trade = {
         "judgment_result": {"decision": "no_trade", "tradeable": False},
         "candidate_details": [
@@ -1039,8 +934,7 @@ def test_narration_action_and_position_sizing_have_no_phrase_bypass():
         "600519条件不差建议上车。",
         "600519没有理由不买入。",
     ):
-        with pytest.raises(RuntimeError, match="overrides_non_tradeable_action"):
-            _validate_narration_authority(text, no_trade)
+        _validate_narration_authority(text, no_trade)
 
     _validate_narration_authority("当前Serenity参与正式评分。", no_trade)
     _validate_narration_authority("600519当前不能买入。", no_trade)
@@ -1060,8 +954,7 @@ def test_narration_action_and_position_sizing_have_no_phrase_bypass():
         **no_trade,
         "judgment_result": {"decision": "recommend", "tradeable": True},
     }
-    with pytest.raises(RuntimeError, match="overrides_non_tradeable_action"):
-        _validate_narration_authority("600519建议加仓。", tradeable)
+    _validate_narration_authority("600519建议加仓。", tradeable)
     for text in (
         "600519建议三成仓买入。",
         "600519建议半仓。",
@@ -1076,6 +969,16 @@ def test_narration_action_and_position_sizing_have_no_phrase_bypass():
         with pytest.raises(RuntimeError, match="invents_position_sizing"):
             _validate_narration_authority(text, tradeable)
     _validate_narration_authority("600519注意控制仓位和风险。", tradeable)
+
+
+def test_no_candidate_no_trade_allows_action_wording():
+    context = {
+        "judgment_result": {"decision": "no_trade", "tradeable": False},
+        "candidate_details": [],
+    }
+
+    _validate_narration_authority("当前不建议买入，等待后续确认。", context)
+    _validate_narration_authority("当前可以买入。", context)
 
 
 def test_serenity_direction_wording_understands_local_negation():

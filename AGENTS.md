@@ -46,6 +46,8 @@ The backend has no verified Ruff or static-type-check command. Do not claim thos
 ## Architecture and dependency boundaries
 
 - Adaptive Decision Engine owns selection. The LLM may route and narrate but may not invent or change candidates, scores, prices, probabilities, or actions.
+- Do not use keyword matching or `if`/`else` text branches to produce, suppress, narrow, rerank, or replace user-facing LLM conclusions. In particular, do not treat incidental words or characters in a preference such as “收益大一点” as a fixed Top-N quantity or a single-symbol instruction.
+- For a follow-up that refines a prior candidate list, preserve the complete structured candidate scope from that canonical run. Pass the relevant candidate facts to the LLM for explanation; never collapse the scope to `focus_symbol` or fabricate a keyword-triggered answer. Any deterministic filtering or ordering must consume explicit structured user constraints and must remain separate from the LLM's output generation.
 - Network data collection must not run inside `/api/chat`, book locks, or decision rendering.
 - Historical and adaptive learning paths must respect as-of availability and T+5 maturity; never place future outcomes in readable pending state.
 - `store/`, `cache/`, and `results/` are runtime artifacts. Preserve user data and never stage them unless explicitly requested.

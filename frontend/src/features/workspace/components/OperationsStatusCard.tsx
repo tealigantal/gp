@@ -1,9 +1,10 @@
 import { Alert, Button, Space, Tag, Typography } from 'antd'
-import type { OpsRunResponse, RuntimeStatus, RuntimeToolInfo } from '../../../shared/contracts'
+import type { LunchResponse, OpsRunResponse, RuntimeStatus, RuntimeToolInfo } from '../../../shared/contracts'
 import { dailyTargetModeMeta, fmtDateTime, runtimeFreshnessMeta } from '../runtimeLabels'
 
 interface OperationsStatusCardProps {
   runtime?: RuntimeStatus | null
+  lunch?: LunchResponse | null
   onRunTool?: (service: string) => Promise<void>
   onRefreshRuntime?: () => Promise<void>
   runningToolService?: string | null
@@ -69,6 +70,7 @@ function recommendedTools(runtime?: RuntimeStatus | null, manualTools: RuntimeTo
 
 export function OperationsStatusCard({
   runtime,
+  lunch,
   onRunTool,
   onRefreshRuntime,
   runningToolService,
@@ -93,22 +95,13 @@ export function OperationsStatusCard({
     artifactFreshness === 'lagging' ||
     (!artifactFreshness && (dailyStatus === 'artifact_lagging' || String(runtime?.book_freshness || '').toLowerCase() === 'lagging')) ||
     Boolean(runtime?.artifact_lag_reason)
-  const dailyStatusLabel = freshness.label
-  const isLunchBreak = runtime?.market_phase === 'LUNCH_BREAK'
-  const lunchDataReady =
-    runtime?.intraday_runtime_enabled !== false &&
-    runtime?.pulse_trade_day === runtime?.pulse_target_trade_day &&
-    Boolean(runtime?.pulse_slot_at && runtime?.pulse_target_slot_at && runtime.pulse_slot_at >= runtime.pulse_target_slot_at) &&
-    String(runtime?.slot_status || '').toUpperCase() === 'OK' &&
-    String(runtime?.artifact_freshness || '').toLowerCase() === 'current'
-  const lunchDataLabel =
-    runtime?.intraday_runtime_enabled === false
-      ? '午盘数据未开启'
-      : lunchDataReady
-        ? `午盘数据已更新 · ${runtime?.pulse_slot_at?.slice(11, 16)}`
-        : String(runtime?.slot_status || '').toUpperCase() === 'OK'
-          ? '午盘数据更新中'
-          : '午盘数据受限'
+  const lunchReady = lunch?.state === 'READY' && lunch.session.complete
+  const lunchPending = lunch?.market_phase === 'LUNCH_BREAK' && lunch?.state === 'PENDING'
+  const statusLabel = lunchReady
+    ? `午盘数据已完成 · ${lunch.session.completed_at?.slice(11, 16) || '11:30'}`
+    : lunchPending
+      ? '午盘数据更新中'
+      : freshness.label
 
   return (
     <section className="snapshot-section ops-card" aria-label="运行态与修复工具">
@@ -121,15 +114,18 @@ export function OperationsStatusCard({
           <Tag color="green">{runtime?.auto_update_service || 'gp-worker'}</Tag>
           <Tag>日线模式</Tag>
           {runtime?.data_provider ? <Tag>数据源 {runtime.data_provider}</Tag> : null}
-          {dailyMode && dailyMode.label !== dailyStatusLabel ? <Tag color={dailyMode.color}>{dailyMode.label}</Tag> : null}
-          <Tag color={artifactLagging ? 'volcano' : eodPending ? 'gold' : dailyBlocked ? 'volcano' : 'green'}>
-            {dailyStatusLabel}
+          {dailyMode && dailyMode.label !== statusLabel ? <Tag color={dailyMode.color}>{dailyMode.label}</Tag> : null}
+          <Tag color={lunchReady ? 'green' : lunchPending ? 'gold' : artifactLagging ? 'volcano' : eodPending ? 'gold' : dailyBlocked ? 'volcano' : 'green'}>
+            {statusLabel}
           </Tag>
-          {isLunchBreak ? <Tag color={lunchDataReady ? 'green' : runtime?.intraday_runtime_enabled === false ? 'default' : 'gold'}>{lunchDataLabel}</Tag> : null}
         </div>
 
         <Typography.Paragraph type="secondary" className="ops-note">
-          {artifactLagging
+          {lunchReady
+            ? '上午交易时段数据已收齐；今日收盘日线尚未完成。'
+            : lunchPending
+              ? '午盘快照尚未覆盖上午最后一个已收盘时段。'
+              : artifactLagging
             ? runtime?.artifact_lag_reason || freshness.note
             : dailyBlocked
               ? runtime?.daily_blocking_reason || freshness.note

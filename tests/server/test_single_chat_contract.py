@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 from fastapi.testclient import TestClient
 
 from gp_assistant.agent_store import AgentStore
@@ -14,6 +16,7 @@ def test_openapi_exposes_product_and_workspace_read_paths():
         "/api/chat/{session_id}",
         "/api/health",
         "/api/book/current",
+        "/api/lunch/current",
         "/api/session/{session_id}",
         "/api/session/{session_id}/diagnostics",
         "/api/sessions",
@@ -66,6 +69,43 @@ def test_workspace_read_model_allows_a_new_session_without_writing(monkeypatch, 
     assert session.json()["session"]["session_id"] == "not-yet-persisted"
     assert session.json()["recent_turns"] == []
     assert client.get("/api/session/not-yet-persisted/diagnostics").status_code == 200
+
+
+def test_lunch_endpoint_only_declares_the_morning_session_complete(monkeypatch, tmp_path):
+    db = tmp_path / "agent.db"
+    monkeypatch.setenv("GP_AGENT_DB", str(db))
+    book = make_book("lunch-snapshot").model_copy(
+        update={
+            "pulse_trade_day": "2026-07-13",
+            "pulse_slot_at": "2026-07-13T11:30:00+08:00",
+            "slot_status": "OK",
+        }
+    )
+    AgentStore(db).publish_book(book)
+    monkeypatch.setattr(
+        "gp_assistant.gateway.routes.resolve_daily_target",
+        lambda **_: SimpleNamespace(
+            market_phase="LUNCH_BREAK",
+            pulse_trade_day="2026-07-13",
+            pulse_slot_closed_at="2026-07-13T11:30:00+08:00",
+            decision_trade_day="2026-07-13",
+            daybook_effective_day="2026-07-10",
+            target_mode="previous_completed",
+        ),
+    )
+
+    response = TestClient(app).get("/api/lunch/current")
+
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["state"] == "READY"
+    assert payload["session"] == {
+        "name": "morning_session",
+        "target_closed_at": "2026-07-13T11:30:00+08:00",
+        "completed_at": "2026-07-13T11:30:00+08:00",
+        "complete": True,
+    }
+    assert payload["daily"]["today_complete"] is False
 
 
 def test_no_legacy_endpoint_is_available():

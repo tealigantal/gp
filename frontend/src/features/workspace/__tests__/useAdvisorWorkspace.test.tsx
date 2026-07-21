@@ -6,6 +6,7 @@ import type { ChatResponse, HealthResponse } from '../../../shared/contracts'
 
 const api = vi.hoisted(() => ({
   getHealth: vi.fn(),
+  getCurrentLunch: vi.fn(),
   getCurrentBook: vi.fn(),
   getSession: vi.fn(),
   getSessionDiagnostics: vi.fn(),
@@ -56,6 +57,15 @@ function wrapper({ children }: { children: ReactNode }) {
 beforeEach(() => {
   localStorage.clear()
   vi.clearAllMocks()
+  api.getCurrentLunch.mockResolvedValue({
+    schema_version: 'lunch_snapshot.v1',
+    kind: 'lunch_snapshot',
+    market_phase: 'NOT_APPLICABLE',
+    state: 'NOT_APPLICABLE',
+    session: { name: 'morning_session', complete: false },
+    daily: { today_complete: false },
+    market: { gate_reasons: [] },
+  })
   api.getCurrentBook.mockResolvedValue({ book: {} })
   api.getSession.mockResolvedValue({
     session: {

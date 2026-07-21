@@ -100,15 +100,17 @@ current single-protocol runtime.
 
 The LLM is not a stock picker, not the ranking authority, and not allowed to invent explanation facts. It does not select, promote, demote, or replace recommended symbols.
 
+`GET /api/book/current` remains the immutable daily-plan/full-snapshot read model. `GET /api/lunch/current` is deliberately separate: it exposes only the completed morning-session status and market gate, and it can never declare the current daily bar complete. Workspace must use the lunch response for lunch wording rather than infer daily readiness from `slot_status`.
+
 Selection is owned by the Adaptive Decision Engine. It consumes ranked candidates, missing-aware features, calibrated probability, risk penalties, setup quality, market regime, exploration pressure, and a candidate-bound as-of Serenity Alpha feature. Complete known-empty Serenity coverage is neutral; incomplete coverage blocks publication and cannot switch to an eight-expert fallback. Risk flags reduce adaptive score or recommendation strength unless an explicit hard block is present.
 
-For chat work, the LLM has two mandatory logical stages. The first emits only a `TurnFrame` intent and may use one real repair request for invalid JSON. Local code derives the request scope, current/historical state, decision and action from the bound snapshot. The second emits Chinese narration over bounded `tool_evidence_context`; if the first draft violates authority validation, one real `tool_evidence_repair` request may regenerate it. Every actual call required by the committed turn must carry real 2xx/provider model/response-ID evidence, and the final narration must pass symbol, candidate+field numeric, action and grounding checks. Rejected drafts are not displayed or persisted.
+For chat work, the LLM has two mandatory logical stages. The first emits only a `TurnFrame` intent and may use one real repair request for invalid JSON. Local code derives the request scope, current/historical state, decision and action from the bound snapshot. The second emits Chinese narration over bounded `tool_evidence_context`. The complete temporary post-generation narration validation and repair layer is disabled: provider prose is committed directly after value-token projection. The immutable snapshot remains authoritative for the structured decision, tradeability, candidates, prices, probabilities and action fields returned by the API.
 
 Narration sees a compact certificate, not the full snapshot. Each selected
-candidate contributes at most two Serenity facts. Numeric display values are
-opaque GPVAL candidate+field+value tokens at the provider boundary and are
-expanded only by local code into labeled capsules. Raw provider-written
-numbers, cross-candidate reuse, cross-field reuse and unauthorized actions fail
+candidate contributes at most two Serenity facts. The provider sees the exact
+display values in that certificate and may render them naturally, but every
+numeric claim must pass candidate-and-field validation. Rounded, derived,
+unbound, cross-candidate, cross-field values and unauthorized actions fail
 closed.
 
 It may:

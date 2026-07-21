@@ -501,11 +501,20 @@ def build_board(
     )
     for idx, entry in enumerate(entries, start=1):
         entry.rank = idx
-        entry.pick.rank = idx
     for idx, entry in enumerate(entries):
         previous_entry = entries[idx - 1] if idx > 0 else None
         next_entry = entries[idx + 1] if idx + 1 < len(entries) else None
         entry.explain_context = _context_for_entry(entry, previous_entry=previous_entry, next_entry=next_entry)
+        # The board's execution context may contain a pulse-level Serenity
+        # summary.  Native attestation requires the persisted board mirror to
+        # retain the exact candidate-bound Serenity evidence used by the daily
+        # decision, not a partial execution projection.
+        canonical_serenity = dict(
+            (entry.pick.meta or {}).get("serenity")
+            or (entry.pick.explain_context or {}).get("serenity")
+            or {}
+        )
+        entry.explain_context["serenity"] = canonical_serenity
         entry.pick.explain_context = dict(entry.explain_context)
         entry.pick.meta["explain_context"] = dict(entry.explain_context)
         if entry.pulse is not None:

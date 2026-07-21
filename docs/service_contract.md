@@ -34,7 +34,7 @@ into the durable report keys such as `target_day`.
 {"session_id":"optional","client_turn_id":"required-idempotency-key","message":"给我当前候选"}
 ```
 
-`message` and `client_turn_id` are required. A new session binds to the current valid `RecommendationSnapshot.v1`; every later turn in that session uses the same immutable snapshot. Retrying the same `client_turn_id` returns the already committed assistant turn without another write. Each successful new turn has two required logical provider stages: routing must contain a valid `intent_routing` result (optionally after `intent_routing_repair`), and narration must contain `tool_evidence` (optionally followed by one `tool_evidence_repair` when the first draft fails authority validation). Every provider call required by the committed turn must have a 2xx status, request/response model and provider response ID.
+`message` and `client_turn_id` are required. A new session binds to the current valid `RecommendationSnapshot.v1`; every later turn in that session uses the same immutable snapshot. Retrying the same `client_turn_id` returns the already committed assistant turn without another write. Each successful new turn has two required logical provider stages: routing must contain a valid `intent_routing` result (optionally after `intent_routing_repair`), and narration must contain `tool_evidence`. The temporary post-generation narration validation and `tool_evidence_repair` stage are disabled; the immutable snapshot remains the source of the structured decision and trading fields. Every provider call required by the committed turn must have a 2xx status, request/response model and provider response ID.
 
 ```json
 {"session_id":"session_x","client_turn_id":"turn_x","snapshot_id":"snapshot_x","decision":"recommend|no_trade","reply":"...","message":{"message_kind":"...","narrative_text":"..."},"symbols":[]}
@@ -55,7 +55,7 @@ Snapshot metadata includes `decision_trade_day`, `daybook_effective_day`, `pulse
 
 If the short 1200 ms SQLite write budget is exhausted, chat returns HTTP `503` with `error.detail.reason="storage_busy"` and `retry_after_ms`. Health and other exact reads wait for the real database for at most 2000 ms, release the read transaction before decoding large JSON, and return the same structured 503 rather than a cached value when the budget is exhausted.
 
-Routing/provider unavailability is `503`; invalid routing after one repair is `502`. A narration draft that fails validation may receive one real-LLM repair attempt; if the repair also fails, or trace integrity fails, the result is `502`. Reusing one `client_turn_id` with different content is `409`. None of these failures commits an assistant turn or binds a new empty session.
+Routing/provider unavailability is `503`; invalid routing after one repair is `502`. Narration no longer has a post-generation validation or repair failure path while that temporary layer is disabled. Reusing one `client_turn_id` with different content is `409`. None of these failures commits an assistant turn or binds a new empty session.
 
 ## GET /api/chat/{session_id}
 
@@ -66,6 +66,10 @@ session is `404`.
 ## GET /api/health
 
 Reports `product_ready`, exact `readiness_reasons`, the `agent.db` counters/current pointer, sole Market Memory history database path/state, current market-time contract, Serenity target/coverage/worker lease, snapshot/active readiness revisions, snapshot/active semantic revisions, and real-LLM verification. `status=ok` means the immutable snapshot passes native-Alpha integrity, matches the current market-time target, the exact active Serenity target is complete/fresh with a live worker lease, its semantic revision still matches the snapshot, and a two-logical-stage chat was committed within the verification TTL. Health never substitutes a cached or older snapshot. HTTP 200 by itself is only API liveness.
+
+## GET /api/lunch/current
+
+Returns `LunchResponse` (`lunch_snapshot.v1`), a dedicated morning-session read model. It never represents daily completion and always returns `daily.today_complete=false`. During `LUNCH_BREAK`, `state=READY` means the exact morning target slot (normally 11:30) is present, belongs to the target trade day, and has `slot_status=OK`; the only permitted completion wording is for the morning session. Outside the lunch break it returns HTTP 200 with `state=NOT_APPLICABLE`, so polling does not turn an ordinary market phase into an error. `/api/book/current` remains the unchanged daily-plan/full-snapshot interface.
 
 For the Workspace, this response also contains `llm_ready`, `llm_retryable`,
 `storage`, and `runtime`. They are UI projections of the exact health,

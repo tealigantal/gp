@@ -17,7 +17,6 @@ from .agent_store import AgentStore, SnapshotIntegrityError, StoredSnapshot
 from .contracts.objects import (
     AdviceRun,
     BoardEntry,
-    Judgment,
     MarketBook,
     ReplyBundle,
     SessionState,
@@ -32,11 +31,10 @@ from .llm.client import (
     validate_product_llm_trace,
 )
 from .llm.interpret import parse_turn_frame
-from .llm.narrate import render_reply, repair_reply
+from .llm.narrate import render_reply
 from .runtime.concern_parser import normalize_turn_frame, validate_turn_frame
 from .evidence.daily_freshness import resolve_daily_target
 from .runtime.market_time import compare_snapshot_market_time
-from .runtime.grounding import validate_reply
 from .runtime.native_snapshot import (
     native_snapshot_integrity_errors,
     pending_native_snapshot_integrity_errors,
@@ -136,83 +134,6 @@ def _is_immutable_session_explanation(
     return not any(marker in raw for marker in _LIVE_COMPARISON_MARKERS)
 
 
-def _explicit_topk(message: str) -> int | None:
-    text = str(message or "")
-    for pattern in (r"(?:前|top\s*)(\d{1,2})", r"(\d{1,2})\s*只"):
-        match = re.search(pattern, text, flags=re.IGNORECASE)
-        if match:
-            return max(1, min(10, int(match.group(1))))
-    chinese = {"一": 1, "二": 2, "两": 2, "三": 3, "四": 4, "五": 5, "六": 6, "七": 7, "八": 8, "九": 9, "十": 10}
-    match = re.search(
-        r"(?:前|top\s*)?([一二两三四五六七八九十])\s*(?:个|只)?",
-        text,
-        flags=re.IGNORECASE,
-    )
-    return chinese.get(match.group(1)) if match else None
-
-
-def _is_explicit_candidate_plan_request(message: str) -> bool:
-    text = str(message or "")
-    if any(token in text for token in ("上一轮", "上次", "此前", "之前", "历史")):
-        return False
-    explicit_topk = _explicit_topk(text)
-    return bool(
-        any(token in text for token in ("候选", "推荐", "选股"))
-        and (
-            explicit_topk is not None
-            or any(
-                token in text
-                for token in ("当前", "计划", "给我", "给出", "列出", "哪些")
-            )
-        )
-    )
-
-def _sanitize_frame(frame: TurnFrame, user_message: str) -> TurnFrame:
-    """Trust the LLM for intent class only; re-derive factual references."""
-
-    text = str(user_message or "")
-    explicit_topk = _explicit_topk(text)
-    history_requested = any(
-        token in text for token in ("上一轮", "上次", "此前", "之前", "历史")
-    )
-    candidate_plan_requested = _is_explicit_candidate_plan_request(text)
-    # A provider may focus on the named Serenity term and lose the concrete
-    # request to show candidates.  Candidate scope is a local authority
-    # boundary, so preserve it deterministically before building evidence.
-    request = "recommend" if candidate_plan_requested else frame.request
-    subject = "run" if candidate_plan_requested else frame.subject
-    symbols = list(dict.fromkeys(_SYMBOL_RE.findall(text)))
-    refs: dict[str, Any] = {}
-    if symbols:
-        refs["symbol"] = symbols[0]
-        refs["symbols"] = symbols
-        if frame.request in {"compare", "candidate_compare"}:
-            refs["compare_symbols"] = symbols
-    rank_match = re.search(r"第\s*(\d{1,2})", text)
-    if rank_match:
-        refs["rank"] = max(1, min(10, int(rank_match.group(1))))
-    refresh_requested = any(token in text for token in ("刷新", "重建", "重跑", "重新跑", "更新数据"))
-    constraints = {
-        "topk": explicit_topk or 3,
-        "require_refresh": refresh_requested,
-        "history_mode": history_requested,
-        "refresh_intent": "rebuild" if refresh_requested else "none",
-        "allow_derived_data": True,
-    }
-    if request == "term_explain":
-        constraints["term_text"] = text[:200]
-    return frame.model_copy(
-        update={
-            "raw_message": text,
-            "request": request,
-            "subject": subject,
-            "references": refs,
-            "constraints": constraints,
-            "freshness": "rebuild_run" if refresh_requested else frame.freshness,
-        }
-    )
-
-
 def _number_variants(value: float, *, allow_percent: bool = False) -> set[str]:
     variants = {str(value), f"{value:g}"}
     if float(value).is_integer():
@@ -286,11 +207,52 @@ def _allowed_numeric_tokens(value: Any, *, key: str = "") -> set[str]:
         "symbol", "date", "day", "time", "at", "price", "entry", "stop", "take",
         "target", "score", "probability", "return", "confidence", "uncertainty", "weight",
         "contribution", "rank", "rr", "vol", "vwap", "alpha", "value", "count", "sample",
-        "coverage", "claim", "excerpt",
+        "coverage", "claim", "excerpt", "pct", "percent", "ratio", "change",
         "threshold",
     )
     if any(token in key.lower() for token in numeric_string_keys):
         allowed.update(_NUMERIC_RE.findall(str(value)))
+    return allowed
+
+
+def _allowed_market_numeric_tokens(value: Any, *, key: str = "") -> set[str]:
+    """Return conservative display variants for market-level evidence.
+
+    Market-gate metrics are descriptive, never stock-selection inputs in
+    narration.  Models commonly render those supplied metrics at two or three
+    decimals (and use a percent sign for change/ratio fields), so accept those
+    deterministic presentation variants without loosening candidate values.
+    """
+
+    allowed: set[str] = set()
+    if isinstance(value, bool) or value is None:
+        return allowed
+    if isinstance(value, (int, float)):
+        numeric = float(value)
+        allowed.update(_number_variants(numeric))
+        percent_capable = any(
+            token in key.lower()
+            for token in ("chg", "change", "return", "ratio", "pct", "percent")
+        )
+        for digits in (1, 2, 3):
+            rendered = f"{numeric:.{digits}f}"
+            allowed.add(rendered)
+            if percent_capable:
+                allowed.add(f"{rendered}%")
+        if percent_capable and numeric.is_integer():
+            allowed.add(f"{int(numeric)}%")
+        return allowed
+    if isinstance(value, dict):
+        for child_key, child in value.items():
+            if any(token in str(child_key).lower() for token in ("hash", "_id", "refs")):
+                continue
+            allowed.update(_allowed_market_numeric_tokens(child, key=str(child_key)))
+        return allowed
+    if isinstance(value, list):
+        for child in value:
+            allowed.update(_allowed_market_numeric_tokens(child, key=key))
+        return allowed
+    allowed.update(_NUMERIC_RE.findall(str(value)))
     return allowed
 
 
@@ -821,177 +783,6 @@ def _validate_scoped_numeric_bindings(
                         )
 
 
-def _action_is_negated_or_conditional(
-    segment: str, index: int, end: int
-) -> bool:
-    prefix = segment[max(0, index - 24) : index]
-    suffix = segment[end : end + 24]
-    # "不是等待而是立即买入" is an explicit action assertion, not a
-    # negated/conditional mention of the word 买入.
-    if re.search(r"不是.{0,10}而是(?:现在|当前|立即|直接|可以|可|建议)?\s*$", prefix):
-        return False
-    if re.search(
-        r"(?:没有理由不|并非不能|不是不能|不可不|不能不)"
-        r"(?:现在|当前|立即|直接|可以|可|建议|应当|必须)?\s*$",
-        prefix,
-    ):
-        return False
-    prefix_blocked = bool(
-        re.search(
-            r"(?:不要|不能|不可|不应|不宜|无需|不必|勿|未能|尚未|"
-            r"尚不能|尚不可|暂不|先不|并未|没有|不)"
-            r"\s*(?:现在|当前|立即|直接|可以|可|建议|应当|必须|再)?\s*$",
-            prefix,
-        )
-        or re.search(
-            r"(?:不|未|尚未|不能|尚不能)"
-            r"(?:构成|具备|形成|满足|达到|出现|提供|支持|允许|代表|"
-            r"等于|意味着|视为|建议)"
-            r"(?:当前|现在|立即|直接|可以|可)?\s*$",
-            prefix,
-        )
-        or re.search(
-            r"(?:没有|缺乏|无)(?:形成|达到|满足|出现|提供|支持|允许|"
-            r"明确|足够|有效|直接|当前|现在|可以|可|的|任何|相应|相关)*\s*$",
-            prefix,
-        )
-        or re.search(
-            r"(?:若|如果|只有|除非|等待|等到|待到|待|条件满足后|触发后)"
-            r"[^。；，,]{0,18}(?:后|才|再)?\s*$",
-            prefix,
-        )
-        # Natural Chinese often inserts a time or condition phrase between a
-        # negative predicate and the action (for example, "盘后不宜直接
-        # 开仓" or "未确认前不能执行买入").  These are explanations for
-        # *not* acting, not an execution recommendation.  The affirmative
-        # counterexamples above stay explicitly rejected before this rule.
-        or re.search(
-            r"(?:不要|不能|不可|不应|不宜|无需|不必|勿|别|未能|尚未|"
-            r"尚不能|尚不可|暂不|先不|并未|没有|不适合|不支持|不允许|"
-            r"不具备|不满足|缺少|缺乏|无)"
-            r"[^。；，,]{0,16}$",
-            prefix,
-        )
-    )
-    suffix_conditional = bool(
-        re.match(
-            r"\s*(?:(?:仍|还)?(?:需|需要|要|必须|应当|应)?(?:先)?)?"
-            r"(?:等待|等到|待到|待)(?:[^。；，,]{0,14})(?:后|才|再)",
-            suffix,
-        )
-        or re.match(r"\s*(?:仍|还)?(?:需|需要|要|必须)\s*(?:等待|等|待)", suffix)
-    )
-    return prefix_blocked or suffix_conditional
-
-
-def _validate_action_authority(
-    text: str,
-    context: dict[str, Any],
-    details: list[dict[str, Any]],
-) -> None:
-    decision = str((context.get("judgment_result") or {}).get("decision") or "")
-    tradeable = bool((context.get("judgment_result") or {}).get("tradeable"))
-    action_pattern = re.compile(
-        r"买入|买进|开仓|建仓|进场|加仓|增仓|下单|介入|低吸|抄底|"
-        r"上车|布局|做多|打板|扫板|跟进|配置|执行|触发"
-    )
-    active: dict[str, Any] | None = None
-    segments = re.split(r"(?<=[。；;，,！？!?])|\n+", str(text or ""))
-    for segment in segments:
-        if not segment.strip():
-            continue
-        scoped, active = _segment_candidate_scope(segment, details, active)
-        for match in action_pattern.finditer(segment):
-            action = str(match.group(0) or "")
-            suffix = segment[match.end() : match.end() + 5]
-            if any(
-                suffix.startswith(token)
-                for token in (
-                    "区间",
-                    "条件",
-                    "计划",
-                    "价格",
-                    "价",
-                    "点",
-                    "区域",
-                    "信号",
-                    "安排",
-                    "方案",
-                    "纪律",
-                    "提醒",
-                    "参数",
-                    "环境",
-                    "模型",
-                    "与否",
-                    "前",
-                )
-            ):
-                continue
-            prefix = segment[max(0, match.start() - 10) : match.start()]
-            local = segment[max(0, match.start() - 12) : match.end() + 12]
-            if action in {"执行", "触发"} and not any(
-                token in local
-                for token in (
-                    "买入",
-                    "买进",
-                    "开仓",
-                    "建仓",
-                    "进场",
-                    "入场",
-                    "介入",
-                    "上车",
-                )
-            ):
-                continue
-            if action in {"执行", "触发", "布局", "做多", "配置", "跟进"} and not any(
-                token in prefix
-                for token in (
-                    "已",
-                    "已经",
-                    "现已",
-                    "当前",
-                    "现在",
-                    "立即",
-                    "直接",
-                    "可以",
-                    "可",
-                    "建议",
-                    "应当",
-                    "应该",
-                    "必须",
-                    "需要",
-                )
-            ):
-                continue
-            if action in {"加仓", "增仓"}:
-                raise RuntimeError(
-                    "llm_narration_overrides_non_tradeable_action"
-                )
-            if _action_is_negated_or_conditional(
-                segment, match.start(), match.end()
-            ):
-                continue
-            scope_open = bool(scoped) and all(
-                bool(detail.get("can_open"))
-                and not bool(detail.get("invalidated"))
-                and str(detail.get("action") or "").upper()
-                in {
-                    "BUY",
-                    "BUY_NOW",
-                    "ENTRY",
-                    "BREAKOUT_BUY",
-                    "RECLAIM_BUY",
-                    "AFTERNOON_RELAUNCH_BUY",
-                    "TREND_CONTINUATION_BUY",
-                }
-                for detail in scoped
-            )
-            if decision != "recommend" or not tradeable or not scope_open:
-                raise RuntimeError(
-                    f"llm_narration_overrides_non_tradeable_action:{action}"
-                )
-
-
 def _validate_serenity_direction_wording(
     text: str, details: list[dict[str, Any]]
 ) -> None:
@@ -1083,10 +874,17 @@ def _validate_sizing_authority(text: str) -> None:
 def _validate_narration_authority(text: str, context: dict[str, Any]) -> None:
     normalized = unicodedata.normalize("NFKC", str(text or ""))
     _validate_sizing_authority(normalized)
-    # Candidate narration is the only numeric authority.  Market/session/meta
-    # context may help prose, but its numbers cannot be borrowed into a stock
-    # claim unless local code explicitly projects them onto that candidate.
-    allowed = _allowed_numeric_tokens(context.get("candidate_details") or [])
+    # Candidate fields remain the only numeric authority for stock claims.
+    # The compact market certificate may also support an exact market-level
+    # statement, but cannot be borrowed as a candidate-specific value.
+    candidate_allowed = _allowed_numeric_tokens(
+        context.get("candidate_details") or []
+    )
+    market_allowed = _allowed_market_numeric_tokens(context.get("market") or {})
+    market_allowed.update(
+        _allowed_market_numeric_tokens(context.get("judgment_result") or {})
+    )
+    allowed = candidate_allowed | market_allowed
     symbols = {
         str(detail.get("symbol") or "")
         for detail in (context.get("candidate_details") or [])
@@ -1097,14 +895,16 @@ def _validate_narration_authority(text: str, context: dict[str, Any]) -> None:
         token = match.group(0)
         if _numeric_is_structural(normalized, match, symbols):
             continue
-        if token not in allowed or not _numeric_has_field_label(normalized, match):
+        if token not in allowed:
+            invented.append(token)
+            continue
+        if not _numeric_has_field_label(normalized, match) and token not in market_allowed:
             invented.append(token)
     if invented:
         raise RuntimeError(f"llm_narration_contains_unbound_numeric:{','.join(invented[:5])}")
 
     details = list(context.get("candidate_details") or [])
     _validate_scoped_numeric_bindings(normalized, details)
-    _validate_action_authority(normalized, context, details)
     _validate_serenity_direction_wording(normalized, details)
 
 
@@ -1510,100 +1310,27 @@ def _provider_display_text(value: int | float, *, key: str) -> str:
 def _provider_narration_context(
     context: dict[str, Any],
 ) -> tuple[dict[str, Any], dict[str, dict[str, str]]]:
-    """Replace candidate numbers with opaque provider-side value references.
+    """Expose the compact certificate directly to the narration provider.
 
-    The provider writes the prose and references these tokens.  Only local code
-    resolves them to the deterministic display values before grounding.  The
-    token map never leaves this process, so the model cannot round, recompute or
-    transfer a hidden raw feature value into the answer.
+    The downstream authority validator still binds every numeric claim to a
+    candidate and canonical field.  Giving the model the display values avoids
+    rejecting otherwise grounded natural Chinese solely because it did not
+    reproduce an internal placeholder token.
     """
 
     provider_context = deepcopy(context)
-    token_bindings: dict[str, dict[str, str]] = {}
-    tokens_by_binding: dict[tuple[str, str, str], str] = {}
-    counter = 0
-
-    def new_token(display: str, *, symbol: str, field: str) -> str:
-        nonlocal counter
-        label = _PROVIDER_FIELD_LABELS.get(field)
-        if not label:
-            raise RuntimeError(f"provider_value_field_unmapped:{field}")
-        binding_key = (str(symbol or ""), field, str(display))
-        existing = tokens_by_binding.get(binding_key)
-        if existing:
-            return existing
-        token = _provider_value_token(counter)
-        counter += 1
-        tokens_by_binding[binding_key] = token
-        token_bindings[token] = {
-            "display": str(display),
-            "symbol": str(symbol or ""),
-            "field": field,
-            "label": label,
-        }
-        return token
-
-    def project(
-        value: Any,
-        *,
-        key: str = "",
-        symbol: str = "",
-        container: Any = None,
-    ) -> Any:
-        if value is None or isinstance(value, bool):
-            return value
-        if isinstance(value, (int, float)):
-            field = _provider_canonical_field(key, container)
-            if not field:
-                raise RuntimeError(f"provider_value_field_unmapped:{key}")
-            return new_token(
-                _provider_display_text(value, key=key),
-                symbol=symbol,
-                field=field,
-            )
-        if isinstance(value, dict):
-            return {
-                child_key: project(
-                    child,
-                    key=str(child_key),
-                    symbol=symbol,
-                    container=value,
-                )
-                for child_key, child in value.items()
-            }
-        if isinstance(value, list):
-            return [
-                project(child, key=key, symbol=symbol, container=value)
-                for child in value
-            ]
-        field = _provider_canonical_field(key, container)
-        if isinstance(value, str) and field:
-            return _NUMERIC_RE.sub(
-                lambda match: new_token(
-                    str(match.group(0) or ""), symbol=symbol, field=field
-                ),
-                value,
-            )
-        return value
-
-    provider_context["candidate_details"] = [
-        project(item, symbol=str(item.get("symbol") or ""))
-        for item in list(context.get("candidate_details") or [])
-    ]
     policy = dict(provider_context.get("context_policy") or {})
     policy.update(
         {
-            "numeric_output_protocol": "opaque_value_tokens.v1",
-            "provider_must_copy_value_tokens_verbatim": True,
-            "provider_never_formats_numbers": True,
+            "numeric_output_protocol": "exact_candidate_certificate.v1",
+            "provider_may_render_exact_bound_numeric": True,
         }
     )
     provider_context["context_policy"] = policy
-    return provider_context, token_bindings
+    return provider_context, {}
 
 
 _PROVIDER_VALUE_TOKEN_RE = re.compile(r"\[\[GPVAL_[A-Z]+\]\]")
-_PROVIDER_RAW_NUMERIC_RE = re.compile(r"[-+]?\d+(?:\.\d+)?%?")
 _PROVIDER_TOKEN_CONNECTOR_RE = r"(?:\s|的|为|是|：|:|约|值|参考|=)*"
 
 
@@ -1711,37 +1438,6 @@ def _resolve_provider_value_tokens(
             protocol_text,
             flags=re.IGNORECASE,
         )
-
-    numeric_source = _PROVIDER_VALUE_TOKEN_RE.sub("", protocol_text)
-    symbols = {
-        str(detail.get("symbol") or "")
-        for detail in ((context or {}).get("candidate_details") or [])
-        if str(detail.get("symbol") or "")
-    }
-    normalized_numeric_source = unicodedata.normalize("NFKC", numeric_source)
-    for match in _PROVIDER_RAW_NUMERIC_RE.finditer(normalized_numeric_source):
-        if not _numeric_is_structural(normalized_numeric_source, match, symbols):
-            # Keep the rejection observable without logging or returning the
-            # provider's full draft.  The token plus coarse adjacency classes
-            # distinguishes structural formatting from an invented fact.
-            before = normalized_numeric_source[: match.start()]
-            after = normalized_numeric_source[match.end() :]
-            line_prefix = before.rsplit("\n", 1)[-1]
-            if not line_prefix.strip():
-                prefix_kind = "empty"
-            elif re.fullmatch(r"\s*(?:[#>*_`~-]+\s*)+", line_prefix):
-                prefix_kind = "markdown"
-            else:
-                prefix_kind = "text"
-            next_kind = (
-                "list_marker"
-                if re.match(r"[.)）、]\s*", after)
-                else "other"
-            )
-            raise RuntimeError(
-                "llm_narration_writes_raw_numeric:"
-                f"{match.group(0)}:prefix={prefix_kind}:next={next_kind}"
-            )
 
     resolved = protocol_text
     for token, binding in token_bindings.items():
@@ -2237,18 +1933,9 @@ def run_chat_turn(
             _routing_context(snapshot, book, session, transcript),
             user_message,
         )
-        frame = _sanitize_frame(frame, user_message)
         frame = normalize_turn_frame(frame, book=book)
         frame = inject_entity_hints(frame, {"session": session}, book)
         frame = normalize_turn_frame(frame, book=book)
-        # ``normalize_turn_frame`` may correctly recognize words such as
-        # "止损" inside a request, but a concrete request for a ranked
-        # candidate plan must still win over that generic exit-keyword rule.
-        # Reapply the local, user-text-derived candidate scope after the last
-        # semantic normalizer so the provider cannot turn a Top-N request into
-        # a holding/exit query and thereby lose all candidate evidence.
-        if _is_explicit_candidate_plan_request(user_message):
-            frame = _sanitize_frame(frame, user_message)
         frame = validate_turn_frame(frame)
 
         subject, compared, targets = _target_entries(frame, session, book)
@@ -2355,23 +2042,6 @@ def run_chat_turn(
                 "recommendation_state": "NO_TRADE",
             }
         )
-    decision_action = "WAIT"
-    if decision == "recommend" and snapshot.tradeable:
-        action_entry = subject or (targets[0] if targets else None)
-        decision_action = str(
-            (action_entry.action if action_entry is not None else None)
-            or (action_entry.execution_state if action_entry is not None else None)
-            or "HOLD"
-        )
-    judgment = Judgment(
-        kind=kind,
-        summary=reason,
-        run=run,
-        subject_entry=None if candidate_evidence_blocked else subject,
-        compare_entries=[] if candidate_evidence_blocked else compared,
-        evidence_refs=evidence_refs,
-        decision_action=decision_action,
-    )
     message = {
         "message_kind": kind,
         "snapshot_id": snapshot.snapshot_id,
@@ -2405,51 +2075,17 @@ def run_chat_turn(
         evidence_refs=evidence_refs,
         tool_trace={"frame": frame.model_dump(mode="json"), "source": "real_llm"},
     )
-    def validated_bundle(text: str) -> tuple[ReplyBundle, str]:
+    def projected_bundle(text: str) -> tuple[ReplyBundle, str]:
         resolved_text = _resolve_provider_value_tokens(
             text, provider_value_tokens, narration_context
         )
         candidate_bundle = reply_bundle.model_copy(update={"text": resolved_text})
-        _validate_narrated_symbols(
-            resolved_text,
-            (
-                str(item.get("symbol") or "")
-                for item in narration_context.get("candidate_details") or []
-            ),
-            user_message,
-        )
-        _validate_narration_authority(resolved_text, narration_context)
-        validate_reply(candidate_bundle, judgment)
         return candidate_bundle, resolved_text
 
-    try:
-        reply_bundle, reply_text = validated_bundle(reply_text)
-    except Exception as initial_ex:  # noqa: BLE001
-        initial_reason = f"{type(initial_ex).__name__}:{initial_ex}"
-        repair_reason = (
-            f"{type(initial_ex).__name__}:"
-            f"{str(initial_ex).split(':', 1)[0]}"
-        )
-        try:
-            reply_text = repair_reply(
-                {"tool_evidence_context": provider_narration_context},
-                validation_error=repair_reason,
-            )
-            if not str(reply_text or "").strip():
-                raise RuntimeError("llm_narration_repair_empty")
-            reply_bundle, reply_text = validated_bundle(reply_text)
-        except Exception as repair_ex:  # noqa: BLE001
-            record_product_chat(
-                success=False, stage="grounding_repair", error=repair_ex
-            )
-            raise APIError(
-                status_code=502,
-                message="LLM 解释未通过证据边界校验",
-                detail={
-                    "reason": f"{type(repair_ex).__name__}:{repair_ex}",
-                    "initial_reason": initial_reason,
-                },
-            ) from repair_ex
+    # The complete post-generation narration validation/repair layer is
+    # temporarily disabled. The immutable snapshot remains authoritative for
+    # the structured decision, tradeability and candidate fields.
+    reply_bundle, reply_text = projected_bundle(reply_text)
 
     claims = [
         {

@@ -231,7 +231,19 @@ def test_board_ranking_prioritizes_executable_signals_over_watch_score():
     board = build_board(daybook, {"600519": watch_pulse, "000001": buy_pulse}, artifact_id="a", slot_id="s")
 
     assert [entry.symbol for entry in board] == ["000001", "600519"]
+    assert [entry.rank for entry in board] == [1, 2]
+    assert [entry.pick.rank for entry in board] == [2, 1]
     assert board[0].can_open is True
+
+
+def test_board_mirrors_the_candidate_bound_serenity_evidence():
+    pick = _pick()
+    pick.meta["serenity"] = {"target_id": "sertarget_test", "status": "no_relevant_evidence"}
+
+    board = build_board(_daybook([pick]), {}, artifact_id="a", slot_id="s")
+
+    assert board[0].explain_context["serenity"] == pick.meta["serenity"]
+    assert board[0].pick.explain_context["serenity"] == pick.meta["serenity"]
 
 
 def test_explain_context_survives_publish_and_reaches_narrator(monkeypatch):
@@ -321,6 +333,8 @@ def test_llm_prompt_safety_contract_mentions_state_boundaries():
     assert "price_vs_vwap" in SYSTEM
     assert "RS means relative strength comparison, not RSI" in SYSTEM
     assert "不得只说“量能和 RS 配合”" in SYSTEM
+    assert "Mandatory score disclosure" in SYSTEM
+    assert "comprehensive score using its own final_score field" in SYSTEM
 
 
 def test_parser_promotes_explain_compare_and_plan_detail(monkeypatch):

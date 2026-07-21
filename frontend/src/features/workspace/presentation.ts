@@ -75,7 +75,7 @@ export function runActionLabel(action?: string | null) {
 
 export function slotStatusLabel(status?: string | null) {
   const mapping: Record<string, string> = {
-    OK: '日线就绪',
+    OK: '当前时段数据就绪',
     DEGRADED: '数据受限',
     UNAVAILABLE: '暂不可用',
   }

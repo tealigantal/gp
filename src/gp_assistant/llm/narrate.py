@@ -61,12 +61,12 @@ Serenity native Alpha evidence:
 5. In shadow/suspended state the ninth expert is still present but effective_weight and score_contribution are zero. In probation/active state only the supplied contribution may affect the one final decision_score.
 6. Mention at most two relevant live facts with their published/effective time and source. Do not quote PDF bodies or infer facts beyond claim/evidence_excerpt.
 7. backfill_only=true or learning_eligible=false remains neutral in the binding score. It may be described only as historical context when the payload explicitly includes it.
-8. candidate_details is a compact display certificate produced by local code. Its quantitative values are opaque bracketed GPVAL tokens. When a numeric fact is truly useful, copy one token verbatim by itself; local code expands it into a candidate-bound field/value capsule. Do not type a number, add a second field label around a token, round, approximate, recompute, derive, or borrow a value. Stock symbols may be copied only from the symbol field.
+8. candidate_details is a compact display certificate produced by local code. You may render an exact supplied value naturally, but never round, approximate, recompute, derive, borrow, or attach a value to a different candidate or field. Stock symbols may be copied only from the symbol field.
 9. Only probability, expected-return, confidence, uncertainty, rate, or explicit pct fields may be rendered as percentages. A score, Alpha value, weight, or score contribution must not be relabeled as a probability or percentage.
 10. A negative score_contribution may only be described as a deduction/drag; a positive contribution may only be described as an addition/lift. A zero or non_binding contribution may not be said to have changed ranking.
-11. Each token already owns exactly one candidate and one canonical field. Use it only for that field's meaning, at most once, and do not place it under another candidate or another quantitative label. The local capsule supplies the visible symbol, field label, and value.
+11. Every displayed value remains tied to one candidate and one canonical field. Do not reuse a value under another candidate or quantitative label.
 12. The certificate has no position-allocation authority. Do not discuss position size, capital proportion, or staged allocation. If a risk reminder is needed, write only “控制仓位和风险”.
-13. Outside stock symbols copied from the symbol field and opaque GPVAL tokens, do not type Arabic digits. Use '-' bullets only; never use a numbered list, “第1名”, “Top 3”, “3只”, or “3日”. Express qualitative priority as “首选/次选” and fixed horizons with Chinese numerals such as “一至三日” or “三日”. A quantitative rank must use its own GPVAL token.
+13. You may use ordinary Chinese formatting, including numbered lists, when it improves readability. Every numeric market claim must still be an exact supplied candidate-bound value; do not invent counts, dates, prices, scores, or percentages.
 
 State wording:
 - TRADING_SIGNAL: "当前有可执行交易信号", include signal_valid_until_slot.
@@ -87,6 +87,20 @@ priority. Do not print raw mode/phase/artifact identifiers unless the user asks.
 For each pick use compact natural wording: why it is on the list, the trigger
 or entry area, stop/invalidation, first target/RR if available, and what must
 confirm before acting. Keep it practical; avoid tables by default.
+
+Mandatory score disclosure:
+For every candidate included in candidate_details, you must explicitly output
+that candidate's comprehensive score using its own final_score field. Do not
+omit scores for secondary candidates, substitute probability/confidence for the
+comprehensive score, or reuse another candidate's score. If final_score is
+absent or null, say only that this candidate's comprehensive score was not
+provided; never invent one.
+
+No-candidate/no-trade format:
+When candidate_details is empty, explain only the supplied no-trade reason and
+the waiting/recheck boundary. Do not invent a stock symbol, rank, market number,
+price, percentage, date, or a replacement candidate. A concise qualitative
+answer is better than filling the answer with unsupported market statistics.
 
 Single-pick follow-up format:
 Conclusion, the supplied market-memory aggregate evidence (for example effective
@@ -109,8 +123,8 @@ Parameter explanation rules:
    taken from the system instructions.
 2. When entry_low/entry_high, trigger_price, stop_price, take1/take2,
    rr_to_take1, slot_rel_vol, rs_index, rs_industry, price_vs_vwap, or vwap is
-   present and genuinely useful, copy its supplied opaque value token exactly by
-   itself. Local code supplies the candidate, canonical field label, and value.
+   present and genuinely useful, use its exact supplied value with the matching
+   candidate and field meaning.
    When absent, use a qualitative statement such as “盘中指标尚未提供”; do not
    invent a numeric condition and do not enumerate every absent field.
 3. RS means relative strength comparison, not RSI. rs_index means strength
@@ -118,8 +132,7 @@ Parameter explanation rules:
 4. For live entry checks, explain only the available price location, VWAP,
    volume, RS, RR, and stop/invalidation checks. Do not create a pass threshold.
 5. For recommendation lists, separate why the symbol was selected from why it
-   can or cannot be entered now. Use '-' bullets only and never use Arabic
-   digits as list markers.
+   can or cannot be entered now.
 """
 
 
@@ -130,12 +143,13 @@ tool_evidence_context 重新写一份完整回答。
 
 硬约束：
 1. 算法引擎已经固定候选、排名、动作、价格、概率、风险和 Serenity Alpha；不得改变、补算或推断。
-2. 所有数量值都是不透明的 GPVAL 令牌。只有确有必要时才单独原样复制一个令牌；本地代码会展开候选、规范字段和值。不得手写任何数量数字，不得给令牌另加字段标签，不得重复或跨候选使用令牌。
+2. 可以自然地写出证书中原样提供的数值。不得取整、近似、补算、跨候选/字段挪用，或编造任何数值。
 3. 证书没有仓位分配权限；不得讨论仓位大小、资金比例或分批投入。若需风险提醒，只能写“控制仓位和风险”。
 4. can_open=false、tradeable=false 或下一交易窗口计划只能写“观察、等待、确认、失效”这类非执行语义。不要出现“执行”或任何买入同义词，即使是否定句；直接写等待确认。不能写成当前可以买入、应当执行或已经触发。
 5. Serenity 的 neutral/non_binding/zero contribution 不能写成利好、利空或改变了排名；其他状态也只能按证书原文解释。
 6. 先给结论，再给少量关键依据和风险边界。不要机械枚举字段，不要输出 JSON、诊断、错误码或道歉。
-7. 除 symbol 字段中的股票代码和原样 GPVAL 令牌外，不得手写阿拉伯数字。列表只能用“-”，不得用数字序号、“第1名”、“Top 3”、“3只”或“3日”；优先级写“首选/次选”，固定期限写“一至三日”或“三日”，数量排名必须使用其 GPVAL 令牌。
+7. 可使用自然的中文格式和编号；所有市场数值、日期和数量结论必须来自证书中的对应字段，不能补写或估算。
+8. 当 candidate_details 为空时，只解释 no-trade 原因和等待条件；不得补写股票代码、排名、市场数值、日期或替代候选。
 
 这是同一真实 LLM 对同一证据证书的重新生成，不是模板。只输出自然中文。
 """

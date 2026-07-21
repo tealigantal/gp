@@ -118,6 +118,27 @@ it('omits retired decision snapshot hero metadata', () => {
   expect(screen.getByText('等待触发')).toBeInTheDocument()
 })
 
+it('uses the lunch interface instead of presenting slot OK as daily completion', () => {
+  render(
+    <DecisionSnapshot
+      book={{ ...bookWithFallback(), market_phase: 'LUNCH_BREAK' }}
+      health={{ ...health, runtime: { ...health.runtime, market_phase: 'LUNCH_BREAK' } }}
+      lunch={{
+        schema_version: 'lunch_snapshot.v1',
+        kind: 'lunch_snapshot',
+        market_phase: 'LUNCH_BREAK',
+        state: 'READY',
+        session: { name: 'morning_session', completed_at: '2026-01-01T11:30:00+08:00', complete: true },
+        daily: { today_complete: false },
+        market: { gate_reasons: [] },
+      }}
+    />,
+  )
+
+  expect(screen.getAllByText('午盘数据已完成 · 11:30').length).toBeGreaterThan(0)
+  expect(screen.queryByText('日线就绪')).not.toBeInTheDocument()
+})
+
 it('shows daily runtime tools from health status', () => {
   render(<DecisionSnapshot book={bookWithFallback()} latest={null} health={health} />)
   expect(screen.getByText('gp-worker')).toBeInTheDocument()

@@ -4,6 +4,7 @@ import type {
   CanonicalRunArtifact,
   ChatResponse,
   HealthResponse,
+  LunchResponse,
   MarketBook,
   OpsRunResponse,
 } from '../../../shared/contracts'
@@ -15,6 +16,7 @@ interface DecisionSnapshotProps {
   book?: MarketBook
   latest?: ChatResponse | null
   health?: HealthResponse
+  lunch?: LunchResponse
   onRunTool?: (service: string) => Promise<void>
   onRefreshRuntime?: () => Promise<void>
   runningToolService?: string | null
@@ -41,6 +43,7 @@ export function DecisionSnapshot({
   book,
   latest,
   health,
+  lunch,
   onRunTool,
   onRefreshRuntime,
   runningToolService,
@@ -52,7 +55,9 @@ export function DecisionSnapshot({
   const marketPhase = marketPhaseLabel(run?.market_phase || book?.market_phase || health?.runtime?.market_phase)
   const rawMarketPhase = String(run?.market_phase || book?.market_phase || health?.runtime?.market_phase || '').toUpperCase()
   const nextSessionReview = ['NON_TRADING', 'POSTCLOSE_PENDING', 'POSTCLOSE_READY'].includes(rawMarketPhase)
-  const slotState = slotStatusLabel(run?.slot_status || book?.slot_status || health?.runtime?.slot_status)
+  const slotState = lunch?.state === 'READY'
+    ? `午盘数据已完成 · ${lunch.session.completed_at?.slice(11, 16) || '11:30'}`
+    : slotStatusLabel(run?.slot_status || book?.slot_status || health?.runtime?.slot_status)
   const runRecommendation = recommendationStateMeta(run?.recommendation_state)
   const symbolRows = (run?.picks || []).length
     ? (run?.picks || []).slice(0, 5).map((pick) => ({
@@ -111,6 +116,7 @@ export function DecisionSnapshot({
 
       <OperationsStatusCard
         runtime={health?.runtime}
+        lunch={lunch}
         onRunTool={onRunTool}
         onRefreshRuntime={onRefreshRuntime}
         runningToolService={runningToolService}

@@ -199,8 +199,24 @@ it('shows the lunch data update state without using the trading recommendation s
         publish_allowed: false,
         tradeability_state: 'blocked',
       })}
+      lunch={{
+        schema_version: 'lunch_snapshot.v1',
+        kind: 'lunch_snapshot',
+        trade_day: '20260717',
+        market_phase: 'LUNCH_BREAK',
+        state: 'READY',
+        session: {
+          name: 'morning_session',
+          target_closed_at: '2026-07-17T11:30:00+08:00',
+          completed_at: '2026-07-17T11:30:00+08:00',
+          complete: true,
+        },
+        daily: { effective_day: '20260716', target_mode: 'previous_completed', today_complete: false },
+        market: { gate_reasons: [] },
+      }}
     />,
   )
 
-  expect(screen.getByText('午盘数据已更新 · 11:30')).toBeInTheDocument()
+  expect(screen.getByText('午盘数据已完成 · 11:30')).toBeInTheDocument()
+  expect(screen.getByText('上午交易时段数据已收齐；今日收盘日线尚未完成。')).toBeInTheDocument()
 })
