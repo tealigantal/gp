@@ -337,7 +337,10 @@ class AgentStore:
             slot_status=artifact.slot_status, publish_allowed=artifact.publish_allowed, daybook_effective_day=artifact.daybook_effective_day,
             pulse_trade_day=artifact.trade_day if artifact.slot_at else None, pulse_slot_at=artifact.slot_at, market_phase=artifact.market_phase,
             data_status=str((artifact.provider_meta or {}).get("data_status") or "daily_plan"), gate=artifact.gate, data_quality=artifact.data_quality,
-            tracked_universe=artifact.tracked_universe, producer={"schema_version": SNAPSHOT_SCHEMA, "selection_policy": str((artifact.producer or {}).get("selection_policy") or "adaptive_policy_single_path")},
+            tracked_universe=artifact.tracked_universe,
+            candidate_universe=dict(published_daybook.source_meta.get("candidate_universe") or {}),
+            universe_quality=dict(published_daybook.source_meta.get("universe_quality") or {}),
+            producer={"schema_version": SNAPSHOT_SCHEMA, "selection_policy": str((artifact.producer or {}).get("selection_policy") or "adaptive_policy_single_path")},
         )
         record = self._record_for_book(book, market_time=market_time)
         self._validate_snapshot(record)
@@ -415,6 +418,9 @@ class AgentStore:
             decision_snapshot.get("serenity_native_attestation") or {}
         )
         if (
+            dict(decision_snapshot.get("candidate_universe") or {})
+            != dict(meta.get("candidate_universe") or {})
+            or
             dict(decision_snapshot.get("serenity_candidate_target") or {})
             != dict(meta.get("serenity_candidate_target") or {})
             or decision_attestation != attestation
@@ -624,7 +630,14 @@ class AgentStore:
                 formula_version=formula_version,
             )
             reference_checksum = reference.input_checksum
-        elif source_reference_id or decision_reference_id or expected_decision == "recommend":
+        elif (
+            source_reference_id
+            or decision_reference_id
+            or (
+                expected_decision == "recommend"
+                and meta.get("serenity_native_ready") is True
+            )
+        ):
             raise SnapshotIntegrityError("runtime_serenity_reference_missing")
 
         binding = {

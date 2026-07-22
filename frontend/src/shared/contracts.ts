@@ -396,6 +396,32 @@ export interface RuntimeToolInfo {
   profile?: string | null
 }
 
+export interface CandidateUniverseSummary {
+  schema?: 'MarketUniverseSnapshot.v1' | string | null
+  universe_id?: string | null
+  daybook_effective_day?: string | null
+  data_date?: string | null
+  counts?: {
+    mainboard_input_count?: number
+    metadata_complete_count?: number
+    daily_ready_count?: number
+    eligible_count?: number
+    scoring_pool_count?: number
+    scored_count?: number
+    selected_count?: number
+  }
+  coverage?: {
+    metadata_ratio?: number
+    daily_ratio?: number
+    scoring_success_ratio?: number
+  }
+  fallback_used?: boolean
+  complete?: boolean
+  blocking_reason?: string | null
+  blocking_reasons?: string[]
+  content_digest?: string | null
+}
+
 export interface RuntimeStatus {
   market_phase: string
   data_provider: string
@@ -412,6 +438,8 @@ export interface RuntimeStatus {
   last_closed_5m?: string | null
   slot_status?: string | null
   publish_allowed: boolean
+  candidate_universe?: CandidateUniverseSummary
+  universe_quality?: CandidateUniverseSummary
   repair_status: string
   repair_stage: string
   daily_data_state?: 'previous_completed' | 'eod_pending' | 'daily_reconciling' | 'freshness_blocked' | 'ready' | 'unavailable' | string | null
@@ -465,6 +493,7 @@ export interface HealthResponse {
   llm_retryable?: boolean
   storage: HealthStorageStats
   runtime: RuntimeStatus
+  candidate_universe?: CandidateUniverseSummary
 }
 
 export interface SessionState {
@@ -694,6 +723,8 @@ export interface MarketBook {
   slot_status?: string | null
   publish_allowed?: boolean
   side_results: SideResult[]
+  candidate_universe?: CandidateUniverseSummary
+  universe_quality?: CandidateUniverseSummary
 }
 
 export interface AdviceRun {

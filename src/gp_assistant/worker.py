@@ -98,6 +98,14 @@ def _load_or_build_daybook(market_time: MarketTimeContext, *, force: bool = Fals
     """Reuse an immutable, producer-compatible daybook for completed bars only."""
     store = AgentStore()
     daybook = None if force else store.load_daybook(market_time.daybook_effective_day, producer=producer_metadata())
+    if daybook is not None:
+        candidate_universe = dict(daybook.source_meta.get("candidate_universe") or {})
+        if (
+            str(candidate_universe.get("schema") or "")
+            != "MarketUniverseSnapshot.v1"
+            or candidate_universe.get("complete") is not True
+        ):
+            daybook = None
     if daybook is not None and daybook.source_meta.get("serenity_native_ready") is False:
         target_id = str(daybook.source_meta.get("serenity_target_id") or "")
         if not target_id:
@@ -502,6 +510,29 @@ def run_runtime_chain(*, now=None, operation: RuntimeOperation | str = "auto") -
             "message": "今日收盘日线已进入确认流程，等待 freshness report 完成后再发布。",
         }
     if daily_data_state == DAILY_FRESHNESS_BLOCKED:
+        # A full-market coverage failure is itself a publishable, auditable
+        # no-trade decision. Publishing it replaces any legacy ten-symbol
+        # current pointer while preserving all historical snapshots.
+        if freshness.get("universe_id"):
+            saved = _build_and_save_daily_plan(
+                daybook=daybook,
+                trade_day=market_time.decision_trade_ymd,
+                market_phase=ms.market_phase,
+                market_time=market_time,
+                force=force_daybook,
+            )
+            saved.update(
+                {
+                    "operation": operation,
+                    "blocked": True,
+                    "reason": "candidate_universe_incomplete",
+                    "daily_freshness": freshness,
+                    "daily_data_state": daily_data_state,
+                    "daily_status": daily_data_state,
+                    "daily_plan_only": True,
+                }
+            )
+            return saved
         return {
             "trade_day": ms.target_daybook_effective_day,
             "market_phase": ms.market_phase,

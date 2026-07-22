@@ -1604,6 +1604,17 @@ def _current_serenity_check(
     book: MarketBook,
 ) -> tuple[str | None, dict[str, Any]]:
     source_meta = dict(book.daybook.source_meta or {})
+    policy = dict(source_meta.get("serenity_policy_snapshot") or {})
+    if (
+        source_meta.get("serenity_native_ready") is not True
+        and float(policy.get("applied_weight") or 0.0) == 0.0
+    ):
+        return None, {
+            "available": False,
+            "degraded_to_zero": True,
+            "effective_weight": 0.0,
+            "reason": "serenity_batch_incomplete",
+        }
     snapshot_target_id = str(source_meta.get("serenity_target_id") or "")
     if not snapshot_target_id:
         return "current_serenity_target_missing", {}
@@ -1782,6 +1793,7 @@ def _selection_meta_summary(
             "epoch": int(policy.get("epoch") or 0),
             "native_required": policy.get("native_required") is True,
         },
+        "candidate_universe": dict(meta.get("candidate_universe") or {}),
     }
 
 
@@ -1811,6 +1823,8 @@ def _narration_context(
                 or reason.startswith("native_snapshot_")
                 or reason.startswith("current_serenity_")
                 or reason.startswith("market_data_")
+                or reason.startswith("candidate_universe_")
+                or reason.startswith("legacy_coverage_")
             )
         )
     )
@@ -1839,6 +1853,8 @@ def _narration_context(
             "market_phase": book.market_phase,
             "gate": book.gate.model_dump(mode="json"),
             "data_quality": book.data_quality.model_dump(mode="json"),
+            "candidate_universe": dict(book.candidate_universe or {}),
+            "universe_quality": dict(book.universe_quality or {}),
         },
         "judgment_result": {
             "decision": decision,

@@ -80,7 +80,7 @@ def test_complete_empty_official_poll_is_a_neutral_native_expert():
     assert row["serenity_adjustment"] == 0.0
 
 
-def test_incomplete_target_is_formal_no_trade_not_baseline_fallback():
+def test_incomplete_target_zeroes_serenity_and_preserves_base_recommendation():
     result = select_candidates(
         [_candidate("000001")],
         topk=1,
@@ -91,6 +91,8 @@ def test_incomplete_target_is_formal_no_trade_not_baseline_fallback():
         require_serenity=True,
     )
 
-    assert result["final_decision"] == "no_trade"
-    assert result["selected_symbols"] == []
-    assert result["policy_debug"]["reason"] == "serenity_coverage_incomplete"
+    assert result["final_decision"] == "recommend"
+    assert result["selected_symbols"] == ["000001"]
+    assert result["serenity_policy"]["applied_weight"] == 0.0
+    assert result["serenity_policy"]["degraded_to_zero"] is True
+    assert result["adaptive_candidates"][0]["serenity_adjustment"] == 0.0

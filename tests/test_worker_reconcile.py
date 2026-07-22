@@ -295,6 +295,34 @@ def test_blocked_daily_freshness_does_not_publish(monkeypatch):
     assert result["daily_status"] == "freshness_blocked"
 
 
+def test_incomplete_full_market_universe_publishes_explicit_no_trade(monkeypatch):
+    market_time = _market_time()
+    blocked = _daybook(ready=False)
+    blocked.source_meta["daily_freshness"].update(
+        {
+            "universe_id": "mus_20260512_incomplete",
+            "blocking_reason": "candidate_universe_incomplete",
+        }
+    )
+    calls: list[dict] = []
+    monkeypatch.setattr(worker, "load_config", lambda: SimpleNamespace(intraday_runtime_enabled=False))
+    monkeypatch.setattr(worker, "compute_market_state", lambda now=None: _state(phase=PHASE_PREOPEN))
+    monkeypatch.setattr(worker, "resolve_daily_target", lambda **_kwargs: market_time)
+    monkeypatch.setattr(worker, "_load_or_build_daybook", lambda *_args, **_kwargs: blocked)
+    monkeypatch.setattr(
+        worker,
+        "_build_and_save_daily_plan",
+        lambda **kwargs: calls.append(kwargs) or {"artifact_id": "daily-no-trade"},
+    )
+
+    result = worker.run_runtime_chain()
+
+    assert calls and calls[0]["daybook"] is blocked
+    assert result["artifact_id"] == "daily-no-trade"
+    assert result["reason"] == "candidate_universe_incomplete"
+    assert result["blocked"] is True
+
+
 def test_noop_requires_the_current_snapshot_to_match_market_time_and_daybook(
     monkeypatch,
 ):
@@ -347,6 +375,10 @@ def test_load_or_build_daybook_uses_agent_store_and_market_time_contract(
     monkeypatch,
 ):
     daybook = _daybook(mode=TARGET_PREVIOUS_COMPLETED)
+    daybook.source_meta["candidate_universe"] = {
+        "schema": "MarketUniverseSnapshot.v1",
+        "complete": True,
+    }
     market_time = _market_time(mode=TARGET_PREVIOUS_COMPLETED)
     captured: dict[str, object] = {}
 

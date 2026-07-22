@@ -2108,7 +2108,6 @@ def serenity_batch_semantic_revision(
     if (
         normalized_policy["mode"] != "native"
         or normalized_policy["epoch"] < 1
-        or not normalized_policy["native_required"]
         or not math.isfinite(normalized_policy["applied_weight"])
         or not math.isfinite(normalized_policy["max_weight"])
     ):
@@ -2345,7 +2344,7 @@ def current_native_readiness_state(
                     "epoch": int(policy.epoch),
                     "applied_weight": float(effective_weight),
                     "max_weight": float(policy.max_weight),
-                    "native_required": True,
+                    "native_required": False,
                 },
             )
             if semantic_ready
@@ -2402,7 +2401,7 @@ def current_native_readiness_state(
             "policy_epoch": int(policy.epoch),
             "policy_applied_weight": float(effective_weight),
             "policy_max_weight": float(policy.max_weight),
-            "native_required": True,
+            "native_required": False,
         }
         semantic_binding = {
             key: value

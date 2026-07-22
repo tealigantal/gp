@@ -13,3 +13,4 @@ Each ADR records Status, Context, Considered Options, Decision, Rationale, Conse
 - [0005 — Serenity native Alpha and real-LLM chat](./0005-serenity-native-alpha-and-real-llm-chat.md)
 - [0006 — Single assistant-turn presentation contract](./0006-assistant-turn-presentation-contract.md)
 - [0007 — Runtime contract consolidation](./0007-runtime-contract-consolidation.md)
+- [0008 — Full-market universe ownership and additive Serenity](./0008-full-market-universe-and-additive-serenity.md)

@@ -16,7 +16,12 @@ from ..runtime.market_clock import compute_market_state
 from ..runtime.utils import now_iso
 from ..decision_engine.pipeline import run_market_memory_selection
 from ..selection_engine.datahub import MarketDataHub
-from .daily_freshness import reconcile_daily_freshness, selection_symbols
+from .market_universe import (
+    build_market_universe_snapshot,
+    finalize_market_universe_snapshot,
+    load_accepted_market_universe,
+    universe_summary,
+)
 
 
 def current_trading_day() -> str:
@@ -32,29 +37,61 @@ def build_day_selection(
     observed_at: str | None = None,
 ) -> Dict[str, Any]:
     date = f"{trading_day[:4]}-{trading_day[4:6]}-{trading_day[6:8]}" if len(trading_day) == 8 else trading_day
+    universe_draft = load_accepted_market_universe(date) or build_market_universe_snapshot(
+        date,
+        observed_at=observed_at,
+    )
     selection_kwargs = {
         "date": date,
         "topk": topk,
         "risk_profile": risk_profile,
         "allow_snapshot": False,
+        "allow_file_fallback": False,
+        "candidate_universe": universe_draft,
         "decision_trade_day": decision_trade_day or date,
         "daybook_effective_day": date,
         "observed_at": observed_at,
     }
     raw = run_market_memory_selection(**selection_kwargs)
-    report = reconcile_daily_freshness(selection_symbols(raw), as_of=date, strict=True)
-    if report["refreshed_symbols"]:
-        refreshed_kwargs = {**selection_kwargs, "observed_at": now_iso()}
-        raw = run_market_memory_selection(**refreshed_kwargs)
-        report = reconcile_daily_freshness(selection_symbols(raw), as_of=date, strict=True)
-    report_map = {item["symbol"]: item for item in report["symbol_reports"]}
-    for bucket in ("picks", "candidate_pool"):
-        for item in raw.get(bucket) or []:
-            symbol = str(item.get("symbol") or item.get("code") or "").strip()
-            if not symbol or symbol not in report_map:
-                continue
-            item["daily_freshness_state"] = report_map[symbol].get("freshness_state")
-            item["last_date"] = report_map[symbol].get("last_item_time") or item.get("last_date")
+    scored_count = int((raw.get("debug") or {}).get("base_scored_count") or 0)
+    final_universe = finalize_market_universe_snapshot(
+        raw.get("candidate_universe") or universe_draft,
+        scored_count=scored_count,
+        selected_count=len(raw.get("picks") or []),
+        persist=True,
+    )
+    raw["candidate_universe"] = final_universe
+    raw["universe_quality"] = universe_summary(final_universe)
+    deferred = dict(raw.get("_deferred_persistence") or {})
+    decision_snapshot = dict(deferred.get("decision_snapshot") or {})
+    decision_snapshot["candidate_universe"] = universe_summary(final_universe)
+    deferred["decision_snapshot"] = decision_snapshot
+    raw["_deferred_persistence"] = deferred
+    counts = dict(final_universe.get("counts") or {})
+    coverage = dict(final_universe.get("coverage") or {})
+    exclusions = dict(final_universe.get("exclusions") or {})
+    report = {
+        "ready": bool(final_universe.get("complete")),
+        "target_day": date,
+        "target_mode": "completed_day_full_market",
+        "checked_count": int(counts.get("mainboard_input_count") or 0),
+        "current_count": int(counts.get("daily_ready_count") or 0),
+        "stale_count": max(
+            0,
+            int(counts.get("mainboard_input_count") or 0)
+            - int(counts.get("daily_ready_count") or 0),
+        ),
+        "failed_count": int(exclusions.get("daily_missing_or_stale") or 0),
+        "stale_symbols": [],
+        "failed_symbols": [],
+        "refreshed_symbols": [],
+        "symbol_reports": [],
+        "coverage_ratio": float(coverage.get("daily_ratio") or 0.0),
+        "universe_id": final_universe.get("universe_id"),
+        "blocking_reason": final_universe.get("blocking_reason"),
+        "blocking_reasons": list(final_universe.get("blocking_reasons") or []),
+        "reconciled_at": observed_at or now_iso(),
+    }
     raw["daily_freshness"] = report
     if report["ready"]:
         return raw
@@ -64,8 +101,8 @@ def build_day_selection(
         {
             "reason_code": "DAILY_FRESHNESS_BLOCKED",
             "target_day": report["target_day"],
-            "stale_symbols": report["stale_symbols"][:10],
-            "failed_symbols": report["failed_symbols"][:10],
+            "universe_id": final_universe.get("universe_id"),
+            "blocking_reasons": list(final_universe.get("blocking_reasons") or []),
         }
     )
     debug["degraded"] = True
@@ -75,8 +112,9 @@ def build_day_selection(
         "candidate_pool": [],
         "picks": [],
         "tradeable": False,
-        "reason": "daily_freshness_blocked",
-        "message": report["blocking_reason"],
+        "decision": "no_trade",
+        "reason": "candidate_universe_incomplete",
+        "message": "全市场候选宇宙覆盖不足，本轮明确不交易。",
         "daily_freshness": report,
         "debug": debug,
     }

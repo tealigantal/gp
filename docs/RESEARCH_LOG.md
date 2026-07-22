@@ -1,5 +1,15 @@
 # Research Log
 
+## 2026-07-22 — 生产候选宇宙与 Serenity 权限边界审计
+
+- **问题：** 为什么每日推荐在数据已刷新时仍局限于同一组股票；Serenity 是否因接入而获得了不应有的基础链路权限？
+- **检查日期与来源：** 2026-07-22；本地工作区源码、Git 历史、Docker Compose、运行日志和运行数据库只读检查。没有使用外部资料，也没有修改运行时状态。
+- **完整证据：** [候选宇宙与 Serenity 边界全仓审计](./architecture-audit-2026-07-22-candidate-universe-and-serenity-boundaries.md)。
+- **观察：** 2026-07-09 的 `8cfde8b` 在生产日线调用点固定 `allow_snapshot=False`；pipeline 因而回退到 `store/universe/universe_symbols.txt`，当前仅十只。每日评分快照和分数会变化，但候选集合不变。新鲜度只在选出候选之后检查，故十只新鲜不能证明全市场完整。
+- **边界观察：** Serenity 有独立 worker 和 append-only 证据库，但核心 pipeline 直接创建其目标、读取其信号并把它放进最终九专家评分；native 覆盖不足会产生 `no_trade`。这使它同时拥有评分贡献和基础推荐可用性否决权。
+- **产品范围观察：** 生产动态路径原本是全市场现货快照后的成交额动态池，不是全量逐标的评分；当前 production `decision_engine` 未证明执行 ST 排除及 legacy `selection_engine` 中的最小宇宙/价格/上市天数等门槛。
+- **决策影响：** 后续修复不能只恢复单个 snapshot 开关。任何获批实现必须先定义并强制验证基础候选宇宙契约（来源、时间、输入/合格/评分数、规则版本和回退状态），再把 Serenity 限定为版本化、受权重约束的评分扩展。是否采用该架构仍待用户明确批准。
+
 ## 2026-07-17 — DeepSeek Beta strict tool routing
 
 - **Question:** Why did compact real `/api/chat` routing calls return HTTP 400 from DeepSeek?

@@ -81,6 +81,34 @@ and the `runtime-loop` resident process.
 ## Target Direction
 
 Keep evidence collection isolated, preserve a permanent 0% baseline, and allow the Serenity add-on to move from shadow to bounded automatic weight only through immutable causal evaluations and automatic rollback.
+
+## Full-market boundary recovery (2026-07-22)
+
+The repository/runtime/Git audit recorded in
+`docs/architecture-audit-2026-07-22-candidate-universe-and-serenity-boundaries.md`
+identified the former ten-symbol coverage failure. The recovery is now encoded
+as follows:
+
+- `evidence/market_universe.py` owns an immutable, content-addressed
+  `MarketUniverseSnapshot.v1`, sourced from the SSE/SZSE security masters and
+  completed daily history. It records counts, exclusions, thresholds, source
+  provenance and the deterministic Top-200 scoring pool.
+- Production calls explicitly disable the static-file fallback. Absolute,
+  previous-day, metadata, target-day, eligible-pool and scoring-coverage gates
+  produce a published empty `candidate_universe_incomplete` no-trade snapshot
+  rather than retaining a legacy recommendation.
+- Container separation is operational only: all Python services share one
+  backend image and bind-mounted stores. Shared files/SQLite, not a versioned
+  cross-service interface, carry several boundaries.
+- The base Adaptive pass scores the complete bounded pool without Serenity and
+  forms a Top-30 finalist set. Serenity can add 0%-8% only inside that set. Any
+  incomplete/stale target batch atomically reduces the whole batch to 0%, so it
+  cannot veto or reorder the base recommendation.
+- `MarketBook`, `/api/health` and Workspace carry `candidate_universe` and
+  `universe_quality` independently of `TrackedUniverse`.
+
+Container/service separation remains operational rather than a versioned
+network boundary; the shared storage discipline described above still applies.
 ## Canonical current publication
 
 All Python Compose services run `gp-backend:<tag>`. The API publishes a producer contract containing revision, source digest, artifact schema, and selection policy. Operational jobs must match it before writing.

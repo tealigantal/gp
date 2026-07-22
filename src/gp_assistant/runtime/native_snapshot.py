@@ -185,6 +185,84 @@ def _runtime_binding_error(
     return None
 
 
+def _candidate_universe_error(snapshot: Any, book: MarketBook) -> str | None:
+    meta = dict(book.daybook.source_meta or {})
+    universe = dict(meta.get("candidate_universe") or {})
+    if str(universe.get("schema") or "") != "MarketUniverseSnapshot.v1":
+        return "legacy_coverage_unverified"
+    if (
+        not str(universe.get("universe_id") or "")
+        or bool(universe.get("fallback_used"))
+        or _day(universe.get("daybook_effective_day"))
+        != _day(getattr(snapshot, "daybook_effective_day", None))
+        or _day(universe.get("data_date"))
+        != _day(getattr(snapshot, "daybook_effective_day", None))
+    ):
+        return "candidate_universe_identity_invalid"
+    counts = dict(universe.get("counts") or {})
+    coverage = dict(universe.get("coverage") or {})
+    thresholds = dict(universe.get("thresholds") or {})
+    try:
+        mainboard = int(counts.get("mainboard_input_count") or 0)
+        eligible = int(counts.get("eligible_count") or 0)
+        pool = int(counts.get("scoring_pool_count") or 0)
+        scored = int(counts.get("scored_count") or 0)
+        metadata_ratio = float(coverage.get("metadata_ratio") or 0.0)
+        daily_ratio = float(coverage.get("daily_ratio") or 0.0)
+        scoring_ratio = float(coverage.get("scoring_success_ratio") or 0.0)
+        minimum_mainboard = int(thresholds.get("minimum_mainboard_count") or 3000)
+        minimum_eligible = int(thresholds.get("minimum_eligible_count") or 50)
+        pool_limit = int(thresholds.get("scoring_pool_limit") or 200)
+        minimum_scored = int(thresholds.get("minimum_scored_count") or 20)
+        metadata_min = float(thresholds.get("metadata_coverage_ratio") or 0.95)
+        daily_min = float(thresholds.get("daily_coverage_ratio") or 0.95)
+        scoring_min = float(thresholds.get("scoring_success_ratio") or 0.95)
+    except (TypeError, ValueError):
+        return "candidate_universe_quality_invalid"
+    calculated_complete = bool(
+        mainboard >= minimum_mainboard
+        and metadata_ratio >= metadata_min
+        and daily_ratio >= daily_min
+        and eligible >= minimum_eligible
+        and pool == min(pool_limit, eligible)
+        and scored >= minimum_scored
+        and scoring_ratio >= scoring_min
+        and not list(universe.get("blocking_reasons") or [])
+    )
+    if bool(universe.get("complete")) != calculated_complete:
+        return "candidate_universe_completeness_mismatch"
+    if str(getattr(snapshot, "decision", "") or "") == "recommend" and not calculated_complete:
+        return "candidate_universe_incomplete"
+    return None
+
+
+def _additive_base_projection_error(snapshot: Any, book: MarketBook) -> str | None:
+    meta = dict(book.daybook.source_meta or {})
+    policy = dict(meta.get("serenity_policy_snapshot") or {})
+    if not _close(policy.get("applied_weight"), 0.0):
+        return "additive_serenity_degraded_weight_nonzero"
+    picks = [*book.daybook.picks, *book.daybook.reserve_picks]
+    for pick in picks:
+        serenity = _serenity(pick)
+        adaptive = dict((pick.meta or {}).get("adaptive_policy") or {})
+        if (
+            not _close(serenity.get("effective_weight"), 0.0)
+            or not _close(serenity.get("score_contribution"), 0.0)
+            or not bool(serenity.get("non_binding", True))
+            or not _close(adaptive.get("decision_score"), adaptive.get("baseline_adaptive_score"))
+        ):
+            return f"additive_serenity_base_projection_invalid:{pick.symbol}"
+    selected = [pick.symbol for pick in book.daybook.picks]
+    if (
+        str(getattr(snapshot, "decision", "") or "") != "recommend"
+        or not selected
+        or not bool(book.daybook.tradeable)
+        or [entry.symbol for entry in book.board] != selected
+    ):
+        return "additive_base_recommendation_projection_invalid"
+    return None
+
+
 def _validate_attested_candidate(
     symbol: str,
     record: dict[str, Any],
@@ -574,10 +652,22 @@ def native_snapshot_integrity_errors(snapshot: Any, book: MarketBook) -> list[st
     binding_error = _runtime_binding_error(
         snapshot,
         meta,
-        reference_required=bool(book.daybook.picks),
+        # A Serenity reference is required only when the native batch is
+        # actually ready. A valid additive-degraded recommendation keeps the
+        # base picks with zero Serenity weight and intentionally has no
+        # reference/pending sidecar.
+        reference_required=bool(
+            book.daybook.picks and meta.get("serenity_native_ready") is True
+        ),
     )
     if binding_error:
         return [binding_error]
+    universe_error = _candidate_universe_error(snapshot, book)
+    if universe_error:
+        return [universe_error]
+    if meta.get("serenity_native_ready") is not True:
+        additive_error = _additive_base_projection_error(snapshot, book)
+        return [additive_error] if additive_error else []
     target_id = str(meta.get("serenity_target_id") or "")
     if not target_id:
         return ["native_snapshot_target_missing"]
@@ -633,7 +723,7 @@ def native_snapshot_integrity_errors(snapshot: Any, book: MarketBook) -> list[st
         formula_version != NATIVE_SERENITY_FORMULA_VERSION
         or str(policy.get("formula_version") or "") != formula_version
         or str(policy.get("mode") or "") != "native"
-        or policy.get("native_required") is not True
+        or policy.get("native_required") is not False
         or policy_state
         not in {"warming", "shadow", "probation", "active", "suspended", "off"}
         or policy_epoch is None
@@ -905,6 +995,20 @@ def pending_native_snapshot_integrity_errors(
         return ["native_snapshot_policy_incompatible"]
     if not producer_is_compatible(book.daybook.producer):
         return ["native_snapshot_producer_incompatible"]
+    universe_error = _candidate_universe_error(snapshot, book)
+    if universe_error and universe_error != "candidate_universe_incomplete":
+        return [universe_error]
+    if (
+        str(getattr(snapshot, "decision", "") or "") == "no_trade"
+        and str(meta.get("decision") or "") == "no_trade"
+        and not bool(book.daybook.tradeable)
+        and not bool(book.daybook.picks)
+        and not bool(book.daybook.reserve_picks)
+        and not bool(book.daybook.reserve_symbols)
+        and not bool(book.board)
+    ):
+        binding_error = _runtime_binding_error(snapshot, meta, reference_required=False)
+        return [binding_error] if binding_error else []
     if (
         str(getattr(snapshot, "decision", "") or "") != "no_trade"
         or str(meta.get("decision") or "") != "no_trade"

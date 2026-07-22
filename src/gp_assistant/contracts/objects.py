@@ -330,6 +330,8 @@ class MarketBook(GPModel):
     gate: SlotGate = Field(default_factory=SlotGate)
     data_quality: SlotDataQuality = Field(default_factory=SlotDataQuality)
     tracked_universe: TrackedUniverse = Field(default_factory=TrackedUniverse)
+    candidate_universe: Dict[str, Any] = Field(default_factory=dict)
+    universe_quality: Dict[str, Any] = Field(default_factory=dict)
     producer: Dict[str, str] = Field(default_factory=dict)
 
 

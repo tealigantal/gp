@@ -179,6 +179,8 @@ class RuntimeStatus(BaseModel):
     last_closed_5m: Optional[str] = None
     slot_status: Optional[str] = None
     data_quality: Dict[str, Any] = Field(default_factory=dict)
+    candidate_universe: Dict[str, Any] = Field(default_factory=dict)
+    universe_quality: Dict[str, Any] = Field(default_factory=dict)
     publish_allowed: bool = False
     repair_status: str = "idle"
     repair_stage: str = "idle"
@@ -231,6 +233,7 @@ class HealthResponse(BaseModel):
     history_db: Dict[str, Any] = Field(default_factory=dict)
     llm: Dict[str, Any] = Field(default_factory=dict)
     serenity: Dict[str, Any] = Field(default_factory=dict)
+    candidate_universe: Dict[str, Any] = Field(default_factory=dict)
     worker: Dict[str, Any] = Field(default_factory=dict)
     # Workspace read-model fields.  They are derived from the same immutable
     # snapshot as chat rather than from the retired runtime/book stores.

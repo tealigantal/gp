@@ -383,6 +383,12 @@ class MarketDataHub:
                             is_behind = (ld < target)
                     except Exception:
                         is_behind = True  # if unparsable, err on refresh
+                    # A completed target-day bar is immutable input for this
+                    # universe build. Reuse it regardless of the generic TTL so
+                    # interrupted full-market runs resume at missing symbols.
+                    if lit and not is_behind:
+                        skip_symbols.add(s)
+                        continue
                     if isinstance(lfa, str) and lfa.strip():
                         last = None
                         try:

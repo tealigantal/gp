@@ -148,9 +148,10 @@ def build_daybook(
     if selection_policy != SELECTION_POLICY:
         raise RuntimeError(f'incompatible_selection_policy:{selection_policy or "missing"}')
     freshness = raw.get('daily_freshness') or {}
-    native_ready = bool(raw.get('serenity_native_ready'))
+    universe_quality = dict(raw.get('universe_quality') or {})
+    candidate_universe = dict(universe_quality or raw.get('candidate_universe') or {})
     decision = str(raw.get('decision') or '')
-    product_candidates_ready = native_ready and decision == 'recommend'
+    product_candidates_ready = bool(candidate_universe.get('complete')) and decision == 'recommend'
     picks = [
         _map_pick(i + 1, item)
         for i, item in enumerate((raw.get('picks') or []) if product_candidates_ready else [])
@@ -184,6 +185,8 @@ def build_daybook(
             'reserve_count': reserve_count,
             'risk_profile': risk_profile,
             'daily_freshness': freshness,
+            'candidate_universe': candidate_universe,
+            'universe_quality': universe_quality,
             'decision_context_snapshot_id': raw.get('decision_context_snapshot_id'),
             'serenity_reference_snapshot_id': raw.get('serenity_reference_snapshot_id'),
             'serenity_target_id': raw.get('serenity_target_id'),

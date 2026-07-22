@@ -51,6 +51,10 @@ def _workspace_runtime(store: AgentStore, snapshot: Any | None) -> RuntimeStatus
     )
     target_mode = str(getattr(snapshot, "target_mode", None) or "unavailable")
     has_book = book is not None
+    candidate_universe = dict(getattr(book, "candidate_universe", None) or {}) if book else {}
+    universe_quality = dict(getattr(book, "universe_quality", None) or candidate_universe) if book else {}
+    counts = dict(candidate_universe.get("counts") or {})
+    universe_ready = bool(candidate_universe.get("complete"))
     return RuntimeStatus(
         market_phase=market_phase,
         data_provider=str(os.getenv("DATA_PROVIDER") or "akshare"),
@@ -67,13 +71,23 @@ def _workspace_runtime(store: AgentStore, snapshot: Any | None) -> RuntimeStatus
         slot_status=(getattr(book, "slot_status", None) if book else None),
         publish_allowed=bool(getattr(book, "publish_allowed", False)),
         daily_data_state=target_mode,
-        daily_freshness_ready=has_book,
+        daily_freshness_ready=bool(has_book and universe_ready),
         daily_target_day=(getattr(snapshot, "daybook_effective_day", None) if snapshot else None),
         daily_target_mode=target_mode,
         artifact_stage=("daily_plan" if has_book else "none"),
         artifact_freshness=("current" if has_book else "unavailable"),
         artifact_status=("ready" if has_book else "unavailable"),
         tradeability_state=("tradeable" if bool(getattr(snapshot, "tradeable", False)) else "no_trade"),
+        daily_checked_count=int(counts.get("mainboard_input_count") or 0),
+        daily_stale_count=max(
+            0,
+            int(counts.get("mainboard_input_count") or 0)
+            - int(counts.get("daily_ready_count") or 0),
+        ),
+        daily_blocking_reason=candidate_universe.get("blocking_reason"),
+        blocking_reason=candidate_universe.get("blocking_reason"),
+        candidate_universe=candidate_universe,
+        universe_quality=universe_quality,
         services=[
             RuntimeToolInfo(service="gp", mode="always_on", command="uvicorn gp_assistant.gateway.app:app", description="聊天与快照 API"),
             RuntimeToolInfo(service="gp-worker", mode="always_on", command="python -m gp_assistant.cli runtime-loop", description="日线计划刷新"),
@@ -216,6 +230,8 @@ def health() -> HealthResponse:
     market_time = None
     atomic_serenity: dict[str, Any] = {}
     serenity_reason: str | None = None
+    candidate_universe: dict[str, Any] = {}
+    snapshot_serenity_policy: dict[str, Any] = {}
     try:
         market_time = resolve_daily_target(allow_probe=False)
         runtime_contract = market_time.as_dict()
@@ -227,6 +243,23 @@ def health() -> HealthResponse:
         try:
             book = store.book_for_snapshot(snapshot)
             source_meta = dict(book.daybook.source_meta or {})
+            snapshot_serenity_policy = dict(source_meta.get("serenity_policy_snapshot") or {})
+            candidate_universe = dict(
+                getattr(book, "candidate_universe", None)
+                or source_meta.get("candidate_universe")
+                or {}
+            )
+            universe_ready = bool(candidate_universe.get("complete"))
+            if not universe_ready:
+                if not candidate_universe:
+                    readiness_reasons.append(
+                        "当前快照缺少全市场候选宇宙契约：legacy_coverage_unverified"
+                    )
+                else:
+                    readiness_reasons.append(
+                        "当前全市场候选宇宙不完整："
+                        + str(candidate_universe.get("blocking_reason") or "candidate_universe_incomplete")
+                    )
             snapshot_target_id = str(source_meta.get("serenity_target_id") or "") or None
             snapshot_readiness_revision = str(
                 source_meta.get("serenity_readiness_revision") or ""
@@ -234,10 +267,7 @@ def health() -> HealthResponse:
             snapshot_semantic_revision = str(
                 source_meta.get("serenity_semantic_revision") or ""
             ) or None
-            pending_snapshot = not (
-                source_meta.get("serenity_native_ready") is True
-                or bool(book.daybook.picks)
-            )
+            pending_snapshot = not bool(book.daybook.picks)
             integrity_errors = (
                 pending_native_snapshot_integrity_errors(snapshot, book)
                 if pending_snapshot
@@ -248,10 +278,6 @@ def health() -> HealthResponse:
                     f"当前推荐快照未通过 Serenity 原生完整性校验：{integrity_errors[0]}"
                 )
             else:
-                if pending_snapshot:
-                    readiness_reasons.append(
-                        "当前推荐快照仍在等待 Serenity 原生候选完整覆盖"
-                    )
                 market_state = (
                     compare_snapshot_market_time(snapshot, market_time)
                     if market_time is not None
@@ -271,7 +297,12 @@ def health() -> HealthResponse:
                 active_semantic_revision = str(
                     atomic_serenity.get("semantic_revision") or ""
                 ) or None
-                if serenity_reason:
+                serenity_weight = float(
+                    dict(source_meta.get("serenity_policy_snapshot") or {}).get("applied_weight")
+                    or 0.0
+                )
+                serenity_blocks = bool(serenity_reason and serenity_weight > 0.0)
+                if serenity_blocks:
                     readiness_reasons.append(
                         f"当前推荐快照的 Serenity 绑定已失效：{serenity_reason}"
                     )
@@ -284,9 +315,9 @@ def health() -> HealthResponse:
                         "当前推荐快照的市场门控不允许推荐动作"
                     )
                 snapshot_native_ready = bool(
-                    not pending_snapshot
+                    universe_ready
                     and runtime_contract_ready
-                    and serenity_reason is None
+                    and not serenity_blocks
                     and gate_compatible
                 )
         except Exception as ex:  # noqa: BLE001
@@ -315,7 +346,8 @@ def health() -> HealthResponse:
              "pulse_trade_day": snapshot.pulse_trade_day, "pulse_slot_closed_at": snapshot.pulse_slot_closed_at,
              "observed_at": snapshot.observed_at, "market_phase": snapshot.market_phase,
              "target_mode": snapshot.target_mode, "pending_eod_day": snapshot.pending_eod_day,
-             "calendar_blocking_reason": snapshot.calendar_blocking_reason}
+             "calendar_blocking_reason": snapshot.calendar_blocking_reason,
+             "candidate_universe_id": candidate_universe.get("universe_id")}
             if snapshot else None
         ),
         history_db=_history_health(),
@@ -328,7 +360,12 @@ def health() -> HealthResponse:
             "snapshot_semantic_revision": snapshot_semantic_revision,
             "active_semantic_revision": active_semantic_revision,
             "snapshot_native_ready": snapshot_native_ready,
+            "snapshot_target_count": int(snapshot_serenity_policy.get("target_count") or 0),
+            "snapshot_coverage_count": int(snapshot_serenity_policy.get("coverage_count") or 0),
+            "snapshot_effective_weight": float(snapshot_serenity_policy.get("applied_weight") or 0.0),
+            "snapshot_degraded_reason": snapshot_serenity_policy.get("failure_reason"),
         },
+        candidate_universe=candidate_universe,
         worker={
             "publisher": "RecommendationSnapshot.v1",
             "selection_policy": "adaptive_v2_native_serenity_single_score",

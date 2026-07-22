@@ -31,6 +31,7 @@ from tests.agent.test_agent_store import make_book, patch_chat_llm
 
 
 def test_chat_keeps_the_llm_candidate_scope(monkeypatch, tmp_path):
+    patch_chat_llm(monkeypatch)
     store = AgentStore(tmp_path / "agent.db")
     store.publish_book(make_book())
     routed = TurnFrame(
@@ -53,8 +54,8 @@ def test_chat_keeps_the_llm_candidate_scope(monkeypatch, tmp_path):
         store=store,
     )
 
-    assert result.message["intent"]["constraints"]["topk"] == 1
-    assert len(result.symbols) == 1
+    assert result["message"]["intent"]["constraints"]["topk"] == 1
+    assert len(result["symbols"]) == 1
 
 
 def test_routing_context_preserves_the_complete_previous_candidate_scope(tmp_path):
@@ -1358,7 +1359,7 @@ def test_current_serenity_gate_accepts_a_new_equivalent_freshness_certificate(mo
             "policy_epoch": policy["epoch"],
             "policy_applied_weight": policy["applied_weight"],
             "policy_max_weight": policy["max_weight"],
-            "native_required": True,
+            "native_required": False,
             "available": True,
         },
     )

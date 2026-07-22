@@ -120,6 +120,35 @@ it('does not show current-ready text when full daily freshness is blocked', () =
   expect(screen.getByText('50 / 1')).toBeInTheDocument()
 })
 
+it('shows the independent full-market universe funnel', () => {
+  render(
+    <OperationsStatusCard
+      runtime={runtime({
+        daily_freshness_ready: true,
+        candidate_universe: {
+          schema: 'MarketUniverseSnapshot.v1',
+          universe_id: 'mus_20260722_test',
+          complete: true,
+          counts: {
+            mainboard_input_count: 3194,
+            daily_ready_count: 3150,
+            eligible_count: 812,
+            scoring_pool_count: 200,
+            scored_count: 196,
+            selected_count: 3,
+          },
+        },
+      })}
+    />,
+  )
+
+  expect(screen.getByText('主板名录')).toBeInTheDocument()
+  expect(screen.getByText('3194')).toBeInTheDocument()
+  expect(screen.getByText('行情就绪')).toBeInTheDocument()
+  expect(screen.getByText('3150')).toBeInTheDocument()
+  expect(screen.getByText('196 / 200')).toBeInTheDocument()
+})
+
 it('shows operation feedback after a tool run', () => {
   const result: OpsRunResponse = {
     operation: 'gp-rebuild-daybook',

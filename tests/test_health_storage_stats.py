@@ -97,7 +97,7 @@ def test_health_is_ready_only_when_snapshot_runtime_serenity_and_llm_all_match(
     assert retryable_payload["llm_retryable"] is True
 
 
-def test_health_degrades_when_same_target_has_new_serenity_semantics(
+def test_health_keeps_base_ready_when_zero_weight_serenity_semantics_change(
     monkeypatch, tmp_path
 ):
     db = tmp_path / "revision-agent.db"
@@ -144,12 +144,10 @@ def test_health_degrades_when_same_target_has_new_serenity_semantics(
 
     payload = TestClient(app).get("/api/health").json()
 
-    assert payload["status"] == "degraded"
-    assert payload["product_ready"] is False
-    assert any(
-        "current_serenity_semantic_revision_changed" in reason
-        for reason in payload["readiness_reasons"]
-    )
+    assert payload["status"] == "ok"
+    assert payload["product_ready"] is True
+    assert not any("Serenity" in reason for reason in payload["readiness_reasons"])
+    assert payload["serenity"]["active_semantic_revision"] == "new-semantic-revision"
 
 
 def test_valid_pending_snapshot_is_pending_not_integrity_corruption(
@@ -188,7 +186,8 @@ def test_valid_pending_snapshot_is_pending_not_integrity_corruption(
     payload = TestClient(app).get("/api/health").json()
 
     assert payload["product_ready"] is False
-    assert any("等待 Serenity" in item for item in payload["readiness_reasons"])
+    assert any("候选宇宙" in item for item in payload["readiness_reasons"])
+    assert not any("Serenity" in item for item in payload["readiness_reasons"])
     assert not any("完整性校验" in item for item in payload["readiness_reasons"])
 
 

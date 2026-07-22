@@ -282,6 +282,27 @@ def test_audit_daily_freshness_focus_symbols(monkeypatch):
 
 
 def test_build_day_selection_blocks_when_daily_not_ready(monkeypatch):
+    draft = {
+        "schema": "MarketUniverseSnapshot.v1",
+        "daybook_effective_day": "2026-04-27",
+        "data_date": "2026-04-27",
+        "counts": {"mainboard_input_count": 2999, "daily_ready_count": 2999, "scoring_pool_count": 0},
+        "coverage": {"daily_ratio": 1.0},
+        "thresholds": {},
+        "exclusions": {},
+        "fallback_used": False,
+        "complete": False,
+        "blocking_reason": "candidate_universe_incomplete",
+        "blocking_reasons": ["mainboard_count_below_absolute_minimum"],
+        "scoring_pool": [],
+    }
+    monkeypatch.setattr(market_service, "build_market_universe_snapshot", lambda *_, **__: draft)
+    monkeypatch.setattr(market_service, "load_accepted_market_universe", lambda *_: None)
+    monkeypatch.setattr(
+        market_service,
+        "finalize_market_universe_snapshot",
+        lambda value, **_: {**value, "universe_id": "mus_test", "content_digest": "digest"},
+    )
     monkeypatch.setattr(
         market_service,
         "run_market_memory_selection",
@@ -292,40 +313,37 @@ def test_build_day_selection_blocks_when_daily_not_ready(monkeypatch):
             "debug": {},
         },
     )
-    monkeypatch.setattr(
-        market_service,
-        "reconcile_daily_freshness",
-        lambda symbols, **_: {
-            "ready": False,
-            "target_day": "2026-04-27",
-            "checked_symbols": list(symbols),
-            "fresh_symbols": [],
-            "stale_symbols": ["002716"],
-            "failed_symbols": ["002716"],
-            "refreshed_symbols": [],
-            "symbol_reports": [
-                {
-                    "symbol": "002716",
-                    "last_item_time": "2026-04-21",
-                    "freshness_state": "failed_refresh",
-                }
-            ],
-            "blocking_reason": "日线数据未补齐到目标交易日 2026-04-27：002716",
-        },
-    )
-
     result = market_service.build_day_selection("20260427", topk=3)
 
     assert result["tradeable"] is False
-    assert result["reason"] == "daily_freshness_blocked"
+    assert result["reason"] == "candidate_universe_incomplete"
     assert result["picks"] == []
     assert result["candidate_pool"] == []
     assert result["daily_freshness"]["ready"] is False
-    assert "日线数据未补齐到目标交易日" in result["message"]
+    assert "全市场候选宇宙覆盖不足" in result["message"]
 
 
 def test_build_day_selection_disables_snapshot_universe(monkeypatch):
     calls: list[dict] = []
+    draft = {
+        "schema": "MarketUniverseSnapshot.v1",
+        "daybook_effective_day": "2026-04-27",
+        "data_date": "2026-04-27",
+        "counts": {
+            "mainboard_input_count": 3000,
+            "daily_ready_count": 3000,
+            "eligible_count": 200,
+            "scoring_pool_count": 200,
+        },
+        "coverage": {"daily_ratio": 1.0},
+        "thresholds": {},
+        "exclusions": {},
+        "fallback_used": False,
+        "complete": True,
+        "blocking_reason": None,
+        "blocking_reasons": [],
+        "scoring_pool": [],
+    }
 
     def fake_selection(**kwargs):
         calls.append(dict(kwargs))
@@ -333,27 +351,22 @@ def test_build_day_selection_disables_snapshot_universe(monkeypatch):
             "tradeable": False,
             "picks": [],
             "candidate_pool": [],
-            "debug": {},
+            "debug": {"base_scored_count": 200},
+            "candidate_universe": kwargs["candidate_universe"],
         }
 
     monkeypatch.setattr(market_service, "run_market_memory_selection", fake_selection)
+    monkeypatch.setattr(market_service, "build_market_universe_snapshot", lambda *_, **__: draft)
+    monkeypatch.setattr(market_service, "load_accepted_market_universe", lambda *_: None)
     monkeypatch.setattr(
         market_service,
-        "reconcile_daily_freshness",
-        lambda symbols, **_: {
-            "ready": True,
-            "target_day": "2026-04-27",
-            "checked_symbols": list(symbols),
-            "fresh_symbols": [],
-            "stale_symbols": [],
-            "failed_symbols": [],
-            "refreshed_symbols": [],
-            "symbol_reports": [],
-            "blocking_reason": None,
-        },
+        "finalize_market_universe_snapshot",
+        lambda value, **_: {**value, "universe_id": "mus_test", "content_digest": "digest"},
     )
 
     market_service.build_day_selection("20260427", topk=3)
 
     assert calls
     assert calls[0]["allow_snapshot"] is False
+    assert calls[0]["allow_file_fallback"] is False
+    assert calls[0]["candidate_universe"] is draft

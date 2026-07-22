@@ -36,6 +36,48 @@ from gp_assistant.serenity.store import (
 from gp_assistant.runtime.producer import producer_metadata
 
 
+def _candidate_universe(
+    day: str,
+    *,
+    complete: bool = True,
+    selected_count: int = 1,
+) -> dict:
+    return {
+        "schema": "MarketUniverseSnapshot.v1",
+        "universe_id": f"mus_{day.replace('-', '')}_test",
+        "daybook_effective_day": day,
+        "data_date": day,
+        "counts": {
+            "mainboard_input_count": 3000 if complete else 2999,
+            "metadata_complete_count": 3000 if complete else 2999,
+            "daily_ready_count": 3000 if complete else 2999,
+            "eligible_count": 200 if complete else 0,
+            "scoring_pool_count": 200 if complete else 0,
+            "scored_count": 190 if complete else 0,
+            "selected_count": selected_count if complete else 0,
+        },
+        "coverage": {
+            "metadata_ratio": 1.0,
+            "daily_ratio": 1.0,
+            "scoring_success_ratio": 0.95 if complete else 0.0,
+        },
+        "thresholds": {
+            "minimum_mainboard_count": 3000,
+            "metadata_coverage_ratio": 0.95,
+            "daily_coverage_ratio": 0.95,
+            "minimum_eligible_count": 50,
+            "scoring_pool_limit": 200,
+            "minimum_scored_count": 20,
+            "scoring_success_ratio": 0.95,
+        },
+        "fallback_used": False,
+        "complete": complete,
+        "blocking_reason": None if complete else "candidate_universe_incomplete",
+        "blocking_reasons": [] if complete else ["mainboard_count_below_absolute_minimum"],
+        "content_digest": "test-digest",
+    }
+
+
 def make_book(
     snapshot_id: str = "snapshot-1",
     *,
@@ -206,7 +248,7 @@ def make_book(
         "epoch": 1,
         "applied_weight": 0.0,
         "max_weight": 0.08,
-        "native_required": True,
+        "native_required": False,
         "baseline_selected_symbols": ["600519"],
         "applied_selected_symbols": ["600519"],
         "would_change_topk": False,
@@ -308,6 +350,8 @@ def make_book(
         "serenity_native_attestation": attestation,
         "decision": "recommend",
         "decision_context_snapshot_id": decision_context_snapshot_id,
+        "candidate_universe": _candidate_universe(daybook_effective_day),
+        "universe_quality": _candidate_universe(daybook_effective_day),
     }
     return MarketBook(
         trading_day=decision_trade_day.replace("-", ""),
@@ -333,6 +377,8 @@ def make_book(
             symbols_received=1,
             benchmark_received=True,
         ),
+        candidate_universe=_candidate_universe(daybook_effective_day),
+        universe_quality=_candidate_universe(daybook_effective_day),
     )
 
 
@@ -349,7 +395,7 @@ def make_pending_runtime(
         "epoch": 1,
         "applied_weight": 0.0,
         "max_weight": 0.08,
-        "native_required": True,
+        "native_required": False,
         "baseline_selected_symbols": [],
         "applied_selected_symbols": [],
         "would_change_topk": False,
@@ -368,6 +414,7 @@ def make_pending_runtime(
         "ranking_output": {"ranked_symbols": []},
         "final_decision": "no_trade",
         "selected_symbols": [],
+        "candidate_universe": _candidate_universe("2026-07-13", complete=False, selected_count=0),
         "serenity_candidate_target": None,
         "serenity_native_attestation": {},
         "serenity_source_run_id": None,
@@ -402,6 +449,8 @@ def make_pending_runtime(
         "serenity_policy_snapshot": policy,
         "serenity_native_attestation": {},
         "decision": "no_trade",
+        "candidate_universe": _candidate_universe("2026-07-13", complete=False, selected_count=0),
+        "universe_quality": _candidate_universe("2026-07-13", complete=False, selected_count=0),
         "market_time": {
             "decision_trade_day": market_time.decision_trade_day,
             "daybook_effective_day": market_time.daybook_effective_day,
@@ -526,6 +575,7 @@ def make_ready_runtime(
         "ranking_output": {"ranked_symbols": ["600519"]},
         "final_decision": "recommend",
         "selected_symbols": ["600519"],
+        "candidate_universe": _candidate_universe("2026-07-13"),
         "serenity_candidate_target": dict(meta["serenity_candidate_target"]),
         "serenity_native_attestation": attestation,
         "serenity_source_run_id": meta["serenity_source_run_id"],
@@ -591,7 +641,7 @@ def fake_parse_turn_frame(context, user_message):
         raw_message=user_message,
         subject="symbol" if symbol else "run",
         request=request,
-        freshness="active_run",
+        freshness=("rebuild_run" if "刷新" in user_message or "重新" in user_message else "active_run"),
         references={"symbol": symbol} if symbol else {},
         constraints={"topk": 3, "allow_derived_data": True},
         ambiguity={"confidence": 1.0, "notes": [], "needs_clarification": False},
@@ -799,6 +849,39 @@ def test_ready_runtime_persists_decision_reference_pending_before_visibility(
     assert load_decision_snapshot(binding["decision_context_snapshot_id"])
     assert load_reference_snapshot(binding["serenity_reference_snapshot_id"])
     assert load_pending_evaluation(binding["serenity_pending_id"])
+    assert store.current_snapshot().snapshot_id == artifact.artifact_id
+
+
+def test_ready_base_runtime_without_serenity_reference_is_publishable(
+    tmp_path, monkeypatch
+):
+    monkeypatch.setenv("GP_MARKET_MEMORY_DIR", str(tmp_path / "market-memory"))
+    monkeypatch.setenv("GP_SERENITY_STORE_DIR", str(tmp_path / "serenity"))
+    store = AgentStore(tmp_path / "agent.db")
+    daybook, artifact, market_time = make_ready_runtime("base-ready-artifact")
+    meta = daybook.source_meta
+    meta["serenity_native_ready"] = False
+    meta["serenity_reference_snapshot_id"] = None
+    meta["serenity_native_attestation"] = {}
+    deferred = dict(meta["_deferred_persistence"])
+    decision_snapshot = dict(deferred["decision_snapshot"])
+    decision_snapshot["serenity_reference_snapshot_id"] = None
+    decision_snapshot["serenity_native_attestation"] = {}
+    deferred["decision_snapshot"] = decision_snapshot
+    deferred["serenity_reference_snapshot"] = None
+    meta["_deferred_persistence"] = deferred
+
+    record = store.publish_runtime_artifact(
+        daybook, artifact, market_time=market_time
+    )
+    binding = dict(
+        store.book_for_snapshot(record).daybook.source_meta[
+            "runtime_evidence_binding"
+        ]
+    )
+    assert binding["serenity_reference_snapshot_id"] is None
+    assert binding["serenity_reference_input_checksum"] is None
+    assert binding["serenity_pending_id"] is None
     assert store.current_snapshot().snapshot_id == artifact.artifact_id
 
 

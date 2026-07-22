@@ -51,6 +51,8 @@ Restore the real `/api/chat` journey for the configured `deepseek-v4-flash` prov
 
 ## Decision Log
 
+- **2026-07-22 — Candidate-universe audit is out of scope for this routing recovery.** A read-only production audit found that the normal daybook path disables the market snapshot and can publish from a static ten-symbol universe, while freshness checks only the selected subset. It also found that Serenity native coverage currently has no-trade authority beyond a pure scoring contribution. These are not repaired, reinterpreted, or hidden by the Beta routing work; the evidence is recorded in `docs/architecture-audit-2026-07-22-candidate-universe-and-serenity-boundaries.md` and requires a separately approved architecture/data-recovery decision.
+
 - Use DeepSeek Beta directly for all GP LLM calls; do not retain a `/v1` compatibility fallback.
 - Preserve strict tools. Unknown optional business inputs are required fields with a `null` value, not omitted fields.
 - Keep Serenity at shadow/0% after a formula-epoch recovery. Its own causal controller may move it to 1% probation only after the documented 40 mature-day, 300-result and performance gates; no manual weight override is permitted.

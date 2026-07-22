@@ -64,6 +64,10 @@ Generated JSON is written under `results/market_memory_validation/` and is treat
 
 The full runner reads `store/search/history.db` through SQLite read-only mode, reconstructs the eligible main-board universe and market breadth at each historical date, never calls a provider, and writes all mutable state below an isolated checkpoint directory.
 
+## Coverage trust boundary after 2026-07-09
+
+Production candidate snapshots from 2026-07-09 through the first successfully validated `MarketUniverseSnapshot.v1` are coverage-unverified. They may be retained and read for audit, but must not be labelled full-market, promoted back to current, or used as tradeable recommendations. No synthetic universe is backfilled for that interval.
+
 ```powershell
 $env:PYTHONPATH = "src"
 python -m gp_assistant.evaluation_engine.historical_replay `

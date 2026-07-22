@@ -15,6 +15,8 @@ This folder is split into:
   System-level ownership and data-flow index; links the detailed backend and frontend architecture documents.
 - [RESEARCH_LOG.md](./RESEARCH_LOG.md)
   External-source and open-source research decisions, including Serenity data-source findings.
+- [architecture-audit-2026-07-22-candidate-universe-and-serenity-boundaries.md](./architecture-audit-2026-07-22-candidate-universe-and-serenity-boundaries.md)
+  Read-only production audit of the candidate-universe regression, freshness-scope gap, and Serenity/base-chain authority boundary.
 - [VALIDATION.md](./VALIDATION.md)
   Cross-cutting planned and executed validation ledger.
 - [DEBT.md](./DEBT.md)

@@ -16,6 +16,8 @@ Each runtime-facing contract category has exactly one authoritative source:
   `src/gp_assistant/runtime/market_time.py`.
 - Daily-freshness report projection:
   `src/gp_assistant/evidence/daily_freshness.py`.
+- Full-market candidate-universe contract and immutable storage:
+  `src/gp_assistant/evidence/market_universe.py`.
 - Persisted product/domain objects: `src/gp_assistant/contracts/objects.py`.
 - Produced-artifact identity: `src/gp_assistant/runtime/producer.py`.
 
@@ -49,7 +51,7 @@ are projected at read time from their committed `content` without a database
 migration. A new empty assistant body is rejected before commit, and a corrupt
 historical empty body is an explicit UI warning rather than a blank answer.
 
-If no current snapshot exists, the service returns HTTP `503` with `current_snapshot_unavailable`. Invalid/incomplete current snapshots return grounded `no_trade`; a valid next-session plan may return `decision=recommend` with `message.tradeable=false`. The service never reads legacy book/run JSON, V1/V2 artifacts, a fallback snapshot, or live Serenity evidence during chat.
+If no current snapshot exists, the service returns HTTP `503` with `current_snapshot_unavailable`. Invalid/incomplete current snapshots return grounded `no_trade`; a valid next-session plan may return `decision=recommend` with `message.tradeable=false`. A recommendation snapshot binds a `MarketUniverseSnapshot.v1` summary and universe ID. A legacy snapshot without that contract is `legacy_coverage_unverified`: it remains readable as historical audit data but cannot be current/tradeable. The service never reads legacy book/run JSON, V1/V2 artifacts, a fallback snapshot, or live Serenity evidence during chat.
 
 Snapshot metadata includes `decision_trade_day`, `daybook_effective_day`, `pulse_trade_day`, `pulse_slot_closed_at`, `observed_at`, `market_phase`, `target_mode`, and `pending_eod_day`; `as_of` remains a deprecated read-only alias. Historical explanatory replies include `perspective="historical"`, `is_current=false`, and `tradeable=false`. An existing-session explanation whose live Serenity semantic revision has advanced uses `snapshot_explanation_only` with the same non-tradeable semantics while retaining its bound candidate evidence. A freshness-only poll renewal does not make the snapshot historical. Current/execution requests against an older session snapshot return `no_trade` with `historical_snapshot_not_tradeable`.
 
@@ -65,7 +67,7 @@ session is `404`.
 
 ## GET /api/health
 
-Reports `product_ready`, exact `readiness_reasons`, the `agent.db` counters/current pointer, sole Market Memory history database path/state, current market-time contract, Serenity target/coverage/worker lease, snapshot/active readiness revisions, snapshot/active semantic revisions, and real-LLM verification. `status=ok` means the immutable snapshot passes native-Alpha integrity, matches the current market-time target, the exact active Serenity target is complete/fresh with a live worker lease, its semantic revision still matches the snapshot, and a two-logical-stage chat was committed within the verification TTL. Health never substitutes a cached or older snapshot. HTTP 200 by itself is only API liveness.
+Reports `product_ready`, exact `readiness_reasons`, the `agent.db` counters/current pointer, full-market `candidate_universe` counts/coverage/blockers, sole Market Memory history database path/state, current market-time contract, Serenity target/coverage/worker lease and effective weight, and real-LLM verification. `status=ok` requires a complete, date-matched, non-fallback universe plus a valid immutable snapshot, market-time binding, gate and verified real LLM. Serenity unavailability is valid when its batch effective weight is zero; a stale binding can block only a snapshot that actually applied a non-zero add-on. Health never substitutes a cached or older snapshot. HTTP 200 by itself is only API liveness.
 
 ## GET /api/lunch/current
 
@@ -84,7 +86,9 @@ the real LLM. A missing provider configuration makes both fields false.
 ## Workspace read endpoints
 
 - `GET /api/book/current`: returns the `MarketBook` embedded in the current
-  immutable recommendation snapshot, or an empty `book` when no snapshot exists.
+  immutable recommendation snapshot, including independent
+  `candidate_universe` / `universe_quality` summaries, or an empty `book` when
+  no snapshot exists.
 - `GET /api/session/{session_id}`: returns persisted turns from `AgentStore`
   using the same assistant-turn presentation contract as write/replay.
   An unseen client-generated session ID is represented as an empty, unpersisted

@@ -97,6 +97,7 @@ export function OperationsStatusCard({
     Boolean(runtime?.artifact_lag_reason)
   const lunchReady = lunch?.state === 'READY' && lunch.session.complete
   const lunchPending = lunch?.market_phase === 'LUNCH_BREAK' && lunch?.state === 'PENDING'
+  const universeCounts = runtime?.candidate_universe?.counts
   const statusLabel = lunchReady
     ? `午盘数据已完成 · ${lunch.session.completed_at?.slice(11, 16) || '11:30'}`
     : lunchPending
@@ -133,6 +134,28 @@ export function OperationsStatusCard({
         </Typography.Paragraph>
 
         <div className="ops-compact-grid">
+          <div>
+            <span>主板名录</span>
+            <strong>{universeCounts?.mainboard_input_count ?? 0}</strong>
+          </div>
+          <div>
+            <span>行情就绪</span>
+            <strong>{universeCounts?.daily_ready_count ?? 0}</strong>
+          </div>
+          <div>
+            <span>合格</span>
+            <strong>{universeCounts?.eligible_count ?? 0}</strong>
+          </div>
+          <div>
+            <span>评分</span>
+            <strong>
+              {universeCounts?.scored_count ?? 0} / {universeCounts?.scoring_pool_count ?? 0}
+            </strong>
+          </div>
+          <div>
+            <span>入选</span>
+            <strong>{universeCounts?.selected_count ?? 0}</strong>
+          </div>
           <div>
             <span>book 更新时间</span>
             <strong>{fmtDateTime(runtime?.book_updated_at)}</strong>

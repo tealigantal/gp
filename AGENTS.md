@@ -6,7 +6,7 @@ GP is a chat-first A-share main-board decision assistant for short 1–3 trading
 
 ## Lifecycle stage
 
-The repository is an initialized important project in integration and historical-validation stage. The active recovery effort is DeepSeek Beta strict tool routing in `docs/plans/2026-07-17-deepseek-beta-tool-routing.md`; Serenity Alpha remains governed by `docs/plans/2026-07-11-serenity-alpha.md`.
+The repository is an initialized important project in integration and historical-validation stage. Full-market candidate-universe recovery is completed and recorded in `docs/plans/2026-07-22-full-market-universe-recovery.md`; Serenity Alpha remains governed by its existing causal policy and ADR 0008.
 
 ## Critical journeys
 
@@ -28,7 +28,7 @@ The repository is an initialized important project in integration and historical
 - `docs/historical_validation.md`: historical replay method and recorded results.
 - `docs/VALIDATION.md`: cross-cutting validation ledger.
 - `docs/PROGRESS.md`: recoverable current status.
-- `docs/plans/2026-07-17-deepseek-beta-tool-routing.md`: active recovery ExecPlan.
+- `docs/plans/2026-07-22-full-market-universe-recovery.md`: completed full-market recovery ExecPlan and runtime evidence.
 - `docs/plans/2026-07-11-serenity-alpha.md`: Serenity Alpha execution plan.
 
 ## Verified entry points and commands
@@ -45,6 +45,10 @@ The backend has no verified Ruff or static-type-check command. Do not claim thos
 
 ## Architecture and dependency boundaries
 
+- GP is a recommendation assistant, not a system whose success criterion is merely producing a stable response. A recommendation is valid only when its actual input scope, data freshness, and source provenance meet the product promise; a green health check, a valid schema, or an LLM response never substitutes for that evidence.
+- A production "全市场" recommendation must use a current, complete, traceable full-market candidate universe. Do not silently narrow it to a static watchlist, prior picks, a cache fragment, or another small fallback. If the complete universe or its required data is unavailable, fail closed with an explicit unavailable/no-recommendation result.
+- Treat any change that disables, bypasses, narrows, replaces, or degrades the production candidate-universe source as a consequential product change. Before making it, prove that the replacement preserves the required coverage and freshness, record its provenance and counts, and obtain explicit user approval when it changes the user-visible recommendation scope.
+- Validate the real production journey at the coverage boundary: record and check candidate source, total input universe, eligible main-board count, scored count, selected count, as-of date, and fallback status. Freshness checks over only selected symbols must not be described as full-market completeness, and readiness must fail when the configured full-market coverage invariant is not satisfied.
 - Adaptive Decision Engine owns selection. The LLM may route and narrate but may not invent or change candidates, scores, prices, probabilities, or actions.
 - Do not use keyword matching or `if`/`else` text branches to produce, suppress, narrow, rerank, or replace user-facing LLM conclusions. In particular, do not treat incidental words or characters in a preference such as “收益大一点” as a fixed Top-N quantity or a single-symbol instruction.
 - For a follow-up that refines a prior candidate list, preserve the complete structured candidate scope from that canonical run. Pass the relevant candidate facts to the LLM for explanation; never collapse the scope to `focus_symbol` or fabricate a keyword-triggered answer. Any deterministic filtering or ordering must consume explicit structured user constraints and must remain separate from the LLM's output generation.

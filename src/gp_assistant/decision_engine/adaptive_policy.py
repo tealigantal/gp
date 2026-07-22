@@ -619,6 +619,18 @@ def select_candidates(
         if serenity_policy_state is not None
         else 0.0
     )
+    preflight_coverage_failures: List[Dict[str, Any]] = []
+    if require_serenity:
+        for idx, candidate in enumerate(ranked):
+            symbol = _normalize_symbol((candidate or {}).get("symbol") or (candidate or {}).get("code"))
+            signal = signals.get(symbol)
+            status = signal.status if signal is not None else "not_ready"
+            if status not in {"available", "no_relevant_evidence"}:
+                preflight_coverage_failures.append(
+                    {"index": idx, "symbol": symbol, "status": status}
+                )
+        if preflight_coverage_failures:
+            serenity_weight = 0.0
     serenity_policy = {
         "formula_version": SERENITY_FORMULA_VERSION,
         "mode": serenity_mode,
@@ -627,6 +639,8 @@ def select_candidates(
         "applied_weight": serenity_weight,
         "max_weight": serenity_policy_state.max_weight if serenity_policy_state is not None else 0.08,
         "native_required": bool(require_serenity),
+        "batch_complete": not preflight_coverage_failures,
+        "degraded_to_zero": bool(preflight_coverage_failures),
     }
     if not ranked:
         return {
@@ -652,7 +666,7 @@ def select_candidates(
 
     scored: List[Dict[str, Any]] = []
     invalid: List[Dict[str, Any]] = []
-    coverage_failures: List[Dict[str, Any]] = []
+    coverage_failures: List[Dict[str, Any]] = list(preflight_coverage_failures)
     for idx, candidate in enumerate(ranked):
         symbol = _normalize_symbol((candidate or {}).get("symbol") or (candidate or {}).get("code"))
         if not symbol:
@@ -662,10 +676,6 @@ def select_candidates(
         serenity_status = (
             serenity_signal.status if serenity_signal is not None else "not_ready"
         )
-        if require_serenity and serenity_status not in {"available", "no_relevant_evidence"}:
-            coverage_failures.append(
-                {"index": idx, "symbol": symbol, "status": serenity_status}
-            )
         block = _hard_block(candidate, market_context)
         if block:
             invalid.append({"index": idx, "symbol": symbol, "reason": block})
@@ -707,30 +717,6 @@ def select_candidates(
             "would_change_topk": False,
         }
     )
-    if coverage_failures:
-        return {
-            "final_decision": "no_trade",
-            "selected_symbols": [],
-            "adaptive_candidates": scored,
-            "policy_state_version": state.get("version", 1),
-            "serenity_policy": serenity_policy,
-            "policy_debug": {
-                "scored_count": len(scored),
-                "invalid_count": len(invalid),
-                "invalid_candidates": invalid[:20],
-                "serenity_coverage_failures": coverage_failures[:20],
-                "selection_policy": "adaptive_v2_native_serenity_single_score",
-                "reason": "serenity_coverage_incomplete",
-                "risk_profile": risk_profile,
-            },
-            "validator_result": {
-                "ok": True,
-                "policy": "adaptive_v2_native_serenity_single_score",
-                "selected_from_ranked_candidates": True,
-                "serenity_complete_for_target": False,
-                "reason": "serenity_coverage_incomplete",
-            },
-        }
     selected = scored[: max(0, int(topk))]
     if not selected:
         reason = "all_candidates_invalid_or_hard_blocked"
@@ -772,6 +758,7 @@ def select_candidates(
             "scored_count": len(scored),
             "invalid_count": len(invalid),
             "invalid_candidates": invalid[:20],
+            "serenity_coverage_failures": coverage_failures[:20],
             "selection_policy": "adaptive_v2_native_serenity_single_score",
             "risk_profile": risk_profile,
         },
@@ -780,6 +767,7 @@ def select_candidates(
             "policy": "adaptive_v2_native_serenity_single_score",
             "selected_from_ranked_candidates": True,
             "serenity_complete_for_target": not require_serenity or not coverage_failures,
+            "serenity_degraded_to_zero": bool(coverage_failures),
         },
     }
 

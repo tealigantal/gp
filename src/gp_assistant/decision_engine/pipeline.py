@@ -345,6 +345,8 @@ def run_market_memory_selection(
     symbols: List[str] | None = None,
     prefer_cache_only: bool = False,
     allow_snapshot: bool = True,
+    allow_file_fallback: bool = True,
+    candidate_universe: Dict[str, Any] | None = None,
     data_source: DailyDataSource | None = None,
     market_context_override: Dict[str, Any] | None = None,
     policy_state: Dict[str, Any] | None = None,
@@ -374,12 +376,35 @@ def run_market_memory_selection(
     market_context.setdefault("market_regime", str(market_context.get("grade") or "C"))
     market_context.setdefault("grade", str(market_context.get("market_regime") or "C"))
     market_context["as_of"] = date
-    if symbols:
+    universe_contract = dict(candidate_universe or {})
+    if universe_contract:
+        contract_rows = list(universe_contract.get("scoring_pool") or [])
+        universe = [
+            {
+                **dict(item),
+                "code": _normalize_symbol(item.get("symbol") or item.get("code")),
+                "symbol": _normalize_symbol(item.get("symbol") or item.get("code")),
+                "amount": _safe_float(item.get("average_amount_5d") or item.get("amount")),
+            }
+            for item in contract_rows
+            if _normalize_symbol(item.get("symbol") or item.get("code"))
+        ]
+        universe_meta = {
+            "source": "market_universe:v1",
+            "schema": universe_contract.get("schema"),
+            "universe_id": universe_contract.get("universe_id"),
+            "output_count": len(universe),
+            "fallback_used": False,
+            "complete": bool(universe_contract.get("complete")),
+            "blocking_reasons": list(universe_contract.get("blocking_reasons") or []),
+            "time_travel_safe": True,
+        }
+    elif symbols:
         universe = [{"code": symbol, "symbol": symbol, "name": None, "industry": None, "amount": 0.0} for symbol in symbols]
         universe_meta = {"source": "symbols:param", "output_count": len(universe), "time_travel_safe": True}
     else:
         universe, universe_meta = _snapshot_universe(snapshot, topk=topk)
-    if not universe and not symbols:
+    if not universe and not symbols and not universe_contract and allow_file_fallback:
         universe, universe_meta = _file_universe(topk=topk)
 
     signals: List[Dict[str, Any]] = []
@@ -471,8 +496,60 @@ def run_market_memory_selection(
             candidate["reason_codes"] = [*candidate["reason_codes"], *critical_reasons]
         candidates.append(candidate)
 
-    candidates.sort(key=lambda item: float((item.get("ranking") or {}).get("ranking_score") or 0.0), reverse=True)
-    ranked = candidates[: max(int(topk) * 3, int(topk))]
+    candidates.sort(key=lambda item: (-float((item.get("ranking") or {}).get("ranking_score") or 0.0), str(item.get("symbol") or "")))
+    # The base Adaptive engine owns the full scoring-pool pass. Serenity is not
+    # visible during this pass and therefore cannot decide membership of the
+    # Top-30 finalist pool.
+    base_adaptive = select_candidates(
+        candidates,
+        topk=min(30, len(candidates)),
+        market_context=market_context,
+        risk_profile=risk_profile,
+        state=policy_state,
+        serenity_signals={},
+        serenity_policy_state=None,
+        serenity_mode="off",
+        require_serenity=False,
+    )
+    base_order = {
+        str(item.get("symbol") or ""): index
+        for index, item in enumerate(base_adaptive.get("adaptive_candidates") or [])
+    }
+    candidates.sort(
+        key=lambda item: (
+            base_order.get(str(item.get("symbol") or ""), 10**9),
+            str(item.get("symbol") or ""),
+        )
+    )
+    ranked = candidates[:30]
+    base_scored_count = int((base_adaptive.get("policy_debug") or {}).get("scored_count") or 0)
+    if universe_contract:
+        counts = dict(universe_contract.get("counts") or {})
+        thresholds = dict(universe_contract.get("thresholds") or {})
+        pool_count = int(counts.get("scoring_pool_count") or len(universe))
+        minimum_scored = int(thresholds.get("minimum_scored_count") or 20)
+        minimum_ratio = float(thresholds.get("scoring_success_ratio") or 0.95)
+        score_ratio = base_scored_count / pool_count if pool_count else 0.0
+        reasons = list(universe_contract.get("blocking_reasons") or [])
+        if base_scored_count < minimum_scored:
+            reasons.append("scored_count_below_minimum")
+        if pool_count and score_ratio < minimum_ratio:
+            reasons.append("scoring_success_ratio_below_threshold")
+        universe_contract["blocking_reasons"] = list(dict.fromkeys(reasons))
+        universe_contract["complete"] = not universe_contract["blocking_reasons"]
+        universe_contract["blocking_reason"] = (
+            None if universe_contract["complete"] else "candidate_universe_incomplete"
+        )
+        if not universe_contract["complete"]:
+            market_context["hard_block"] = True
+            market_context["hard_block_reasons"] = list(
+                dict.fromkeys(
+                    [
+                        *list(market_context.get("hard_block_reasons") or []),
+                        "candidate_universe_incomplete",
+                    ]
+                )
+            )
     decision_created_at = str(observed_at or now_iso())
     serenity_cfg = load_config().serenity
     resolved_serenity_mode = str(serenity_mode or serenity_cfg.mode)
@@ -497,15 +574,15 @@ def run_market_memory_selection(
     serenity_target = None
     serenity_signals: Dict[str, FrozenSerenitySignal] = {}
     serenity_batch_ready = False
+    serenity_coverage_count = 0
     serenity_source_run_id: str | None = None
     serenity_readiness_revision: str | None = None
     serenity_semantic_revision: str | None = None
     serenity_poll_finished_at: str | None = None
     serenity_poll_expires_at: str | None = None
-    # Explicit ``serenity_mode='off'`` is reserved for replay/unit callers.
-    # A production config that disables the resident service must fail closed
-    # instead of publishing the eight-expert baseline as a recommendation.
-    require_serenity = resolved_serenity_mode == "native" or serenity_mode is None
+    # Serenity is an additive, bounded expert. It never owns base-product
+    # readiness; an incomplete target batch zeroes the entire batch weight.
+    require_serenity = False
     if resolved_serenity_mode == "native" and serenity_symbols:
         if serenity_persist:
             serenity_target = publish_candidate_target(
@@ -525,6 +602,13 @@ def run_market_memory_selection(
         )
         expected_symbols = set(serenity_target.symbols) if serenity_target else set()
         signal_symbols = set(serenity_signals)
+        serenity_coverage_count = sum(
+            1
+            for symbol, signal in serenity_signals.items()
+            if symbol in expected_symbols
+            and signal.status in {"available", "no_relevant_evidence"}
+            and str(signal.target_id or "") == str(serenity_target.target_id if serenity_target else "")
+        )
         source_run_ids = {
             str(signal.source_run_id or "")
             for signal in serenity_signals.values()
@@ -615,6 +699,9 @@ def run_market_memory_selection(
                 for symbol, signal in serenity_signals.items()
             }
 
+    if not serenity_batch_ready and serenity_state is not None:
+        serenity_state = serenity_state.model_copy(update={"applied_weight": 0.0})
+
     adaptive_input = {
         "as_of": date,
         "decision_trade_day": decision_trade_day,
@@ -644,8 +731,19 @@ def run_market_memory_selection(
         serenity_mode=resolved_serenity_mode,
         require_serenity=require_serenity,
     )
+    adaptive_serenity_policy = dict(adaptive.get("serenity_policy") or {})
+    adaptive_serenity_policy.update(
+        {
+            "batch_complete": bool(serenity_batch_ready),
+            "degraded_to_zero": not serenity_batch_ready,
+            "target_count": len(serenity_symbols),
+            "coverage_count": serenity_coverage_count,
+            "failure_reason": None if serenity_batch_ready else "serenity_batch_incomplete",
+        }
+    )
+    adaptive["serenity_policy"] = adaptive_serenity_policy
     scored_for_counterfactual = list(adaptive.get("adaptive_candidates") or [])
-    if require_serenity and scored_for_counterfactual:
+    if serenity_batch_ready and scored_for_counterfactual:
         adaptive["serenity_counterfactuals"] = [
             arm.model_dump(mode="json")
             for arm in build_serenity_counterfactuals(
@@ -854,6 +952,7 @@ def run_market_memory_selection(
         },
         "serenity_policy_state": serenity_state.model_dump(mode="json"),
         "serenity_native_attestation": serenity_attestation,
+        "candidate_universe": universe_contract,
     }
     snapshot_id = "dcs_" + sha256(
         json.dumps(
@@ -984,6 +1083,15 @@ def run_market_memory_selection(
             else None
         ),
         "serenity_native_ready": serenity_complete,
+        "candidate_universe": universe_contract,
+        "universe_quality": {
+            "complete": bool(universe_contract.get("complete")) if universe_contract else None,
+            "blocking_reason": universe_contract.get("blocking_reason") if universe_contract else None,
+            "blocking_reasons": list(universe_contract.get("blocking_reasons") or []) if universe_contract else [],
+            "base_scored_count": base_scored_count,
+            "base_scoring_pool_count": len(universe),
+            "base_finalist_count": len(ranked),
+        },
         "serenity_formula_version": FORMULA_VERSION,
         "serenity_policy_snapshot": dict(adaptive.get("serenity_policy") or {}),
         "serenity_source_run_id": serenity_source_run_id,
@@ -1010,6 +1118,8 @@ def run_market_memory_selection(
             "snapshot": snapshot_meta,
             "signals_count": len(signals),
             "candidate_count": len(candidates),
+            "base_scored_count": base_scored_count,
+            "base_finalist_count": len(ranked),
             "market_memory_events_upserted": upserted_events,
             "failures": failures[:50],
             "adaptive_single_path": True,

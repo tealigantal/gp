@@ -93,6 +93,8 @@ def build_daily_plan_market_book(
     tracked_universe = tracked_universe_from_daybook(daybook)
     pulses = build_daily_plan_pulses(daybook, tracked_universe)
     board = build_board(daybook, pulses, artifact_id=None, slot_id=None)
+    candidate_universe = dict(daybook.source_meta.get("candidate_universe") or {})
+    universe_quality = dict(daybook.source_meta.get("universe_quality") or candidate_universe)
     return MarketBook(
         trading_day=daybook.trading_day,
         book_version=book_version,
@@ -124,6 +126,8 @@ def build_daily_plan_market_book(
             errors=[],
         ),
         tracked_universe=tracked_universe,
+        candidate_universe=candidate_universe,
+        universe_quality=universe_quality,
         producer=dict(daybook.producer),
     )
 

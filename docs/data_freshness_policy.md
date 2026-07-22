@@ -55,6 +55,12 @@ An already bound session may explain an older snapshot after the trading day cha
 `resolve_daily_target()` returns the one `MarketTimeContext` used by the core runtime. It names `decision_trade_day`, `daybook_effective_day`, `pulse_trade_day`, `pulse_slot_closed_at`, timezone-bearing `observed_at`, `market_phase`, `target_mode`, and optional `pending_eod_day`.
 
 `decision_trade_day` is the plan's intended trading day; `daybook_effective_day` is the only date permitted for daily-bar selection, cache freshness, and candidate validation. Runtime artifacts use the former as `trade_day`; `DayBook.trading_day` uses the latter. The old `as_of` field is a read-only compatibility alias and must not decide freshness.
+
+### 3.1.2 全市场候选宇宙完整性
+
+生产 daybook 必须绑定同一 `daybook_effective_day` 的 `MarketUniverseSnapshot.v1`。主板名录至少 3,000 且不少于上一成功交易日的 95%；名称/上市日期和目标日日线覆盖均至少 95%；合格池至少 50；评分池固定为 `min(200, 合格数)`；评分成功至少 20 且至少覆盖评分池的 95%。筛选规则为非 ST/退市、上市满 60 天、收盘价 2–500 元、五日平均成交额至少 5 亿元、信号历史至少 120 根。评分池按五日平均成交额降序、代码升序确定。
+
+任一门槛失败必须发布空候选的 `candidate_universe_incomplete`，并把阻断原因写入不可变宇宙和 current no-trade 快照；不得沿用上一日结果，也不得读取 `universe_symbols.txt`。该静态文件只允许显式测试/开发调用。
 3.2 pulse_trade_day
 
 5 分钟线所属的交易日。
