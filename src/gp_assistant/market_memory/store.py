@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import os
-import re
 import sqlite3
 import threading
 import time
@@ -14,7 +13,8 @@ from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional
 
 from ..core.paths import store_dir
-from ..runtime.market_time import iso_day
+def iso_day(value: object) -> str:
+    return str(value or "").replace("/", "-")[:10]
 from ..runtime.utils import now_iso
 
 _SCHEMA_LOCK = threading.Lock()
@@ -48,41 +48,10 @@ def _lock_path() -> Path:
     return _event_root() / ".market_memory.lock"
 
 
-def _snapshot_dir() -> Path:
-    path = _event_root() / "decision_snapshots"
-    path.mkdir(parents=True, exist_ok=True)
-    return path
-
-
 def _event_root() -> Path:
     path = Path(os.getenv("GP_MARKET_MEMORY_DIR") or str(store_dir() / "events"))
     path.mkdir(parents=True, exist_ok=True)
     return path
-
-
-def decision_snapshot_path(snapshot_id: str) -> Path:
-    if re.fullmatch(r"dcs_[0-9a-f]{24}", str(snapshot_id or "")) is None:
-        raise ValueError("decision_snapshot_id_invalid")
-    return _snapshot_dir() / f"{snapshot_id}.json"
-
-
-def _atomic_write_json(path: Path, payload: Dict[str, Any]) -> None:
-    encoded = json.dumps(
-        payload,
-        ensure_ascii=False,
-        indent=2,
-        sort_keys=True,
-        default=str,
-    )
-    temporary = path.with_name(f".{path.name}.{uuid.uuid4().hex}.tmp")
-    try:
-        with temporary.open("x", encoding="utf-8", newline="\n") as handle:
-            handle.write(encoded)
-            handle.flush()
-            os.fsync(handle.fileno())
-        os.replace(temporary, path)
-    finally:
-        temporary.unlink(missing_ok=True)
 
 
 def _acquire_process_lock(path: Path, *, timeout_sec: float = 1.2) -> str:
@@ -175,32 +144,6 @@ def _connect(*, writable: bool = False) -> sqlite3.Connection | None:
                     if name not in columns:
                         conn.execute(f"ALTER TABLE market_events ADD COLUMN {name} {definition}")
                 conn.execute("CREATE INDEX IF NOT EXISTS idx_market_events_maturity ON market_events(signal_trading_day,outcome_available_trading_day,outcome_complete)")
-                conn.execute(
-                    """
-                    CREATE TABLE IF NOT EXISTS decision_snapshots(
-                        snapshot_id TEXT PRIMARY KEY,
-                        run_id TEXT,
-                        as_of TEXT NOT NULL,
-                        final_decision TEXT NOT NULL,
-                        payload_json TEXT NOT NULL,
-                        created_at TEXT NOT NULL
-                    )
-                    """
-                )
-                conn.execute(
-                    """
-                    CREATE TABLE IF NOT EXISTS prediction_outcomes(
-                        outcome_id TEXT PRIMARY KEY,
-                        snapshot_id TEXT NOT NULL,
-                        symbol TEXT,
-                        role TEXT NOT NULL,
-                        as_of TEXT NOT NULL,
-                        outcome_json TEXT NOT NULL,
-                        error_types_json TEXT NOT NULL,
-                        created_at TEXT NOT NULL
-                    )
-                    """
-                )
                 conn.commit()
                 _SCHEMA_READY.add(dbp)
     return conn
@@ -329,143 +272,3 @@ def list_events_before(as_of: str, *, require_outcome: bool = True, limit: Optio
         return [_row_to_event(row) for row in conn.execute(sql, params).fetchall()]
     finally:
         conn.close()
-
-
-def save_decision_snapshot(snapshot: Dict[str, Any]) -> str:
-    snapshot_id = str(snapshot.get("snapshot_id") or "")
-    if not snapshot_id:
-        raw = json.dumps(snapshot, ensure_ascii=False, sort_keys=True, default=str)
-        snapshot_id = "dcs_" + sha256(raw.encode("utf-8")).hexdigest()[:24]
-        snapshot["snapshot_id"] = snapshot_id
-    payload_text = json.dumps(snapshot, ensure_ascii=False, sort_keys=True, default=str)
-    path = decision_snapshot_path(snapshot_id)
-    with memory_db_lane():
-        conn = _connect(writable=True)
-        assert conn is not None
-        try:
-            existing = conn.execute(
-                "SELECT payload_json FROM decision_snapshots WHERE snapshot_id=?",
-                (snapshot_id,),
-            ).fetchone()
-            if existing is not None:
-                existing_text = json.dumps(
-                    json.loads(existing["payload_json"] or "{}"),
-                    ensure_ascii=False,
-                    sort_keys=True,
-                    default=str,
-                )
-                if existing_text != payload_text:
-                    raise RuntimeError("decision_snapshot_immutable_conflict")
-            conn.execute(
-                """
-                INSERT INTO decision_snapshots(snapshot_id, run_id, as_of, final_decision, payload_json, created_at)
-                VALUES (?,?,?,?,?,?)
-                ON CONFLICT(snapshot_id) DO NOTHING
-                """,
-                (
-                    snapshot_id,
-                    snapshot.get("run_id"),
-                    str(snapshot.get("as_of") or ""),
-                    str(snapshot.get("final_decision") or snapshot.get("decision") or "unknown"),
-                    payload_text,
-                    now_iso(),
-                ),
-            )
-            conn.commit()
-        finally:
-            conn.close()
-    replace_file = not path.exists()
-    if path.exists():
-        try:
-            existing_payload = json.loads(path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError, UnicodeDecodeError):
-            replace_file = True
-        else:
-            existing_file = json.dumps(
-                existing_payload,
-                ensure_ascii=False,
-                sort_keys=True,
-                default=str,
-            )
-            if existing_file != payload_text:
-                raise RuntimeError("decision_snapshot_file_immutable_conflict")
-    if replace_file:
-        _atomic_write_json(path, snapshot)
-    try:
-        persisted_file = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError, UnicodeDecodeError) as exc:
-        raise RuntimeError("decision_snapshot_file_verification_failed") from exc
-    if json.dumps(
-        persisted_file,
-        ensure_ascii=False,
-        sort_keys=True,
-        default=str,
-    ) != payload_text:
-        raise RuntimeError("decision_snapshot_file_verification_failed")
-    return snapshot_id
-
-
-def load_decision_snapshot(snapshot_id: str) -> Dict[str, Any] | None:
-    try:
-        path = decision_snapshot_path(snapshot_id)
-    except ValueError:
-        return None
-    if path.exists():
-        try:
-            return json.loads(path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError, UnicodeDecodeError):
-            pass
-    conn = _connect()
-    if conn is None:
-        return None
-    try:
-        row = conn.execute("SELECT payload_json FROM decision_snapshots WHERE snapshot_id=?", (snapshot_id,)).fetchone()
-        return json.loads(row["payload_json"] or "{}") if row else None
-    finally:
-        conn.close()
-
-
-def save_prediction_outcome(
-    *,
-    snapshot_id: str,
-    symbol: str | None,
-    role: str,
-    as_of: str,
-    outcome: Dict[str, Any],
-    error_types: List[str],
-) -> str:
-    raw = json.dumps(
-        {"snapshot_id": snapshot_id, "symbol": symbol, "role": role, "as_of": as_of},
-        ensure_ascii=False,
-        sort_keys=True,
-    )
-    outcome_id = "po_" + sha256(raw.encode("utf-8")).hexdigest()[:24]
-    with memory_db_lane():
-        conn = _connect(writable=True)
-        assert conn is not None
-        try:
-            conn.execute(
-                """
-                INSERT INTO prediction_outcomes(
-                    outcome_id, snapshot_id, symbol, role, as_of, outcome_json, error_types_json, created_at
-                )
-                VALUES (?,?,?,?,?,?,?,?)
-                ON CONFLICT(outcome_id) DO UPDATE SET
-                    outcome_json=excluded.outcome_json,
-                    error_types_json=excluded.error_types_json
-                """,
-                (
-                    outcome_id,
-                    snapshot_id,
-                    symbol,
-                    role,
-                    as_of,
-                    json.dumps(outcome, ensure_ascii=False, sort_keys=True),
-                    json.dumps(error_types, ensure_ascii=False),
-                    now_iso(),
-                ),
-            )
-            conn.commit()
-            return outcome_id
-        finally:
-            conn.close()

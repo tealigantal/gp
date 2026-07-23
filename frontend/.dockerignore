@@ -1,17 +1,4 @@
-# Keep the Docker build context small
-node_modules/
-dist/
-.vite/
-
-# VCS / OS / IDE
-.git/
-.DS_Store
-.idea/
-.vscode/
-
-# Env and caches
-.env.local
-.eslintcache
-npm-debug.log*
-yarn-error.log*
-pnpm-debug.log*
+node_modules
+dist
+.vite
+*.log

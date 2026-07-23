@@ -18,6 +18,8 @@ The repository is an initialized important project in integration and historical
 
 ## Repository map and sources of truth
 
+Before changing the recommendation path, read `docs/contracts/CURRENT_CONTRACTS.md`, `docs/contracts/RETIRED_CONTRACTS.md`, and `docs/contracts/registry.yaml`.
+
 - `README.md`: product onboarding and user-visible workflows.
 - `PROJECT_GOAL.md`: durable objective, constraints, and approval gates.
 - `docs/PRODUCT.md`: product behavior and recovery experience.

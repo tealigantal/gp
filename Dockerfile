@@ -21,8 +21,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     TZ=Asia/Shanghai
 
 LABEL org.opencontainers.image.revision=${GP_BUILD_REVISION} \
-      io.gp.artifact-schema="RecommendationSnapshot.v1" \
-      io.gp.selection-policy="adaptive_v2_native_serenity_single_score"
+      io.gp.artifact-schema="ContractKernel.v1" \
+      io.gp.selection-policy="adaptive_kernel_v2"
 
 WORKDIR /app
 

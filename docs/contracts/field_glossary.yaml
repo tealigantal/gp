@@ -1,0 +1,1 @@
+{"market_session_date":"The exchange session for which a plan is intended.","daily_evidence_date":"The latest completed daily bar used by a plan.","slot_closed_at":"The latest fully closed intraday bar in an observation.","generated_at":"Plan creation time.","observed_at":"Runtime observation creation time.","published_at":"Publication commit time."}

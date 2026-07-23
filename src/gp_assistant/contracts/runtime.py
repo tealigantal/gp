@@ -1,28 +1,42 @@
 from __future__ import annotations
 
-from typing import Final, Literal, TypeAlias, cast
+from datetime import date, datetime
+
+from .base import ContractModel
+from .catalog import MarketPhase, RuntimeDataState
+from .market import MarketId
 
 
-# The only operations accepted by the resident recommendation runtime.
-# Each value has a distinct lifecycle meaning; retired replay/daily aliases
-# are deliberately absent so callers cannot silently take an obsolete path.
-RuntimeOperation: TypeAlias = Literal[
-    "auto",
-    "rebuild_daybook",
-    "postclose_archive",
-]
-
-RUNTIME_OPERATIONS: Final[frozenset[str]] = frozenset(
-    {
-        "auto",
-        "rebuild_daybook",
-        "postclose_archive",
-    }
-)
+class RuntimeDataQuality(ContractModel):
+    state: RuntimeDataState
+    source: str
+    reason_codes: tuple[str, ...]
 
 
-def require_runtime_operation(value: object) -> RuntimeOperation:
-    operation = str(value or "").strip()
-    if operation not in RUNTIME_OPERATIONS:
-        raise ValueError(f"runtime_operation_invalid:{operation or 'missing'}")
-    return cast(RuntimeOperation, operation)
+class MarketGate(ContractModel):
+    state: str
+    score: float
+    reason_codes: tuple[str, ...]
+
+
+class SymbolExecutionState(ContractModel):
+    symbol: str
+    state: str
+    vwap: float | None
+    intraday_score: float | None
+    reason_codes: tuple[str, ...]
+
+
+class RuntimeObservation(ContractModel):
+    runtime_id: str
+    plan_id: str
+    market: MarketId
+    market_session_date: date
+    observed_at: datetime
+    slot_closed_at: datetime | None
+    market_phase: MarketPhase
+    data_quality: RuntimeDataQuality
+    market_gate: MarketGate
+    symbol_execution_states: tuple[SymbolExecutionState, ...]
+    producer_name: str
+    producer_revision: str

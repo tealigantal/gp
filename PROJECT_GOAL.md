@@ -4,7 +4,7 @@
 
 ## Objective
 
-Build a dependable A-share main-board recommendation chat agent. Every recommendation and follow-up must read one immutable, versioned recommendation snapshot through one chat contract; no legacy recommendation, execution, or operational API may provide an alternative answer.
+Build a dependable A-share main-board recommendation chat agent. Every recommendation and follow-up must bind to one immutable RecommendationPublication projected only from one RecommendationPlan and an optional RuntimeObservation; no retired recommendation, execution, or operational API may provide an alternative answer.
 
 ## User and Problem
 
@@ -12,13 +12,13 @@ The primary user is an individual A-share researcher/trader who needs a coherent
 
 ## Observable Stopping Condition
 
-The product reaches its durable objective when current-data recommendation and follow-up journeys are reliable through the single chat protocol, snapshots and turns commit atomically, legacy stores and APIs are removed, historical replay proves no future leakage, probability and adaptive outputs meet documented holdout thresholds, operational failures fail closed, and all displayed claims are traceable to immutable evidence.
+The product reaches its durable objective when current-data recommendation and follow-up journeys are reliable through the single chat protocol, publications and turns commit atomically, retired stores and APIs are removed, historical replay proves no future leakage, probability and adaptive outputs meet documented holdout thresholds, operational failures fail closed, and all displayed claims are traceable to immutable evidence.
 
 ## Critical User Journeys
 
 - Ask for current Top-N candidates and receive a valid plan or explicit no-trade result.
 - Ask why a candidate was selected or rejected and receive source-grounded evidence.
-- Compare candidates and explain an existing position from the same bound snapshot.
+- Compare candidates and explain an existing position from the same bound publication.
 - Review how a conclusion changed without rewriting the original evidence.
 - Use resident official-announcement evidence as a native, bounded and causally gated Alpha expert without mistaking it for certainty.
 
@@ -39,7 +39,7 @@ The product reaches its durable objective when current-data recommendation and f
 
 ## Current Lifecycle Stage
 
-Single-protocol recovery: Serenity-native Adaptive scoring, immutable Alpha lineage, and real-LLM grounded conversation.
+Contract-kernel hard cutover: one typed plan, runtime observation, publication, and conversation lineage.
 
 ## Approval Gates
 

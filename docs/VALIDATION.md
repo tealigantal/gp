@@ -1,282 +1,29 @@
 # Validation Ledger
 
-## 2026-07-22 full-market universe implementation checkpoint
+## Contract Kernel
 
-- **Cause addressed:** The production worker disabled snapshot input, silently read the ten-symbol development file, and then treated freshness over those ten symbols as full-market completeness. Incomplete Serenity coverage could independently veto the base recommendation.
-- **Change:** Added immutable `MarketUniverseSnapshot.v1`, official exchange-master normalization, strict main-board metadata/daily/eligibility/scoring gates, deterministic Top-200 construction, explicit no-fallback production routing, current no-trade publication on incomplete coverage, base Top-200 Adaptive scoring followed by a Top-30 additive Serenity batch, and independent universe projections in MarketBook/health/Workspace. Historical snapshots without the contract are `legacy_coverage_unverified` and cannot become current/tradeable.
-- **Executed validation:** `python -m compileall -q src tests`; full `python -m pytest -q`; frontend `npm run lint`, `npm run typecheck`, `npm test -- --run` (8 files, 27 tests), and `npm run build`; `docker compose config --quiet`; `git diff --check`. All passed. The live publication exposed and then regression-covered the zero-weight Serenity reference-binding boundary; the final full backend suite passed after that fix.
-- **Runtime acceptance:** Universe `mus_20260722_12adb91c92ebb41babf6` passed with main-board 3,191, metadata 3,191, target-day daily 3,190 (99.97%), eligible 606, pool/scored 200/200, selected 10 and `fallback_used=false`. Current snapshot `daily_29989bdcae26`, health, runtime projection and MarketBook reference that universe; `/api/health` reports `status=ok`, `product_ready=true` and real-LLM verification `ready`. Serenity reports target/coverage 30/0, effective weight 0 and `serenity_batch_incomplete`, without blocking the base result. The rendered Workspace showed `3191 / 3190 / 606 / 200/200 / 10` and no console errors. Real session `session_a2400f910864` returned Top-3 `600988 / 002648 / 603259` and a same-session comparison follow-up from the same snapshot.
-- **Container provenance:** Authorized `docker compose build gp web` and final `docker compose build gp` succeeded; `gp`, `gp-worker`, `gp-serenity-worker` and `web` were recreated with `--no-deps --force-recreate`, without `--remove-orphans`, Docker Desktop restart or mounted-data deletion. The three Python services share image `sha256:1f0ada8c202bcc88b8e987fd3e67fa909da08be01d850df9449b5e3fdf3a1b12`, and checked local/container hashes for universe, pipeline, routes, datahub and native-snapshot validation files matched.
+2026-07-23: backend suite passed (5 tests); `compileall`, manifest, retirement, and diff checks passed. Frontend lint, typecheck, test (1 test), and production build passed.
 
-## 2026-07-21 mandatory candidate comprehensive-score narration
+The real local data path generated a 2026-07-23 plan from a live AkShare spot universe (3,194 main-board symbols) intersected with cached daily evidence (3,193 covered symbols, 2026-07-22). It evaluated 197 candidates and deterministically selected 3. A real `/api/chat` call completed through the configured LLM; a same-session/client-turn retry returned the persisted response without a duplicate turn. Outside market hours, the actual runtime refresh explicitly published `market_not_in_trading_phase` and `tradeable_now=false`.
 
-- **Cause addressed:** The persisted `daily_af417838c0e7` snapshot contained all ten candidates' `final_score` values, but a score follow-up was narrated from a one-candidate focus slice and the reply incorrectly claimed the other scores were absent.
-- **Change:** The narration system now requires every supplied `candidate_details` item to state its own `final_score` as the comprehensive score; it cannot substitute probability/confidence, borrow another candidate's score, or invent a missing value.
-- **Executed validation:** `python -m pytest -q tests/unit/test_intraday_multistrategy.py -k llm_prompt_safety_contract`, `python -m compileall -q src tests`, and `git diff --check` passed.
-- **Runtime acceptance:** Rebuilt and recreated `gp`, `gp-worker`, and `gp-serenity-worker` from the local workspace. The first health read correctly exposed a pre-rebuild snapshot as `native_snapshot_producer_incompatible`; the worker then published `daily_417a5311b334` and `/api/health` recovered to `status=ok`, `product_ready=true`. A real `POST /api/chat` with “今天给我三只” committed a three-candidate reply that stated 000858's comprehensive score as 52.75, 600036's as 52.09, and 002415's as 50.62.
+The configured development database passed `integrity_check`, `foreign_key_check`, canonical initialization, and API health smoke after destructive replacement.
 
-## 2026-07-21 LLM-owned routing scope
+## Workspace Reconnection
 
-- **Cause addressed:** Local hard-field reconstruction parsed the “一” in “一点” as `topk=1`, reducing a prior Top-10 conversation to a single candidate before narration.
-- **Change:** Removed `_sanitize_frame()` and its final candidate-scope override from the `/api/chat` route. The strict LLM `TurnFrame` now owns request type, candidate quantity, references, and refresh intent; local code keeps schema/range validation and immutable-snapshot resolution.
-- **Executed validation:** `python -m pytest -q tests/agent/test_agent_llm_chat.py -k 'llm_owned_scope or two_stage_llm_trace'`, `python -m compileall -q src tests`, and `git diff --check` passed.
-- **Runtime acceptance:** Rebuilt and recreated `gp`, `gp-worker`, and `gp-serenity-worker`; health recovered with `status=ok`, `product_ready=true`, and compatible `daily_6368ec2ad3be`. In a fresh real session, “今天给我10只” committed ten candidates; the immediate “我想要预期收益大一点的” follow-up was routed by the LLM with `topk=10` and returned all ten, reordered by their supplied expected return.
+2026-07-23: Restored the chat-first workspace against the current Contract Kernel. Added read-only canonical conversation list/detail routes; `tests/contracts` passed (6 tests), including an HTTP verification that a persisted session returns ordered canonical turns. Frontend `typecheck`, `lint`, test (1 test), and production build passed before container rebuild.
 
-## 2026-07-21 prior candidate-set routing
+2026-07-23: Rebuilt the local Compose `gp`, `gp-worker`, and `web` services. Browser verification at `http://127.0.0.1:8080` showed the restored workspace, current candidate snapshot, session switching, persisted-turn reload, and a real LLM response correctly describing post-close state and 2026-07-22 daily evidence. No browser console errors were observed. A stale bind-mounted history lock from a replaced container was automatically reclaimed by the rebuilt worker; the expanded contract suite passed (7 tests) and no later worker lock timeout appeared.
 
-- **Cause addressed:** A filtering request using “这里面” was routed as `pick_detail`; the focus fallback then supplied only the first candidate despite the preceding Top-10 response.
-- **Change:** `SessionState` now retains the complete prior assistant candidate list for routing, and the strict router prompt mandates `compare` plus the full `compare_symbols` set for “这里面/上述/这批” filtering or exclusion requests.
-- **Executed validation:** Focused agent tests verify complete prior-scope preservation and prompt policy; `python -m compileall -q src tests` and `git diff --check` passed.
-- **Runtime acceptance:** Rebuilt and recreated `gp`, `gp-worker`, and `gp-serenity-worker`; health recovered with `status=ok`, `product_ready=true`, and compatible `daily_77d99fd48f4b`. In a fresh real Top-10 session, “帮我把这里面的非老登股挑选出来，并附上他们的评分” routed to `compare` with all ten `compare_symbols`, returned ten candidate certificates, and listed all ten comprehensive scores.
+## Chat Agent Showcase UI
 
-## 2026-07-21 lunch-board projection and narration freedom recovery
+2026-07-23: Recreated the missing frontend against current contracts and passed `npm run typecheck`, `npm run lint`, `npm test -- --run` (6 tests), and `npm run build`. The final production build emitted 155.57 kB JavaScript and 16.31 kB CSS before gzip. Cross-platform optional bindings for Rollup and SWC are explicitly locked so the Windows-generated lockfile builds reproducibly in the Alpine image. Tests cover canonical fact rendering, chat persistence, historical-publication isolation, state-sync failure closure, response-loss retry with stable session and client-turn identities, and Chinese IME composition.
 
-- **Cause addressed:** A lunch board legitimately reorders symbols by live
-  execution readiness, but native snapshot validation required that board to
-  retain the immutable daily selected-symbol order and overwrote each copied
-  pick's decision rank. The first failure masked a second gap where the board
-  explanation could retain a partial pulse Serenity summary instead of the
-  candidate-bound attested payload. Separately, real LLM prose was rejected
-  before authority validation whenever it used ordinary numbers rather than
-  internal GPVAL placeholders.
-- **Change:** The board retains immutable `entry.pick.rank` while its own
-  display `entry.rank` may reorder intraday. Native validation now requires
-  exact selected-set coverage plus immutable pick rank, not board display
-  order; board Serenity context mirrors the canonical pick payload. Narration
-  receives the exact compact certificate and may use direct candidate-bound
-  values, deterministic judgment-reason values, and bounded market-level
-  display variants. Candidate/field checks, symbol scope, non-trade action
-  protection, sizing prohibition, and Serenity grounding remain fail-closed.
-- **Executed validation:** `python -m compileall -q src tests` passed;
-  targeted board/native/chat tests passed (74 tests); `python -m pytest -q`
-  passed; `docker compose config --quiet` and `git diff --check` passed.
-- **Runtime acceptance:** Rebuilt and force-recreated `gp`, `gp-worker`, and
-  `gp-serenity-worker` from the current workspace without deleting mounted
-  runtime data. The worker published successive lunch artifacts with
-  `slot_status=OK` and `runtime_contract_ready=true`, with no recurrence of
-  `native_snapshot_board_projection_invalid` or
-  `native_snapshot_board_serenity_mirror_invalid`. A real DeepSeek chat
-  completed routing, narration, and repair; its final commit was correctly
-  rejected with 503 when the live Serenity/current snapshot changed during the
-  provider round trip, rather than because of an LLM output validation error.
+2026-07-23: `docker compose config --quiet` passed. Plain `docker compose up -d --build` built the API and web images, then started `gp` healthy, `gp-worker` running, and `web` healthy. HTTP verification through `http://127.0.0.1:8080` returned 200 and proxied a current publication with 2026-07-23 daily evidence in post-close phase.
 
-## 2026-07-18 plain assistant-transcript output
+2026-07-23: Automated browser verification found 901 characters of meaningful initial content, no Vite error overlay, and no captured console errors. It rendered six saved conversations, three current selected candidates in engine order, and the post-close unavailable state. A new real chat produced and persisted a two-turn conversation; after page reload, selecting the newest saved session restored both ordered turns. The frontend exposed three candidate cards and two conversation messages after reload.
 
-- **Decision:** The Workspace transcript is a conversation surface, not a
-  second structured decision dashboard. The right-side snapshot remains the
-  single structured operational view.
-- **Change:** Replaced every assistant message-kind renderer in `ChatThread`
-  with one presentation projection: validated `narrative_text` (or the
-  committed legacy content when metadata is absent) plus optional
-  LLM-provided follow-up prompts. Removed the retired recommendation,
-  comparison, live-entry, exit, run-change, no-trade, detail, and narrative
-  card components. This does not change the API contract, selection, numeric
-  validation, persisted data, or Serenity's native shadow/0% policy.
-- **Executed validation:** Targeted ChatThread Vitest tests passed (8 tests);
-  the complete frontend suite passed (25 tests); `npm run lint`, `npm run
-  typecheck`, `npm run build`, `docker compose config --quiet`, and `git diff
-  --check` passed.
-- **Container acceptance:** Rebuilt and force-recreated `web` without
-  removing runtime data. Compose also recreated its unchanged `gp` dependency;
-  `gp-worker` and `gp-serenity-worker` remained running. `GET /` returned 200,
-  `/api/health` returned `status=ok`, `product_ready=true`, and
-  `llm_ready=true`; Serenity remained `native/shadow/0%`. The deployed Nginx
-  assets no longer contain the retired `下一交易窗口策略计划` card copy.
+2026-07-23: After independent frontend review, historical sessions now hide the unrelated current decision brief, polling failure forces execution unavailable, uncertain retries reuse the original client-turn identity, IME composition Enter does not submit, and mobile history remains horizontally accessible. The final web-only rebuild used `docker compose up -d --no-deps --build web`; it did not rebuild or restart backend services. At a 390 px browser viewport, all six history buttons remained visible through the horizontal session rail. The final browser pass again found no console error or framework overlay.
 
-## 2026-07-18 runtime contract consolidation
+2026-07-23: Repaired false historical-session detection caused by minute-level runtime publication churn. Frontend lint, typecheck, 10 Vitest cases, production build, and diff checks passed. The tests cover same-plan publication rollover, crossed health/publication reads, conversation request ordering, current/publication separation, Chinese reason rendering, evaluated-count wording, and execution-risk semantics. A web-only Compose rebuild left `gp` and `gp-worker` untouched. Browser verification reopened the reported `a7d44e66` session, correctly labeled its initially unknown lineage, sent a real follow-up, learned the trusted same-plan binding, restored all three current candidates, rendered `进入评分 198`, `执行风险`, and the Chinese next-session reason, and found no console errors or framework overlay.
 
-- **Cause addressed:** The default suite retained eight worker tests that
-  monkeypatched deleted file-store and portfolio functions. Market-time
-  consumers also relied on implicit mapping aliases such as target_day, so
-  removal of the aliases could break freshness paths rather than expose a
-  single explicit boundary.
-- **Change:** Added contracts/runtime.py as the sole operation contract,
-  removed retired worker loop/replay aliases, made intent literals strict,
-  removed market-time mapping aliases, and added
-  daily_freshness_target_fields() as the only projection into the persisted
-  daily-freshness schema. Replaced the stale worker suite with current
-  AgentStore plus MarketTimeContext coverage; it verifies rejected retired
-  operations/intent labels, pending and blocked branches, no-op binding, and
-  resident dispatch.
-- **Executed validation:** python -m compileall -q src tests passed;
-  python -m pytest tests/test_daily_freshness.py tests/test_worker_reconcile.py tests/agent/test_market_time_storage_contract.py -q passed (35 tests);
-  default python -m pytest -q passed (263 tests); and git diff --check passed.
-  Test cleanup removed tracked fixtures under .pytest-tmp/; they were restored
-  byte-for-byte from HEAD before the final default run.
-- **Frontend and container acceptance:** frontend lint, typecheck, all 25
-  Vitest cases, and production build passed; docker compose config --quiet
-  passed. Rebuilt and force-recreated gp, gp-worker, gp-serenity-worker, and
-  web without removing mounted runtime data. The local and container SHA-256
-  values matched for contracts/runtime.py, contracts/intents.py,
-  runtime/market_time.py, evidence/daily_freshness.py, and worker.py. A real
-  POST /api/chat committed a 214-character response with narrative_text equal
-  to reply; health then returned product_ready=true, llm_ready=true, and
-  llm_retryable=true. Serenity remained native/shadow at 0%.
-- **Final end-to-end acceptance:** After the final source-compatible Compose
-  rebuild, the real DeepSeek session `e2e-final-20260718-2215` committed a
-  current three-candidate answer and a same-session follow-up about the first
-  candidate's wait and cancellation conditions. The first answer kept all
-  candidates in the next-session, non-executable state and used local value
-  capsules for plan numbers; the follow-up correctly kept `002415` in wait,
-  described the after-open confirmation conditions, stated Serenity shadow has
-  no relevant evidence and zero contribution, and used the locally projected
-  `31.29` stop. Both persisted assistant contents exactly equalled
-  `message.narrative_text`; traces contained only real `intent_routing`,
-  `tool_evidence`, and, where needed, one `tool_evidence_repair` call. Final
-  health was `status=ok`, `product_ready=true`, `llm_ready=true`, and
-  `llm_retryable=true`; Serenity was `native/shadow/0%` with a live worker and
-  the Web returned HTTP 200. Host/container SHA-256 values matched for the
-  chat, runtime-contract, intent, market-time, freshness, and worker files.
-- **Regression after final repairs:** The default backend suite, compileall,
-  and `git diff --check` passed. Frontend lint, typecheck, all 25 Vitest cases,
-  and production build passed. The test runner's tracked `.pytest-tmp`
-  fixtures were restored from HEAD before staging.
-
-## 2026-07-18 assistant-turn presentation contract recovery
-
-- **Root cause:** The DeepSeek call for the reported `你好` turn succeeded (HTTP 200) and committed a non-empty reply. The single-protocol writer stored that text in `turn.content`/`payload.reply`, but `message.narrative_text` was absent. Commit `268b43c` restored Workspace session reads by exposing that raw payload, while the older `ChatThread` rendered only `meta.message.narrative_text`; the result was a blank body for a valid real LLM answer. The later retryability repair did not modify provider configuration, tool calls, request payloads, or reply generation.
-- **Change:** `src/gp_assistant/contracts/api.py::ChatResponse` is now the single assistant-turn presentation contract. It binds `message.narrative_text` exactly to the validated committed `reply`; `AgentStore` uses it before write, during idempotent replay, and for every persisted-turn read. Frontend rendering uses committed content only for legacy/malformed-metadata visibility and shows a warning for a truly corrupt empty row. No database migration, runtime-state deletion, LLM fallback/template, selection change, or Serenity policy change was introduced.
-- **Executed validation:** targeted backend chat/health tests plus the assistant-contract suite passed (61 passed, 6 deselected); full frontend suite passed (25 tests), `npm run typecheck`, and `npm run build` passed; `git diff --check` passed. The former eight `tests/test_worker_reconcile.py` failures were subsequently repaired by the runtime-contract consolidation recorded above; the default backend suite is now green.
-- **Live acceptance:** Rebuilt and force-recreated `gp`, `gp-worker`, `gp-serenity-worker`, and `web` without deleting mounted runtime data. The reported legacy session `session_ohi12fto` now projects its 426-byte committed reply into `message.narrative_text` exactly. A new real DeepSeek chat then committed a 340-byte answer; the POST response, same-key idempotent replay, `GET /api/chat/{session_id}`, and `GET /api/session/{session_id}` all carried the identical narrative. Final health was `status=ok`, `product_ready=true`, `llm_ready=true`, `llm_retryable=true`; Serenity stayed native/shadow at 0%.
-
-## 2026-07-18 LLM narration retryability and numeric-label repair
-
-- **Cause:** The generic `第一目标` numeric-label matcher ran before the distinct `第一目标盈亏比` matcher, so the valid displayed risk/reward `0.73` was treated as a `take1` price. Its rejected repair wrote product-chat verification `error`, and the Workspace incorrectly used that committed-chat signal to disable every future request.
-- **Change:** Match `第一目标盈亏比` as its own higher-priority field while retaining strict `take1` validation. Expose `llm_retryable` separately from `llm_ready`; only a committed, fully validated real chat sets readiness, while a configured provider permits the user's next real request after a rejected response. The frontend keeps the composer enabled only in that retryable state and refreshes health immediately after a successful submission. No database schema, persisted runtime state, fallback/template answer, automatic LLM probe, or Serenity policy changed.
-- **Executed validation:** `python -m compileall -q src tests`; `python -m pytest tests/agent/test_agent_llm_chat.py tests/test_llm_runtime_status.py tests/test_health_storage_stats.py tests/server/test_single_chat_contract.py --basetemp <isolated-temp>` (61 passed, 2 deselected); frontend `npm test -- --run` (22 passed), `npm run typecheck`, and `npm run build`; `git diff --check` passed before container acceptance. The hook regression verifies that a committed chat invalidates `['health']` and moves the rendered health state from retryable to ready without waiting for the polling interval.
-- **Live acceptance:** Rebuilt and force-recreated `gp`, `gp-worker`, `gp-serenity-worker`, and `web` without deleting any mounted runtime directory. Directly after the rebuild health correctly reported the persisted rejected turn as `llm_ready=false`, `llm_retryable=true`; after the worker published a source-compatible native snapshot, a real DeepSeek `POST /api/chat` committed. Its same-session natural-language follow-up also committed with real `intent_routing`, `tool_evidence`, and validator-directed `tool_evidence_repair` traces. Health then reported `status=ok`, `product_ready=true`, `llm_ready=true`, and `llm_retryable=true`; Serenity remained native/shadow at its causal baseline `0%`.
-
-## 2026-07-18 Workspace gateway and worker observability recovery
-
-- **Cause:** The single-protocol integration commit changed the Web Nginx upstream from Compose service `gp` to nonexistent `api`, deleted the Workspace read endpoints while the frontend still requested them, and left the frontend without the required chat `client_turn_id`. The market worker also emitted no successful-loop summary, making a healthy worker look blank in Docker Desktop.
-- **Change:** Restored only read-only Workspace projections from the current `AgentStore` snapshot and persisted turns; no retired book/run authority or chat fallback was reinstated. Restored Nginx upstream `gp:8000`, added browser-side idempotency keys, and added a bounded worker completion log.
-- **Executed validation:** `python -m compileall -q src tests`; `python -m pytest tests/server/test_single_chat_contract.py tests/agent/test_agent_store.py -q` (18 passed); frontend `npm run typecheck`, `npm test -- --run` (18 passed), and `npm run build`; `docker compose config --quiet`; then rebuilt and force-recreated `gp`, `gp-worker`, `gp-serenity-worker`, and `web` without deleting mounted runtime directories.
-- **Live acceptance:** Browser Workspace loaded with LLM connected, current Top candidates, an enabled composer, and no console errors. A real submitted two-candidate/Serenity question completed `/api/chat` with HTTP 200 and returned rendered `002415` and `601318` plan cards. Health then reported `product_ready=true`, `llm_ready=true`, Serenity available in native shadow mode at 0%, and `gp-worker` logged one artifact publish followed by safe `noop=true` cycles.
-
-## Executed — Serenity Alpha implementation checks
-
-- **Scenario:** Real official-announcement collection, shadow scoring, counterfactual ranking, causal promotion, bounded active weight, and automatic suspension.
-- **User intent:** See real Serenity evidence immediately and allow it to enter ranking only after proving forward value.
-- **Preconditions:** Free source reachable; isolated Serenity store; current book available; no mutation of production Market Memory during tests.
-- **Environment:** Local Python 3.11 and Docker Compose where the local Docker engine is available.
-- **Representative data:** Current Top10, reserve, holdings, real CNINFO records/PDFs, and deterministic source fixtures derived from real response shapes.
-- **Exact steps:** Maintained in `docs/plans/2026-07-11-serenity-alpha.md`.
-- **Expected result:** Real source IDs/hashes/first-seen values; base Adaptive invariance in shadow; no T+5 leakage; automatic state transitions and rollback; bounded narration payload.
-- **Actual result:**
-  - `python -m compileall -q src tests` passed during implementation checkpoints.
-  - Serenity source/store/policy/runtime/scheduler/narration plus Adaptive/replay/context/health targeted suites passed; the final targeted checkpoint contained 119 tests.
-  - The full default suite passed all 311 tests serially with an isolated pytest base/store directory.
-  - `python -m compileall -q src tests`, changed-Python-file Ruff, and `git diff --check` passed. Repository-wide Ruff remains red on 185 pre-existing legacy findings outside this change.
-  - `docker compose --profile experiments config --quiet` and `docker compose --profile serenity-bootstrap config --quiet` passed. Profile inspection confirmed the experiment profile starts `gp-serenity-worker` but not bootstrap, while `serenity-bootstrap` starts the one-shot bootstrap but not the worker.
-  - Docker image build and live container/API smoke could not run because the local Docker Desktop Linux engine pipe was absent. No running container was restarted or replaced.
-  - Real command: `python -m gp_assistant.cli serenity-bootstrap --lookback-days 30 --symbols 000001`.
-  - Real result: `source_kind=bootstrap`, 4 requests, 2 CNINFO records/PDFs, complete metadata/hydration coverage, no backlog, schema fingerprint `4cb7014a163e4a3a`, elapsed 3.64 seconds, next delay 1800 seconds, marker `serboot_9006363b1b6de1090d027602`.
-  - Real status: `state=shadow`, `available=true`, `applied_weight=0`, `bootstrap_ready=true`, 2 backfill documents, 0 verified scoring facts. The system returned no relevant signal rather than manufacturing an effect.
-  - A second isolated real bootstrap for `000977` returned two CNINFO documents with SSE/SZSE verification. One current earnings-guidance filing produced a verified positive fact (`direction=+1`, `confidence=0.92`, `source_quality=1`), visible immediately in narration/reference scoring. Because it was historical bootstrap data, `backfill_only=true`, `learning_eligible=false`, and the formal applied weight remained exactly 0%.
-  - Hardening regressions cover append-only metadata revisions, target-independent schema fingerprints, strict response container types, persistent 429 backoff with and without `Retry-After`, source-level failure streaks after partial success, terminal scanned/truncated PDFs, transient same-hash parse retry, per-symbol cursor migration, exact/report-period correction linking, unscoped live correction zeroing, explicit trading-day sample identity, SQL pre-limit sample deduplication, and legacy transcript redaction.
-- **Failure and recovery:** Source failure degrades Serenity only; policy violations atomically set weight to zero; worker restart resumes from committed cursor and lease state.
-- **Evidence:** Local command outputs dated 2026-07-11; ignored runtime DB under `store/serenity/`; verified `000977` PDF `1225414299`; unit coverage for bootstrap-only readiness, fixture rejection, page/hydration resume, breaker persistence, per-symbol coverage, version revalidation, correction handling, T+6 timing, checksum tamper, atomic ledgers, reference-only backfill, and replay isolation.
-- **Remaining risk:** Free endpoints have no SLA; forward performance cannot be established during implementation itself.
-- **Date:** 2026-07-11.
-
-## Remaining operational gates
-
-## 2026-07-17 local-image refresh preflight
-
-- **Live baseline:** All four local containers were up. `GET /api/health` returned HTTP 200 with `llm_ready=true`, `book_freshness=postclose_ready`, a current compatible artifact, and 10/10 daily symbols. A real `POST /api/chat` completed with HTTP 200, exercised the LLM tool route, and returned the post-close `WAIT` plan for `000333` and `002594`.
-- **Preflight checks:** `docker compose --profile experiments config --quiet` and `python -m compileall -q src tests` passed. The prescribed historical targeted test command is stale because `tests/server/test_chat_endpoint_smoke.py` no longer exists. Its current three-file subset fails during collection because `src/gp_assistant/runtime/turn_loop.py` imports `gp_assistant.memory.service` while the local `src/gp_assistant/memory/` directory contains only `__pycache__`. Git history attributes the inconsistency to merge commit `af90e6a`: relative to first parent `fb41d91`, it deleted all seven `memory` files while retaining/restoring the loop from that parent.
-- **Deployment decision:** Did not build or recreate containers. The active backend image includes the missing `memory` source package and imports `turn_loop` successfully; rebuilding from the incomplete workspace would replace the verified live chat path with a startup/import failure.
-- **Follow-up risk:** The real chat session's subsequent `GET /api/chat/predeploy-audit-20260717-1512` returned HTTP 404. Recheck successful-turn history retrieval after the source reconciliation and rebuild.
-
-## 2026-07-18 native Serenity and real-chat recovery
-
-- **Historical cause repaired:** Merge `af90e6a` deleted all seven tracked `src/gp_assistant/memory/` sources while retaining the matching runtime import. The files were restored byte-for-byte from first parent `fb41d91`; no mounted runtime data was deleted.
-- **Serenity repair:** A delayed `SerenityAddon.v1` evidence bundle appeared after the first native formula cutover and was incorrectly evaluated in the native epoch. `native_formula_cutover_v2` now retires legacy pending work and starts a new auditable epoch. It returns to shadow only when the suspension is entirely attributable to that legacy formula and no current native integrity failure exists. Runtime evidence persistence also rejects non-native formula versions.
-- **Authorized legacy-evidence purge:** At the user's direction, the running evidence store atomically deleted all 15 `SerenityAddon.v1` pending records, both evaluations carrying that legacy add-on formula, and their 15 exclusive reference snapshots. The worker was stopped only for the transaction, then restarted; a compact policy-ledger record retains the deletion counts without retaining legacy payloads. Post-purge verification found zero legacy pending records, evaluations, and reference snapshots.
-- **Live Serenity result:** The current policy is `mode=native`, `state=shadow`, `epoch=3`, `applied_weight=0.0`, no suspension reason, a completed current poll, and target coverage `10/10` with zero incomplete symbols. The zero weight is the controller's causal baseline; it is not a missing module or a fallback path.
-- **Chat repair:** Product-chat status is atomically persisted for both Uvicorn API workers. Explicit candidate requests cannot be downgraded to `term_explain` or generic `chat` merely because they mention Serenity; Chinese `两只` is normalized as Top-2.
-- **Default Compose startup:** `gp-serenity-worker` no longer has an `experiments` profile. `docker compose config --services` lists `gp`, `gp-serenity-worker`, `gp-worker`, and `web`; `docker compose up -d --build --force-recreate` started all four. The resident-service test passed, and a real subsequent chat completed provider routing, evidence narration, and repair with HTTP 200, restoring `/api/health` to `status=ok`, `product_ready=true`, and `llm.verification=ready`.
-- **Executed checks:** `python -m compileall -q src tests`; `python -m pytest tests/agent/test_agent_llm_chat.py tests/test_llm_runtime_status.py tests/agent/test_agent_store.py tests/test_serenity_store.py tests/test_serenity_runtime.py -q`; frontend `npm run lint`, `npm run typecheck`, `npm test -- --run`, and `npm run build`; `docker compose --profile experiments config --quiet`; and `git diff --check` all passed.
-- **Container acceptance:** Rebuilt and force-recreated `gp`, `gp-worker`, `gp-serenity-worker`, and `web` without `--remove-orphans`. A real stable-snapshot `POST /api/chat` committed a recommendation with `002415` and `601318`; intent routing, tool-evidence narration, and validator-directed narration repair each had real provider HTTP 200 plus a response ID. `/api/health` then reported `status=ok`, `product_ready=true`, `llm.verification=ready`, and the Serenity state above.
-- **Observed fail-closed behavior:** A separate request overlapping a worker snapshot publication returned 503 `current_snapshot_changed_before_commit`; it did not persist a stale answer. The subsequent stable request committed successfully.
-- **Known unrelated test debt:** `python -m pytest tests/test_worker_reconcile.py -q` has eight failures because those tests monkeypatch removed pre-single-protocol worker functions (`load_portfolio_snapshot` and module-level `load_daybook`). No production behavior was changed to preserve that obsolete seam.
-
-## 2026-07-17 CNINFO official-envelope repair and local container refresh
-
-- **Cause proven:** A live HTTP 200 CNINFO no-result response used the official top-level fields `classifiedAnnouncements`, `totalSecurities`, `totalAnnouncement`, `totalRecordNum`, `announcements`, `categoryList`, `hasMore`, and `totalpages`, with `announcements:null`, zero counts, `hasMore:false`, and `totalpages:0`. The old parser incorrectly required an array and raised `cninfo_announcement_schema_changed`.
-- **Change:** Adopted strict `cninfo-announcement-envelope-v2`: official `announcementId` only, official nullable empty page only, exact envelope checks, and `hasMore`-only continuation. No legacy `id` or empty-array compatibility was retained.
-- **Executed validation:** `python -m pytest tests/test_serenity_sources.py tests/test_serenity_runtime.py -q` passed (47 tests); `python -m pytest -q`, `python -m compileall -q src tests`, and `git diff --check` passed.
-- **Live source validation:** The repaired local collector queried current CNINFO data for `002594` and completed with zero records, `backlog=false`, `total_pages=0`, `next_page=null`, and source fingerprint `6ee17c3ed8440c47`.
-- **Container validation:** `docker compose --profile experiments config --quiet` passed; `docker compose build gp web` rebuilt `gp-backend:local` and `gp-web`; force recreation refreshed `gp`, `gp-worker`, `gp-serenity-worker`, and `web` without `--remove-orphans`. The in-container and local SHA-256 for `src/gp_assistant/serenity/sources.py` both equal `34ed0c58fa2ecd87d87865a0f68c4e362f0f87127746c3406ddcadf101ad38cf`.
-- **Live worker recovery:** After the old worker lease naturally expired, the renewed worker was the sole lease owner. The obsolete pre-repair CNINFO breaker was cleared and its first real poll succeeded: run `serpoll_6a9a0f9de6c34be98e3b66519c3b6870`, 3 requests, 0 records, complete coverage for `002594` and `600000`, no errors, no backlog, and schema fingerprint `576ec46738c76f6b`. Base GP API and market worker are up; Serenity policy remains suspended at 0% because the forward causal gate has not changed.
-
-## 2026-07-17 DeepSeek Beta tool-routing recovery
-
-- Updated the local Compose environment and `.env.example` to use `https://api.deepseek.com/beta`; no `/v1` fallback remains.
-- Corrected strict tool schemas so every declared object property is required and unknown routing values use JSON `null`.
-- The provider's direct response identified the rejected field as thinking mode combined with `tool_choice=required`. The client now sends `thinking={"type":"disabled"}` for agent tool routing.
-- Passed `python -m pytest tests/unit/test_llm_client.py tests/unit/test_card_tool_llm_explanation.py tests/test_worker_reconcile.py tests/server/test_chat_endpoint_smoke.py -q` (31 tests), `python -m compileall -q src tests`, `docker compose config --quiet`, and `git diff --check`.
-- Rebuilt and recreated `gp`, `gp-worker`, and `gp-serenity-worker` with the shared `gp-backend:local` image.
-- Direct live DeepSeek Beta validation with the complete GP agent schema returned HTTP 200 and selected `answer_chat`; this proves the original provider 400 is resolved.
-- Full local `/api/chat` acceptance remains pending only because the worker is still refreshing and `current book unavailable` prevents routing before the provider call.
-
-## 2026-07-15 local container refresh and compatibility check
-
-- Recreated the local API, runtime worker, Serenity worker, and Workspace containers without deleting the mounted `store/`, `data/`, or `configs/` directories.
-- A source-overlay image (`gp-backend-current:local`) compiled successfully and served `/api/health`; its current tool-calling `/api/chat` path was rejected by the configured `deepseek-v4-flash` provider with HTTP 400, so it was not retained as the live API image.
-- Restored the previously validated `gp-backend:local` image with `GP_SERENITY_MODE=native`, then verified `/api/health` reported `product_ready=true` and an isolated real `/api/chat` turn completed with HTTP 200.
-- The full dependency-image rebuild remains in progress through the slow external Python package source; it was not used for the live cutover.
-
-- Docker image build and live API/container smoke when the local Docker daemon is available.
-- Five consecutive forward shadow trading days cannot be completed in this implementation session and remain a rollout gate, not a simulated acceptance result.
-
-Historical replay methodology and prior results remain in `docs/historical_validation.md`.
-
-## 2026-07-21 narration validation removal
-
-- `python -m pytest -q tests/agent/test_agent_llm_chat.py` passed after
-  removing the runtime post-generation narration validation and repair path.
-- `python -m compileall -q src tests` and `git diff --check` passed.
-- The focused test now verifies that unvalidated narration commits without a
-  repair round-trip while the API's structured decision result still originates
-  from the immutable snapshot.
-- Rebuilt and recreated `gp`, `gp-worker`, and `gp-serenity-worker` from the
-  current local source. A real `POST /api/chat` with “为什么现在不能交易？”
-  returned HTTP 200, `decision=no_trade`, and `reason=market_gate_not_allow`;
-  the answer committed without a narration repair round-trip.
-
-## 2026-07-21 lunch interface separation
-
-- `python -m pytest -q tests/server/test_single_chat_contract.py` passed,
-  including `GET /api/lunch/current`: a complete 11:30 morning slot returns
-  `state=READY` while `daily.today_complete=false`.
-- Workspace typecheck and focused component/hook tests passed. The lunch UI
-  now renders `午盘数据已完成 · 11:30` and explicitly states that today's
-  closing daily data is not complete.
-- A subsequent full backend `python -m pytest -q` reached 99% but failed one
-  existing Windows file-replacement test (`test_decision_snapshot_file_is_safe_and_recovers_from_partial_json`) with `PermissionError: [WinError 5]` in `os.replace`; it is outside the lunch endpoint/UI path. Test-created `.pytest-tmp` fixtures were restored.
-## 2026-07-11 container recommendation recovery
-
-- Full isolated suite: 311 tests passed (`python -m pytest -q`).
-- Rebuilt `gp` and `gp-worker`; all services start successfully.
-- Diagnosed Docker Desktop bind-mounted SQLite WAL failure (`disk I/O error`).
-- Created a non-destructive clean database copy containing 3,077 queries and 12,242,184 items; the original `history.db` remains untouched.
-- Container cache probes for `000001`, `600000`, and `600519` now read through 2026-07-10 successfully.
-- Rebuilt daybook `daily_eb6f6ac1d239`; current book contains a candidate. Publication remains disabled as expected during `NON_TRADING`.
-## 2026-07-11 canonical recommendation recovery
-
-- Backend compile and complete default pytest passed.
-- Frontend lint, typecheck, 17 tests, and production build passed.
-- Compose config resolves all six Python services to one `gp-backend:local` image and only `gp` owns the build definition.
-- API, worker, and Serenity containers used the same image digest.
-- Guarded ops rebuild emitted matching producer identity and produced 10 current Adaptive picks for 2026-07-10.
-- `/api/book/current` and parameterless `/api/recommend_v2` returned the same 10 symbols; non-trading retained plans with execution disabled.
-- Browser verification loaded the workspace without overlay/blank state and displayed Top symbols with “最近交易日计划 / 下个交易日复核”.
-- Real two-turn chat passed after the final image rebuild: “今天给我3只” returned 600000/000651/000001 and “第一只为什么能进” reused the same run with grounded explanation.
-- Final browser verification confirmed the first symbol, non-trading plan label and header; no framework error overlay was present.
-- Serenity worker is running from the shared image at 0% weight. Its persisted policy remains safely suspended because earlier source failures triggered the documented circuit breaker; no promotion override was applied.
-- Independent final review found and resolved three P1 issues: canonical fallback masking, incomplete non-execution phase gating, and explicit-zero corruption in the V2 adapter. The complete backend suite passed again afterward.
-- Final-image two-turn chat passed with run `run_ddccc64eb9a5`; both turns retained symbols 600000/000651/000001 and reused the same run.
-## 2026-07-17 Lunch-break runtime indicator
-
-- Frontend component test verifies that a current, complete 11:30 artifact renders `午盘数据已更新 · 11:30` independently from `publish_allowed` and tradeability.
+2026-07-23: Added per-conversation deletion and passed backend compile, the full 8-test backend suite, frontend lint/typecheck, 14 Vitest cases, production build, Compose config, and diff checks. Tests cover exact session deletion, cascaded turn removal, preservation of another session and current plan/publication, tombstoned late-chat rejection, confirmation cancellation, active/inactive deletion, stale list suppression, and both deletion/switch response orders. Rebuilt `gp`, `gp-worker`, and `web`; all became healthy/running. Browser verification created only `session_delete_e2e_1784815569461`, deleted it through the first card's UI control, observed the list count move from 9 to 8, reloaded with the card still absent, received 404 from its conversation read and 409 `conversation_deleted` from a late same-ID chat, and captured no console error or framework overlay. No pre-existing user conversation was deleted.

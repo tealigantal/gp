@@ -5,29 +5,20 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 
-from ..agent_store import AgentStore
-from ..core.errors import APIError
-from ..core.logging import setup_logging
+from ..store import ContractStore, UnsupportedDatabaseSchema
 from .routes import router
-
-setup_logging()
 
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
-    AgentStore().initialize()
+    ContractStore().initialize()
     yield
 
 
-app = FastAPI(title='gp_assistant', version='2.0.0', lifespan=lifespan)
+app = FastAPI(title="GP Contract Kernel", version="3.0.0", lifespan=lifespan)
 app.include_router(router)
 
 
-@app.exception_handler(APIError)
-async def api_error_handler(_, exc: APIError):  # noqa: ANN001
-    return JSONResponse(status_code=exc.status_code, content=exc.to_json())
-
-
-@app.exception_handler(Exception)
-async def generic_error_handler(_, exc):  # noqa: ANN001
-    return JSONResponse(status_code=500, content={"error": {"message": str(exc)}})
+@app.exception_handler(UnsupportedDatabaseSchema)
+async def unsupported_schema_handler(_, exc: UnsupportedDatabaseSchema):
+    return JSONResponse(status_code=503, content={"error": str(exc)})

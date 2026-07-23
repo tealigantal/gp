@@ -1,0 +1,2491 @@
+{
+  "contracts": {
+    "CandidateDecision": {
+      "$defs": {
+        "CandidateDisposition": {
+          "enum": [
+            "selected",
+            "reserve",
+            "rejected"
+          ],
+          "title": "CandidateDisposition",
+          "type": "string"
+        },
+        "ExpertContribution": {
+          "additionalProperties": false,
+          "properties": {
+            "contribution": {
+              "title": "Contribution",
+              "type": "number"
+            },
+            "expert": {
+              "title": "Expert",
+              "type": "string"
+            },
+            "reason_codes": {
+              "items": {
+                "type": "string"
+              },
+              "title": "Reason Codes",
+              "type": "array"
+            },
+            "weight": {
+              "title": "Weight",
+              "type": "number"
+            }
+          },
+          "required": [
+            "expert",
+            "contribution",
+            "weight",
+            "reason_codes"
+          ],
+          "title": "ExpertContribution",
+          "type": "object"
+        },
+        "ProbabilityAssessment": {
+          "additionalProperties": false,
+          "properties": {
+            "confidence": {
+              "title": "Confidence",
+              "type": "number"
+            },
+            "effective_sample_size": {
+              "title": "Effective Sample Size",
+              "type": "number"
+            },
+            "probability": {
+              "title": "Probability",
+              "type": "number"
+            },
+            "uncertainty": {
+              "title": "Uncertainty",
+              "type": "number"
+            }
+          },
+          "required": [
+            "probability",
+            "confidence",
+            "effective_sample_size",
+            "uncertainty"
+          ],
+          "title": "ProbabilityAssessment",
+          "type": "object"
+        },
+        "RankingAssessment": {
+          "additionalProperties": false,
+          "properties": {
+            "rank": {
+              "title": "Rank",
+              "type": "integer"
+            },
+            "reason_codes": {
+              "items": {
+                "type": "string"
+              },
+              "title": "Reason Codes",
+              "type": "array"
+            },
+            "score": {
+              "title": "Score",
+              "type": "number"
+            }
+          },
+          "required": [
+            "score",
+            "rank",
+            "reason_codes"
+          ],
+          "title": "RankingAssessment",
+          "type": "object"
+        },
+        "RiskAssessment": {
+          "additionalProperties": false,
+          "properties": {
+            "execution_risk": {
+              "title": "Execution Risk",
+              "type": "number"
+            },
+            "reason_codes": {
+              "items": {
+                "type": "string"
+              },
+              "title": "Reason Codes",
+              "type": "array"
+            },
+            "score": {
+              "title": "Score",
+              "type": "number"
+            }
+          },
+          "required": [
+            "score",
+            "execution_risk",
+            "reason_codes"
+          ],
+          "title": "RiskAssessment",
+          "type": "object"
+        },
+        "SignalAssessment": {
+          "additionalProperties": false,
+          "properties": {
+            "label": {
+              "title": "Label",
+              "type": "string"
+            },
+            "reason_codes": {
+              "items": {
+                "type": "string"
+              },
+              "title": "Reason Codes",
+              "type": "array"
+            },
+            "score": {
+              "title": "Score",
+              "type": "number"
+            }
+          },
+          "required": [
+            "score",
+            "label",
+            "reason_codes"
+          ],
+          "title": "SignalAssessment",
+          "type": "object"
+        },
+        "TradePlan": {
+          "additionalProperties": false,
+          "properties": {
+            "action": {
+              "title": "Action",
+              "type": "string"
+            },
+            "entry_high": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Entry High"
+            },
+            "entry_low": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Entry Low"
+            },
+            "reason_codes": {
+              "items": {
+                "type": "string"
+              },
+              "title": "Reason Codes",
+              "type": "array"
+            },
+            "stop_price": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Stop Price"
+            },
+            "take_profit_prices": {
+              "items": {
+                "type": "number"
+              },
+              "title": "Take Profit Prices",
+              "type": "array"
+            }
+          },
+          "required": [
+            "entry_low",
+            "entry_high",
+            "stop_price",
+            "take_profit_prices",
+            "action",
+            "reason_codes"
+          ],
+          "title": "TradePlan",
+          "type": "object"
+        }
+      },
+      "additionalProperties": false,
+      "properties": {
+        "adaptive_score": {
+          "title": "Adaptive Score",
+          "type": "number"
+        },
+        "disposition": {
+          "$ref": "#/$defs/CandidateDisposition"
+        },
+        "experts": {
+          "items": {
+            "$ref": "#/$defs/ExpertContribution"
+          },
+          "title": "Experts",
+          "type": "array"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "probability": {
+          "$ref": "#/$defs/ProbabilityAssessment"
+        },
+        "ranking": {
+          "$ref": "#/$defs/RankingAssessment"
+        },
+        "reason_codes": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Reason Codes",
+          "type": "array"
+        },
+        "recommendation_strength": {
+          "title": "Recommendation Strength",
+          "type": "string"
+        },
+        "risk": {
+          "$ref": "#/$defs/RiskAssessment"
+        },
+        "signal": {
+          "$ref": "#/$defs/SignalAssessment"
+        },
+        "symbol": {
+          "title": "Symbol",
+          "type": "string"
+        },
+        "trade_plan": {
+          "$ref": "#/$defs/TradePlan"
+        }
+      },
+      "required": [
+        "symbol",
+        "name",
+        "disposition",
+        "adaptive_score",
+        "recommendation_strength",
+        "signal",
+        "probability",
+        "risk",
+        "ranking",
+        "experts",
+        "trade_plan",
+        "reason_codes"
+      ],
+      "title": "CandidateDecision",
+      "type": "object"
+    },
+    "CandidateUniverseBinding": {
+      "additionalProperties": false,
+      "properties": {
+        "candidate_universe_id": {
+          "title": "Candidate Universe Id",
+          "type": "string"
+        },
+        "complete": {
+          "title": "Complete",
+          "type": "boolean"
+        },
+        "content_digest": {
+          "title": "Content Digest",
+          "type": "string"
+        },
+        "eligible_count": {
+          "title": "Eligible Count",
+          "type": "integer"
+        },
+        "source": {
+          "title": "Source",
+          "type": "string"
+        },
+        "total_count": {
+          "title": "Total Count",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "candidate_universe_id",
+        "content_digest",
+        "total_count",
+        "eligible_count",
+        "complete",
+        "source"
+      ],
+      "title": "CandidateUniverseBinding",
+      "type": "object"
+    },
+    "ConversationSession": {
+      "additionalProperties": false,
+      "properties": {
+        "active_publication_id": {
+          "title": "Active Publication Id",
+          "type": "string"
+        },
+        "created_at": {
+          "format": "date-time",
+          "title": "Created At",
+          "type": "string"
+        },
+        "session_id": {
+          "title": "Session Id",
+          "type": "string"
+        },
+        "updated_at": {
+          "format": "date-time",
+          "title": "Updated At",
+          "type": "string"
+        }
+      },
+      "required": [
+        "session_id",
+        "active_publication_id",
+        "created_at",
+        "updated_at"
+      ],
+      "title": "ConversationSession",
+      "type": "object"
+    },
+    "ConversationTurn": {
+      "additionalProperties": false,
+      "properties": {
+        "client_turn_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Client Turn Id"
+        },
+        "content": {
+          "title": "Content",
+          "type": "string"
+        },
+        "created_at": {
+          "format": "date-time",
+          "title": "Created At",
+          "type": "string"
+        },
+        "publication_id": {
+          "title": "Publication Id",
+          "type": "string"
+        },
+        "role": {
+          "title": "Role",
+          "type": "string"
+        },
+        "sequence": {
+          "title": "Sequence",
+          "type": "integer"
+        },
+        "session_id": {
+          "title": "Session Id",
+          "type": "string"
+        },
+        "turn_id": {
+          "title": "Turn Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "turn_id",
+        "session_id",
+        "publication_id",
+        "sequence",
+        "role",
+        "content",
+        "created_at"
+      ],
+      "title": "ConversationTurn",
+      "type": "object"
+    },
+    "DailyEvidenceBinding": {
+      "$defs": {
+        "MarketId": {
+          "enum": [
+            "cn_a_main"
+          ],
+          "title": "MarketId",
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "properties": {
+        "content_digest": {
+          "title": "Content Digest",
+          "type": "string"
+        },
+        "daily_evidence_date": {
+          "format": "date",
+          "title": "Daily Evidence Date",
+          "type": "string"
+        },
+        "market": {
+          "$ref": "#/$defs/MarketId"
+        },
+        "source": {
+          "title": "Source",
+          "type": "string"
+        }
+      },
+      "required": [
+        "market",
+        "daily_evidence_date",
+        "source",
+        "content_digest"
+      ],
+      "title": "DailyEvidenceBinding",
+      "type": "object"
+    },
+    "DecisionPolicyBinding": {
+      "additionalProperties": false,
+      "properties": {
+        "adaptive_policy_state_version": {
+          "title": "Adaptive Policy State Version",
+          "type": "string"
+        },
+        "revision": {
+          "title": "Revision",
+          "type": "string"
+        },
+        "risk_profile": {
+          "title": "Risk Profile",
+          "type": "string"
+        },
+        "selection_policy": {
+          "title": "Selection Policy",
+          "type": "string"
+        }
+      },
+      "required": [
+        "revision",
+        "adaptive_policy_state_version",
+        "selection_policy",
+        "risk_profile"
+      ],
+      "title": "DecisionPolicyBinding",
+      "type": "object"
+    },
+    "EvidenceWrite": {
+      "additionalProperties": false,
+      "properties": {
+        "category": {
+          "title": "Category",
+          "type": "string"
+        },
+        "content_digest": {
+          "title": "Content Digest",
+          "type": "string"
+        },
+        "evidence_id": {
+          "title": "Evidence Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "evidence_id",
+        "category",
+        "content_digest"
+      ],
+      "title": "EvidenceWrite",
+      "type": "object"
+    },
+    "ExpertContribution": {
+      "additionalProperties": false,
+      "properties": {
+        "contribution": {
+          "title": "Contribution",
+          "type": "number"
+        },
+        "expert": {
+          "title": "Expert",
+          "type": "string"
+        },
+        "reason_codes": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Reason Codes",
+          "type": "array"
+        },
+        "weight": {
+          "title": "Weight",
+          "type": "number"
+        }
+      },
+      "required": [
+        "expert",
+        "contribution",
+        "weight",
+        "reason_codes"
+      ],
+      "title": "ExpertContribution",
+      "type": "object"
+    },
+    "MarketGate": {
+      "additionalProperties": false,
+      "properties": {
+        "reason_codes": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Reason Codes",
+          "type": "array"
+        },
+        "score": {
+          "title": "Score",
+          "type": "number"
+        },
+        "state": {
+          "title": "State",
+          "type": "string"
+        }
+      },
+      "required": [
+        "state",
+        "score",
+        "reason_codes"
+      ],
+      "title": "MarketGate",
+      "type": "object"
+    },
+    "MarketSessionRef": {
+      "$defs": {
+        "MarketId": {
+          "enum": [
+            "cn_a_main"
+          ],
+          "title": "MarketId",
+          "type": "string"
+        },
+        "TradingCalendarRef": {
+          "additionalProperties": false,
+          "properties": {
+            "calendar_id": {
+              "title": "Calendar Id",
+              "type": "string"
+            },
+            "revision": {
+              "title": "Revision",
+              "type": "string"
+            },
+            "source": {
+              "title": "Source",
+              "type": "string"
+            }
+          },
+          "required": [
+            "calendar_id",
+            "revision",
+            "source"
+          ],
+          "title": "TradingCalendarRef",
+          "type": "object"
+        }
+      },
+      "additionalProperties": false,
+      "properties": {
+        "calendar": {
+          "$ref": "#/$defs/TradingCalendarRef"
+        },
+        "market": {
+          "$ref": "#/$defs/MarketId"
+        },
+        "market_session_date": {
+          "format": "date",
+          "title": "Market Session Date",
+          "type": "string"
+        }
+      },
+      "required": [
+        "market",
+        "market_session_date",
+        "calendar"
+      ],
+      "title": "MarketSessionRef",
+      "type": "object"
+    },
+    "PlanDecision": {
+      "$defs": {
+        "PlanStatus": {
+          "enum": [
+            "recommend",
+            "no_recommend",
+            "unavailable"
+          ],
+          "title": "PlanStatus",
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "properties": {
+        "reason_codes": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Reason Codes",
+          "type": "array"
+        },
+        "status": {
+          "$ref": "#/$defs/PlanStatus"
+        }
+      },
+      "required": [
+        "status",
+        "reason_codes"
+      ],
+      "title": "PlanDecision",
+      "type": "object"
+    },
+    "PlanLookupKey": {
+      "$defs": {
+        "MarketId": {
+          "enum": [
+            "cn_a_main"
+          ],
+          "title": "MarketId",
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "properties": {
+        "adaptive_policy_state_version": {
+          "title": "Adaptive Policy State Version",
+          "type": "string"
+        },
+        "candidate_universe_content_digest": {
+          "title": "Candidate Universe Content Digest",
+          "type": "string"
+        },
+        "candidate_universe_id": {
+          "title": "Candidate Universe Id",
+          "type": "string"
+        },
+        "daily_evidence_date": {
+          "anyOf": [
+            {
+              "format": "date",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Daily Evidence Date"
+        },
+        "decision_policy_revision": {
+          "title": "Decision Policy Revision",
+          "type": "string"
+        },
+        "market": {
+          "$ref": "#/$defs/MarketId"
+        },
+        "market_session_date": {
+          "format": "date",
+          "title": "Market Session Date",
+          "type": "string"
+        },
+        "producer_revision": {
+          "title": "Producer Revision",
+          "type": "string"
+        },
+        "producer_source_digest": {
+          "title": "Producer Source Digest",
+          "type": "string"
+        },
+        "risk_profile": {
+          "title": "Risk Profile",
+          "type": "string"
+        },
+        "selection_policy": {
+          "title": "Selection Policy",
+          "type": "string"
+        }
+      },
+      "required": [
+        "market",
+        "market_session_date",
+        "daily_evidence_date",
+        "candidate_universe_id",
+        "candidate_universe_content_digest",
+        "decision_policy_revision",
+        "adaptive_policy_state_version",
+        "producer_revision",
+        "producer_source_digest",
+        "selection_policy",
+        "risk_profile"
+      ],
+      "title": "PlanLookupKey",
+      "type": "object"
+    },
+    "ProbabilityAssessment": {
+      "additionalProperties": false,
+      "properties": {
+        "confidence": {
+          "title": "Confidence",
+          "type": "number"
+        },
+        "effective_sample_size": {
+          "title": "Effective Sample Size",
+          "type": "number"
+        },
+        "probability": {
+          "title": "Probability",
+          "type": "number"
+        },
+        "uncertainty": {
+          "title": "Uncertainty",
+          "type": "number"
+        }
+      },
+      "required": [
+        "probability",
+        "confidence",
+        "effective_sample_size",
+        "uncertainty"
+      ],
+      "title": "ProbabilityAssessment",
+      "type": "object"
+    },
+    "ProducerIdentity": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "revision": {
+          "title": "Revision",
+          "type": "string"
+        },
+        "source_digest": {
+          "title": "Source Digest",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "revision",
+        "source_digest"
+      ],
+      "title": "ProducerIdentity",
+      "type": "object"
+    },
+    "PublicationDecision": {
+      "$defs": {
+        "ExecutionStatus": {
+          "enum": [
+            "available",
+            "unavailable",
+            "pending"
+          ],
+          "title": "ExecutionStatus",
+          "type": "string"
+        },
+        "PlanStatus": {
+          "enum": [
+            "recommend",
+            "no_recommend",
+            "unavailable"
+          ],
+          "title": "PlanStatus",
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "properties": {
+        "execution_status": {
+          "$ref": "#/$defs/ExecutionStatus"
+        },
+        "plan_status": {
+          "$ref": "#/$defs/PlanStatus"
+        },
+        "reason_codes": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Reason Codes",
+          "type": "array"
+        },
+        "tradeable_now": {
+          "title": "Tradeable Now",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "plan_status",
+        "execution_status",
+        "tradeable_now",
+        "reason_codes"
+      ],
+      "title": "PublicationDecision",
+      "type": "object"
+    },
+    "PublicationLineage": {
+      "additionalProperties": false,
+      "properties": {
+        "plan_id": {
+          "title": "Plan Id",
+          "type": "string"
+        },
+        "producer_revision": {
+          "title": "Producer Revision",
+          "type": "string"
+        },
+        "runtime_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Runtime Id"
+        },
+        "source_digest": {
+          "title": "Source Digest",
+          "type": "string"
+        }
+      },
+      "required": [
+        "plan_id",
+        "runtime_id",
+        "producer_revision",
+        "source_digest"
+      ],
+      "title": "PublicationLineage",
+      "type": "object"
+    },
+    "RankingAssessment": {
+      "additionalProperties": false,
+      "properties": {
+        "rank": {
+          "title": "Rank",
+          "type": "integer"
+        },
+        "reason_codes": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Reason Codes",
+          "type": "array"
+        },
+        "score": {
+          "title": "Score",
+          "type": "number"
+        }
+      },
+      "required": [
+        "score",
+        "rank",
+        "reason_codes"
+      ],
+      "title": "RankingAssessment",
+      "type": "object"
+    },
+    "RecommendationPlan": {
+      "$defs": {
+        "CandidateDecision": {
+          "additionalProperties": false,
+          "properties": {
+            "adaptive_score": {
+              "title": "Adaptive Score",
+              "type": "number"
+            },
+            "disposition": {
+              "$ref": "#/$defs/CandidateDisposition"
+            },
+            "experts": {
+              "items": {
+                "$ref": "#/$defs/ExpertContribution"
+              },
+              "title": "Experts",
+              "type": "array"
+            },
+            "name": {
+              "title": "Name",
+              "type": "string"
+            },
+            "probability": {
+              "$ref": "#/$defs/ProbabilityAssessment"
+            },
+            "ranking": {
+              "$ref": "#/$defs/RankingAssessment"
+            },
+            "reason_codes": {
+              "items": {
+                "type": "string"
+              },
+              "title": "Reason Codes",
+              "type": "array"
+            },
+            "recommendation_strength": {
+              "title": "Recommendation Strength",
+              "type": "string"
+            },
+            "risk": {
+              "$ref": "#/$defs/RiskAssessment"
+            },
+            "signal": {
+              "$ref": "#/$defs/SignalAssessment"
+            },
+            "symbol": {
+              "title": "Symbol",
+              "type": "string"
+            },
+            "trade_plan": {
+              "$ref": "#/$defs/TradePlan"
+            }
+          },
+          "required": [
+            "symbol",
+            "name",
+            "disposition",
+            "adaptive_score",
+            "recommendation_strength",
+            "signal",
+            "probability",
+            "risk",
+            "ranking",
+            "experts",
+            "trade_plan",
+            "reason_codes"
+          ],
+          "title": "CandidateDecision",
+          "type": "object"
+        },
+        "CandidateDisposition": {
+          "enum": [
+            "selected",
+            "reserve",
+            "rejected"
+          ],
+          "title": "CandidateDisposition",
+          "type": "string"
+        },
+        "CandidateUniverseBinding": {
+          "additionalProperties": false,
+          "properties": {
+            "candidate_universe_id": {
+              "title": "Candidate Universe Id",
+              "type": "string"
+            },
+            "complete": {
+              "title": "Complete",
+              "type": "boolean"
+            },
+            "content_digest": {
+              "title": "Content Digest",
+              "type": "string"
+            },
+            "eligible_count": {
+              "title": "Eligible Count",
+              "type": "integer"
+            },
+            "source": {
+              "title": "Source",
+              "type": "string"
+            },
+            "total_count": {
+              "title": "Total Count",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "candidate_universe_id",
+            "content_digest",
+            "total_count",
+            "eligible_count",
+            "complete",
+            "source"
+          ],
+          "title": "CandidateUniverseBinding",
+          "type": "object"
+        },
+        "DailyEvidenceBinding": {
+          "additionalProperties": false,
+          "properties": {
+            "content_digest": {
+              "title": "Content Digest",
+              "type": "string"
+            },
+            "daily_evidence_date": {
+              "format": "date",
+              "title": "Daily Evidence Date",
+              "type": "string"
+            },
+            "market": {
+              "$ref": "#/$defs/MarketId"
+            },
+            "source": {
+              "title": "Source",
+              "type": "string"
+            }
+          },
+          "required": [
+            "market",
+            "daily_evidence_date",
+            "source",
+            "content_digest"
+          ],
+          "title": "DailyEvidenceBinding",
+          "type": "object"
+        },
+        "DecisionPolicyBinding": {
+          "additionalProperties": false,
+          "properties": {
+            "adaptive_policy_state_version": {
+              "title": "Adaptive Policy State Version",
+              "type": "string"
+            },
+            "revision": {
+              "title": "Revision",
+              "type": "string"
+            },
+            "risk_profile": {
+              "title": "Risk Profile",
+              "type": "string"
+            },
+            "selection_policy": {
+              "title": "Selection Policy",
+              "type": "string"
+            }
+          },
+          "required": [
+            "revision",
+            "adaptive_policy_state_version",
+            "selection_policy",
+            "risk_profile"
+          ],
+          "title": "DecisionPolicyBinding",
+          "type": "object"
+        },
+        "ExpertContribution": {
+          "additionalProperties": false,
+          "properties": {
+            "contribution": {
+              "title": "Contribution",
+              "type": "number"
+            },
+            "expert": {
+              "title": "Expert",
+              "type": "string"
+            },
+            "reason_codes": {
+              "items": {
+                "type": "string"
+              },
+              "title": "Reason Codes",
+              "type": "array"
+            },
+            "weight": {
+              "title": "Weight",
+              "type": "number"
+            }
+          },
+          "required": [
+            "expert",
+            "contribution",
+            "weight",
+            "reason_codes"
+          ],
+          "title": "ExpertContribution",
+          "type": "object"
+        },
+        "MarketId": {
+          "enum": [
+            "cn_a_main"
+          ],
+          "title": "MarketId",
+          "type": "string"
+        },
+        "PlanDecision": {
+          "additionalProperties": false,
+          "properties": {
+            "reason_codes": {
+              "items": {
+                "type": "string"
+              },
+              "title": "Reason Codes",
+              "type": "array"
+            },
+            "status": {
+              "$ref": "#/$defs/PlanStatus"
+            }
+          },
+          "required": [
+            "status",
+            "reason_codes"
+          ],
+          "title": "PlanDecision",
+          "type": "object"
+        },
+        "PlanLookupKey": {
+          "additionalProperties": false,
+          "properties": {
+            "adaptive_policy_state_version": {
+              "title": "Adaptive Policy State Version",
+              "type": "string"
+            },
+            "candidate_universe_content_digest": {
+              "title": "Candidate Universe Content Digest",
+              "type": "string"
+            },
+            "candidate_universe_id": {
+              "title": "Candidate Universe Id",
+              "type": "string"
+            },
+            "daily_evidence_date": {
+              "anyOf": [
+                {
+                  "format": "date",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Daily Evidence Date"
+            },
+            "decision_policy_revision": {
+              "title": "Decision Policy Revision",
+              "type": "string"
+            },
+            "market": {
+              "$ref": "#/$defs/MarketId"
+            },
+            "market_session_date": {
+              "format": "date",
+              "title": "Market Session Date",
+              "type": "string"
+            },
+            "producer_revision": {
+              "title": "Producer Revision",
+              "type": "string"
+            },
+            "producer_source_digest": {
+              "title": "Producer Source Digest",
+              "type": "string"
+            },
+            "risk_profile": {
+              "title": "Risk Profile",
+              "type": "string"
+            },
+            "selection_policy": {
+              "title": "Selection Policy",
+              "type": "string"
+            }
+          },
+          "required": [
+            "market",
+            "market_session_date",
+            "daily_evidence_date",
+            "candidate_universe_id",
+            "candidate_universe_content_digest",
+            "decision_policy_revision",
+            "adaptive_policy_state_version",
+            "producer_revision",
+            "producer_source_digest",
+            "selection_policy",
+            "risk_profile"
+          ],
+          "title": "PlanLookupKey",
+          "type": "object"
+        },
+        "PlanStatus": {
+          "enum": [
+            "recommend",
+            "no_recommend",
+            "unavailable"
+          ],
+          "title": "PlanStatus",
+          "type": "string"
+        },
+        "ProbabilityAssessment": {
+          "additionalProperties": false,
+          "properties": {
+            "confidence": {
+              "title": "Confidence",
+              "type": "number"
+            },
+            "effective_sample_size": {
+              "title": "Effective Sample Size",
+              "type": "number"
+            },
+            "probability": {
+              "title": "Probability",
+              "type": "number"
+            },
+            "uncertainty": {
+              "title": "Uncertainty",
+              "type": "number"
+            }
+          },
+          "required": [
+            "probability",
+            "confidence",
+            "effective_sample_size",
+            "uncertainty"
+          ],
+          "title": "ProbabilityAssessment",
+          "type": "object"
+        },
+        "ProducerIdentity": {
+          "additionalProperties": false,
+          "properties": {
+            "name": {
+              "title": "Name",
+              "type": "string"
+            },
+            "revision": {
+              "title": "Revision",
+              "type": "string"
+            },
+            "source_digest": {
+              "title": "Source Digest",
+              "type": "string"
+            }
+          },
+          "required": [
+            "name",
+            "revision",
+            "source_digest"
+          ],
+          "title": "ProducerIdentity",
+          "type": "object"
+        },
+        "RankingAssessment": {
+          "additionalProperties": false,
+          "properties": {
+            "rank": {
+              "title": "Rank",
+              "type": "integer"
+            },
+            "reason_codes": {
+              "items": {
+                "type": "string"
+              },
+              "title": "Reason Codes",
+              "type": "array"
+            },
+            "score": {
+              "title": "Score",
+              "type": "number"
+            }
+          },
+          "required": [
+            "score",
+            "rank",
+            "reason_codes"
+          ],
+          "title": "RankingAssessment",
+          "type": "object"
+        },
+        "RiskAssessment": {
+          "additionalProperties": false,
+          "properties": {
+            "execution_risk": {
+              "title": "Execution Risk",
+              "type": "number"
+            },
+            "reason_codes": {
+              "items": {
+                "type": "string"
+              },
+              "title": "Reason Codes",
+              "type": "array"
+            },
+            "score": {
+              "title": "Score",
+              "type": "number"
+            }
+          },
+          "required": [
+            "score",
+            "execution_risk",
+            "reason_codes"
+          ],
+          "title": "RiskAssessment",
+          "type": "object"
+        },
+        "SerenityDecisionBinding": {
+          "additionalProperties": false,
+          "properties": {
+            "applied_weight": {
+              "title": "Applied Weight",
+              "type": "number"
+            },
+            "policy_revision": {
+              "title": "Policy Revision",
+              "type": "string"
+            },
+            "reason_codes": {
+              "items": {
+                "type": "string"
+              },
+              "title": "Reason Codes",
+              "type": "array"
+            },
+            "reference_id": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Reference Id"
+            },
+            "state": {
+              "title": "State",
+              "type": "string"
+            }
+          },
+          "required": [
+            "reference_id",
+            "policy_revision",
+            "applied_weight",
+            "state",
+            "reason_codes"
+          ],
+          "title": "SerenityDecisionBinding",
+          "type": "object"
+        },
+        "SignalAssessment": {
+          "additionalProperties": false,
+          "properties": {
+            "label": {
+              "title": "Label",
+              "type": "string"
+            },
+            "reason_codes": {
+              "items": {
+                "type": "string"
+              },
+              "title": "Reason Codes",
+              "type": "array"
+            },
+            "score": {
+              "title": "Score",
+              "type": "number"
+            }
+          },
+          "required": [
+            "score",
+            "label",
+            "reason_codes"
+          ],
+          "title": "SignalAssessment",
+          "type": "object"
+        },
+        "TradePlan": {
+          "additionalProperties": false,
+          "properties": {
+            "action": {
+              "title": "Action",
+              "type": "string"
+            },
+            "entry_high": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Entry High"
+            },
+            "entry_low": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Entry Low"
+            },
+            "reason_codes": {
+              "items": {
+                "type": "string"
+              },
+              "title": "Reason Codes",
+              "type": "array"
+            },
+            "stop_price": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Stop Price"
+            },
+            "take_profit_prices": {
+              "items": {
+                "type": "number"
+              },
+              "title": "Take Profit Prices",
+              "type": "array"
+            }
+          },
+          "required": [
+            "entry_low",
+            "entry_high",
+            "stop_price",
+            "take_profit_prices",
+            "action",
+            "reason_codes"
+          ],
+          "title": "TradePlan",
+          "type": "object"
+        }
+      },
+      "additionalProperties": false,
+      "properties": {
+        "candidate_universe": {
+          "$ref": "#/$defs/CandidateUniverseBinding"
+        },
+        "daily_evidence": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DailyEvidenceBinding"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "daily_evidence_date": {
+          "anyOf": [
+            {
+              "format": "date",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Daily Evidence Date"
+        },
+        "decision": {
+          "$ref": "#/$defs/PlanDecision"
+        },
+        "decision_policy": {
+          "$ref": "#/$defs/DecisionPolicyBinding"
+        },
+        "evaluated_candidates": {
+          "items": {
+            "$ref": "#/$defs/CandidateDecision"
+          },
+          "title": "Evaluated Candidates",
+          "type": "array"
+        },
+        "generated_at": {
+          "format": "date-time",
+          "title": "Generated At",
+          "type": "string"
+        },
+        "lookup_key": {
+          "$ref": "#/$defs/PlanLookupKey"
+        },
+        "market": {
+          "$ref": "#/$defs/MarketId"
+        },
+        "market_session_date": {
+          "format": "date",
+          "title": "Market Session Date",
+          "type": "string"
+        },
+        "plan_id": {
+          "title": "Plan Id",
+          "type": "string"
+        },
+        "producer": {
+          "$ref": "#/$defs/ProducerIdentity"
+        },
+        "serenity": {
+          "$ref": "#/$defs/SerenityDecisionBinding"
+        }
+      },
+      "required": [
+        "plan_id",
+        "lookup_key",
+        "market",
+        "market_session_date",
+        "daily_evidence_date",
+        "generated_at",
+        "decision",
+        "candidate_universe",
+        "daily_evidence",
+        "decision_policy",
+        "producer",
+        "evaluated_candidates",
+        "serenity"
+      ],
+      "title": "RecommendationPlan",
+      "type": "object"
+    },
+    "RecommendationPublication": {
+      "$defs": {
+        "CandidateDecision": {
+          "additionalProperties": false,
+          "properties": {
+            "adaptive_score": {
+              "title": "Adaptive Score",
+              "type": "number"
+            },
+            "disposition": {
+              "$ref": "#/$defs/CandidateDisposition"
+            },
+            "experts": {
+              "items": {
+                "$ref": "#/$defs/ExpertContribution"
+              },
+              "title": "Experts",
+              "type": "array"
+            },
+            "name": {
+              "title": "Name",
+              "type": "string"
+            },
+            "probability": {
+              "$ref": "#/$defs/ProbabilityAssessment"
+            },
+            "ranking": {
+              "$ref": "#/$defs/RankingAssessment"
+            },
+            "reason_codes": {
+              "items": {
+                "type": "string"
+              },
+              "title": "Reason Codes",
+              "type": "array"
+            },
+            "recommendation_strength": {
+              "title": "Recommendation Strength",
+              "type": "string"
+            },
+            "risk": {
+              "$ref": "#/$defs/RiskAssessment"
+            },
+            "signal": {
+              "$ref": "#/$defs/SignalAssessment"
+            },
+            "symbol": {
+              "title": "Symbol",
+              "type": "string"
+            },
+            "trade_plan": {
+              "$ref": "#/$defs/TradePlan"
+            }
+          },
+          "required": [
+            "symbol",
+            "name",
+            "disposition",
+            "adaptive_score",
+            "recommendation_strength",
+            "signal",
+            "probability",
+            "risk",
+            "ranking",
+            "experts",
+            "trade_plan",
+            "reason_codes"
+          ],
+          "title": "CandidateDecision",
+          "type": "object"
+        },
+        "CandidateDisposition": {
+          "enum": [
+            "selected",
+            "reserve",
+            "rejected"
+          ],
+          "title": "CandidateDisposition",
+          "type": "string"
+        },
+        "ExecutionStatus": {
+          "enum": [
+            "available",
+            "unavailable",
+            "pending"
+          ],
+          "title": "ExecutionStatus",
+          "type": "string"
+        },
+        "ExpertContribution": {
+          "additionalProperties": false,
+          "properties": {
+            "contribution": {
+              "title": "Contribution",
+              "type": "number"
+            },
+            "expert": {
+              "title": "Expert",
+              "type": "string"
+            },
+            "reason_codes": {
+              "items": {
+                "type": "string"
+              },
+              "title": "Reason Codes",
+              "type": "array"
+            },
+            "weight": {
+              "title": "Weight",
+              "type": "number"
+            }
+          },
+          "required": [
+            "expert",
+            "contribution",
+            "weight",
+            "reason_codes"
+          ],
+          "title": "ExpertContribution",
+          "type": "object"
+        },
+        "PlanStatus": {
+          "enum": [
+            "recommend",
+            "no_recommend",
+            "unavailable"
+          ],
+          "title": "PlanStatus",
+          "type": "string"
+        },
+        "ProbabilityAssessment": {
+          "additionalProperties": false,
+          "properties": {
+            "confidence": {
+              "title": "Confidence",
+              "type": "number"
+            },
+            "effective_sample_size": {
+              "title": "Effective Sample Size",
+              "type": "number"
+            },
+            "probability": {
+              "title": "Probability",
+              "type": "number"
+            },
+            "uncertainty": {
+              "title": "Uncertainty",
+              "type": "number"
+            }
+          },
+          "required": [
+            "probability",
+            "confidence",
+            "effective_sample_size",
+            "uncertainty"
+          ],
+          "title": "ProbabilityAssessment",
+          "type": "object"
+        },
+        "PublicationDecision": {
+          "additionalProperties": false,
+          "properties": {
+            "execution_status": {
+              "$ref": "#/$defs/ExecutionStatus"
+            },
+            "plan_status": {
+              "$ref": "#/$defs/PlanStatus"
+            },
+            "reason_codes": {
+              "items": {
+                "type": "string"
+              },
+              "title": "Reason Codes",
+              "type": "array"
+            },
+            "tradeable_now": {
+              "title": "Tradeable Now",
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "plan_status",
+            "execution_status",
+            "tradeable_now",
+            "reason_codes"
+          ],
+          "title": "PublicationDecision",
+          "type": "object"
+        },
+        "PublicationLineage": {
+          "additionalProperties": false,
+          "properties": {
+            "plan_id": {
+              "title": "Plan Id",
+              "type": "string"
+            },
+            "producer_revision": {
+              "title": "Producer Revision",
+              "type": "string"
+            },
+            "runtime_id": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Runtime Id"
+            },
+            "source_digest": {
+              "title": "Source Digest",
+              "type": "string"
+            }
+          },
+          "required": [
+            "plan_id",
+            "runtime_id",
+            "producer_revision",
+            "source_digest"
+          ],
+          "title": "PublicationLineage",
+          "type": "object"
+        },
+        "RankingAssessment": {
+          "additionalProperties": false,
+          "properties": {
+            "rank": {
+              "title": "Rank",
+              "type": "integer"
+            },
+            "reason_codes": {
+              "items": {
+                "type": "string"
+              },
+              "title": "Reason Codes",
+              "type": "array"
+            },
+            "score": {
+              "title": "Score",
+              "type": "number"
+            }
+          },
+          "required": [
+            "score",
+            "rank",
+            "reason_codes"
+          ],
+          "title": "RankingAssessment",
+          "type": "object"
+        },
+        "RiskAssessment": {
+          "additionalProperties": false,
+          "properties": {
+            "execution_risk": {
+              "title": "Execution Risk",
+              "type": "number"
+            },
+            "reason_codes": {
+              "items": {
+                "type": "string"
+              },
+              "title": "Reason Codes",
+              "type": "array"
+            },
+            "score": {
+              "title": "Score",
+              "type": "number"
+            }
+          },
+          "required": [
+            "score",
+            "execution_risk",
+            "reason_codes"
+          ],
+          "title": "RiskAssessment",
+          "type": "object"
+        },
+        "SignalAssessment": {
+          "additionalProperties": false,
+          "properties": {
+            "label": {
+              "title": "Label",
+              "type": "string"
+            },
+            "reason_codes": {
+              "items": {
+                "type": "string"
+              },
+              "title": "Reason Codes",
+              "type": "array"
+            },
+            "score": {
+              "title": "Score",
+              "type": "number"
+            }
+          },
+          "required": [
+            "score",
+            "label",
+            "reason_codes"
+          ],
+          "title": "SignalAssessment",
+          "type": "object"
+        },
+        "TradePlan": {
+          "additionalProperties": false,
+          "properties": {
+            "action": {
+              "title": "Action",
+              "type": "string"
+            },
+            "entry_high": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Entry High"
+            },
+            "entry_low": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Entry Low"
+            },
+            "reason_codes": {
+              "items": {
+                "type": "string"
+              },
+              "title": "Reason Codes",
+              "type": "array"
+            },
+            "stop_price": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Stop Price"
+            },
+            "take_profit_prices": {
+              "items": {
+                "type": "number"
+              },
+              "title": "Take Profit Prices",
+              "type": "array"
+            }
+          },
+          "required": [
+            "entry_low",
+            "entry_high",
+            "stop_price",
+            "take_profit_prices",
+            "action",
+            "reason_codes"
+          ],
+          "title": "TradePlan",
+          "type": "object"
+        }
+      },
+      "additionalProperties": false,
+      "properties": {
+        "candidates": {
+          "items": {
+            "$ref": "#/$defs/CandidateDecision"
+          },
+          "title": "Candidates",
+          "type": "array"
+        },
+        "decision": {
+          "$ref": "#/$defs/PublicationDecision"
+        },
+        "lineage": {
+          "$ref": "#/$defs/PublicationLineage"
+        },
+        "plan_id": {
+          "title": "Plan Id",
+          "type": "string"
+        },
+        "publication_id": {
+          "title": "Publication Id",
+          "type": "string"
+        },
+        "published_at": {
+          "format": "date-time",
+          "title": "Published At",
+          "type": "string"
+        },
+        "runtime_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Runtime Id"
+        }
+      },
+      "required": [
+        "publication_id",
+        "plan_id",
+        "runtime_id",
+        "published_at",
+        "decision",
+        "candidates",
+        "lineage"
+      ],
+      "title": "RecommendationPublication",
+      "type": "object"
+    },
+    "RiskAssessment": {
+      "additionalProperties": false,
+      "properties": {
+        "execution_risk": {
+          "title": "Execution Risk",
+          "type": "number"
+        },
+        "reason_codes": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Reason Codes",
+          "type": "array"
+        },
+        "score": {
+          "title": "Score",
+          "type": "number"
+        }
+      },
+      "required": [
+        "score",
+        "execution_risk",
+        "reason_codes"
+      ],
+      "title": "RiskAssessment",
+      "type": "object"
+    },
+    "RuntimeDataQuality": {
+      "$defs": {
+        "RuntimeDataState": {
+          "enum": [
+            "ready",
+            "stale",
+            "unavailable"
+          ],
+          "title": "RuntimeDataState",
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "properties": {
+        "reason_codes": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Reason Codes",
+          "type": "array"
+        },
+        "source": {
+          "title": "Source",
+          "type": "string"
+        },
+        "state": {
+          "$ref": "#/$defs/RuntimeDataState"
+        }
+      },
+      "required": [
+        "state",
+        "source",
+        "reason_codes"
+      ],
+      "title": "RuntimeDataQuality",
+      "type": "object"
+    },
+    "RuntimeObservation": {
+      "$defs": {
+        "MarketGate": {
+          "additionalProperties": false,
+          "properties": {
+            "reason_codes": {
+              "items": {
+                "type": "string"
+              },
+              "title": "Reason Codes",
+              "type": "array"
+            },
+            "score": {
+              "title": "Score",
+              "type": "number"
+            },
+            "state": {
+              "title": "State",
+              "type": "string"
+            }
+          },
+          "required": [
+            "state",
+            "score",
+            "reason_codes"
+          ],
+          "title": "MarketGate",
+          "type": "object"
+        },
+        "MarketId": {
+          "enum": [
+            "cn_a_main"
+          ],
+          "title": "MarketId",
+          "type": "string"
+        },
+        "MarketPhase": {
+          "enum": [
+            "preopen",
+            "morning",
+            "lunch",
+            "afternoon",
+            "closing_auction",
+            "postclose",
+            "closed"
+          ],
+          "title": "MarketPhase",
+          "type": "string"
+        },
+        "RuntimeDataQuality": {
+          "additionalProperties": false,
+          "properties": {
+            "reason_codes": {
+              "items": {
+                "type": "string"
+              },
+              "title": "Reason Codes",
+              "type": "array"
+            },
+            "source": {
+              "title": "Source",
+              "type": "string"
+            },
+            "state": {
+              "$ref": "#/$defs/RuntimeDataState"
+            }
+          },
+          "required": [
+            "state",
+            "source",
+            "reason_codes"
+          ],
+          "title": "RuntimeDataQuality",
+          "type": "object"
+        },
+        "RuntimeDataState": {
+          "enum": [
+            "ready",
+            "stale",
+            "unavailable"
+          ],
+          "title": "RuntimeDataState",
+          "type": "string"
+        },
+        "SymbolExecutionState": {
+          "additionalProperties": false,
+          "properties": {
+            "intraday_score": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Intraday Score"
+            },
+            "reason_codes": {
+              "items": {
+                "type": "string"
+              },
+              "title": "Reason Codes",
+              "type": "array"
+            },
+            "state": {
+              "title": "State",
+              "type": "string"
+            },
+            "symbol": {
+              "title": "Symbol",
+              "type": "string"
+            },
+            "vwap": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Vwap"
+            }
+          },
+          "required": [
+            "symbol",
+            "state",
+            "vwap",
+            "intraday_score",
+            "reason_codes"
+          ],
+          "title": "SymbolExecutionState",
+          "type": "object"
+        }
+      },
+      "additionalProperties": false,
+      "properties": {
+        "data_quality": {
+          "$ref": "#/$defs/RuntimeDataQuality"
+        },
+        "market": {
+          "$ref": "#/$defs/MarketId"
+        },
+        "market_gate": {
+          "$ref": "#/$defs/MarketGate"
+        },
+        "market_phase": {
+          "$ref": "#/$defs/MarketPhase"
+        },
+        "market_session_date": {
+          "format": "date",
+          "title": "Market Session Date",
+          "type": "string"
+        },
+        "observed_at": {
+          "format": "date-time",
+          "title": "Observed At",
+          "type": "string"
+        },
+        "plan_id": {
+          "title": "Plan Id",
+          "type": "string"
+        },
+        "producer_name": {
+          "title": "Producer Name",
+          "type": "string"
+        },
+        "producer_revision": {
+          "title": "Producer Revision",
+          "type": "string"
+        },
+        "runtime_id": {
+          "title": "Runtime Id",
+          "type": "string"
+        },
+        "slot_closed_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Slot Closed At"
+        },
+        "symbol_execution_states": {
+          "items": {
+            "$ref": "#/$defs/SymbolExecutionState"
+          },
+          "title": "Symbol Execution States",
+          "type": "array"
+        }
+      },
+      "required": [
+        "runtime_id",
+        "plan_id",
+        "market",
+        "market_session_date",
+        "observed_at",
+        "slot_closed_at",
+        "market_phase",
+        "data_quality",
+        "market_gate",
+        "symbol_execution_states",
+        "producer_name",
+        "producer_revision"
+      ],
+      "title": "RuntimeObservation",
+      "type": "object"
+    },
+    "SerenityDecisionBinding": {
+      "additionalProperties": false,
+      "properties": {
+        "applied_weight": {
+          "title": "Applied Weight",
+          "type": "number"
+        },
+        "policy_revision": {
+          "title": "Policy Revision",
+          "type": "string"
+        },
+        "reason_codes": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Reason Codes",
+          "type": "array"
+        },
+        "reference_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Reference Id"
+        },
+        "state": {
+          "title": "State",
+          "type": "string"
+        }
+      },
+      "required": [
+        "reference_id",
+        "policy_revision",
+        "applied_weight",
+        "state",
+        "reason_codes"
+      ],
+      "title": "SerenityDecisionBinding",
+      "type": "object"
+    },
+    "SerenityReferenceSnapshot": {
+      "additionalProperties": false,
+      "properties": {
+        "content_digest": {
+          "title": "Content Digest",
+          "type": "string"
+        },
+        "reference_id": {
+          "title": "Reference Id",
+          "type": "string"
+        },
+        "state": {
+          "title": "State",
+          "type": "string"
+        }
+      },
+      "required": [
+        "reference_id",
+        "content_digest",
+        "state"
+      ],
+      "title": "SerenityReferenceSnapshot",
+      "type": "object"
+    },
+    "SignalAssessment": {
+      "additionalProperties": false,
+      "properties": {
+        "label": {
+          "title": "Label",
+          "type": "string"
+        },
+        "reason_codes": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Reason Codes",
+          "type": "array"
+        },
+        "score": {
+          "title": "Score",
+          "type": "number"
+        }
+      },
+      "required": [
+        "score",
+        "label",
+        "reason_codes"
+      ],
+      "title": "SignalAssessment",
+      "type": "object"
+    },
+    "SymbolExecutionState": {
+      "additionalProperties": false,
+      "properties": {
+        "intraday_score": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Intraday Score"
+        },
+        "reason_codes": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Reason Codes",
+          "type": "array"
+        },
+        "state": {
+          "title": "State",
+          "type": "string"
+        },
+        "symbol": {
+          "title": "Symbol",
+          "type": "string"
+        },
+        "vwap": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Vwap"
+        }
+      },
+      "required": [
+        "symbol",
+        "state",
+        "vwap",
+        "intraday_score",
+        "reason_codes"
+      ],
+      "title": "SymbolExecutionState",
+      "type": "object"
+    },
+    "TradePlan": {
+      "additionalProperties": false,
+      "properties": {
+        "action": {
+          "title": "Action",
+          "type": "string"
+        },
+        "entry_high": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Entry High"
+        },
+        "entry_low": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Entry Low"
+        },
+        "reason_codes": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Reason Codes",
+          "type": "array"
+        },
+        "stop_price": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Stop Price"
+        },
+        "take_profit_prices": {
+          "items": {
+            "type": "number"
+          },
+          "title": "Take Profit Prices",
+          "type": "array"
+        }
+      },
+      "required": [
+        "entry_low",
+        "entry_high",
+        "stop_price",
+        "take_profit_prices",
+        "action",
+        "reason_codes"
+      ],
+      "title": "TradePlan",
+      "type": "object"
+    },
+    "TradingCalendarRef": {
+      "additionalProperties": false,
+      "properties": {
+        "calendar_id": {
+          "title": "Calendar Id",
+          "type": "string"
+        },
+        "revision": {
+          "title": "Revision",
+          "type": "string"
+        },
+        "source": {
+          "title": "Source",
+          "type": "string"
+        }
+      },
+      "required": [
+        "calendar_id",
+        "revision",
+        "source"
+      ],
+      "title": "TradingCalendarRef",
+      "type": "object"
+    }
+  },
+  "schema": "contract_manifest.v1"
+}

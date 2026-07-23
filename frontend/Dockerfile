@@ -6,17 +6,13 @@ ARG HTTPS_PROXY
 ARG ALL_PROXY
 
 FROM ${BASE_NODE_IMAGE} AS build
-ARG NPM_REGISTRY=https://registry.npmmirror.com
+ARG NPM_REGISTRY
 ARG HTTP_PROXY
 ARG HTTPS_PROXY
 ARG ALL_PROXY
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm config set registry "${NPM_REGISTRY}" \
-    && npm config delete proxy \
-    && npm config delete https-proxy \
-    && if [ -n "${HTTP_PROXY}" ]; then npm config set proxy "${HTTP_PROXY}"; fi \
-    && if [ -n "${HTTPS_PROXY}" ]; then npm config set https-proxy "${HTTPS_PROXY}"; fi \
     && HTTP_PROXY="${HTTP_PROXY}" HTTPS_PROXY="${HTTPS_PROXY}" ALL_PROXY="${ALL_PROXY}" npm ci --no-audit --no-fund
 COPY . .
 RUN npm run build

@@ -53,7 +53,31 @@ def _db_lock_path() -> Path:
     return path
 
 
-def _acquire_process_lock(path: Path, *, timeout_sec: float = 1.2, poll_sec: float = 0.05) -> str:
+def _reclaim_stale_process_lock(path: Path, *, stale_after_sec: float = 300.0) -> bool:
+    """Remove only an expired lock left behind by a terminated process.
+
+    The lock lives on a Docker bind mount, so a container recreation can leave
+    an otherwise valid file whose PID is no longer meaningful.  A live writer
+    must refresh or finish well inside this deliberately conservative window.
+    """
+    try:
+        content = path.read_text(encoding="utf-8").strip()
+        parts = content.split()
+        written_at = float(parts[1]) if len(parts) >= 2 else path.stat().st_mtime
+        if time.time() - written_at < stale_after_sec:
+            return False
+        # Re-read before unlinking so a newer owner is not treated as stale.
+        if path.read_text(encoding="utf-8").strip() != content:
+            return False
+        path.unlink()
+        return True
+    except FileNotFoundError:
+        return True
+    except (OSError, ValueError):
+        return False
+
+
+def _acquire_process_lock(path: Path, *, timeout_sec: float = 1.2, poll_sec: float = 0.05, stale_after_sec: float = 300.0) -> str:
     deadline = time.monotonic() + timeout_sec
     token = uuid.uuid4().hex
     while True:
@@ -66,6 +90,8 @@ def _acquire_process_lock(path: Path, *, timeout_sec: float = 1.2, poll_sec: flo
                 os.close(fd)
             return token
         except FileExistsError:
+            if _reclaim_stale_process_lock(path, stale_after_sec=stale_after_sec):
+                continue
             if time.monotonic() >= deadline:
                 raise TimeoutError(f"Timed out waiting for history db lock: {path}")
             time.sleep(poll_sec)

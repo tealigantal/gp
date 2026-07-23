@@ -53,6 +53,7 @@ def retrieve_similar_events(
     as_of: str,
     k: int = 80,
     max_pool: int = 4000,
+    event_pool: List[MarketMemoryEvent] | None = None,
 ) -> Dict[str, Any]:
     """Retrieve nearest cases by normalized feature-vector distance.
 
@@ -60,7 +61,11 @@ def retrieve_similar_events(
     small context adjustment and cannot substitute for vector distance.
     """
 
-    pool = list_events_before(as_of, require_outcome=True, limit=max_pool)
+    # A plan producer evaluates many symbols against the same as-of boundary.
+    # The caller may therefore supply one already-materialized immutable pool;
+    # this avoids reopening and decoding the same evidence rows per symbol while
+    # retaining the exact retrieval semantics.
+    pool = event_pool if event_pool is not None else list_events_before(as_of, require_outcome=True, limit=max_pool)
     prior_summary = _prior_block(pool, current_event)
     rows: List[Dict[str, Any]] = []
     current_vec = current_event.feature_vector

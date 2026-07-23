@@ -7,6 +7,16 @@ from typing import List, Optional
 
 from .paths import configs_dir
 
+try:
+    # Docker injects these through compose.  Loading without override makes the
+    # same checked-in command work for the local desktop process while keeping
+    # explicit process/container variables authoritative.
+    from dotenv import load_dotenv
+except ImportError:  # pragma: no cover - dependency is declared for runtime
+    load_dotenv = None
+else:
+    load_dotenv(dotenv_path=".env", override=False)
+
 
 def _truthy(v: str | None) -> bool:
     if v is None:

@@ -3,31 +3,11 @@ import react from '@vitejs/plugin-react-swc'
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
-  const proxyTarget = env.VITE_DEV_API_PROXY || 'http://localhost:8000'
-
   return {
     plugins: [react()],
     server: {
       port: 5173,
-      proxy: {
-        '/api': {
-          target: proxyTarget,
-          changeOrigin: true,
-        },
-      },
-    },
-    build: {
-      sourcemap: false,
-      chunkSizeWarningLimit: 900,
-      rollupOptions: {
-        output: {
-          manualChunks: {
-            react: ['react', 'react-dom'],
-            query: ['@tanstack/react-query', 'axios'],
-            antd: ['antd'],
-          },
-        },
-      },
+      proxy: { '/api': { target: env.VITE_DEV_API_PROXY || 'http://127.0.0.1:8000', changeOrigin: true } },
     },
   }
 })

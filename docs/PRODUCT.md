@@ -1,55 +1,17 @@
-# GP Product
+# Product
 
-## Product Summary
+GP is a chat-first A-share main-board decision assistant for short 1–3 trading-day plans. It presents either a publication grounded in complete evidence or an explicit unavailable/no-recommendation result. Runtime quality can make execution unavailable without changing the daily plan.
 
-GP is a single-workspace A-share main-board decision assistant for short 1–3 trading-day plans. The left pane is a continuous conversation and the right pane presents the same canonical decision snapshot.
+## Chat workspace
 
-## Target Users
+The primary local product surface is a responsive three-pane workspace at port 8080. Conversation history and canonical turns remain the main journey. The decision brief shows the current plan date, evidence date, execution availability, and the selected candidates in engine-provided order. It does not turn internal diagnostics into user-facing recommendations and does not hide unavailable or non-trading states.
 
-Individual researchers and traders who want evidence-backed candidate plans and consistent follow-up decisions. GP is not an execution venue and does not place orders.
+On smaller screens, the same information becomes a single reading flow: chat first, decision brief second. Sending supports Enter, while Shift+Enter inserts a new line. Failed narration is shown in Chinese and the unsent question remains available for retry.
 
-## User Problems
+The current decision brief and a conversation's bound publication are separate browser states. When a trusted response proves both publications belong to the same immutable plan, runtime-only updates keep the current candidates visible with an explicit execution-state notice. A confirmed different plan remains isolated, while an unknown historical lineage is labeled as unknown rather than falsely asserted to be a different decision.
 
-- Candidate lists without an auditable reason or risk boundary.
-- Follow-up answers that drift from the original recommendation.
-- Current and historical data being mixed across time.
-- Probabilities or news being treated as certainty.
+Every saved-conversation card has a separate delete control. Deletion requires an explicit irreversible-action confirmation that identifies the conversation time and publication. Deleting the active conversation returns the workspace to a new chat; deleting another conversation leaves the current chat intact. A deleted session and all of its messages disappear permanently, while recommendation publications and plans remain unchanged.
 
-## Critical User Journeys
+# Time-aware narration
 
-- Request current candidates or an explicit no-trade result.
-- Inspect a candidate's entry, stop, take-profit, probability, uncertainty, and evidence.
-- Compare ranked candidates and understand why an alternative lost.
-- Manage a holding as the thesis strengthens, weakens, or invalidates.
-- Read official-announcement evidence as a bounded experimental factor.
-
-## Expected User-visible Behavior
-
-Every current recommendation is backed by an immutable `MarketUniverseSnapshot.v1`. The Workspace shows the independent funnel `主板名录 / 行情就绪 / 合格 / 评分 / 入选`; these counts are not inferred from the much smaller recommendation/reserve tracking set. If the full-market contract is below its declared thresholds, candidates are hidden and the current result is an explicit `candidate_universe_incomplete` no-trade snapshot.
-
-All market-facing answers use the same active run and structured judgment. The LLM translates facts into Chinese but cannot change selection or numbers. DeepSeek tool routing uses the provider's strict Beta interface; unavailable provider calls fail explicitly rather than silently using a different router. The LLM owns the semantic request frame, including candidate quantity and scope; local code validates its schema and resolves only supplied references against the immutable snapshot, without rewriting the request from user-text heuristics. The full candidate symbols from the most recent assistant answer are supplied to that router, so a user can refer to the prior set with “这里面”“上述” or “这批” without collapsing to its first symbol. Obsolete routing labels are not silently reinterpreted as a different user request: the normal real-LLM repair runs once, then the turn fails closed if it remains invalid. A rejected LLM narration is fail-closed for that one answer: it is neither displayed nor saved, while a configured real provider remains available for the user's next direct question. Once an answer commits, its exact validated body remains visible in the immediate response, idempotent retry, and later Workspace history; a malformed historical record is shown as an explicit recovery warning, never as a blank reply. The conversation transcript renders that validated narration as plain text for every assistant intent; it does not render candidate, comparison, execution, or risk-detail cards. The right-side decision snapshot remains the single structured operational view. Serenity is visible immediately as real evidence and shadow/counterfactual impact; it affects production ranking only after automatic causal validation.
-
-During the lunch break, the runtime status card shows whether the 11:30 intraday data artifact has updated. This is a data-completion signal only; it does not imply a trading recommendation.
-
-## Failure and Recovery Experience
-
-Critical market-data failures produce explicit blocked/no-trade behavior and never reuse the static development symbol file or a previous trading day's result. Serenity collection failures degrade only the experiment: its whole Top-30 batch receives an effective weight of zero, the base recommendation and ordering remain available, the answer must not claim that no announcement exists, and health exposes the target count, coverage, reason, and effective weight. If a real LLM answer fails evidence validation, the Workspace says it may be retried and keeps the composer available; only an unconfigured provider disables new natural-language requests.
-
-## Product Constraints
-
-- Real, attributable data only.
-- No automated trading.
-- No future leakage in replay or learning.
-- No silent fallback that fabricates a conclusion.
-- Public chat response compatibility remains stable.
-
-## Non-goals
-
-Broad-media news coverage, OCR of scanned filings, commercial redistribution of free public data, and guaranteed performance are outside Serenity v1.
-
-## Current Gaps
-
-Adaptive full-history acceptance is incomplete; existing probability samples show overconfidence; Docker validation depends on the local engine; free announcement sources lack an SLA; Serenity has no forward performance sample yet.
-## Non-trading daily plans
-
-When the latest completed trading day has valid Adaptive candidates, weekends and other non-trading periods continue to show the ranked daily plan, entry zone, stop and take-profit levels. The UI labels it as a recent-trading-day plan for next-session review; `publish_allowed=false` prevents it from being presented as immediately executable.
+The LLM receives the publication's market-time context directly in its prompt: current Shanghai time, plan session date, daily evidence date, publication time, and the latest runtime phase/observed/slot-close facts. It must use those facts to explain pre-open, morning, lunch, afternoon, closing auction, and post-close behavior in Chinese without changing recommendation authority.

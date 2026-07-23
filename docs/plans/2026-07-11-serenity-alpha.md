@@ -66,7 +66,7 @@ The base selection is implemented in `src/gp_assistant/decision_engine/adaptive_
 
 - Add `pypdf` and ignore `store/serenity/` runtime files.
 - Implement one-writer WAL storage with heartbeat lease, read-only API connections, immutable versions, cursors, poll runs, hypotheses, snapshots, evaluations, update ledger, and policy CAS.
-- Implement `serenity-loop`, `serenity-once`, `serenity-bootstrap`, and `serenity-status`.
+- The retired Serenity-specific commands were removed by the 2026-07-23 contract-kernel cutover. Runtime scheduling now uses the unified `gp_assistant.cli worker` command; Serenity remains a read-only evidence input governed by its causal policy.
 - Add the worker under `experiments` and bootstrap under the distinct `serenity-bootstrap` profile so they cannot contend for the same lease.
 - Add tests named in this plan to the repository's default-test allowlist.
 
