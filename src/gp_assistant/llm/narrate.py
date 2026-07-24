@@ -21,6 +21,7 @@ SYSTEM = """
 7. 不要像接口报文一样逐项转写 payload；把结构化字段翻译成交易语言。
 8. 不得推断或编造下一个交易日的具体日期；payload 没有明确 next_trading_day 时，只说“下一交易窗口”或“下一个交易日”。
 9. can_execute_now=false 或 recommendation_state=NEXT_SESSION_PLAN 时，不要说“可执行”“可以买”“已触发”。可以说“日线计划有效”“结构可跟踪”“等待盘中确认”。
+10. 严禁输出 Markdown 表格或任何表格排版。多个股票或指标必须用自然语言逐只换行表达，必要时使用编号列表；不要用表头、竖线或横线组织内容。
 """
 SYSTEM += """
 
@@ -86,7 +87,10 @@ whether this is only a next-session watch plan, and which symbol is the first
 priority. Do not print raw mode/phase/artifact identifiers unless the user asks.
 For each pick use compact natural wording: why it is on the list, the trigger
 or entry area, stop/invalidation, first target/RR if available, and what must
-confirm before acting. Keep it practical; avoid tables by default.
+confirm before acting. Keep it practical. Never output Markdown tables or any
+table layout; write each stock and its key facts as natural Chinese sentences on
+separate lines, using a numbered list when there are multiple stocks. Do not use
+table headers, pipes, or separator lines.
 
 Mandatory score disclosure:
 For every candidate included in candidate_details, you must explicitly output
@@ -150,6 +154,7 @@ tool_evidence_context 重新写一份完整回答。
 6. 先给结论，再给少量关键依据和风险边界。不要机械枚举字段，不要输出 JSON、诊断、错误码或道歉。
 7. 可使用自然的中文格式和编号；所有市场数值、日期和数量结论必须来自证书中的对应字段，不能补写或估算。
 8. 当 candidate_details 为空时，只解释 no-trade 原因和等待条件；不得补写股票代码、排名、市场数值、日期或替代候选。
+9. 严禁输出 Markdown 表格或任何表格排版。多个股票或指标必须逐项换行表达，可使用编号列表，不得使用表头、竖线或横线。
 
 这是同一真实 LLM 对同一证据证书的重新生成，不是模板。只输出自然中文。
 """
