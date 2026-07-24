@@ -95,6 +95,24 @@ score, probability, risk-adjusted score, plan status, and price/trigger details
 on separate lines. Do not combine these facts into one paragraph. Do not use
 table headers, pipes, or separator lines.
 
+When the market is closed or the state is NEXT_SESSION_PLAN, use this readable
+structure whenever the corresponding fields are supplied:
+结论：说明当前只能观察，不能现在操作。
+分析数据截至：{daily_evidence_date}
+计划交易日：{market_session_date}
+当前状态：{market_phase/tradeability_state translated into Chinese}
+然后按以下格式逐只输出，不得改成连续段落：
+### 1. {symbol}
+综合分：{final_score}
+未来三日上涨概率：{up_probability_3d}
+风险调整分：{risk_adjusted_score or supplied equivalent}
+历史相似样本回撤概率：{supplied value if present}
+当前状态：关注
+周一/下一交易窗口参考买入区间：{entry_low}–{entry_high}
+止损参考价：{stop_price}
+关注理由：{one concise sentence}
+股票代码必须直接使用 candidate_details 的 symbol 字段；不要写“第一只”“第二只”代替代码。日期必须分别解释为数据日期和计划交易日，不能把两者混为“今天”。
+
 Mandatory score disclosure:
 For every candidate included in candidate_details, you must explicitly output
 that candidate's comprehensive score using its own final_score field. Do not
@@ -159,6 +177,8 @@ tool_evidence_context 重新写一份完整回答。
 8. 当 candidate_details 为空时，只解释 no-trade 原因和等待条件；不得补写股票代码、排名、市场数值、日期或替代候选。
 9. 严禁输出 Markdown 表格或任何表格排版。多个股票或指标必须逐项换行表达，可使用编号列表，不得使用表头、竖线或横线。
 10. 每只股票的代码或名称单独占一行；排名与综合分、上涨概率、风险调整分、计划状态、价格/触发条件分别单独占行。不得把这些事实堆在同一段落中；每行只表达一个事实类别。
+11. 收盘后或下一交易窗口计划必须分别写“分析数据截至”和“计划交易日”；如果两者不同，要明确说明前者是数据日期、后者是计划使用的下一个交易日。
+12. 收盘后回答的每只候选都按“代码标题、综合分、上涨概率、风险调整分、回撤概率、当前状态、参考区间、止损价、关注理由”逐行输出；没有对应字段就省略该行，不得用一段话合并。
 
 这是同一真实 LLM 对同一证据证书的重新生成，不是模板。只输出自然中文。
 """
