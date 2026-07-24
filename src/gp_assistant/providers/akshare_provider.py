@@ -14,7 +14,7 @@ import json
 import os
 import threading
 import time
-from datetime import datetime
+from datetime import date, datetime
 from hashlib import sha256
 from zoneinfo import ZoneInfo
 import pandas as pd
@@ -64,6 +64,26 @@ def _write_snapshot_cache(df: pd.DataFrame, disk_path, disk_meta_path, *, source
                 path.unlink()
             except FileNotFoundError:
                 pass
+
+
+def _verified_snapshot_cache_meta(df: pd.DataFrame, disk_meta_path) -> Dict[str, Any]:  # noqa: ANN001
+    """Return metadata only when a disk snapshot has trustworthy date provenance."""
+    try:
+        persisted_meta = json.loads(disk_meta_path.read_text(encoding="utf-8"))
+        if not isinstance(persisted_meta, dict):
+            return {}
+        if str(persisted_meta.get("content_digest") or "") != _snapshot_content_digest(df):
+            return {}
+        source = str(persisted_meta.get("source") or "").strip()
+        captured_at = datetime.fromisoformat(str(persisted_meta.get("captured_at") or ""))
+        session_date = date.fromisoformat(str(persisted_meta.get("snapshot_session_date") or ""))
+        if source not in {"akshare:sina", "akshare:em"} or captured_at.tzinfo is None:
+            return {}
+        if captured_at.astimezone(ZoneInfo("Asia/Shanghai")).date() != session_date:
+            return {}
+        return persisted_meta
+    except (OSError, ValueError, TypeError, json.JSONDecodeError):
+        return {}
 
 
 class AkShareProvider(MarketDataProvider):
@@ -339,45 +359,49 @@ class AkShareProvider(MarketDataProvider):
         try:
             if disk_path.exists():
                 df_disk = pd.read_pickle(disk_path)  # type: ignore[arg-type]
-                mtime = float(getattr(disk_path.stat(), "st_mtime", time.time()))
-                age = time.time() - mtime
-                if isinstance(df_disk, pd.DataFrame) and age <= max(1, int(disk_ttl)):
-                    persisted_meta: Dict[str, Any] = {}
-                    try:
-                        persisted_meta = json.loads(disk_meta_path.read_text(encoding="utf-8"))
-                    except Exception:
-                        persisted_meta = {}
-                    if str(persisted_meta.get("content_digest") or "") != _snapshot_content_digest(df_disk):
-                        persisted_meta = {}
-                    attempts.append({"source": "cache:file", "ok": True, "rows": int(len(df_disk))})
-                    disk_meta = {
-                        "source": "cache:file",
-                        "cache": "file",
-                        "fallback": False,
-                        "stale": False,
-                        "missing": False,
-                        "elapsed_sec": 0.0,
-                        "cache_age_sec": round(age, 2),
-                        "skipped_routes": [],
-                        "attempts": attempts,
-                        "captured_at": persisted_meta.get("captured_at"),
-                        "snapshot_session_date": persisted_meta.get("snapshot_session_date"),
-                        "cache_of": persisted_meta.get("source"),
-                    }
-                    # try carry schema if present
-                    try:
-                        if isinstance(self._last_snapshot_meta, dict) and self._last_snapshot_meta.get("schema"):
-                            disk_meta["schema"] = self._last_snapshot_meta.get("schema")
-                    except Exception:
-                        pass
-                    self._last_snapshot_meta = disk_meta
-                    try:
-                        print(f"[快照] 命中文件缓存 rows={int(len(df_disk))} age={age:.1f}s ttl={disk_ttl}s", flush=True)
-                    except Exception:
-                        pass
-                    # also refresh in-memory cache state
-                    self._update_snapshot_cache(df_disk)
-                    return df_disk
+                if isinstance(df_disk, pd.DataFrame):
+                    persisted_meta = _verified_snapshot_cache_meta(df_disk, disk_meta_path)
+                    captured_at = datetime.fromisoformat(str(persisted_meta.get("captured_at"))) if persisted_meta else None
+                    age = (
+                        datetime.now(ZoneInfo("Asia/Shanghai")).timestamp() - captured_at.timestamp()
+                        if captured_at is not None
+                        else None
+                    )
+                    if persisted_meta and age is not None and 0.0 <= age <= max(1, int(disk_ttl)):
+                        attempts.append({"source": "cache:file", "ok": True, "rows": int(len(df_disk))})
+                        disk_meta = {
+                            "source": "cache:file",
+                            "cache": "file",
+                            "fallback": False,
+                            "stale": False,
+                            "missing": False,
+                            "elapsed_sec": 0.0,
+                            "cache_age_sec": round(age, 2),
+                            "skipped_routes": [],
+                            "attempts": attempts,
+                            "captured_at": persisted_meta.get("captured_at"),
+                            "snapshot_session_date": persisted_meta.get("snapshot_session_date"),
+                            "cache_of": persisted_meta.get("source"),
+                        }
+                        # try carry schema if present
+                        try:
+                            if isinstance(self._last_snapshot_meta, dict) and self._last_snapshot_meta.get("schema"):
+                                disk_meta["schema"] = self._last_snapshot_meta.get("schema")
+                        except Exception:
+                            pass
+                        self._last_snapshot_meta = disk_meta
+                        try:
+                            print(f"[快照] 命中文件缓存 rows={int(len(df_disk))} age={age:.1f}s ttl={disk_ttl}s", flush=True)
+                        except Exception:
+                            pass
+                        return df_disk
+                    attempts.append(
+                        {
+                            "source": "cache:file",
+                            "ok": False,
+                            "err": "unverified_metadata" if not persisted_meta else "expired_metadata",
+                        }
+                    )
         except Exception:
             pass
 
@@ -546,13 +570,7 @@ class AkShareProvider(MarketDataProvider):
                 if isinstance(df_disk, pd.DataFrame) and not df_disk.empty:
                     mtime = float(getattr(disk_path.stat(), "st_mtime", time.time()))
                     age = time.time() - mtime
-                    persisted_meta: Dict[str, Any] = {}
-                    try:
-                        persisted_meta = json.loads(disk_meta_path.read_text(encoding="utf-8"))
-                    except Exception:
-                        persisted_meta = {}
-                    if str(persisted_meta.get("content_digest") or "") != _snapshot_content_digest(df_disk):
-                        persisted_meta = {}
+                    persisted_meta = _verified_snapshot_cache_meta(df_disk, disk_meta_path)
                     self._last_snapshot_meta = {
                         "source": "cache:file",
                         "cache": "file",
@@ -572,8 +590,6 @@ class AkShareProvider(MarketDataProvider):
                         print(f"[快照] 失败回退到磁盘缓存 rows={int(len(df_disk))} age={age:.1f}s", flush=True)
                     except Exception:
                         pass
-                    # also refresh memory
-                    self._update_snapshot_cache(df_disk)
                     return df_disk
         except Exception:
             pass

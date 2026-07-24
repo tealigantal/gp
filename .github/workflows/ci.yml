@@ -24,11 +24,14 @@ jobs:
         env:
           PYTHONPATH: src
         run: python -m gp_assistant.selection_engine.self_check_contract
-      - name: Self-check (contract)
+      - name: Contract manifest
         env:
           PYTHONPATH: src
-          GP_SELF_CHECK_MODE: contract
-        run: python -m gp_assistant.selection_engine.self_check
+        run: python -m gp_assistant.contracts.manifest --check
+      - name: Retired symbols
+        env:
+          PYTHONPATH: src
+        run: python -m gp_assistant.contracts.check_retired
   frontend:
     runs-on: ubuntu-latest
     continue-on-error: true
