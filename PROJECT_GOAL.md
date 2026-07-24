@@ -21,6 +21,7 @@ The product reaches its durable objective when current-data recommendation and f
 - Compare candidates and explain an existing position from the same bound publication.
 - Review how a conclusion changed without rewriting the original evidence.
 - Use resident official-announcement evidence as an atomic fixed-3% Alpha expert without mistaking it for certainty or allowing partial source coverage to bias candidates.
+- Refresh the frozen Top-30 at lunch from one complete 11:30 five-minute batch while preserving the morning plan, daily evidence and historical conversation lineage.
 
 ## Non-goals
 
@@ -51,7 +52,7 @@ Contract-kernel hard cutover: one typed plan, runtime observation, publication, 
 
 - Serenity is a local resident native Alpha input using free official announcements; its effective weight is exactly 0% or 3%, and the deterministic engine remains the sole ranking authority.
 - Current data and chat services continue to use the existing Docker topology and shared `store` volume.
-- The user accepts one additional open-source PDF dependency, `pypdf`, and no OCR in v1.
+- The user accepts the bounded Serenity v2 OCR lane: `pypdf` remains the text fast path, while structurally valid zero-text PDFs may use fixed-version PDFium, Tesseract `chi_sim+eng`, and Pillow dependencies inside the isolated worker child process.
 
 ## Unknowns
 

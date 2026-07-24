@@ -2,7 +2,11 @@ from __future__ import annotations
 
 import io
 import multiprocessing
+import os
 import re
+import signal
+import statistics
+from dataclasses import dataclass
 from hashlib import sha256
 from typing import Any, Dict, List, Tuple
 
@@ -32,6 +36,36 @@ _REPORT_PERIOD = re.compile(
     r"(20\d{2})\s*年?\s*(第一季度|一季度|半年度|上半年|前三季度|第三季度|三季度|年度|全年)",
     re.I,
 )
+
+PARSER_REVISION = "serenity_pdf_parser_v2_ocr"
+
+
+def supported_title_family(title: str) -> str | None:
+    """Return only title families capable of producing governed Serenity evidence."""
+    normalized = normalize_cn_text(title)
+    if _CORRECTION.search(normalized) and not _relation_fact_types(normalized):
+        return None
+    if _PERFORMANCE.search(normalized):
+        return "earnings_guidance"
+    if _ENFORCEMENT.search(normalized):
+        return "regulatory_enforcement"
+    if _LITIGATION.search(normalized):
+        return "major_litigation"
+    if _TERMINATION.search(normalized) and _TERMINATION_SUBJECT.search(normalized):
+        return "termination_or_withdrawal"
+    if _REFERENCE_ONLY.search(normalized) and not _CORRECTION.search(normalized):
+        return "reference_only"
+    return None
+
+
+@dataclass(frozen=True)
+class PdfParseResult:
+    text: str
+    state: str
+    parse_method: str
+    parser_revision: str = PARSER_REVISION
+    ocr_engine: str | None = None
+    ocr_confidence: float | None = None
 
 
 def _relation_fact_types(title: str) -> List[str]:
@@ -66,39 +100,297 @@ def _earnings_relation_key(value: str) -> str:
     return f"earnings_guidance:{match.group(1)}:{period}" if period else ""
 
 
-def _extract_pdf_text_sync(
+def _extract_text_layer_sync(
     data: bytes,
     *,
     max_pages: int,
     max_chars: int,
-) -> Tuple[str, str]:
+) -> PdfParseResult:
     try:
         from pypdf import PdfReader
     except Exception:
-        return "", "parser_unavailable"
+        return PdfParseResult("", "parser_unavailable", "pypdf")
     try:
         reader = PdfReader(io.BytesIO(data), strict=False)
+        if bool(reader.is_encrypted):
+            return PdfParseResult("", "encrypted", "pypdf")
         parts: List[str] = []
         total = 0
         page_count = len(reader.pages)
-        truncated = page_count > max_pages
-        for index in range(min(page_count, max_pages)):
+        if page_count > max_pages:
+            return PdfParseResult("", "page_limit", "pypdf")
+        for index in range(page_count):
             page = reader.pages[index]
             text = str(page.extract_text() or "")
             if not text:
                 continue
             remaining = max_chars - total
             if remaining <= 0:
-                truncated = True
-                break
+                return PdfParseResult("", "truncated", "pypdf")
             parts.append(text[:remaining])
             total += min(len(text), remaining)
         joined = "\n".join(parts).strip()
+        if total >= max_chars:
+            return PdfParseResult("", "truncated", "pypdf")
         if not joined:
-            return "", "unparsed"
-        return joined, "truncated" if truncated or total >= max_chars else "parsed"
+            return PdfParseResult("", "zero_text", "pypdf")
+        return PdfParseResult(joined, "parsed", "pypdf")
     except Exception:
-        return "", "unparsed"
+        return PdfParseResult("", "unparsed", "pypdf")
+
+
+def _family_matches_text(family: str, text: str) -> bool:
+    text = re.sub(r"\s+", "", normalize_cn_text(text))
+    if family == "earnings_guidance":
+        return bool(_PERFORMANCE.search(text))
+    if family == "regulatory_enforcement":
+        return bool(_ENFORCEMENT.search(text))
+    if family == "major_litigation":
+        return bool(_LITIGATION.search(text))
+    if family == "termination_or_withdrawal":
+        return bool(_TERMINATION.search(text) and _TERMINATION_SUBJECT.search(text))
+    if family == "reference_only":
+        return bool(_REFERENCE_ONLY.search(text))
+    return False
+
+
+def _evidence_signature(title: str, family: str, text: str) -> tuple[int, tuple[float, ...]]:
+    text = re.sub(r"\s+", "", normalize_cn_text(text))
+    if _CORRECTION.search(title):
+        return 0, ()
+    if family == "earnings_guidance":
+        improving = _IMPROVING_LOSS.search(text)
+        positive = _POSITIVE.search(text)
+        negative = _NEGATIVE.search(text)
+        match = improving or (positive if positive and not negative else negative if negative and not positive else None)
+        direction = 1 if improving or (positive and not negative) else -1 if negative and not positive else 0
+        values: list[float] = []
+        if match:
+            for value in match.groups():
+                if value is not None:
+                    values.append(float(value))
+        return direction, tuple(values)
+    if family == "regulatory_enforcement":
+        return (-1, ()) if _ENFORCEMENT.search(text) and not _NEGATED_ENFORCEMENT.search(text) else (0, ())
+    if family == "major_litigation":
+        unfavorable = _LITIGATION.search(text) and not _FAVORABLE_LITIGATION.search(text) and not _FAVORABLE_RESOLUTION.search(text)
+        return (-1, ()) if unfavorable else (0, ())
+    if family == "termination_or_withdrawal":
+        return (-1, ()) if _TERMINATION.search(text) and _TERMINATION_SUBJECT.search(text) else (0, ())
+    return 0, ()
+
+
+def _ocr_languages_available(languages: set[str]) -> bool:
+    return {"chi_sim", "eng"}.issubset(languages)
+
+
+def _ocr_text_validation_state(*, symbol: str, family: str, text: str, median_confidence: float) -> str | None:
+    compact = re.sub(r"\s+", "", normalize_cn_text(text))
+    if len(compact) < 200:
+        return "ocr_text_too_short"
+    if str(symbol).zfill(6) not in compact[:10_000]:
+        return "ocr_symbol_mismatch"
+    if not _family_matches_text(family, text):
+        return "ocr_topic_mismatch"
+    if median_confidence < 60.0:
+        return "ocr_low_confidence"
+    return None
+
+
+def _ocr_pixels_exceeded(*, page_pixels: int, total_pixels: int, max_page_pixels: int, max_total_pixels: int) -> bool:
+    return page_pixels > max_page_pixels or total_pixels > max_total_pixels
+
+
+def _ocr_pdf_sync(
+    data: bytes,
+    *,
+    symbol: str,
+    title: str,
+    max_pages: int,
+    max_chars: int,
+    primary_dpi: int,
+    verify_dpi: int,
+    max_page_pixels: int,
+    max_total_pixels: int,
+    page_timeout_sec: float,
+) -> PdfParseResult:
+    family = supported_title_family(title)
+    if family is None:
+        return PdfParseResult("", "title_irrelevant", "ocr")
+    try:
+        import pypdfium2 as pdfium
+        import pytesseract
+        from pytesseract import Output
+    except Exception:
+        return PdfParseResult("", "ocr_unavailable", "ocr")
+    document = None
+    try:
+        languages = set(pytesseract.get_languages(config=""))
+        if not _ocr_languages_available(languages):
+            return PdfParseResult("", "ocr_language_unavailable", "ocr")
+        engine = str(pytesseract.get_tesseract_version()).splitlines()[0]
+        document = pdfium.PdfDocument(data)
+        if len(document) > max_pages:
+            return PdfParseResult("", "page_limit", "ocr", ocr_engine=engine)
+        total_pixels = 0
+        total_chars = 0
+        page_results: list[dict[str, Any]] = []
+        for page_index in range(len(document)):
+            page = document[page_index]
+            bitmap = page.render(scale=primary_dpi / 72.0)
+            image = bitmap.to_pil().convert("RGB")
+            pixels = int(image.width) * int(image.height)
+            total_pixels += pixels
+            if _ocr_pixels_exceeded(page_pixels=pixels, total_pixels=total_pixels, max_page_pixels=max_page_pixels, max_total_pixels=max_total_pixels):
+                image.close()
+                bitmap.close()
+                page.close()
+                return PdfParseResult("", "pixel_limit", "ocr", ocr_engine=engine)
+            result = pytesseract.image_to_data(
+                image,
+                lang="chi_sim+eng",
+                config="--psm 6",
+                output_type=Output.DICT,
+                timeout=page_timeout_sec,
+            )
+            tokens: list[dict[str, Any]] = []
+            words: list[str] = []
+            for index, raw in enumerate(result.get("text", [])):
+                word = str(raw or "").strip()
+                if not word:
+                    continue
+                try:
+                    confidence = float(result["conf"][index])
+                except (KeyError, TypeError, ValueError, IndexError):
+                    confidence = -1.0
+                words.append(word)
+                tokens.append(
+                    {
+                        "text": word,
+                        "confidence": confidence,
+                        "left": int(result["left"][index]),
+                        "top": int(result["top"][index]),
+                        "width": int(result["width"][index]),
+                        "height": int(result["height"][index]),
+                    }
+                )
+            page_text = " ".join(words)
+            total_chars += len(page_text)
+            if total_chars > max_chars:
+                image.close()
+                bitmap.close()
+                page.close()
+                return PdfParseResult("", "truncated", "ocr", ocr_engine=engine)
+            page_results.append({"text": page_text, "tokens": tokens, "size": image.size})
+            image.close()
+            bitmap.close()
+            page.close()
+        text = "\n".join(str(item["text"]) for item in page_results).strip()
+        confidences = [
+            float(token["confidence"])
+            for item in page_results
+            for token in item["tokens"]
+            if float(token["confidence"]) >= 0
+        ]
+        median_confidence = statistics.median(confidences) if confidences else -1.0
+        validation_state = _ocr_text_validation_state(symbol=symbol, family=family, text=text, median_confidence=median_confidence)
+        if validation_state is not None:
+            return PdfParseResult("", validation_state, "ocr", ocr_engine=engine, ocr_confidence=median_confidence)
+
+        signature = _evidence_signature(title, family, text)
+        if signature[0] != 0 or signature[1]:
+            matching_page_index = next(
+                (
+                    index
+                    for index, item in enumerate(page_results)
+                    if _evidence_signature(title, family, str(item["text"])) == signature
+                ),
+                None,
+            )
+            if matching_page_index is None:
+                return PdfParseResult("", "ocr_uncertain", "ocr", ocr_engine=engine, ocr_confidence=median_confidence)
+            item = page_results[matching_page_index]
+            evidence_tokens = [
+                token
+                for token in item["tokens"]
+                if re.search(r"\d|%|业绩|净利润|增长|下降|亏损|立案|处罚|处分|监管|调查|诉讼|仲裁|终止|撤回|取消", str(token["text"]), re.I)
+            ]
+            if not evidence_tokens:
+                return PdfParseResult("", "ocr_uncertain", "ocr", ocr_engine=engine, ocr_confidence=median_confidence)
+            page = document[matching_page_index]
+            verify_bitmap = page.render(scale=verify_dpi / 72.0)
+            verify_image = verify_bitmap.to_pil().convert("RGB")
+            verify_pixels = int(verify_image.width) * int(verify_image.height)
+            total_pixels += verify_pixels
+            if _ocr_pixels_exceeded(page_pixels=verify_pixels, total_pixels=total_pixels, max_page_pixels=max_page_pixels, max_total_pixels=max_total_pixels):
+                verify_image.close()
+                verify_bitmap.close()
+                page.close()
+                return PdfParseResult("", "pixel_limit", "ocr", ocr_engine=engine, ocr_confidence=median_confidence)
+            ratio = verify_dpi / primary_dpi
+            left = max(0, int(min(token["left"] for token in evidence_tokens) * ratio) - 120)
+            top = max(0, int(min(token["top"] for token in evidence_tokens) * ratio) - 120)
+            right = min(verify_image.width, int(max(token["left"] + token["width"] for token in evidence_tokens) * ratio) + 120)
+            bottom = min(verify_image.height, int(max(token["top"] + token["height"] for token in evidence_tokens) * ratio) + 120)
+            if right <= left or bottom <= top:
+                verify_image.close()
+                verify_bitmap.close()
+                page.close()
+                return PdfParseResult("", "ocr_uncertain", "ocr", ocr_engine=engine, ocr_confidence=median_confidence)
+            crop = verify_image.crop((left, top, right, bottom))
+            verification_text = pytesseract.image_to_string(
+                crop,
+                lang="chi_sim+eng",
+                config="--psm 6",
+                timeout=page_timeout_sec,
+            )
+            crop.close()
+            verify_image.close()
+            verify_bitmap.close()
+            page.close()
+            if not _family_matches_text(family, verification_text) or _evidence_signature(title, family, verification_text) != signature:
+                return PdfParseResult("", "ocr_uncertain", "ocr", ocr_engine=engine, ocr_confidence=median_confidence)
+        return PdfParseResult(text, "parsed", "tesseract_ocr", ocr_engine=engine, ocr_confidence=round(float(median_confidence), 2))
+    except RuntimeError:
+        return PdfParseResult("", "ocr_page_timeout", "ocr")
+    except Exception:
+        return PdfParseResult("", "ocr_unparsed", "ocr")
+    finally:
+        if document is not None:
+            try:
+                document.close()
+            except Exception:
+                pass
+
+
+def _extract_pdf_document_sync(
+    data: bytes,
+    *,
+    symbol: str,
+    title: str,
+    max_pages: int,
+    max_chars: int,
+    primary_dpi: int,
+    verify_dpi: int,
+    max_page_pixels: int,
+    max_total_pixels: int,
+    page_timeout_sec: float,
+) -> PdfParseResult:
+    fast = _extract_text_layer_sync(data, max_pages=max_pages, max_chars=max_chars)
+    if fast.state != "zero_text":
+        return fast
+    return _ocr_pdf_sync(
+        data,
+        symbol=symbol,
+        title=title,
+        max_pages=max_pages,
+        max_chars=max_chars,
+        primary_dpi=primary_dpi,
+        verify_dpi=verify_dpi,
+        max_page_pixels=max_page_pixels,
+        max_total_pixels=max_total_pixels,
+        page_timeout_sec=page_timeout_sec,
+    )
 
 
 def _pdf_parse_process(
@@ -106,63 +398,121 @@ def _pdf_parse_process(
     data: bytes,
     max_pages: int,
     max_chars: int,
+    symbol: str,
+    title: str,
+    primary_dpi: int,
+    verify_dpi: int,
+    max_page_pixels: int,
+    max_total_pixels: int,
+    page_timeout_sec: float,
 ) -> None:
     try:
+        if os.name == "posix":
+            os.setsid()
         sender.send(
-            _extract_pdf_text_sync(
+            _extract_pdf_document_sync(
                 data,
+                symbol=symbol,
+                title=title,
                 max_pages=max_pages,
                 max_chars=max_chars,
+                primary_dpi=primary_dpi,
+                verify_dpi=verify_dpi,
+                max_page_pixels=max_page_pixels,
+                max_total_pixels=max_total_pixels,
+                page_timeout_sec=page_timeout_sec,
             )
         )
     except BaseException:
         try:
-            sender.send(("", "unparsed"))
+            sender.send(PdfParseResult("", "unparsed", "unknown"))
         except Exception:
             pass
     finally:
         sender.close()
 
 
-def extract_pdf_text(
+def _terminate_parse_process(process: multiprocessing.Process) -> None:
+    if process.is_alive() and os.name == "posix" and process.pid is not None:
+        try:
+            os.killpg(process.pid, signal.SIGTERM)
+        except (OSError, ProcessLookupError):
+            process.terminate()
+    elif process.is_alive():
+        process.terminate()
+    if process.pid is not None:
+        process.join(timeout=2.0)
+    if process.is_alive() and os.name == "posix" and process.pid is not None:
+        try:
+            os.killpg(process.pid, signal.SIGKILL)
+        except (OSError, ProcessLookupError):
+            process.kill()
+        process.join(timeout=1.0)
+
+
+def extract_pdf_document(
     data: bytes,
     *,
-    max_pages: int = 80,
+    symbol: str,
+    title: str,
+    max_pages: int = 40,
     max_chars: int = 250_000,
-    timeout_sec: float = 20.0,
-) -> Tuple[str, str]:
-    """Parse an untrusted PDF in a disposable process with a hard wall-clock bound."""
+    timeout_sec: float = 240.0,
+    primary_dpi: int = 200,
+    verify_dpi: int = 300,
+    max_page_pixels: int = 20_000_000,
+    max_total_pixels: int = 160_000_000,
+    page_timeout_sec: float = 8.0,
+) -> PdfParseResult:
+    """Parse an untrusted PDF in a disposable process with bounded OCR fallback."""
     context = multiprocessing.get_context("spawn")
     receiver, sender = context.Pipe(duplex=False)
     process = context.Process(
         target=_pdf_parse_process,
-        args=(sender, data, max(1, int(max_pages)), max(1, int(max_chars))),
+        args=(
+            sender,
+            data,
+            max(1, int(max_pages)),
+            max(1, int(max_chars)),
+            str(symbol).zfill(6),
+            str(title),
+            max(72, int(primary_dpi)),
+            max(72, int(verify_dpi)),
+            max(1, int(max_page_pixels)),
+            max(1, int(max_total_pixels)),
+            max(0.1, float(page_timeout_sec)),
+        ),
         daemon=True,
     )
     try:
         process.start()
         sender.close()
         if not receiver.poll(max(0.1, float(timeout_sec))):
-            return "", "parse_timeout"
+            return PdfParseResult("", "parse_timeout", "unknown")
         try:
             result = receiver.recv()
         except (EOFError, OSError):
-            return "", "unparsed"
-        if (
-            not isinstance(result, tuple)
-            or len(result) != 2
-            or not all(isinstance(item, str) for item in result)
-        ):
-            return "", "unparsed"
+            return PdfParseResult("", "unparsed", "unknown")
+        if not isinstance(result, PdfParseResult):
+            return PdfParseResult("", "unparsed", "unknown")
         return result
     except Exception:
-        return "", "parser_worker_unavailable"
+        return PdfParseResult("", "parser_worker_unavailable", "unknown")
     finally:
         receiver.close()
-        if process.is_alive():
-            process.terminate()
-        if process.pid is not None:
-            process.join(timeout=2.0)
+        _terminate_parse_process(process)
+
+
+def extract_pdf_text(
+    data: bytes,
+    *,
+    max_pages: int = 40,
+    max_chars: int = 250_000,
+    timeout_sec: float = 20.0,
+) -> Tuple[str, str]:
+    """Backward-compatible text-layer-only parser used by legacy internal callers."""
+    result = _extract_text_layer_sync(data, max_pages=max_pages, max_chars=max_chars)
+    return result.text, "unparsed" if result.state == "zero_text" else result.state
 
 
 def _excerpt(text: str, pattern: re.Pattern[str], *, width: int = 220) -> str:

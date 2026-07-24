@@ -1,13 +1,7 @@
-from .features import build_feature_snapshot
-from .scoring import build_score_breakdown, determine_recommendation_state
-from .strategies import STRATEGY_NAMES, StrategyCandidate, StrategyRegistry, select_champion
+"""Current intraday modules are imported explicitly by their owners.
 
-__all__ = [
-    "STRATEGY_NAMES",
-    "StrategyCandidate",
-    "StrategyRegistry",
-    "build_feature_snapshot",
-    "build_score_breakdown",
-    "determine_recommendation_state",
-    "select_champion",
-]
+The former eager exports referenced the retired ``strategies`` module and made
+every valid submodule import fail before it could be loaded.
+"""
+
+__all__: list[str] = []

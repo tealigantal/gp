@@ -104,7 +104,7 @@ class LocalParquetProvider(MarketDataProvider):
         # Return empty DataFrame if unavailable
         return pd.DataFrame(columns=["ts_code", "name"])  # type: ignore[name-defined]
 
-    def get_minute_bars_5m(self, symbol: str, start_date: str, end_date: str) -> pd.DataFrame:
+    def get_minute_bars_5m(self, symbol: str, start_date: str, end_date: str, *, allow_fallback: bool = True) -> pd.DataFrame:
         ts_code = _infer_ts_code(symbol)
         folder = self.min5_root / f"ts_code={ts_code}"
         if not folder.exists():

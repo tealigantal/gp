@@ -10,9 +10,11 @@ import sqlite3
 from typing import Iterator
 
 from .contracts.conversation import ConversationSession, ConversationTurn
+from .contracts.catalog import ExecutionStatus
 from .contracts.decision import RecommendationPlan
-from .contracts.publication import RecommendationPublication
+from .contracts.publication import PublicationDecision, RecommendationPublication
 from .contracts.runtime import RuntimeObservation
+from .contracts.ids import content_id
 
 
 DATABASE_SCHEMA = "contract_kernel.v1"
@@ -140,18 +142,41 @@ class ContractStore:
     def commit_plan(self, plan: RecommendationPlan) -> None:
         encoded, payload_digest = self._encode(plan)
         lookup_digest = _digest(plan.lookup_key.model_dump(mode="json"))
+        plan_identity = json.dumps(
+            {
+                "key": plan.lookup_key.model_dump(mode="json"),
+                "decision": plan.decision.model_dump(mode="json"),
+                "candidates": [item.model_dump(mode="json") for item in plan.evaluated_candidates],
+                "serenity": plan.serenity.model_dump(mode="json"),
+            },
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+        if plan.plan_id != content_id("plan", plan_identity):
+            raise ContractStoreError("plan_identity_mismatch")
         with self._transaction() as conn:
             existing = conn.execute("SELECT payload_digest FROM recommendation_plans WHERE plan_id=?", (plan.plan_id,)).fetchone()
             if existing and str(existing["payload_digest"]) != payload_digest:
                 raise PublicationConflict("plan_identity_conflict")
-            conn.execute("INSERT OR IGNORE INTO recommendation_plans(plan_id,lookup_digest,payload_json,payload_digest,generated_at) VALUES(?,?,?,?,?)", (plan.plan_id, lookup_digest, encoded, payload_digest, plan.generated_at.isoformat()))
+            lookup = conn.execute("SELECT plan_id,payload_digest FROM recommendation_plans WHERE lookup_digest=?", (lookup_digest,)).fetchone()
+            if lookup and (str(lookup["plan_id"]) != plan.plan_id or str(lookup["payload_digest"]) != payload_digest):
+                raise PublicationConflict("plan_lookup_conflict")
+            if existing is None:
+                conn.execute("INSERT INTO recommendation_plans(plan_id,lookup_digest,payload_json,payload_digest,generated_at) VALUES(?,?,?,?,?)", (plan.plan_id, lookup_digest, encoded, payload_digest, plan.generated_at.isoformat()))
 
     def commit_runtime(self, runtime: RuntimeObservation) -> None:
-        if self.load_plan(runtime.plan_id) is None:
-            raise ContractStoreError("plan_not_found")
         encoded, payload_digest = self._encode(runtime)
+        runtime_semantic = runtime.model_dump(mode="json", exclude={"runtime_id"})
+        if runtime.runtime_id != content_id("runtime", json.dumps(runtime_semantic, sort_keys=True, separators=(",", ":"))):
+            raise ContractStoreError("runtime_identity_mismatch")
         with self._transaction() as conn:
-            conn.execute("INSERT OR IGNORE INTO runtime_observations(runtime_id,plan_id,payload_json,payload_digest,observed_at) VALUES(?,?,?,?,?)", (runtime.runtime_id, runtime.plan_id, encoded, payload_digest, runtime.observed_at.isoformat()))
+            if conn.execute("SELECT 1 FROM recommendation_plans WHERE plan_id=?", (runtime.plan_id,)).fetchone() is None:
+                raise ContractStoreError("plan_not_found")
+            existing = conn.execute("SELECT payload_digest FROM runtime_observations WHERE runtime_id=?", (runtime.runtime_id,)).fetchone()
+            if existing and str(existing["payload_digest"]) != payload_digest:
+                raise PublicationConflict("runtime_identity_conflict")
+            if existing is None:
+                conn.execute("INSERT INTO runtime_observations(runtime_id,plan_id,payload_json,payload_digest,observed_at) VALUES(?,?,?,?,?)", (runtime.runtime_id, runtime.plan_id, encoded, payload_digest, runtime.observed_at.isoformat()))
 
     def load_runtime(self, runtime_id: str) -> RuntimeObservation | None:
         if not self.path.exists():
@@ -164,15 +189,88 @@ class ContractStore:
         finally:
             conn.close()
 
-    def commit_publication(self, publication: RecommendationPublication) -> None:
-        if self.load_plan(publication.plan_id) is None:
-            raise ContractStoreError("plan_not_found")
-        if publication.runtime_id and self.load_runtime(publication.runtime_id) is None:
-            raise ContractStoreError("runtime_plan_mismatch")
+    def commit_publication(
+        self,
+        publication: RecommendationPublication,
+        *,
+        expected_current_publication_id: str | None,
+    ) -> RecommendationPublication:
         encoded, payload_digest = self._encode(publication)
         with self._transaction() as conn:
-            conn.execute("INSERT OR IGNORE INTO recommendation_publications(publication_id,plan_id,runtime_id,payload_json,payload_digest,published_at) VALUES(?,?,?,?,?,?)", (publication.publication_id, publication.plan_id, publication.runtime_id, encoded, payload_digest, publication.published_at.isoformat()))
+            plan_row = conn.execute("SELECT payload_json FROM recommendation_plans WHERE plan_id=?", (publication.plan_id,)).fetchone()
+            if plan_row is None:
+                raise ContractStoreError("plan_not_found")
+            plan = RecommendationPlan.model_validate_json(str(plan_row["payload_json"]))
+            runtime = None
+            if publication.runtime_id:
+                runtime_row = conn.execute("SELECT plan_id,payload_json FROM runtime_observations WHERE runtime_id=?", (publication.runtime_id,)).fetchone()
+                if runtime_row is None or str(runtime_row["plan_id"]) != publication.plan_id:
+                    raise ContractStoreError("runtime_plan_mismatch")
+                runtime = RuntimeObservation.model_validate_json(str(runtime_row["payload_json"]))
+                if runtime.market_session_date != plan.market_session_date or runtime.market != plan.market:
+                    raise ContractStoreError("runtime_plan_mismatch")
+            if (
+                publication.lineage.plan_id != publication.plan_id
+                or publication.lineage.runtime_id != publication.runtime_id
+                or publication.lineage.producer_revision != plan.producer.revision
+                or publication.lineage.source_digest != plan.producer.source_digest
+                or publication.candidates != plan.evaluated_candidates
+                or (runtime is not None and runtime.plan_id != plan.plan_id)
+            ):
+                raise ContractStoreError("publication_lineage_mismatch")
+            execution_status = (
+                ExecutionStatus.AVAILABLE
+                if runtime and runtime.data_quality.state.value == "ready"
+                else ExecutionStatus.PENDING if runtime is None else ExecutionStatus.UNAVAILABLE
+            )
+            tradeable = bool(
+                plan.decision.status.value == "recommend"
+                and execution_status is ExecutionStatus.AVAILABLE
+                and runtime
+                and runtime.market_gate.state == "allow"
+            )
+            reason_codes = tuple(plan.decision.reason_codes) + (
+                ()
+                if tradeable
+                else (("runtime_pending",) if runtime is None else tuple(runtime.data_quality.reason_codes))
+            )
+            expected_decision = PublicationDecision(
+                plan_status=plan.decision.status,
+                execution_status=execution_status,
+                tradeable_now=tradeable,
+                reason_codes=reason_codes,
+            )
+            if publication.decision != expected_decision:
+                raise ContractStoreError("publication_decision_mismatch")
+            identity = json.dumps(
+                {
+                    "plan_id": plan.plan_id,
+                    "runtime_id": runtime.runtime_id if runtime else None,
+                    "decision": publication.decision.model_dump(mode="json"),
+                    "lineage": publication.lineage.model_dump(mode="json"),
+                },
+                sort_keys=True,
+                separators=(",", ":"),
+            )
+            if publication.publication_id != content_id("publication", identity):
+                raise ContractStoreError("publication_identity_mismatch")
+            current_row = conn.execute("SELECT publication_id FROM current_publication WHERE singleton=1").fetchone()
+            actual_current = str(current_row["publication_id"]) if current_row else None
+            if actual_current != expected_current_publication_id:
+                raise PublicationConflict("stale_publication_write")
+            existing_row = conn.execute("SELECT payload_json FROM recommendation_publications WHERE publication_id=?", (publication.publication_id,)).fetchone()
+            canonical = publication
+            if existing_row:
+                existing_publication = RecommendationPublication.model_validate_json(str(existing_row["payload_json"]))
+                existing_semantic = existing_publication.model_dump(mode="json", exclude={"published_at"})
+                proposed_semantic = publication.model_dump(mode="json", exclude={"published_at"})
+                if existing_semantic != proposed_semantic:
+                    raise PublicationConflict("publication_identity_conflict")
+                canonical = existing_publication
+            else:
+                conn.execute("INSERT INTO recommendation_publications(publication_id,plan_id,runtime_id,payload_json,payload_digest,published_at) VALUES(?,?,?,?,?,?)", (publication.publication_id, publication.plan_id, publication.runtime_id, encoded, payload_digest, publication.published_at.isoformat()))
             conn.execute("INSERT INTO current_publication(singleton,publication_id) VALUES(1,?) ON CONFLICT(singleton) DO UPDATE SET publication_id=excluded.publication_id", (publication.publication_id,))
+            return canonical
 
     def current_publication(self) -> RecommendationPublication | None:
         if not self.path.exists():

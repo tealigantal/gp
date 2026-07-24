@@ -10,8 +10,13 @@ No new dependencies are introduced; API signatures are preserved.
 from __future__ import annotations
 
 from typing import Dict, Any, Optional, List
+import json
+import os
 import threading
 import time
+from datetime import date, datetime
+from hashlib import sha256
+from zoneinfo import ZoneInfo
 import pandas as pd
 
 from ..core.errors import DataProviderError
@@ -21,6 +26,64 @@ from ..core.paths import cache_dir
 
 
 _REQUEST_PATCH_LOCK = threading.RLock()
+
+
+def _snapshot_content_digest(df: pd.DataFrame) -> str:
+    try:
+        hashed = pd.util.hash_pandas_object(df, index=True).values.tobytes()
+        return sha256(hashed).hexdigest()
+    except Exception:
+        return ""
+
+
+def _write_snapshot_cache(df: pd.DataFrame, disk_path, disk_meta_path, *, source: str, captured_at: str, session_date: str) -> None:  # noqa: ANN001
+    disk_path.parent.mkdir(parents=True, exist_ok=True)
+    token = f"{os.getpid()}.{threading.get_ident()}"
+    pickle_tmp = disk_path.with_suffix(disk_path.suffix + f".{token}.tmp")
+    meta_tmp = disk_meta_path.with_suffix(disk_meta_path.suffix + f".{token}.tmp")
+    try:
+        df.to_pickle(pickle_tmp)
+        meta_tmp.write_text(
+            json.dumps(
+                {
+                    "captured_at": captured_at,
+                    "snapshot_session_date": session_date,
+                    "source": source,
+                    "content_digest": _snapshot_content_digest(df),
+                },
+                ensure_ascii=False,
+                sort_keys=True,
+            ),
+            encoding="utf-8",
+        )
+        os.replace(pickle_tmp, disk_path)
+        os.replace(meta_tmp, disk_meta_path)
+    finally:
+        for path in (pickle_tmp, meta_tmp):
+            try:
+                path.unlink()
+            except FileNotFoundError:
+                pass
+
+
+def _verified_snapshot_cache_meta(df: pd.DataFrame, disk_meta_path) -> Dict[str, Any]:  # noqa: ANN001
+    """Return metadata only when a disk snapshot has trustworthy date provenance."""
+    try:
+        persisted_meta = json.loads(disk_meta_path.read_text(encoding="utf-8"))
+        if not isinstance(persisted_meta, dict):
+            return {}
+        if str(persisted_meta.get("content_digest") or "") != _snapshot_content_digest(df):
+            return {}
+        source = str(persisted_meta.get("source") or "").strip()
+        captured_at = datetime.fromisoformat(str(persisted_meta.get("captured_at") or ""))
+        session_date = date.fromisoformat(str(persisted_meta.get("snapshot_session_date") or ""))
+        if source not in {"akshare:sina", "akshare:em"} or captured_at.tzinfo is None:
+            return {}
+        if captured_at.astimezone(ZoneInfo("Asia/Shanghai")).date() != session_date:
+            return {}
+        return persisted_meta
+    except (OSError, ValueError, TypeError, json.JSONDecodeError):
+        return {}
 
 
 class AkShareProvider(MarketDataProvider):
@@ -278,6 +341,7 @@ class AkShareProvider(MarketDataProvider):
 
         # Disk cache fast-path
         disk_path = cache_dir() / "ak_spot_snapshot.pkl"
+        disk_meta_path = cache_dir() / "ak_spot_snapshot.meta.json"
         disk_meta: Dict[str, Any] = {}
         try:
             try:
@@ -295,36 +359,49 @@ class AkShareProvider(MarketDataProvider):
         try:
             if disk_path.exists():
                 df_disk = pd.read_pickle(disk_path)  # type: ignore[arg-type]
-                mtime = float(getattr(disk_path.stat(), "st_mtime", time.time()))
-                age = time.time() - mtime
-                if isinstance(df_disk, pd.DataFrame) and age <= max(1, int(disk_ttl)):
-                    attempts.append({"source": "cache:file", "ok": True, "rows": int(len(df_disk))})
-                    disk_meta = {
-                        "source": "cache:file",
-                        "cache": "file",
-                        "fallback": False,
-                        "stale": False,
-                        "missing": False,
-                        "elapsed_sec": 0.0,
-                        "cache_age_sec": round(age, 2),
-                        "skipped_routes": [],
-                        "attempts": attempts,
-                        "as_of_ts": None,
-                    }
-                    # try carry schema if present
-                    try:
-                        if isinstance(self._last_snapshot_meta, dict) and self._last_snapshot_meta.get("schema"):
-                            disk_meta["schema"] = self._last_snapshot_meta.get("schema")
-                    except Exception:
-                        pass
-                    self._last_snapshot_meta = disk_meta
-                    try:
-                        print(f"[快照] 命中文件缓存 rows={int(len(df_disk))} age={age:.1f}s ttl={disk_ttl}s", flush=True)
-                    except Exception:
-                        pass
-                    # also refresh in-memory cache state
-                    self._update_snapshot_cache(df_disk)
-                    return df_disk
+                if isinstance(df_disk, pd.DataFrame):
+                    persisted_meta = _verified_snapshot_cache_meta(df_disk, disk_meta_path)
+                    captured_at = datetime.fromisoformat(str(persisted_meta.get("captured_at"))) if persisted_meta else None
+                    age = (
+                        datetime.now(ZoneInfo("Asia/Shanghai")).timestamp() - captured_at.timestamp()
+                        if captured_at is not None
+                        else None
+                    )
+                    if persisted_meta and age is not None and 0.0 <= age <= max(1, int(disk_ttl)):
+                        attempts.append({"source": "cache:file", "ok": True, "rows": int(len(df_disk))})
+                        disk_meta = {
+                            "source": "cache:file",
+                            "cache": "file",
+                            "fallback": False,
+                            "stale": False,
+                            "missing": False,
+                            "elapsed_sec": 0.0,
+                            "cache_age_sec": round(age, 2),
+                            "skipped_routes": [],
+                            "attempts": attempts,
+                            "captured_at": persisted_meta.get("captured_at"),
+                            "snapshot_session_date": persisted_meta.get("snapshot_session_date"),
+                            "cache_of": persisted_meta.get("source"),
+                        }
+                        # try carry schema if present
+                        try:
+                            if isinstance(self._last_snapshot_meta, dict) and self._last_snapshot_meta.get("schema"):
+                                disk_meta["schema"] = self._last_snapshot_meta.get("schema")
+                        except Exception:
+                            pass
+                        self._last_snapshot_meta = disk_meta
+                        try:
+                            print(f"[快照] 命中文件缓存 rows={int(len(df_disk))} age={age:.1f}s ttl={disk_ttl}s", flush=True)
+                        except Exception:
+                            pass
+                        return df_disk
+                    attempts.append(
+                        {
+                            "source": "cache:file",
+                            "ok": False,
+                            "err": "unverified_metadata" if not persisted_meta else "expired_metadata",
+                        }
+                    )
         except Exception:
             pass
 
@@ -351,6 +428,7 @@ class AkShareProvider(MarketDataProvider):
                         "elapsed_sec": 0.0,
                         "skipped_routes": [],
                         "attempts": attempts,
+                        "cache_age_sec": round(age, 2),
                     }
                     if self._snapshot_cache_source:
                         meta["cache_of"] = self._snapshot_cache_source
@@ -360,6 +438,8 @@ class AkShareProvider(MarketDataProvider):
                             if "schema" in self._last_snapshot_meta:
                                 meta["schema"] = self._last_snapshot_meta.get("schema")
                             meta["normalized"] = True
+                            meta["captured_at"] = self._last_snapshot_meta.get("captured_at")
+                            meta["snapshot_session_date"] = self._last_snapshot_meta.get("snapshot_session_date")
                     except Exception:
                         pass
                     self._last_snapshot_meta = meta
@@ -393,6 +473,8 @@ class AkShareProvider(MarketDataProvider):
                     df = self._standardize_spot_snapshot(df, route="sina")
                     src = self._src_for_route("sina")
                     attempts.append({"source": src, "ok": True, "rows": int(len(df))})
+                    captured_at = datetime.now(ZoneInfo("Asia/Shanghai")).isoformat()
+                    snapshot_session_date = datetime.now(ZoneInfo("Asia/Shanghai")).date().isoformat()
                     self._last_snapshot_meta = {
                         "source": src,
                         "fallback": False,
@@ -403,6 +485,8 @@ class AkShareProvider(MarketDataProvider):
                         "attempts": attempts,
                         "schema": (self._last_snapshot_meta or {}).get("schema"),
                         "normalized": True,
+                        "captured_at": captured_at,
+                        "snapshot_session_date": snapshot_session_date,
                     }
                     try:
                         print(f"[快照] 命中 route=sina rows={int(len(df))} elapsed={round(time.time()-t0,2)}s", flush=True)
@@ -411,7 +495,14 @@ class AkShareProvider(MarketDataProvider):
                     self._update_snapshot_cache(df)
                     # persist disk cache
                     try:
-                        df.to_pickle(disk_path)
+                        _write_snapshot_cache(
+                            df,
+                            disk_path,
+                            disk_meta_path,
+                            source=src,
+                            captured_at=captured_at,
+                            session_date=snapshot_session_date,
+                        )
                     except Exception:
                         pass
                     return df
@@ -430,6 +521,8 @@ class AkShareProvider(MarketDataProvider):
                     df = self._standardize_spot_snapshot(df, route="em")
                     src = self._src_for_route("em")
                     attempts.append({"source": src, "ok": True, "rows": int(len(df))})
+                    captured_at = datetime.now(ZoneInfo("Asia/Shanghai")).isoformat()
+                    snapshot_session_date = datetime.now(ZoneInfo("Asia/Shanghai")).date().isoformat()
                     self._last_snapshot_meta = {
                         "source": src,
                         "fallback": False,
@@ -440,6 +533,8 @@ class AkShareProvider(MarketDataProvider):
                         "attempts": attempts,
                         "schema": (self._last_snapshot_meta or {}).get("schema"),
                         "normalized": True,
+                        "captured_at": captured_at,
+                        "snapshot_session_date": snapshot_session_date,
                     }
                     try:
                         print(f"[快照] 命中 route=em rows={int(len(df))} elapsed={round(time.time()-t0,2)}s", flush=True)
@@ -448,7 +543,14 @@ class AkShareProvider(MarketDataProvider):
                     self._update_snapshot_cache(df)
                     # persist disk cache
                     try:
-                        df.to_pickle(disk_path)
+                        _write_snapshot_cache(
+                            df,
+                            disk_path,
+                            disk_meta_path,
+                            source=src,
+                            captured_at=captured_at,
+                            session_date=snapshot_session_date,
+                        )
                     except Exception:
                         pass
                     return df
@@ -468,6 +570,7 @@ class AkShareProvider(MarketDataProvider):
                 if isinstance(df_disk, pd.DataFrame) and not df_disk.empty:
                     mtime = float(getattr(disk_path.stat(), "st_mtime", time.time()))
                     age = time.time() - mtime
+                    persisted_meta = _verified_snapshot_cache_meta(df_disk, disk_meta_path)
                     self._last_snapshot_meta = {
                         "source": "cache:file",
                         "cache": "file",
@@ -479,13 +582,14 @@ class AkShareProvider(MarketDataProvider):
                         "skipped_routes": [],
                         "attempts": attempts,
                         "error": (f"{type(last_err).__name__}: {last_err}" if last_err else None),
+                        "captured_at": persisted_meta.get("captured_at"),
+                        "snapshot_session_date": persisted_meta.get("snapshot_session_date"),
+                        "cache_of": persisted_meta.get("source"),
                     }
                     try:
                         print(f"[快照] 失败回退到磁盘缓存 rows={int(len(df_disk))} age={age:.1f}s", flush=True)
                     except Exception:
                         pass
-                    # also refresh memory
-                    self._update_snapshot_cache(df_disk)
                     return df_disk
         except Exception:
             pass
@@ -771,7 +875,7 @@ class AkShareProvider(MarketDataProvider):
             return f"sz{s}"
         return f"sh{s}"
 
-    def get_minute_bars_5m(self, symbol: str, start_date: str, end_date: str) -> pd.DataFrame:
+    def get_minute_bars_5m(self, symbol: str, start_date: str, end_date: str, *, allow_fallback: bool = True) -> pd.DataFrame:
         ak = self._import()
         primary_error: Exception | None = None
         prefixed = self._to_prefixed_symbol(symbol)
@@ -788,6 +892,8 @@ class AkShareProvider(MarketDataProvider):
             raise DataProviderError("AkShare stock_zh_a_minute empty in requested window", symbol=symbol)
         except Exception as ex:  # noqa: BLE001
             primary_error = ex
+        if not allow_fallback:
+            raise DataProviderError(f"AkShare minute primary route failed: {primary_error}", symbol=symbol) from primary_error
         sym = self._to_em_symbol(symbol)
         try:
             df = self._call_with_retry(
@@ -809,7 +915,7 @@ class AkShareProvider(MarketDataProvider):
         except Exception as ex:  # noqa: BLE001
             raise DataProviderError(f"AkShare minute fetch failed: primary={primary_error}; fallback={ex}", symbol=symbol) from ex
 
-    def get_index_minute_bars_5m(self, symbol: str, start_date: str, end_date: str) -> pd.DataFrame:
+    def get_index_minute_bars_5m(self, symbol: str, start_date: str, end_date: str, *, allow_fallback: bool = True) -> pd.DataFrame:
         ak = self._import()
         idx = str(symbol).strip()
         primary_error: Exception | None = None
@@ -827,6 +933,8 @@ class AkShareProvider(MarketDataProvider):
             raise DataProviderError("AkShare index stock_zh_a_minute empty in requested window", symbol=idx)
         except Exception as ex:  # noqa: BLE001
             primary_error = ex
+        if not allow_fallback:
+            raise DataProviderError(f"AkShare index minute primary route failed: {primary_error}", symbol=idx) from primary_error
         try:
             df = self._call_with_retry(
                 lambda: self._with_requests_timeout(

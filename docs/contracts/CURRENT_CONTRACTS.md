@@ -2,11 +2,13 @@
 
 GP has one recommendation lifecycle.
 
-1. `RecommendationPlan` is the immutable daily decision from the Adaptive Decision Engine. Its identity binds the session, completed daily evidence, complete candidate universe, policy state, and producer revision.
+1. `RecommendationPlan` is an immutable decision version from the Adaptive Decision Engine. A base plan binds the session, completed daily evidence, complete candidate universe, policy state, and producer revision. An optional lunch-derived plan may retain that full evaluated scope while reranking only the base plan's frozen Top-30 from one exact, complete 11:30 five-minute batch; it is a new plan and never mutates the base plan.
 2. `RuntimeObservation` is immutable intraday execution evidence for exactly one plan. It may only report symbols already evaluated by that plan.
 3. `RecommendationPublication` is the only product projection. `PublicationService` alone constructs and commits it from a plan plus an optional runtime observation.
 
-`PlanService` resolves the target before selection. A session before or during trading uses the current session and the latest completed daily evidence. After close, a pending daily bar yields an explicit pending state; a completed daily bar targets the next open session. Market phase and polling time never affect plan identity.
+`PlanService` resolves the target before selection. A session before or during trading uses the current session and the latest completed daily evidence. After close, a pending daily bar yields an explicit pending state; a completed daily bar targets the next open session. The base plan identity is independent of polling time. A lunch-derived identity additionally binds the base plan ID and normalized closed five-minute content through the existing producer and policy identity fields.
+
+The lunch batch is atomic: every frozen Top-30 symbol plus CSI300 must contain the exact 24 closed bars from 09:35 through 11:30 for the same session. Collection starts no earlier than 11:32 to avoid accepting an upstream row at the instant its label first appears. Any missing, duplicate, unordered, null, mixed-session or unclosed input means no lunch plan and no current-publication switch. A lunch plan must be published with its 11:30 `RuntimeObservation`; the lunch market gate remains deny. Existing conversation sessions keep their first publication, while a new session may bind the latest lunch publication.
 
 The database owns `recommendation_plans`, `runtime_observations`, `recommendation_publications`, `current_publication`, `sessions`, `turns`, and `claims`. Conversation sessions and turns bind `publication_id`.
 
