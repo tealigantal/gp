@@ -89,7 +89,10 @@ For each pick use compact natural wording: why it is on the list, the trigger
 or entry area, stop/invalidation, first target/RR if available, and what must
 confirm before acting. Keep it practical. Never output Markdown tables or any
 table layout; write each stock and its key facts as natural Chinese sentences on
-separate lines, using a numbered list when there are multiple stocks. Do not use
+separate lines, using a numbered list when there are multiple stocks. For every
+pick, put the stock code/name on its own line, then put rank and comprehensive
+score, probability, risk-adjusted score, plan status, and price/trigger details
+on separate lines. Do not combine these facts into one paragraph. Do not use
 table headers, pipes, or separator lines.
 
 Mandatory score disclosure:
@@ -155,6 +158,7 @@ tool_evidence_context 重新写一份完整回答。
 7. 可使用自然的中文格式和编号；所有市场数值、日期和数量结论必须来自证书中的对应字段，不能补写或估算。
 8. 当 candidate_details 为空时，只解释 no-trade 原因和等待条件；不得补写股票代码、排名、市场数值、日期或替代候选。
 9. 严禁输出 Markdown 表格或任何表格排版。多个股票或指标必须逐项换行表达，可使用编号列表，不得使用表头、竖线或横线。
+10. 每只股票的代码或名称单独占一行；排名与综合分、上涨概率、风险调整分、计划状态、价格/触发条件分别单独占行。不得把这些事实堆在同一段落中；每行只表达一个事实类别。
 
 这是同一真实 LLM 对同一证据证书的重新生成，不是模板。只输出自然中文。
 """
