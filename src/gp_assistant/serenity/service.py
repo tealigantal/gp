@@ -6,7 +6,6 @@ from hashlib import sha256
 import json
 import os
 from pathlib import Path
-import re
 import sqlite3
 import time
 from typing import Any, Iterable
@@ -14,19 +13,13 @@ from zoneinfo import ZoneInfo
 
 from ..core.config import load_config
 from ..core.paths import store_dir
-from .parser import build_verified_evidence, extract_pdf_text
+from .parser import PARSER_REVISION, build_verified_evidence, extract_pdf_document, supported_title_family
 from .sources import CNInfoClient, ExchangeVerifier
 
 
-POLICY_REVISION = "serenity_fixed_batch_3pct_v1"
+POLICY_REVISION = "serenity_fixed_batch_3pct_v2_ocr"
 FIXED_WEIGHT = 0.03
-ZERO_REFERENCE = "serenity_zero_v1"
-_RELEVANT_TITLE = re.compile(
-    r"业绩(?:预告|快报)|净利润|立案|行政处罚|纪律处分|监管措施|调查通知|"
-    r"重大(?:诉讼|仲裁)|终止|撤回|取消|更正|修订|补充公告|重大资产重组|"
-    r"控制权变更|非公开发行|定向增发|重大项目|回购|增持|减持|中标|合同",
-    re.I,
-)
+ZERO_REFERENCE = "serenity_zero_v2"
 
 
 def _canonical(value: Any) -> str:
@@ -355,25 +348,40 @@ def collect_once(*, now: datetime | None = None, client: CNInfoClient | None = N
             if not bool(page.get("complete")):
                 raise RuntimeError(f"pagination_incomplete:{symbol}")
             for record in list(page.get("records") or []):
-                if not _RELEVANT_TITLE.search(str(record.get("title") or "")):
+                title = str(record.get("title") or "")
+                title_family = supported_title_family(title)
+                if title_family is None:
                     continue
                 published_at = str(record.get("published_at") or "")
                 published_clock = datetime.fromisoformat(published_at)
                 if published_clock > clock:
                     continue
-                pdf = source.download_pdf(str(record["source_url"]), max_bytes=cfg.pdf_max_bytes)
-                text, parse_state = extract_pdf_text(pdf, timeout_sec=max(5.0, cfg.request_timeout_sec * 2))
-                if parse_state != "parsed":
-                    raise RuntimeError(f"pdf_{parse_state}:{symbol}")
                 if not exchange.verify(record, start=start, end=end):
                     raise RuntimeError(f"exchange_verification_failed:{symbol}")
+                pdf = source.download_pdf(str(record["source_url"]), max_bytes=cfg.pdf_max_bytes)
+                parse_result = extract_pdf_document(
+                    pdf,
+                    symbol=symbol,
+                    title=title,
+                    max_pages=40,
+                    max_chars=250_000,
+                    timeout_sec=240.0,
+                    primary_dpi=200,
+                    verify_dpi=300,
+                    max_page_pixels=20_000_000,
+                    max_total_pixels=160_000_000,
+                    page_timeout_sec=8.0,
+                )
+                if parse_result.state != "parsed":
+                    raise RuntimeError(f"pdf_{parse_result.state}:{symbol}")
+                text = parse_result.text
                 content_digest = sha256(pdf).hexdigest()
                 document_id = "serdoc_" + sha256(f"cninfo|{record['source_record_id']}".encode()).hexdigest()[:24]
                 version_id = "server_" + sha256(f"{document_id}|{content_digest}".encode()).hexdigest()[:24]
                 first_seen_at = _document_first_seen_at(document_id) or clock.isoformat()
                 facts, _ = build_verified_evidence(
                     symbol=symbol,
-                    title=str(record["title"]),
+                    title=title,
                     text=text,
                     published_at=published_at,
                     effective_available_at=first_seen_at,
@@ -390,10 +398,15 @@ def collect_once(*, now: datetime | None = None, client: CNInfoClient | None = N
                     "symbol": symbol,
                     "source_record_id": str(record["source_record_id"]),
                     "source_url": str(record["source_url"]),
-                    "title": str(record["title"]),
+                    "title": title,
+                    "title_family": title_family,
                     "published_at": published_at,
                     "first_seen_at": first_seen_at,
                     "content_digest": content_digest,
+                    "parse_method": parse_result.parse_method,
+                    "parser_revision": parse_result.parser_revision,
+                    "ocr_engine": parse_result.ocr_engine,
+                    "ocr_confidence": parse_result.ocr_confidence,
                     "facts": [fact.model_dump(mode="json") for fact in facts],
                 }
                 documents.append(item)
@@ -409,7 +422,25 @@ def collect_once(*, now: datetime | None = None, client: CNInfoClient | None = N
             alphas[symbol] = round(alpha, 12)
             reasons[symbol] = ["serenity_verified_positive" if alpha > 0 else "serenity_verified_negative" if alpha < 0 else "serenity_no_relevant_evidence"]
         completed_at = clock.isoformat()
-        payload = {"schema": "SerenityBatch.v1", "target_id": target.target_id, "completed_at": completed_at, "alphas": alphas, "reasons": reasons, "document_version_ids": sorted(item["version_id"] for item in documents)}
+        payload = {
+            "schema": "SerenityBatch.v1",
+            "target_id": target.target_id,
+            "completed_at": completed_at,
+            "policy_revision": POLICY_REVISION,
+            "parser_revision": PARSER_REVISION,
+            "alphas": alphas,
+            "reasons": reasons,
+            "document_version_ids": sorted(item["version_id"] for item in documents),
+            "document_parse_audit": {
+                item["version_id"]: {
+                    "parse_method": item["parse_method"],
+                    "parser_revision": item["parser_revision"],
+                    "ocr_engine": item["ocr_engine"],
+                    "ocr_confidence": item["ocr_confidence"],
+                }
+                for item in documents
+            },
+        }
         batch_id = _commit_batch(target, payload, documents, completed_at)
         _set_health("ready", target_id=target.target_id, batch_id=batch_id, updated_at=completed_at)
         return {"state": "ready", "target_id": target.target_id, "batch_id": batch_id, "symbol_count": len(target.symbols), "document_count": len(documents)}

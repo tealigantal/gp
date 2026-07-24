@@ -31,7 +31,7 @@ from gp_assistant.contracts.evidence import (
 from gp_assistant.contracts.market import TradingCalendarRef
 from gp_assistant.contracts.ids import content_id
 from gp_assistant.intraday.lunch_rebalance import LunchBatchUnavailable, collect_lunch_batch, rerank_lunch_candidates
-from gp_assistant.serenity.service import load_active_target
+from gp_assistant.serenity.service import POLICY_REVISION, load_active_target
 from gp_assistant.store import ContractStore, ContractStoreError, PublicationConflict
 
 
@@ -127,7 +127,7 @@ def _base_plan(store: ContractStore, *, serenity_active: bool = False):
         evaluated_candidates=(*finalists, outsider),
         serenity=SerenityDecisionBinding(
             reference_id="serenity-batch" if serenity_active else None,
-            policy_revision="serenity_fixed_batch_3pct_v1",
+            policy_revision=POLICY_REVISION,
             applied_weight=0.03 if serenity_active else 0.0,
             state="active" if serenity_active else "degraded",
             reason_codes=("verified",) if serenity_active else ("serenity_batch_unavailable",),
@@ -339,7 +339,8 @@ def test_worker_lunch_tick_never_runs_empty_runtime_and_afternoon_keeps_lunch_pl
     real = Calls()
     runtime = Calls()
     lunch = LunchRebalanceProducer(store, provider=FakeMinuteProvider())
-    last_plan_at = datetime(2026, 7, 24, 11, 0, tzinfo=TZ)
+    last_plan_at = 1_000.0
+    monotonic_now = lambda: 1_100.0
 
     before_lunch = _worker_tick(
         store,
@@ -349,6 +350,7 @@ def test_worker_lunch_tick_never_runs_empty_runtime_and_afternoon_keeps_lunch_pl
         real_producer=real,
         runtime_producer=runtime,
         lunch_producer=lunch,
+        monotonic_now=monotonic_now,
     )
     assert before_lunch == last_plan_at
     assert real.count == 0
@@ -363,6 +365,7 @@ def test_worker_lunch_tick_never_runs_empty_runtime_and_afternoon_keeps_lunch_pl
         real_producer=real,
         runtime_producer=runtime,
         lunch_producer=lunch,
+        monotonic_now=monotonic_now,
     )
     assert returned == last_plan_at
     assert real.count == 0
@@ -377,6 +380,7 @@ def test_worker_lunch_tick_never_runs_empty_runtime_and_afternoon_keeps_lunch_pl
         real_producer=real,
         runtime_producer=runtime,
         lunch_producer=lunch,
+        monotonic_now=monotonic_now,
     )
     assert store.load_plan(store.current_publication().plan_id).producer.name == "lunch_5m_producer"
 
@@ -388,6 +392,7 @@ def test_worker_lunch_tick_never_runs_empty_runtime_and_afternoon_keeps_lunch_pl
         real_producer=real,
         runtime_producer=runtime,
         lunch_producer=lunch,
+        monotonic_now=monotonic_now,
     )
     assert real.count == 0
     assert runtime.count == 1

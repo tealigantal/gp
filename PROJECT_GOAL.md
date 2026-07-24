@@ -52,7 +52,7 @@ Contract-kernel hard cutover: one typed plan, runtime observation, publication, 
 
 - Serenity is a local resident native Alpha input using free official announcements; its effective weight is exactly 0% or 3%, and the deterministic engine remains the sole ranking authority.
 - Current data and chat services continue to use the existing Docker topology and shared `store` volume.
-- The user accepts one additional open-source PDF dependency, `pypdf`, and no OCR in v1.
+- The user accepts the bounded Serenity v2 OCR lane: `pypdf` remains the text fast path, while structurally valid zero-text PDFs may use fixed-version PDFium, Tesseract `chi_sim+eng`, and Pillow dependencies inside the isolated worker child process.
 
 ## Unknowns
 

@@ -18,6 +18,7 @@ from .store import ContractStore
 from .serenity.service import publish_target as publish_serenity_target
 from .serenity.service import run_loop as run_serenity_loop
 from datetime import datetime
+from collections.abc import Callable
 from zoneinfo import ZoneInfo
 
 
@@ -54,25 +55,35 @@ def _worker_tick(
     store: ContractStore,
     *,
     now: datetime,
-    last_plan_at: datetime | None,
+    last_plan_at: float | None,
     plan_interval_sec: int,
     real_producer: RealRecommendationProducer | None = None,
     runtime_producer: RuntimeRecommendationProducer | None = None,
     lunch_producer: LunchRebalanceProducer | None = None,
-) -> datetime | None:
+    monotonic_now: Callable[[], float] | None = None,
+) -> float | None:
+    monotonic_clock = monotonic_now or time.monotonic
     phase = market_phase(now)
     current_publication = store.current_publication()
     current_plan = store.load_plan(current_publication.plan_id) if current_publication else None
-    current_session_ready = bool(current_plan and current_plan.market_session_date == now.date())
-    plan_due = last_plan_at is None or (now - last_plan_at).total_seconds() >= max(60, plan_interval_sec)
+    current_session_ready = bool(
+        current_plan
+        and current_plan.market_session_date == now.date()
+        and current_plan.candidate_universe.complete
+    )
+    plan_due = last_plan_at is None or monotonic_clock() - last_plan_at >= max(60, plan_interval_sec)
     real = real_producer or RealRecommendationProducer(store)
     runtime = runtime_producer or RuntimeRecommendationProducer(store)
     lunch = lunch_producer or LunchRebalanceProducer(store)
 
     if phase is MarketPhase.LUNCH:
-        if not current_session_ready:
-            real.produce(now, refresh_daily=True)
-            last_plan_at = now
+        if plan_due and not current_session_ready:
+            try:
+                real.produce(now, refresh_daily=True)
+            except Exception as exc:  # noqa: BLE001
+                print(json.dumps({"worker_plan_error": f"{type(exc).__name__}:{exc}"}, ensure_ascii=False), flush=True)
+            finally:
+                last_plan_at = monotonic_clock()
         result = lunch.produce(now=now)
         if result.state not in {"published", "reused"}:
             print(json.dumps({"lunch_rebalance": result.state, "reason": result.reason}, ensure_ascii=False), flush=True)
@@ -84,8 +95,12 @@ def _worker_tick(
         and phase in {MarketPhase.AFTERNOON, MarketPhase.CLOSING_AUCTION}
     )
     if plan_due and not lunch_plan_current:
-        real.produce(now, refresh_daily=True)
-        last_plan_at = now
+        try:
+            real.produce(now, refresh_daily=True)
+        except Exception as exc:  # noqa: BLE001
+            print(json.dumps({"worker_plan_error": f"{type(exc).__name__}:{exc}"}, ensure_ascii=False), flush=True)
+        finally:
+            last_plan_at = monotonic_clock()
     runtime.produce(now=now)
     return last_plan_at
 

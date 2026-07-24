@@ -1,5 +1,11 @@
 # Validation Ledger
 
+## Exact Daily Coverage and Serenity OCR v2
+
+2026-07-24: `python -m pytest -q` passed 47 default tests after the final OCR whitespace regression was added. Targeted OCR/source and daily-refresh/lunch/Serenity contract suites passed; `python -m compileall -q src tests`, `docker compose config --quiet`, contract/retired-symbol checks and `git diff --check` also passed. Tests prove old-date nonempty responses stay pending, only fresh same-session complete zero rows can be excluded, resumed symbols reenter the denominator, only missing symbols refresh, exact coverage must reach 100%, and both successful and failed scans wait a full monotonic interval from completion.
+
+2026-07-24: Built isolated image `gp-backend:ocr-pr10` without recreating any service. The image reported Tesseract 5.3.0 with `chi_sim`, `eng`, and `osd`; pypdfium2 5.12.1, pytesseract 0.3.13, and Pillow 12.3.0 matched the pinned versions. A generated one-page Chinese image-only PDF passed the actual container parser as `tesseract_ocr`, with symbol/topic checks, 93 median confidence, and consistent 200/300 DPI percentage recognition. Corrupt, page-limited, low-confidence, symbol/topic mismatch and inconsistent-number paths are covered by deterministic tests and map the entire exact Serenity batch to 0%. No third-party PDF or runtime store artifact is part of the change.
+
 ## Lunch Top-30 Five-Minute Rerank
 
 2026-07-24: `python -m pytest -q` passed 40 tests. The suite covers the exact 11:32 trigger, complete 30-symbol plus CSI300 batch gating, missing/duplicate/unfinished source failure, deterministic reranking, unchanged daily trade facts, Serenity's persisted fixed 3% bound, append-only plan/runtime/publication history, current-pointer CAS, late-publication prevention, real spawned-process write exclusion, current-schema migration refusal without byte changes, old/new conversation publication binding, afternoon preservation of the immutable lunch signal, product-only LLM context and output rejection when engineering identifiers or interfaces leak.

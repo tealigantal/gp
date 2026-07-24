@@ -2,6 +2,8 @@
 
 Daily base plans bind one completed `daily_evidence_date` and one complete full-market candidate-universe digest. They fail closed when the required daily date or full-market coverage is unavailable.
 
+The required daily date must appear exactly for every expected-tradable symbol; a nonempty older response is not refresh success. The raw main-board count never shrinks for suspension. A symbol may leave only the target-date coverage denominator when the reused spot snapshot is fresh, belongs to that exact session, contains every required field, has positive previous close, and reports zero price, OHLC, volume and amount. Missing rows, stale fallback, cross-day snapshots and incomplete fields cannot prove suspension. Readiness requires 100% exact-date coverage after storage is reread.
+
 Runtime observations bind one immutable plan and one observed market phase. Their `slot_closed_at` may never be later than `observed_at`, and a publication for the same market session may not move either closed-slot time or observation time backwards.
 
 ## Lunch five-minute batch

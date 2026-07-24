@@ -34,6 +34,8 @@ Before changing the recommendation path, read `docs/contracts/CURRENT_CONTRACTS.
 - `docs/adr/0010-serenity-fixed-three-percent-unified-worker.md`: current Serenity weight and deployment decision.
 - `docs/plans/2026-07-24-lunch-five-minute-rerank.md`: active lunch Top-30 rerank ExecPlan.
 - `docs/adr/0011-lunch-top30-five-minute-rerank.md`: immutable lunch-plan semantic extension.
+- `docs/plans/2026-07-24-daily-refresh-and-serenity-ocr-recovery.md`: active daily-refresh and scanned-PDF recovery ExecPlan.
+- `docs/adr/0012-daily-coverage-and-serenity-ocr.md`: exact target-date coverage and bounded OCR decision.
 
 ## Verified entry points and commands
 

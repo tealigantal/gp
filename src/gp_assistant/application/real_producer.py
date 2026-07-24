@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 from collections import Counter
-from datetime import date, datetime
+from datetime import date, datetime, time as clock_time
 from hashlib import sha256
 import json
+import math
 
 import pandas as pd
 
@@ -14,6 +15,7 @@ from ..market_memory.retrieval import retrieve_similar_events
 from ..market_memory.store import list_events_before
 from ..providers.boards import is_mainboard
 from ..providers.factory import get_provider
+from ..core.config import load_config
 from ..probability_engine.engine import infer_probability
 from ..risk_engine.engine import assess_candidate_risk, rank_candidate
 from .history_daily import frames as history_frames, latest_rows
@@ -30,15 +32,68 @@ from .trading_calendar import load_cn_a_calendar
 class RealRecommendationProducer:
     """Offline production producer; it reads cached full-market daily evidence only."""
 
-    def __init__(self, store, *, spot_loader=None, daily_refresher=None):
+    def __init__(self, store, *, spot_loader=None, spot_meta_loader=None, daily_refresher=None):
         self.store = store
         self.provider = get_provider(prefer="akshare") if spot_loader is None else None
         self.spot_loader = spot_loader or self.provider.get_spot_snapshot
+        self.spot_meta_loader = spot_meta_loader or (
+            self.provider.last_snapshot_meta if self.provider is not None else (lambda: {})
+        )
         self.daily_refresher = daily_refresher
+
+    @staticmethod
+    def _no_bar_expected_symbols(
+        spot: pd.DataFrame,
+        *,
+        eligible_symbols: frozenset[str],
+        snapshot_meta: dict[str, object],
+        now: datetime,
+        required_daily_date: date,
+        is_open: bool,
+    ) -> frozenset[str]:
+        """Return same-session, explicitly non-trading symbols; ambiguity stays eligible."""
+        if not is_open or now.timetz().replace(tzinfo=None) < clock_time(15, 0):
+            return frozenset()
+        if bool(snapshot_meta.get("stale")) or bool(snapshot_meta.get("missing")) or bool(snapshot_meta.get("fallback")):
+            return frozenset()
+        if str(snapshot_meta.get("snapshot_session_date") or "") != required_daily_date.isoformat():
+            return frozenset()
+        if required_daily_date != now.date():
+            return frozenset()
+        source = str(snapshot_meta.get("source") or "")
+        if not source:
+            return frozenset()
+        if snapshot_meta.get("cache"):
+            try:
+                age = float(snapshot_meta.get("cache_age_sec"))
+            except (TypeError, ValueError):
+                return frozenset()
+            cfg = load_config()
+            limit = cfg.cache_refresh_ttl_sec if snapshot_meta.get("cache") == "file" else cfg.ak_spot_refresh_ttl_sec
+            if not math.isfinite(age) or age < 0 or age > max(1, int(limit)):
+                return frozenset()
+        required_columns = {"code", "prev_close", "price", "open", "high", "low", "volume", "amount"}
+        if not required_columns.issubset(spot.columns):
+            return frozenset()
+        excluded: set[str] = set()
+        for row in spot[list(required_columns)].itertuples(index=False):
+            values = row._asdict()
+            symbol = str(values["code"]).zfill(6)
+            if symbol not in eligible_symbols:
+                continue
+            try:
+                previous = float(values["prev_close"])
+                current = tuple(float(values[key]) for key in ("price", "open", "high", "low", "volume", "amount"))
+            except (TypeError, ValueError):
+                continue
+            if previous > 0 and math.isfinite(previous) and all(math.isfinite(value) and value == 0.0 for value in current):
+                excluded.add(symbol)
+        return frozenset(excluded)
 
     def produce(self, now: datetime, *, refresh_daily: bool = False) -> object:
         latest = latest_rows()
         spot = self.spot_loader()
+        snapshot_meta = dict(self.spot_meta_loader() or {})
         if not isinstance(spot, pd.DataFrame) or spot.empty:
             raise ValueError("candidate_universe_unavailable")
         required_columns = {"code", "name"}
@@ -55,32 +110,93 @@ class RealRecommendationProducer:
         )
         if not eligible_symbols:
             raise ValueError("candidate_universe_empty")
-        dates = Counter(str(row["date"])[:10] for row in latest.values())
-        evidence_day, covered = dates.most_common(1)[0] if dates else (None, 0)
-        covered_symbols = {
-            symbol for symbol in eligible_symbols
-            if symbol in latest and str(latest[symbol]["date"])[:10] == evidence_day
-        }
-        total = len(eligible_symbols)
-        complete = bool(evidence_day and covered_symbols and len(covered_symbols) / total >= 0.999)
         trading_calendar = load_cn_a_calendar()
         is_open = trading_calendar.is_open(now.date())
         next_open = trading_calendar.next_open_after(now.date())
-        market_session = now.date() if is_open and now.timetz().replace(tzinfo=None).hour < 15 else next_open
+        market_session = now.date() if is_open and now.timetz().replace(tzinfo=None) < clock_time(15, 0) else next_open
+        required_daily_date = trading_calendar.previous_open_before(market_session)
+        raw_eligible = frozenset(eligible_symbols)
+        no_bar_expected = self._no_bar_expected_symbols(
+            spot,
+            eligible_symbols=raw_eligible,
+            snapshot_meta=snapshot_meta,
+            now=now,
+            required_daily_date=required_daily_date,
+            is_open=is_open,
+        )
+        expected_tradable = raw_eligible - no_bar_expected
+
+        def exact_covered(rows: dict[str, dict[str, object]]) -> frozenset[str]:
+            return frozenset(
+                symbol
+                for symbol in expected_tradable
+                if symbol in rows and str(rows[symbol].get("date") or "")[:10] == required_daily_date.isoformat()
+            )
+
+        covered_target = exact_covered(latest)
+        complete = bool(expected_tradable and covered_target == expected_tradable)
+        refresh_report: dict[str, int] | None = None
+        if refresh_daily and not complete:
+            missing = sorted(expected_tradable - covered_target)
+            refresher = self.daily_refresher or DailyEvidenceRefresher(self.provider or get_provider(prefer="akshare"))
+            refresh_report = refresher.refresh(
+                symbols=missing,
+                start=required_daily_date.isoformat(),
+                end=required_daily_date.isoformat(),
+                target_date=required_daily_date.isoformat(),
+            )
+            latest = latest_rows()
+            covered_target = exact_covered(latest)
+            complete = bool(expected_tradable and covered_target == expected_tradable)
+
+        dates = Counter(
+            str(latest[symbol].get("date") or "")[:10]
+            for symbol in raw_eligible
+            if symbol in latest and str(latest[symbol].get("date") or "")[:10] != required_daily_date.isoformat()
+        )
+        fallback_day = dates.most_common(1)[0][0] if dates else None
+        evidence_day = required_daily_date.isoformat() if complete else fallback_day
+        covered_symbols = {
+            symbol
+            for symbol in expected_tradable
+            if evidence_day and symbol in latest and str(latest[symbol].get("date") or "")[:10] == evidence_day
+        }
         target = resolve_plan_target(
             now=now,
             completed_daily_date=date.fromisoformat(evidence_day) if evidence_day else None,
             calendar=trading_calendar.ref,
             is_open=is_open,
             next_open_session=next_open,
-            required_daily_evidence_date=trading_calendar.previous_open_before(market_session),
+            required_daily_evidence_date=required_daily_date,
         )
-        if refresh_daily and target.state is PlanTargetState.PENDING_DAILY_EVIDENCE:
-            refresher = self.daily_refresher or DailyEvidenceRefresher(self.provider or get_provider(prefer="akshare"))
-            refresher.refresh(symbols=eligible_symbols, start=target.daily_evidence_date.isoformat() if target.daily_evidence_date else target.market_session_date.isoformat(), end=now.date().isoformat())
-            return self.produce(now, refresh_daily=False)
-        digest = sha256("|".join(f"{symbol}:{latest[symbol]['date']}" for symbol in sorted(covered_symbols)).encode()).hexdigest()
-        universe = CandidateUniverseBinding(candidate_universe_id=f"universe_{evidence_day or 'unavailable'}_{digest[:16]}", content_digest=digest, total_count=total, eligible_count=len(covered_symbols), complete=complete, source="akshare:spot+history.db:daily")
+        digest_payload = {
+            "schema": "CandidateUniverseEvidence.v2",
+            "target_daily_date": required_daily_date.isoformat(),
+            "raw_eligible_symbols": sorted(raw_eligible),
+            "no_bar_expected_symbols": sorted(no_bar_expected),
+            "exact_covered_symbols": sorted(covered_target),
+        }
+        digest = sha256(json.dumps(digest_payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+        print(
+            json.dumps(
+                {
+                    "daily_evidence_date": required_daily_date.isoformat(),
+                    "raw_mainboard_count": len(raw_eligible),
+                    "no_bar_expected_count": len(no_bar_expected),
+                    "expected_tradable_count": len(expected_tradable),
+                    "exact_covered_count": len(covered_target),
+                    "missing_count": len(expected_tradable - covered_target),
+                    "complete": complete,
+                    "refresh": refresh_report,
+                    "snapshot_source": str(snapshot_meta.get("cache_of") or snapshot_meta.get("source") or "unknown"),
+                    "snapshot_session_date": str(snapshot_meta.get("snapshot_session_date") or ""),
+                },
+                ensure_ascii=False,
+                sort_keys=True,
+            ),
+            flush=True,
+        )
+        universe = CandidateUniverseBinding(candidate_universe_id=f"universe_{evidence_day or 'unavailable'}_{digest[:16]}", content_digest=digest, total_count=len(raw_eligible), eligible_count=len(covered_symbols), complete=complete, source="akshare:spot+history.db:daily")
         pool = sorted(covered_symbols, key=lambda symbol: float(latest[symbol].get("amount") or 0.0), reverse=True)[:200]
         base_candidates = self._candidates(history_frames(pool), evidence_day) if complete and target.state is PlanTargetState.READY else ()
         finalists = tuple(sorted(base_candidates, key=lambda item: (-item.adaptive_score, item.symbol))[:30])

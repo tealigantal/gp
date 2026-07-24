@@ -1,4 +1,6 @@
 from datetime import date, datetime, timedelta, timezone
+import json
+import sqlite3
 from types import SimpleNamespace
 
 from gp_assistant.application.conversation_service import ConversationService
@@ -11,6 +13,7 @@ from gp_assistant.contracts.decision import CandidateDecision, TradePlan
 from gp_assistant.contracts.evidence import CandidateUniverseBinding, DecisionPolicyBinding, ProbabilityAssessment, ProducerIdentity, RankingAssessment, RiskAssessment, SerenityDecisionBinding, SignalAssessment
 from gp_assistant.contracts.market import TradingCalendarRef
 from gp_assistant.decision_engine.adaptive import AdaptiveDecisionEngine
+from gp_assistant.serenity.parser import PdfParseResult
 from gp_assistant.serenity.service import FIXED_WEIGHT, POLICY_REVISION, _commit_batch, _set_health, collect_once, load_decision, publish_target, status_snapshot
 from gp_assistant.store import ContractStore
 
@@ -239,6 +242,65 @@ def test_collector_source_failure_never_creates_partial_weight(tmp_path, monkeyp
     assert status_snapshot()["state"] == "degraded"
 
 
+def test_irrelevant_legal_revision_is_skipped_before_download(tmp_path, monkeypatch):
+    monkeypatch.setenv("GP_SERENITY_CURRENT_DB", str(tmp_path / "serenity.db"))
+    observed = datetime(2026, 7, 24, 9, 0, tzinfo=TZ)
+    target = publish_target(("000001",), market_session_date="2026-07-24", daily_evidence_date="2026-07-23", universe_digest="u", base_scores={"000001": 0.6}, observed_at=observed.isoformat())
+
+    class Source:
+        def load_stock_map(self):
+            return {"000001": {"org_id": "a"}}
+
+        def fetch_symbol(self, *_args, **_kwargs):
+            return {"complete": True, "records": [{"title": "关于发行股份购买资产的补充法律意见书（二）（修订稿）", "published_at": "2026-07-20T09:00:00+08:00", "source_url": "https://example.invalid/legal.pdf", "source_record_id": "legal"}]}
+
+        def download_pdf(self, *_args, **_kwargs):
+            raise AssertionError("irrelevant title must not be downloaded")
+
+    report = collect_once(now=observed, client=Source(), verifier=object())
+    assert report["state"] == "ready"
+    assert load_decision(target).applied_weight == 0.03
+
+
+def test_ocr_uncertainty_fails_the_whole_batch_and_audit_stays_in_json(tmp_path, monkeypatch):
+    db = tmp_path / "serenity.db"
+    monkeypatch.setenv("GP_SERENITY_CURRENT_DB", str(db))
+    observed = datetime(2026, 7, 24, 9, 0, tzinfo=TZ)
+    target = publish_target(("000001",), market_session_date="2026-07-24", daily_evidence_date="2026-07-23", universe_digest="u", base_scores={"000001": 0.6}, observed_at=observed.isoformat())
+
+    class Source:
+        def load_stock_map(self):
+            return {"000001": {"org_id": "a"}}
+
+        def fetch_symbol(self, *_args, **_kwargs):
+            return {"complete": True, "records": [{"title": "2026年半年度业绩预告", "published_at": "2026-07-20T09:00:00+08:00", "source_url": "https://example.invalid/report.pdf", "source_record_id": "report"}]}
+
+        def download_pdf(self, *_args, **_kwargs):
+            return b"pdf"
+
+    class Verifier:
+        def verify(self, *_args, **_kwargs):
+            return True
+
+    monkeypatch.setattr("gp_assistant.serenity.service.extract_pdf_document", lambda *_args, **_kwargs: PdfParseResult("", "ocr_uncertain", "ocr", ocr_engine="5.3", ocr_confidence=80.0))
+    report = collect_once(now=observed, client=Source(), verifier=Verifier())
+    assert report["state"] == "degraded"
+    assert load_decision(target).applied_weight == 0.0
+
+    monkeypatch.setattr("gp_assistant.serenity.service.extract_pdf_document", lambda *_args, **_kwargs: PdfParseResult("证券代码000001，2026年半年度业绩预告，预计净利润同比增长35%。", "parsed", "tesseract_ocr", ocr_engine="5.3", ocr_confidence=88.0))
+    ready = collect_once(now=observed, client=Source(), verifier=Verifier())
+    assert ready["state"] == "ready"
+    conn = sqlite3.connect(db)
+    try:
+        document = json.loads(conn.execute("SELECT payload_json FROM document_versions").fetchone()[0])
+        batch = json.loads(conn.execute("SELECT payload_json FROM batches ORDER BY completed_at DESC LIMIT 1").fetchone()[0])
+    finally:
+        conn.close()
+    assert document["parse_method"] == "tesseract_ocr"
+    assert document["ocr_confidence"] == 88.0
+    assert batch["document_parse_audit"][document["version_id"]]["ocr_engine"] == "5.3"
+
+
 def test_document_effective_availability_uses_stable_first_seen_time(tmp_path, monkeypatch):
     monkeypatch.setenv("GP_SERENITY_CURRENT_DB", str(tmp_path / "serenity.db"))
     first_clock = datetime(2026, 7, 24, 11, 30, tzinfo=TZ)
@@ -275,7 +337,10 @@ def test_document_effective_availability_uses_stable_first_seen_time(tmp_path, m
             return True
 
     effective_times = []
-    monkeypatch.setattr("gp_assistant.serenity.service.extract_pdf_text", lambda *_args, **_kwargs: ("净利润增长", "parsed"))
+    monkeypatch.setattr(
+        "gp_assistant.serenity.service.extract_pdf_document",
+        lambda *_args, **_kwargs: PdfParseResult("证券代码000001，净利润增长35%。", "parsed", "pypdf"),
+    )
 
     def capture_evidence(**kwargs):
         effective_times.append(kwargs["effective_available_at"])
