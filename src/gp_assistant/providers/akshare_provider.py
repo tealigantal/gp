@@ -771,7 +771,7 @@ class AkShareProvider(MarketDataProvider):
             return f"sz{s}"
         return f"sh{s}"
 
-    def get_minute_bars_5m(self, symbol: str, start_date: str, end_date: str) -> pd.DataFrame:
+    def get_minute_bars_5m(self, symbol: str, start_date: str, end_date: str, *, allow_fallback: bool = True) -> pd.DataFrame:
         ak = self._import()
         primary_error: Exception | None = None
         prefixed = self._to_prefixed_symbol(symbol)
@@ -788,6 +788,8 @@ class AkShareProvider(MarketDataProvider):
             raise DataProviderError("AkShare stock_zh_a_minute empty in requested window", symbol=symbol)
         except Exception as ex:  # noqa: BLE001
             primary_error = ex
+        if not allow_fallback:
+            raise DataProviderError(f"AkShare minute primary route failed: {primary_error}", symbol=symbol) from primary_error
         sym = self._to_em_symbol(symbol)
         try:
             df = self._call_with_retry(
@@ -809,7 +811,7 @@ class AkShareProvider(MarketDataProvider):
         except Exception as ex:  # noqa: BLE001
             raise DataProviderError(f"AkShare minute fetch failed: primary={primary_error}; fallback={ex}", symbol=symbol) from ex
 
-    def get_index_minute_bars_5m(self, symbol: str, start_date: str, end_date: str) -> pd.DataFrame:
+    def get_index_minute_bars_5m(self, symbol: str, start_date: str, end_date: str, *, allow_fallback: bool = True) -> pd.DataFrame:
         ak = self._import()
         idx = str(symbol).strip()
         primary_error: Exception | None = None
@@ -827,6 +829,8 @@ class AkShareProvider(MarketDataProvider):
             raise DataProviderError("AkShare index stock_zh_a_minute empty in requested window", symbol=idx)
         except Exception as ex:  # noqa: BLE001
             primary_error = ex
+        if not allow_fallback:
+            raise DataProviderError(f"AkShare index minute primary route failed: {primary_error}", symbol=idx) from primary_error
         try:
             df = self._call_with_retry(
                 lambda: self._with_requests_timeout(

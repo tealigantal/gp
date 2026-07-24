@@ -1,5 +1,15 @@
 # Validation Ledger
 
+## Lunch Top-30 Five-Minute Rerank
+
+2026-07-24: `python -m pytest -q` passed 40 tests. The suite covers the exact 11:32 trigger, complete 30-symbol plus CSI300 batch gating, missing/duplicate/unfinished source failure, deterministic reranking, unchanged daily trade facts, Serenity's persisted fixed 3% bound, append-only plan/runtime/publication history, current-pointer CAS, late-publication prevention, real spawned-process write exclusion, current-schema migration refusal without byte changes, old/new conversation publication binding, afternoon preservation of the immutable lunch signal, product-only LLM context and output rejection when engineering identifiers or interfaces leak.
+
+2026-07-24: `python -m pytest -q tests/test_akshare_minute_provider.py` passed 3 tests. `python -m pytest -q tests/integration/test_live_lunch_min5_source.py -m integration` passed 1 live read-only test through the isolated child-process collector. The live batch contained all 30 frozen candidates plus CSI300 with exactly 24 closed five-minute rows from 09:35 through 11:30.
+
+2026-07-24: `python -m compileall -q src tests`, contract-manifest check, retired-symbol check, `docker compose config --quiet`, and `git diff --check` passed. Tests used temporary SQLite files; no production database, container, public response field, ContractModel, or schema version was changed or deployed.
+
+2026-07-24: A final SQLite read-only compatibility audit of the live `contract_kernel.v1` store found zero content-ID, publication-decision, lineage, candidate, plan/runtime market-session, current-pointer, or foreign-key problems; `integrity_check` returned `ok`. This specifically confirmed that the PR retains the existing v1 publication reason semantics instead of silently invalidating historical rows.
+
 ## Serenity Fixed 3% Unified Worker
 
 2026-07-24: `compileall`, the full 18-test contract suite, retired-symbol enforcement, Compose config, and diff checks passed. Tests prove positive, negative, and neutral complete-batch behavior; exact zero invariance when one symbol is missing or a source fails; the ±0.03 cap; stable zero-plan reuse and complete-batch plan invalidation; full evaluated-candidate retention with Serenity restricted to the frozen Top-30; prevention of uncovered candidates entering selection because a covered finalist was penalized; first-seen availability that never backdates evidence to the announcement clock; product-level public health without raw collector errors; and product-only LLM context without Serenity internal references.

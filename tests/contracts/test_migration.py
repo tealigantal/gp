@@ -3,7 +3,7 @@ import sqlite3
 
 import pytest
 
-from gp_assistant.migrate_contracts import migrate
+from gp_assistant.migrate_contracts import MigrationBlocked, migrate
 from gp_assistant.store import ContractStore, UnsupportedDatabaseSchema
 from .test_contract_lifecycle import plan
 
@@ -32,3 +32,23 @@ def test_old_schema_is_rejected_and_migration_maps_exact_embedded_contract(tmp_p
     assert check.execute("PRAGMA foreign_key_check").fetchall() == []
     assert check.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
     check.close()
+
+
+def test_current_contract_database_is_never_replaced_by_legacy_migration(tmp_path):
+    path = tmp_path / "current.sqlite"
+    store = ContractStore(path)
+    selected_plan = plan(store)
+    from gp_assistant.application.publication_service import PublicationService
+
+    PublicationService(store).publish(
+        plan_id=selected_plan.plan_id,
+        runtime_id=None,
+        published_at=selected_plan.generated_at,
+    )
+    before = path.read_bytes()
+
+    with pytest.raises(MigrationBlocked, match="database_already_contract_kernel_v1"):
+        migrate(path, writers_stopped=True)
+
+    assert path.read_bytes() == before
+    assert ContractStore(path).current_publication() is not None

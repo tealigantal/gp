@@ -32,6 +32,8 @@ Before changing the recommendation path, read `docs/contracts/CURRENT_CONTRACTS.
 - `docs/PROGRESS.md`: recoverable current status.
 - `docs/plans/2026-07-24-serenity-fixed-three-percent-worker.md`: active Serenity fixed-3% integration ExecPlan.
 - `docs/adr/0010-serenity-fixed-three-percent-unified-worker.md`: current Serenity weight and deployment decision.
+- `docs/plans/2026-07-24-lunch-five-minute-rerank.md`: active lunch Top-30 rerank ExecPlan.
+- `docs/adr/0011-lunch-top30-five-minute-rerank.md`: immutable lunch-plan semantic extension.
 
 ## Verified entry points and commands
 

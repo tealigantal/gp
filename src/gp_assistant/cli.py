@@ -11,7 +11,9 @@ import uvicorn
 from .gateway.app import app
 from .migrate_contracts import migrate
 from .application.real_producer import RealRecommendationProducer
-from .application.runtime_producer import RuntimeRecommendationProducer
+from .application.lunch_rebalance_producer import LunchRebalanceProducer, is_lunch_plan
+from .application.runtime_producer import RuntimeRecommendationProducer, market_phase
+from .contracts.catalog import MarketPhase
 from .store import ContractStore
 from .serenity.service import publish_target as publish_serenity_target
 from .serenity.service import run_loop as run_serenity_loop
@@ -24,7 +26,18 @@ def _seed_serenity_target_from_current_plan(store: ContractStore, now: datetime)
     plan = store.load_plan(publication.plan_id) if publication else None
     if plan is None or plan.daily_evidence_date is None or not plan.candidate_universe.complete or plan.serenity.applied_weight != 0.0:
         return
-    finalists = tuple(sorted(plan.evaluated_candidates, key=lambda item: (-item.adaptive_score, item.symbol))[:30])
+    finalists = tuple(
+        item
+        for item in plan.evaluated_candidates
+        if any(expert.expert == "serenity" for expert in item.experts)
+    )
+    if len(finalists) != 30:
+        return
+
+    def base_score(item) -> float:
+        lunch_change = sum(expert.contribution for expert in item.experts if expert.expert == "intraday_5m")
+        return round(float(item.adaptive_score) - float(lunch_change), 12)
+
     if not finalists:
         return
     publish_serenity_target(
@@ -32,9 +45,49 @@ def _seed_serenity_target_from_current_plan(store: ContractStore, now: datetime)
         market_session_date=plan.market_session_date.isoformat(),
         daily_evidence_date=plan.daily_evidence_date.isoformat(),
         universe_digest=plan.candidate_universe.content_digest,
-        base_scores={item.symbol: item.adaptive_score for item in finalists},
+        base_scores={item.symbol: base_score(item) for item in finalists},
         observed_at=now.isoformat(),
     )
+
+
+def _worker_tick(
+    store: ContractStore,
+    *,
+    now: datetime,
+    last_plan_at: datetime | None,
+    plan_interval_sec: int,
+    real_producer: RealRecommendationProducer | None = None,
+    runtime_producer: RuntimeRecommendationProducer | None = None,
+    lunch_producer: LunchRebalanceProducer | None = None,
+) -> datetime | None:
+    phase = market_phase(now)
+    current_publication = store.current_publication()
+    current_plan = store.load_plan(current_publication.plan_id) if current_publication else None
+    current_session_ready = bool(current_plan and current_plan.market_session_date == now.date())
+    plan_due = last_plan_at is None or (now - last_plan_at).total_seconds() >= max(60, plan_interval_sec)
+    real = real_producer or RealRecommendationProducer(store)
+    runtime = runtime_producer or RuntimeRecommendationProducer(store)
+    lunch = lunch_producer or LunchRebalanceProducer(store)
+
+    if phase is MarketPhase.LUNCH:
+        if not current_session_ready:
+            real.produce(now, refresh_daily=True)
+            last_plan_at = now
+        result = lunch.produce(now=now)
+        if result.state not in {"published", "reused"}:
+            print(json.dumps({"lunch_rebalance": result.state, "reason": result.reason}, ensure_ascii=False), flush=True)
+        return last_plan_at
+
+    lunch_plan_current = bool(
+        current_session_ready
+        and is_lunch_plan(current_plan)
+        and phase in {MarketPhase.AFTERNOON, MarketPhase.CLOSING_AUCTION}
+    )
+    if plan_due and not lunch_plan_current:
+        real.produce(now, refresh_daily=True)
+        last_plan_at = now
+    runtime.produce(now=now)
+    return last_plan_at
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -63,6 +116,7 @@ def main(argv: list[str] | None = None) -> int:
     elif args.command == "refresh-runtime":
         print(RuntimeRecommendationProducer(ContractStore()).produce(now=datetime.now(ZoneInfo("Asia/Shanghai"))).model_dump_json())
     else:
+        worker_store = ContractStore()
         serenity_process = None
         serenity_restart_after = 0.0
         last_plan_at = None
@@ -87,10 +141,12 @@ def main(argv: list[str] | None = None) -> int:
                         serenity_process.start()
                         serenity_restart_after = time.monotonic() + 30.0
             try:
-                if last_plan_at is None or (now - last_plan_at).total_seconds() >= max(60, args.plan_interval_sec):
-                    RealRecommendationProducer(ContractStore()).produce(now, refresh_daily=True)
-                    last_plan_at = now
-                RuntimeRecommendationProducer(ContractStore()).produce(now=now)
+                last_plan_at = _worker_tick(
+                    worker_store,
+                    now=now,
+                    last_plan_at=last_plan_at,
+                    plan_interval_sec=args.plan_interval_sec,
+                )
             except Exception as exc:  # noqa: BLE001
                 print(json.dumps({"worker_error": f"{type(exc).__name__}:{exc}"}, ensure_ascii=False), flush=True)
             time.sleep(max(10, args.runtime_interval_sec))

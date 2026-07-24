@@ -19,3 +19,9 @@ The LLM receives the publication's market-time context directly in its prompt: c
 ## Serenity official-announcement evidence
 
 Serenity is an auxiliary official-announcement dimension, not a second selector. The base engine first freezes its Top-30. If every finalist has a complete, current, verified source result for that exact batch, Serenity uses a fixed 3% signed weight; positive or negative evidence can change the score by at most 0.03. A complete result with no relevant announcement is neutral. If any finalist is missing, a source or PDF fails, or the batch is stale or mismatched, the whole batch contributes zero and the base recommendation remains unchanged. The chat may explain only the actual bound weight, contribution, and product-level reason; it never exposes internal interfaces or identifiers.
+
+## Lunch five-minute rerank
+
+After the 11:30 close, GP may publish a new order within the morning plan's frozen Top-30. It requires exact, complete five-minute data for all 30 candidates and CSI300. The lunch score reflects relative morning strength, location versus a volume-weighted price proxy, location within the morning range, and last-hour momentum; the already bound Serenity contribution remains limited to ±0.03. The daily plan and all non-ranking facts remain immutable.
+
+If any input is incomplete, GP keeps the morning publication instead of showing an empty lunch result. A successful lunch publication is still non-tradeable during the break. Existing conversations continue to explain the publication they originally used; a new conversation sees the latest lunch publication.

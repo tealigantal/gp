@@ -20,10 +20,10 @@ class MarketDataProvider(ABC):
     def get_intraday(self, symbol: str, date: str) -> pd.DataFrame:
         raise DataProviderError("intraday not supported", symbol=symbol)
 
-    def get_minute_bars_5m(self, symbol: str, start_date: str, end_date: str) -> pd.DataFrame:
+    def get_minute_bars_5m(self, symbol: str, start_date: str, end_date: str, *, allow_fallback: bool = True) -> pd.DataFrame:
         raise DataProviderError("minute bars not supported", symbol=symbol)
 
-    def get_index_minute_bars_5m(self, symbol: str, start_date: str, end_date: str) -> pd.DataFrame:
+    def get_index_minute_bars_5m(self, symbol: str, start_date: str, end_date: str, *, allow_fallback: bool = True) -> pd.DataFrame:
         raise DataProviderError("index minute bars not supported", symbol=symbol)
 
     def get_fundamentals(self, symbol: str):  # noqa: ANN001

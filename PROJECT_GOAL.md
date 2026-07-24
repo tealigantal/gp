@@ -21,6 +21,7 @@ The product reaches its durable objective when current-data recommendation and f
 - Compare candidates and explain an existing position from the same bound publication.
 - Review how a conclusion changed without rewriting the original evidence.
 - Use resident official-announcement evidence as an atomic fixed-3% Alpha expert without mistaking it for certainty or allowing partial source coverage to bias candidates.
+- Refresh the frozen Top-30 at lunch from one complete 11:30 five-minute batch while preserving the morning plan, daily evidence and historical conversation lineage.
 
 ## Non-goals
 

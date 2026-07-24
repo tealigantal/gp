@@ -109,7 +109,15 @@ class RealRecommendationProducer:
         )
         serenity_revision = serenity_decision.semantic_revision if serenity_decision else f"{POLICY_REVISION}:zero:no_target"
         command = PlanService(self.store).get_or_create(target=target, universe=universe, policy=DecisionPolicyBinding(revision="adaptive_kernel_v3_serenity", adaptive_policy_state_version=f"1:{serenity_revision}", selection_policy="full_market_liquidity_ranked_top30", risk_profile="normal"), producer=ProducerIdentity(name="real_daily_producer", revision="2", source_digest=digest), evaluated_candidates=candidates, serenity=serenity_binding, generated_at=now, selection_eligible_symbols=frozenset(item.symbol for item in finalists))
-        PublicationService(self.store).publish(plan_id=command.plan.plan_id, runtime_id=None, published_at=now)
+        current_publication = self.store.current_publication()
+        current_plan = self.store.load_plan(current_publication.plan_id) if current_publication else None
+        lunch_is_current = bool(
+            current_plan
+            and current_plan.market_session_date == command.plan.market_session_date
+            and current_plan.producer.name == "lunch_5m_producer"
+        )
+        if not lunch_is_current and (current_publication is None or current_publication.plan_id != command.plan.plan_id):
+            PublicationService(self.store).publish(plan_id=command.plan.plan_id, runtime_id=None, published_at=now)
         return command
 
     @staticmethod

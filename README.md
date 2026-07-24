@@ -16,6 +16,8 @@ Its only recommendation lifecycle is:
 
 `RecommendationPlan` → optional `RuntimeObservation` → `RecommendationPublication`
 
+At 11:30 the worker may append a new immutable plan that reranks only the morning plan's frozen Top-30 from one complete five-minute batch. It never rewrites the morning plan or changes the public lifecycle; incomplete lunch data leaves the morning publication current.
+
 Read [current contracts](docs/contracts/CURRENT_CONTRACTS.md), [retirement record](docs/contracts/RETIRED_CONTRACTS.md), and the [registry](docs/contracts/registry.yaml) before changing the recommendation path.
 
 ## Commands
@@ -32,4 +34,4 @@ python -m gp_assistant.contracts.check_retired
 
 The public recommendation read is `GET /api/recommendation/current`. A missing or insufficient-evidence result is explicit; it never reads a retired structure.
 
-Use `python -m gp_assistant.cli migrate-contracts --database store/agent.db` only after stopping writers and setting `GP_CONTRACT_WRITERS_STOPPED=1`.
+`migrate-contracts` is retained only for an explicitly identified pre-contract legacy database after all writers are stopped. It refuses a `contract_kernel.v1` database; never run it against the current `store/agent.db` as a routine startup or repair command.

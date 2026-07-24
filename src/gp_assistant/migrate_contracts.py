@@ -17,7 +17,7 @@ from time import sleep
 from .contracts.decision import RecommendationPlan
 from .contracts.publication import RecommendationPublication
 from .contracts.runtime import RuntimeObservation
-from .store import ContractStore
+from .store import ContractStore, DATABASE_SCHEMA
 
 
 class MigrationBlocked(RuntimeError):
@@ -44,6 +44,12 @@ def migrate(database: str | Path, *, writers_stopped: bool | None = None) -> dic
     report: dict[str, object] = {"source": str(source), "migrated_publications": 0, "discarded": {}, "counts": {}}
     try:
         old.execute("PRAGMA foreign_keys=ON")
+        tables = {str(row[0]) for row in old.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+        if "schema_metadata" in tables:
+            schema_row = old.execute("SELECT value FROM schema_metadata WHERE key='schema'").fetchone()
+            if schema_row and str(schema_row[0]) == DATABASE_SCHEMA:
+                raise MigrationBlocked("database_already_contract_kernel_v1")
+            raise MigrationBlocked("database_schema_not_legacy")
         report["counts"] = _legacy_counts(old)
         if backup.exists():
             if backup.stat().st_size < source.stat().st_size:
@@ -63,19 +69,29 @@ def migrate(database: str | Path, *, writers_stopped: bool | None = None) -> dic
             replacement = Path(temporary.name)
         destination = ContractStore(replacement)
         destination.initialize()
-        tables = {str(row[0]) for row in old.execute("SELECT name FROM sqlite_master WHERE type='table'")}
         discarded = 0
         if "recommendation_snapshots" in tables:
             rows = old.execute("SELECT payload_json FROM recommendation_snapshots").fetchall()
+            recovered: list[tuple[RecommendationPlan, RuntimeObservation | None, RecommendationPublication]] = []
             for row in rows:
                 try:
                     raw = json.loads(str(row[0]))
                     plan = RecommendationPlan.model_validate(raw["recommendation_plan"])
-                    destination.commit_plan(plan)
-                    if raw.get("runtime_observation") is not None:
-                        destination.commit_runtime(RuntimeObservation.model_validate(raw["runtime_observation"]))
+                    runtime = RuntimeObservation.model_validate(raw["runtime_observation"]) if raw.get("runtime_observation") is not None else None
                     publication = RecommendationPublication.model_validate(raw["recommendation_publication"])
-                    destination.commit_publication(publication)
+                    recovered.append((plan, runtime, publication))
+                except Exception:
+                    discarded += 1
+            for plan, runtime, publication in sorted(recovered, key=lambda item: (item[2].published_at, item[2].publication_id)):
+                try:
+                    destination.commit_plan(plan)
+                    if runtime is not None:
+                        destination.commit_runtime(runtime)
+                    current = destination.current_publication()
+                    destination.commit_publication(
+                        publication,
+                        expected_current_publication_id=current.publication_id if current else None,
+                    )
                     report["migrated_publications"] = int(report["migrated_publications"]) + 1
                 except Exception:
                     discarded += 1

@@ -49,6 +49,11 @@ class RuntimeRecommendationProducer:
                 gate=MarketGate(state="deny", score=0.0, reason_codes=("runtime_session_not_current",)),
                 states=(),
             )
+        if phase is MarketPhase.LUNCH:
+            current = self.store.current_publication()
+            current_runtime = self.store.load_runtime(current.runtime_id) if current and current.plan_id == plan.plan_id and current.runtime_id else None
+            if current_runtime is not None:
+                return current_runtime
         if phase not in {MarketPhase.MORNING, MarketPhase.AFTERNOON, MarketPhase.CLOSING_AUCTION}:
             return self._commit_and_publish(
                 plan=plan,
