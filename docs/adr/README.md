@@ -14,3 +14,4 @@ Each ADR records Status, Context, Considered Options, Decision, Rationale, Conse
 - [0006 — Single assistant-turn presentation contract](./0006-assistant-turn-presentation-contract.md)
 - [0007 — Runtime contract consolidation](./0007-runtime-contract-consolidation.md)
 - [0008 — Full-market universe ownership and additive Serenity](./0008-full-market-universe-and-additive-serenity.md)
+- [0010 — Serenity fixed 3% and unified worker isolation](./0010-serenity-fixed-three-percent-unified-worker.md) — supersedes the former 0%-8% promotion range and separate-container topology

@@ -1,6 +1,6 @@
 # Superseded — Serenity Alpha Automatic Promotion ExecPlan
 
-> Superseded on 2026-07-13 by `docs/plans/2026-07-13-serenity-resident-service.md` and ADR 0004. This document remains a historical implementation record; its automatic-promotion design is not active.
+> Superseded first on 2026-07-13 and finally by `docs/plans/2026-07-24-serenity-fixed-three-percent-worker.md` plus ADR 0010. This document remains a historical implementation record; its automatic-promotion design and separate-container topology are not active.
 
 ## Purpose / Big Picture
 

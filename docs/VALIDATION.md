@@ -1,5 +1,13 @@
 # Validation Ledger
 
+## Serenity Fixed 3% Unified Worker
+
+2026-07-24: `compileall`, the full 18-test contract suite, retired-symbol enforcement, Compose config, and diff checks passed. Tests prove positive, negative, and neutral complete-batch behavior; exact zero invariance when one symbol is missing or a source fails; the ±0.03 cap; stable zero-plan reuse and complete-batch plan invalidation; full evaluated-candidate retention with Serenity restricted to the frozen Top-30; prevention of uncovered candidates entering selection because a covered finalist was penalized; first-seen availability that never backdates evidence to the announcement clock; product-level public health without raw collector errors; and product-only LLM context without Serenity internal references.
+
+2026-07-24: Rebuilt `gp-backend:local` and recreated `gp` and `gp-worker` from the same image `sha256:c10be816d0671792fcdb27d94ad7e8720af4cf8737750ad4c5471e4509f3aa41`. Container/local SHA-256 matched for both the Serenity service and conversation prompt. API health was healthy, the unified worker had separate core and Serenity processes, and the former `gp-gp-serenity-worker-1` container was removed by exact name. The historical 8.6 MB Serenity evidence database remained present.
+
+2026-07-24: A live official-announcement poll built the current Top-30 target and encountered an unparsed `000100` PDF. Health exposed Serenity degradation, the committed recommendation used `adaptive_kernel_v3_serenity`, all 30 candidate Serenity weights were exactly 0, and the core worker subsequently published a new runtime/publication. A real chat explained the fixed 3%, signed bound, neutral complete case, and source-failure whole-batch zero in natural Chinese without exposing fields, reason codes, IDs, or interfaces; the disposable verification conversation was then deleted.
+
 ## Contract Kernel
 
 2026-07-23: backend suite passed (5 tests); `compileall`, manifest, retirement, and diff checks passed. Frontend lint, typecheck, test (1 test), and production build passed.

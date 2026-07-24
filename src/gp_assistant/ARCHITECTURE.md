@@ -1,3 +1,5 @@
 # GP Backend Architecture
 
 The backend owns one typed recommendation lifecycle: a plan is selected by the Adaptive Decision Engine, a runtime observation records closed intraday evidence, and a publication projects those two immutable inputs. The application services are the only writers and the LLM is limited to publication-bound narration.
+
+The real producer computes the base candidate scores and freezes the Top-30 before Serenity. It publishes an exact target to the append-only Serenity store and performs a local read only. An exact complete batch applies the fixed signed contribution `0.03 × alpha`; all other states preserve the base float exactly. The Serenity semantic revision participates in the adaptive policy state identity so an asynchronously completed batch invalidates the zero plan without letting source-error details create plan churn. The unified worker supervises Serenity in a separate process; no Serenity network operation runs in plan, publication, or conversation code.

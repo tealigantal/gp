@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import argparse
 import json
+import multiprocessing
+import os
 import time
 
 import uvicorn
@@ -11,8 +13,28 @@ from .migrate_contracts import migrate
 from .application.real_producer import RealRecommendationProducer
 from .application.runtime_producer import RuntimeRecommendationProducer
 from .store import ContractStore
+from .serenity.service import publish_target as publish_serenity_target
+from .serenity.service import run_loop as run_serenity_loop
 from datetime import datetime
 from zoneinfo import ZoneInfo
+
+
+def _seed_serenity_target_from_current_plan(store: ContractStore, now: datetime) -> None:
+    publication = store.current_publication()
+    plan = store.load_plan(publication.plan_id) if publication else None
+    if plan is None or plan.daily_evidence_date is None or not plan.candidate_universe.complete or plan.serenity.applied_weight != 0.0:
+        return
+    finalists = tuple(sorted(plan.evaluated_candidates, key=lambda item: (-item.adaptive_score, item.symbol))[:30])
+    if not finalists:
+        return
+    publish_serenity_target(
+        (item.symbol for item in finalists),
+        market_session_date=plan.market_session_date.isoformat(),
+        daily_evidence_date=plan.daily_evidence_date.isoformat(),
+        universe_digest=plan.candidate_universe.content_digest,
+        base_scores={item.symbol: item.adaptive_score for item in finalists},
+        observed_at=now.isoformat(),
+    )
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -41,9 +63,29 @@ def main(argv: list[str] | None = None) -> int:
     elif args.command == "refresh-runtime":
         print(RuntimeRecommendationProducer(ContractStore()).produce(now=datetime.now(ZoneInfo("Asia/Shanghai"))).model_dump_json())
     else:
+        serenity_process = None
+        serenity_restart_after = 0.0
         last_plan_at = None
         while True:
             now = datetime.now(ZoneInfo("Asia/Shanghai"))
+            if os.getenv("GP_SERENITY_MODE", "native").strip().lower() != "off":
+                if serenity_process is None or not serenity_process.is_alive():
+                    if time.monotonic() >= serenity_restart_after:
+                        if serenity_process is not None:
+                            serenity_process.join(timeout=0.1)
+                            print(json.dumps({"serenity_process_exit": serenity_process.exitcode}, ensure_ascii=False), flush=True)
+                        try:
+                            _seed_serenity_target_from_current_plan(ContractStore(), now)
+                        except Exception as exc:  # noqa: BLE001
+                            print(json.dumps({"serenity_target_seed_error": f"{type(exc).__name__}:{exc}"}, ensure_ascii=False), flush=True)
+                        serenity_process = multiprocessing.Process(
+                            target=run_serenity_loop,
+                            kwargs={"interval_sec": int(os.getenv("GP_SERENITY_POLL_INTERVAL_SEC", "60"))},
+                            name="gp-serenity",
+                            daemon=False,
+                        )
+                        serenity_process.start()
+                        serenity_restart_after = time.monotonic() + 30.0
             try:
                 if last_plan_at is None or (now - last_plan_at).total_seconds() >= max(60, args.plan_interval_sec):
                     RealRecommendationProducer(ContractStore()).produce(now, refresh_daily=True)

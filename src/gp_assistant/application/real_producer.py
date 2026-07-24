@@ -9,7 +9,7 @@ import pandas as pd
 
 from ..contracts.catalog import CandidateDisposition, PlanTargetState
 from ..contracts.decision import CandidateDecision, TradePlan
-from ..contracts.evidence import CandidateUniverseBinding, DecisionPolicyBinding, ProbabilityAssessment, ProducerIdentity, RankingAssessment, RiskAssessment, SignalAssessment
+from ..contracts.evidence import CandidateUniverseBinding, DecisionPolicyBinding, ExpertContribution, ProbabilityAssessment, ProducerIdentity, RankingAssessment, RiskAssessment, SignalAssessment
 from ..market_memory.retrieval import retrieve_similar_events
 from ..market_memory.store import list_events_before
 from ..providers.boards import is_mainboard
@@ -19,6 +19,7 @@ from ..risk_engine.engine import assess_candidate_risk, rank_candidate
 from .history_daily import frames as history_frames, latest_rows
 from .daily_refresh import DailyEvidenceRefresher
 from ..serenity.policy import bind
+from ..serenity.service import FIXED_WEIGHT, POLICY_REVISION, load_decision, publish_target
 from ..signal_engine.daily import build_signal_events_for_symbol
 from .plan_service import PlanService
 from .publication_service import PublicationService
@@ -81,10 +82,72 @@ class RealRecommendationProducer:
         digest = sha256("|".join(f"{symbol}:{latest[symbol]['date']}" for symbol in sorted(covered_symbols)).encode()).hexdigest()
         universe = CandidateUniverseBinding(candidate_universe_id=f"universe_{evidence_day or 'unavailable'}_{digest[:16]}", content_digest=digest, total_count=total, eligible_count=len(covered_symbols), complete=complete, source="akshare:spot+history.db:daily")
         pool = sorted(covered_symbols, key=lambda symbol: float(latest[symbol].get("amount") or 0.0), reverse=True)[:200]
-        candidates = self._candidates(history_frames(pool), evidence_day) if complete and target.state is PlanTargetState.READY else ()
-        command = PlanService(self.store).get_or_create(target=target, universe=universe, policy=DecisionPolicyBinding(revision="adaptive_kernel_v2", adaptive_policy_state_version="1", selection_policy="full_market_liquidity_ranked", risk_profile="normal"), producer=ProducerIdentity(name="real_daily_producer", revision="1", source_digest=digest), evaluated_candidates=candidates, serenity=bind(reference_id=None, policy_revision="native_causal_v1", requested_weight=0.0, causal_ready=False), generated_at=now)
+        base_candidates = self._candidates(history_frames(pool), evidence_day) if complete and target.state is PlanTargetState.READY else ()
+        finalists = tuple(sorted(base_candidates, key=lambda item: (-item.adaptive_score, item.symbol))[:30])
+        serenity_decision = None
+        if finalists and target.daily_evidence_date is not None:
+            serenity_target = publish_target(
+                (item.symbol for item in finalists),
+                market_session_date=target.market_session_date.isoformat(),
+                daily_evidence_date=target.daily_evidence_date.isoformat(),
+                universe_digest=universe.content_digest,
+                base_scores={item.symbol: item.adaptive_score for item in finalists},
+                observed_at=now.isoformat(),
+            )
+            serenity_decision = load_decision(serenity_target)
+        candidates = self._apply_serenity(
+            base_candidates,
+            serenity_decision,
+            eligible_symbols=frozenset(item.symbol for item in finalists),
+        )
+        serenity_binding = bind(
+            reference_id=serenity_decision.reference_id if serenity_decision else None,
+            policy_revision=POLICY_REVISION,
+            requested_weight=FIXED_WEIGHT,
+            causal_ready=bool(serenity_decision and serenity_decision.applied_weight == FIXED_WEIGHT),
+            reason_codes=serenity_decision.reason_codes if serenity_decision else ("serenity_target_unavailable",),
+        )
+        serenity_revision = serenity_decision.semantic_revision if serenity_decision else f"{POLICY_REVISION}:zero:no_target"
+        command = PlanService(self.store).get_or_create(target=target, universe=universe, policy=DecisionPolicyBinding(revision="adaptive_kernel_v3_serenity", adaptive_policy_state_version=f"1:{serenity_revision}", selection_policy="full_market_liquidity_ranked_top30", risk_profile="normal"), producer=ProducerIdentity(name="real_daily_producer", revision="2", source_digest=digest), evaluated_candidates=candidates, serenity=serenity_binding, generated_at=now, selection_eligible_symbols=frozenset(item.symbol for item in finalists))
         PublicationService(self.store).publish(plan_id=command.plan.plan_id, runtime_id=None, published_at=now)
         return command
+
+    @staticmethod
+    def _apply_serenity(
+        candidates: tuple[CandidateDecision, ...],
+        decision,
+        *,
+        eligible_symbols: frozenset[str] | None = None,
+    ) -> tuple[CandidateDecision, ...]:
+        if decision is None:
+            return candidates
+        active = decision.applied_weight == FIXED_WEIGHT
+        fused: list[CandidateDecision] = []
+        for candidate in candidates:
+            if eligible_symbols is not None and candidate.symbol not in eligible_symbols:
+                fused.append(candidate)
+                continue
+            alpha = float(decision.alphas.get(candidate.symbol, 0.0)) if active else 0.0
+            contribution = max(-FIXED_WEIGHT, min(FIXED_WEIGHT, FIXED_WEIGHT * alpha)) if active else 0.0
+            # On every degraded path retain the exact base float rather than
+            # recomputing base + 0, which makes the zero lane bit-for-bit inert.
+            final_score = max(0.0, min(1.0, candidate.adaptive_score + contribution)) if active else candidate.adaptive_score
+            reason_codes = tuple(decision.reasons.get(candidate.symbol, decision.reason_codes))
+            expert = ExpertContribution(
+                expert="serenity",
+                contribution=contribution,
+                weight=FIXED_WEIGHT if active else 0.0,
+                reason_codes=reason_codes,
+            )
+            fused.append(
+                candidate.model_copy(
+                    update={
+                        "adaptive_score": final_score,
+                        "experts": (*candidate.experts, expert),
+                    }
+                )
+            )
+        return tuple(fused)
 
     def _candidates(self, frames: dict[str, pd.DataFrame], evidence_day: str | None) -> tuple[CandidateDecision, ...]:
         pool = sorted(frames, key=lambda symbol: float(frames[symbol].iloc[-1].get("amount") or 0.0), reverse=True)[:200]

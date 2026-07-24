@@ -39,7 +39,6 @@ class ProviderConfig:
 @dataclass
 class SerenityConfig:
     mode: str = os.getenv("GP_SERENITY_MODE", "native").strip().lower()
-    max_weight: float = float(os.getenv("GP_SERENITY_MAX_WEIGHT", "0.08"))
     update_mature_days: int = int(os.getenv("GP_SERENITY_UPDATE_MATURE_DAYS", "5"))
     eval_window_days: int = int(os.getenv("GP_SERENITY_EVAL_WINDOW_DAYS", "60"))
     request_timeout_sec: float = float(os.getenv("GP_SERENITY_REQUEST_TIMEOUT_SEC", "15"))
@@ -58,7 +57,6 @@ class SerenityConfig:
     def __post_init__(self) -> None:
         if self.mode not in {"off", "native"}:
             raise ValueError(f"invalid GP_SERENITY_MODE: {self.mode}")
-        self.max_weight = max(0.0, min(0.08, float(self.max_weight)))
         self.update_mature_days = max(1, int(self.update_mature_days))
         self.eval_window_days = max(20, int(self.eval_window_days))
         self.page_size = max(1, min(100, int(self.page_size)))

@@ -6,7 +6,7 @@ GP is a chat-first A-share main-board decision assistant for short 1–3 trading
 
 ## Lifecycle stage
 
-The repository is an initialized important project in integration and historical-validation stage. Full-market candidate-universe recovery is completed and recorded in `docs/plans/2026-07-22-full-market-universe-recovery.md`; Serenity Alpha remains governed by its existing causal policy and ADR 0008.
+The repository is an initialized important project in integration and historical-validation stage. Full-market candidate-universe recovery is part of the current contract kernel; Serenity is governed by ADR 0010 and the active fixed-3% unified-worker plan.
 
 ## Critical journeys
 
@@ -14,7 +14,7 @@ The repository is an initialized important project in integration and historical
 - Explain why a selected or rejected symbol received its position without inventing facts.
 - Answer symbol, comparison, exit, and run-change follow-ups from the same canonical run.
 - Fail closed when required market data is stale or incomplete.
-- Keep Serenity evidence advisory in shadow mode and automatically promote it only through the documented causal gates.
+- Apply Serenity to the frozen base Top-30 only as an atomic fixed-3% batch; any incomplete, failed, stale, or mismatched batch contributes zero to every finalist.
 
 ## Repository map and sources of truth
 
@@ -30,13 +30,13 @@ Before changing the recommendation path, read `docs/contracts/CURRENT_CONTRACTS.
 - `docs/historical_validation.md`: historical replay method and recorded results.
 - `docs/VALIDATION.md`: cross-cutting validation ledger.
 - `docs/PROGRESS.md`: recoverable current status.
-- `docs/plans/2026-07-22-full-market-universe-recovery.md`: completed full-market recovery ExecPlan and runtime evidence.
-- `docs/plans/2026-07-11-serenity-alpha.md`: Serenity Alpha execution plan.
+- `docs/plans/2026-07-24-serenity-fixed-three-percent-worker.md`: active Serenity fixed-3% integration ExecPlan.
+- `docs/adr/0010-serenity-fixed-three-percent-unified-worker.md`: current Serenity weight and deployment decision.
 
 ## Verified entry points and commands
 
 - Backend: `PYTHONPATH=src python -m gp_assistant serve --host 127.0.0.1 --port 8000`
-- Runtime worker: `PYTHONPATH=src python -m gp_assistant runtime-loop`
+- Runtime worker: `PYTHONPATH=src python -m gp_assistant worker`
 - Compile: `python -m compileall -q src tests`
 - Backend tests: `python -m pytest -q` (integration tests are excluded by `pytest.ini` unless explicitly selected)
 - Frontend: from `frontend/`, run `npm ci`, then `npm run lint`, `npm run typecheck`, `npm test -- --run`, and `npm run build`
@@ -59,10 +59,12 @@ The backend has no verified Ruff or static-type-check command. Do not claim thos
 - `store/`, `cache/`, and `results/` are runtime artifacts. Preserve user data and never stage them unless explicitly requested.
 - `selection_engine/` is legacy/reference and low-level support, not the production ranking authority.
 - New evidence stores must be append-only for versions and first-seen semantics; do not reuse overwrite-oriented `history.db` for Serenity.
+- Serenity collection runs only in the isolated child process supervised by `gp-worker`. Recommendation and chat paths may publish/read a target or committed batch but never perform network collection.
+- Serenity has only two effective weights: a complete exact batch uses 3%; every other state uses 0% for the whole batch. The LLM may explain bound product facts but never compute the contribution or expose storage/interface internals.
 
 ## Approval gates
 
-User approval is required before deployment, publication, secret changes, paid data acquisition, destructive migration, commercial use of public data, or public API breaks. The user has authorized local free-data Serenity collection and gated automatic promotion up to an 8% add-on weight; promotion may occur only through the recorded state machine.
+User approval is required before deployment, publication, secret changes, paid data acquisition, destructive migration, commercial use of public data, or public API breaks. On 2026-07-24 the user authorized local deployment of free-data Serenity at an atomic fixed 3% weight in the unified worker and exact removal of the obsolete standalone Serenity container.
 
 ## Definition of done
 

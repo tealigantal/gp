@@ -26,6 +26,7 @@ class PlanService:
         evaluated_candidates: tuple,
         serenity: SerenityDecisionBinding,
         generated_at: datetime,
+        selection_eligible_symbols: frozenset[str] | None = None,
     ) -> PlanCommitCommand:
         key = PlanLookupKey(
             market=target.market,
@@ -43,7 +44,10 @@ class PlanService:
         existing = self.store.load_exact_plan(__import__("hashlib").sha256(json.dumps(key.model_dump(mode="json"), sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest())
         if existing:
             return PlanCommitCommand(plan=existing, serenity_reference=None, evidence_writes=())
-        evaluated_candidates = AdaptiveDecisionEngine().select(tuple(evaluated_candidates))
+        evaluated_candidates = AdaptiveDecisionEngine().select(
+            tuple(evaluated_candidates),
+            selection_eligible_symbols=selection_eligible_symbols,
+        )
         status = PlanStatus.RECOMMEND if target.state.value == "ready" and universe.complete and any(item.disposition.value == "selected" for item in evaluated_candidates) else PlanStatus.NO_RECOMMEND if target.state.value == "ready" and universe.complete else PlanStatus.UNAVAILABLE
         reasons = () if status is PlanStatus.RECOMMEND else (("daily_evidence_pending",) if target.state.value != "ready" else ("candidate_universe_incomplete",) if not universe.complete else ("no_selected_candidate",))
         decision = PlanDecision(status=status, reason_codes=reasons)

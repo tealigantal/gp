@@ -311,13 +311,23 @@ class ContractStore:
         finally:
             conn.close()
 
-    def health(self) -> dict[str, str | None]:
+    def health(self) -> dict[str, object]:
         publication = self.current_publication()
         plan = self.load_plan(publication.plan_id) if publication else None
         runtime = self.load_runtime(publication.runtime_id) if publication and publication.runtime_id else None
         daily_state = "unavailable"
         if plan is not None:
             daily_state = "pending" if "daily_evidence_pending" in plan.decision.reason_codes else "ready"
+        from .serenity.service import status_snapshot as serenity_status
+
+        raw_serenity = serenity_status()
+        public_serenity = {
+            "mode": raw_serenity.get("mode"),
+            "state": raw_serenity.get("state"),
+            "target_ready": bool(raw_serenity.get("target_ready")),
+            "batch_ready": bool(raw_serenity.get("batch_ready")),
+        }
+
         return {
             "current_publication_id": publication.publication_id if publication else None,
             "plan_id": publication.plan_id if publication else None,
@@ -330,4 +340,5 @@ class ContractStore:
             "runtime_data_state": runtime.data_quality.state.value if runtime else "unavailable",
             "publication_state": publication.decision.plan_status.value if publication else "unavailable",
             "tradeability_state": "tradeable" if publication and publication.decision.tradeable_now else "unavailable",
+            "serenity": public_serenity,
         }

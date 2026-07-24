@@ -3,6 +3,8 @@
 - **Status:** Accepted
 - **Date:** 2026-07-22
 
+> The full-market ownership decision remains accepted. ADR 0010 supersedes only Serenity's former 0%-8% promotion range with an atomic fixed 3% batch and the unified-worker topology.
+
 ## Context
 
 The production daily path disabled the market snapshot and silently fell back to a ten-symbol file. Freshness then validated only those ten symbols, allowing a reduced input scope to appear complete. Serenity also had both scoring authority and a veto over base recommendation availability.

@@ -67,7 +67,7 @@ def current_lunch() -> dict[str, object]:
 
 
 @router.get("/api/health")
-def health() -> dict[str, str | None]:
+def health() -> dict[str, object]:
     return ContractStore().health()
 
 

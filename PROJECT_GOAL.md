@@ -20,7 +20,7 @@ The product reaches its durable objective when current-data recommendation and f
 - Ask why a candidate was selected or rejected and receive source-grounded evidence.
 - Compare candidates and explain an existing position from the same bound publication.
 - Review how a conclusion changed without rewriting the original evidence.
-- Use resident official-announcement evidence as a native, bounded and causally gated Alpha expert without mistaking it for certainty.
+- Use resident official-announcement evidence as an atomic fixed-3% Alpha expert without mistaking it for certainty or allowing partial source coverage to bias candidates.
 
 ## Non-goals
 
@@ -44,12 +44,12 @@ Contract-kernel hard cutover: one typed plan, runtime observation, publication, 
 ## Approval Gates
 
 - Full Adaptive holdout acceptance before mainline production promotion.
-- Serenity ranking influence was explicitly authorized on 2026-07-14; any non-zero production weight still requires the existing forward causal gates.
+- Serenity ranking influence at a fixed 3% for an exact complete batch was explicitly authorized on 2026-07-24; incomplete, failed, stale, or mismatched batches must be zero for every finalist.
 - Explicit approval for deployment, paid dependencies/data, commercial data use, secrets, destructive migrations, or public API breaks.
 
 ## Assumptions
 
-- Serenity is a local resident native Alpha input using free official announcements; its separately gated weight is bounded to 8% and the deterministic engine remains the sole ranking authority.
+- Serenity is a local resident native Alpha input using free official announcements; its effective weight is exactly 0% or 3%, and the deterministic engine remains the sole ranking authority.
 - Current data and chat services continue to use the existing Docker topology and shared `store` volume.
 - The user accepts one additional open-source PDF dependency, `pypdf`, and no OCR in v1.
 

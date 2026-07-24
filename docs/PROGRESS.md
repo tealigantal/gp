@@ -1,6 +1,12 @@
 # Current Progress
 
-Last updated: 2026-07-23
+Last updated: 2026-07-24
+
+Serenity has been restored as an atomic fixed-3% official-announcement expert in the current contract kernel. The base engine freezes Top-30 first. An exact complete batch applies a bounded signed contribution; any missing candidate, source/PDF failure, stale state, or mismatch makes the whole batch zero without changing the base recommendation. Collection is supervised as a separate process inside `gp-worker`, while plan and chat paths remain network-free. Serenity batch identity now participates in plan identity, so later complete evidence can replace the stable zero plan without error-driven churn.
+
+The latest local deployment uses one shared backend image for `gp` and `gp-worker`; the obsolete standalone Serenity container has been removed without deleting its mounted historical evidence. The live source run currently fails closed because a `000100` PDF is unparsed, so the current plan correctly records 0% Serenity contribution for all 30 finalists while the core plan/runtime loop continues.
+
+The narration system prompt now explains Serenity's official-announcement role, fixed 3%, ±0.03 bound, complete-neutral behavior, and whole-batch zero rule. A real LLM response described those principles and the current zero effect in natural Chinese without exposing field names, reason codes, internal IDs, or engineering interfaces.
 
 The contract-kernel hard cutover is implemented and locally validated. The configured development database now has canonical plan, runtime, publication, session, and turn records produced through the new-only path. The unified worker owns offline daily-evidence refresh, plan generation, and runtime refresh; it never runs from `/api/chat`.
 
