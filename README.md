@@ -18,7 +18,7 @@ Its only recommendation lifecycle is:
 
 At 11:30 the worker may append a new immutable plan that reranks only the morning plan's frozen Top-30 from one complete five-minute batch. It never rewrites the morning plan or changes the public lifecycle; incomplete lunch data leaves the morning publication current.
 
-Read [current contracts](docs/contracts/CURRENT_CONTRACTS.md), [retirement record](docs/contracts/RETIRED_CONTRACTS.md), and the [registry](docs/contracts/registry.yaml) before changing the recommendation path.
+Read the [documentation map](docs/README.md) first. Before changing the recommendation path, read [current contracts](docs/contracts/CURRENT_CONTRACTS.md), [retirement record](docs/contracts/RETIRED_CONTRACTS.md), and the [registry](docs/contracts/registry.yaml).
 
 ## Commands
 

@@ -1,5 +1,9 @@
 # Validation Ledger
 
+## Markdown Documentation Consolidation
+
+2026-07-24: Inventoried 47 tracked Markdown files outside ignored runtime paths. Added `docs/README.md` as the navigation map, repaired the ADR and archive indexes, and moved the retired 2026-04-01 repair brief into the historical archive with an explicit warning. A PowerShell local-link scan reported `NO_BROKEN_RELATIVE_MARKDOWN_LINKS`; `git diff --check` passed. This validation changed no application code, contract, dependency, schema, container, or runtime artifact.
+
 ## Exact Daily Coverage and Serenity OCR v2
 
 2026-07-24: `python -m pytest -q` passed 47 default tests after the final OCR whitespace regression was added. Targeted OCR/source and daily-refresh/lunch/Serenity contract suites passed; `python -m compileall -q src tests`, `docker compose config --quiet`, contract/retired-symbol checks and `git diff --check` also passed. Tests prove old-date nonempty responses stay pending, only fresh same-session complete zero rows can be excluded, resumed symbols reenter the denominator, only missing symbols refresh, exact coverage must reach 100%, and both successful and failed scans wait a full monotonic interval from completion.

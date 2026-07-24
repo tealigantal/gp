@@ -1,5 +1,9 @@
 # GP 修复单（面向 Codex）
 
+> Historical repair brief from 2026-04-01. It refers to retired DayBook,
+> AdvicePick, and related paths; do not use it as an active plan or contract.
+> For current behavior, start at [the documentation map](../../README.md).
+
 ## 目标
 
 本轮不是补丁修复，而是在**不新建主链、不做兼容、不加兜底**的前提下，把现有 Chat-first 主链修完整：
