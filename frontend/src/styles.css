@@ -46,7 +46,11 @@ svg { width: 20px; height: 20px; }
 .new-chat svg { width: 17px; }
 
 .history-label { padding: 2px 9px 0; display: flex; justify-content: space-between; color: #878c88; font-size: 11px; font-weight: 700; letter-spacing: .08em; }
-.history { min-height: 0; flex: 1; display: flex; flex-direction: column; gap: 5px; overflow-y: auto; scrollbar-width: thin; }
+.history { min-height: 0; height: min(470px, calc(100vh - 250px)); max-height: min(470px, calc(100vh - 250px)); flex: 0 1 auto; display: flex; flex-direction: column; gap: 5px; overflow-y: scroll; overscroll-behavior: contain; scrollbar-gutter: stable; scrollbar-width: thin; scrollbar-color: rgba(105,113,109,.48) transparent; }
+.history::-webkit-scrollbar { width: 8px; }
+.history::-webkit-scrollbar-track { background: transparent; }
+.history::-webkit-scrollbar-thumb { border: 2px solid transparent; border-radius: 999px; background-clip: padding-box; background-color: rgba(105,113,109,.48); }
+.history::-webkit-scrollbar-thumb:hover { background-color: rgba(36,77,61,.68); }
 .history-empty { padding: 14px 10px; color: #929791; font-size: 12px; line-height: 1.7; }
 .history-row { display: grid; grid-template-columns: minmax(0,1fr) 30px; gap: 2px; align-items: center; }
 .history-item { width: 100%; padding: 10px; display: grid; grid-template-columns: 22px minmax(0,1fr); gap: 9px; align-items: start; border: 0; border-radius: 11px; background: transparent; text-align: left; cursor: pointer; transition: background .16s; }
@@ -197,8 +201,8 @@ svg { width: 20px; height: 20px; }
   .brand { padding: 0; }.brand-mark { width: 36px; height: 36px; }.brand span { display: none; }
   .new-chat { width: auto; min-height: 36px; padding: 0 13px; }
   .history-label { grid-column: 1 / -1; display: flex; padding: 3px 2px 0; }
-  .history { grid-column: 1 / -1; display: flex; flex-direction: row; gap: 7px; overflow-x: auto; overflow-y: hidden; padding-bottom: 3px; }
-  .history-row { min-width: 234px; grid-template-columns: minmax(0,1fr) 44px; }
+  .history { grid-column: 1 / -1; height: auto; max-height: min(42vh, 390px); display: flex; flex-direction: column; gap: 5px; overflow-x: hidden; overflow-y: scroll; padding: 2px 3px 3px 0; }
+  .history-row { min-width: 0; grid-template-columns: minmax(0,1fr) 44px; }
   .history-item { min-width: 0; width: 100%; background: rgba(255,255,255,.48); }
   .history-delete { width: 44px; height: 44px; opacity: .72; }
   .engine-card { display: none; }
