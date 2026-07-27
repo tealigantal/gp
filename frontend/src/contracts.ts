@@ -10,6 +10,15 @@ export interface HealthStatus {
   runtime_data_state: string | null
   publication_state: string | null
   tradeability_state: string | null
+  market_recovery?: {
+    state: string
+    target_trade_date: string | null
+    completed: number
+    total: number
+    failed: number
+    next_retry_at: string | null
+    approximate_universe: boolean
+  }
 }
 
 export interface TradePlan {
@@ -80,4 +89,3 @@ export interface ChatResponse {
   reply: string
   publication: RecommendationPublication
 }
-

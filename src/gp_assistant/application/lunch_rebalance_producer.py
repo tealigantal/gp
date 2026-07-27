@@ -21,9 +21,8 @@ from ..intraday.lunch_rebalance import (
     rerank_lunch_candidates,
 )
 from ..providers.factory import get_provider
-from ..store import ContractStore, PublicationConflict
+from ..store import ContractStore
 from .plan_service import PlanService
-from .publication_service import PublicationService
 from .runtime_service import RuntimeService
 
 
@@ -88,6 +87,7 @@ class LunchRebalanceResult:
     publication_id: str | None
     batch_digest: str | None
     reason: str | None = None
+    base_publication_id: str | None = None
 
 
 def is_lunch_plan(plan) -> bool:
@@ -260,23 +260,11 @@ class LunchRebalanceProducer:
                 producer_revision=LUNCH_PRODUCER_REVISION,
             )
             runtime = RuntimeService(self.store).observe(observation)
-            try:
-                lunch_publication = PublicationService(self.store).publish(
-                    plan_id=lunch_plan.plan_id,
-                    runtime_id=runtime.runtime_id,
-                    published_at=now,
-                    expected_current_publication_id=base_publication_id,
-                )
-            except PublicationConflict:
-                current = self.store.current_publication()
-                current_plan = self.store.load_plan(current.plan_id) if current else None
-                if is_lunch_plan(current_plan) and current_plan.producer.source_digest == source_digest:
-                    return LunchRebalanceResult("reused", current_plan.plan_id, current.runtime_id, current.publication_id, batch.content_digest)
-                return LunchRebalanceResult("unavailable", base_plan.plan_id, None, current.publication_id if current else None, batch.content_digest, "stale_base_publication")
             return LunchRebalanceResult(
-                "published",
+                "ready",
                 lunch_plan.plan_id,
                 runtime.runtime_id,
-                lunch_publication.publication_id,
+                None,
                 batch.content_digest,
+                base_publication_id=base_publication_id,
             )

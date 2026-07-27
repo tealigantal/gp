@@ -141,6 +141,15 @@ class AppConfig:
     # Cache TTL
     cache_refresh_ttl_sec: int = int(os.getenv("GP_CACHE_REFRESH_TTL_SEC", "300"))
 
+    # Durable market-day orchestration.  These are intentionally the only
+    # production knobs for daily evidence recovery; the worker does not infer
+    # a scan cadence from its one-minute heartbeat.
+    market_run_batch_size: int = int(os.getenv("GP_MARKET_RUN_BATCH_SIZE", "100"))
+    market_run_probe_interval_sec: int = int(os.getenv("GP_MARKET_RUN_PROBE_INTERVAL_SEC", "300"))
+    market_run_retry_interval_sec: int = int(os.getenv("GP_MARKET_RUN_RETRY_INTERVAL_SEC", "300"))
+    market_run_lease_sec: int = int(os.getenv("GP_MARKET_RUN_LEASE_SEC", "90"))
+    market_run_fetch_budget_sec: int = int(os.getenv("GP_MARKET_RUN_FETCH_BUDGET_SEC", "900"))
+
     # Intraday pulse/worker
     intraday_runtime_enabled: bool = _truthy(os.getenv("GP_INTRADAY_RUNTIME_ENABLED", "1"))
     intraday_fetch_workers: int = int(os.getenv("GP_INTRADAY_FETCH_WORKERS", "3"))
@@ -173,6 +182,11 @@ def load_config() -> AppConfig:
         cfg.ak_daily_priority = daily
     if not cfg.recommend_mode:
         cfg.recommend_mode = "dev" if cfg.dev_mode else "default"
+    cfg.market_run_batch_size = max(1, min(500, int(cfg.market_run_batch_size)))
+    cfg.market_run_probe_interval_sec = max(60, min(3600, int(cfg.market_run_probe_interval_sec)))
+    cfg.market_run_retry_interval_sec = max(60, min(7200, int(cfg.market_run_retry_interval_sec)))
+    cfg.market_run_lease_sec = max(30, min(3600, int(cfg.market_run_lease_sec)))
+    cfg.market_run_fetch_budget_sec = max(60, min(3600, int(cfg.market_run_fetch_budget_sec)))
     try:
         _ = zoneinfo.ZoneInfo(cfg.timezone)
     except Exception:

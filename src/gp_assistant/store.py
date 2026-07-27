@@ -13,6 +13,7 @@ from .contracts.conversation import ConversationSession, ConversationTurn
 from .contracts.catalog import ExecutionStatus
 from .contracts.decision import RecommendationPlan
 from .contracts.publication import PublicationDecision, RecommendationPublication
+from .contracts.publication_policy import publication_ineligibility
 from .contracts.runtime import RuntimeObservation
 from .contracts.ids import content_id
 
@@ -62,6 +63,26 @@ class ContractStore:
 
     def initialize(self) -> None:
         existed = self.path.exists()
+        # The production contract schema is immutable after bootstrap.  Avoid
+        # taking a write transaction merely to prove that fact on every health
+        # or chat read: two Uvicorn workers plus the market worker otherwise
+        # contend on the same bind-mounted SQLite file during recovery.
+        if existed:
+            try:
+                readonly = self._connect(writable=False)
+                try:
+                    row = readonly.execute("SELECT value FROM schema_metadata WHERE key='schema'").fetchone()
+                    turn_columns = {str(column["name"]) for column in readonly.execute("PRAGMA table_info(turns)")}
+                    if row is not None and str(row["value"]) == DATABASE_SCHEMA and "client_turn_id" in turn_columns:
+                        return
+                    if row is not None and str(row["value"]) != DATABASE_SCHEMA:
+                        raise UnsupportedDatabaseSchema("unsupported_database_schema")
+                finally:
+                    readonly.close()
+            except sqlite3.OperationalError as exc:
+                message = str(exc).lower()
+                if "locked" not in message and "no such table" not in message:
+                    raise
         conn = self._connect(writable=True)
         try:
             names = {str(row["name"]) for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
@@ -201,6 +222,9 @@ class ContractStore:
             if plan_row is None:
                 raise ContractStoreError("plan_not_found")
             plan = RecommendationPlan.model_validate_json(str(plan_row["payload_json"]))
+            ineligibility = publication_ineligibility(plan)
+            if ineligibility is not None:
+                raise PublicationConflict(ineligibility)
             runtime = None
             if publication.runtime_id:
                 runtime_row = conn.execute("SELECT plan_id,payload_json FROM runtime_observations WHERE runtime_id=?", (publication.runtime_id,)).fetchone()
@@ -271,6 +295,42 @@ class ContractStore:
                 conn.execute("INSERT INTO recommendation_publications(publication_id,plan_id,runtime_id,payload_json,payload_digest,published_at) VALUES(?,?,?,?,?,?)", (publication.publication_id, publication.plan_id, publication.runtime_id, encoded, payload_digest, publication.published_at.isoformat()))
             conn.execute("INSERT INTO current_publication(singleton,publication_id) VALUES(1,?) ON CONFLICT(singleton) DO UPDATE SET publication_id=excluded.publication_id", (publication.publication_id,))
             return canonical
+
+    def latest_eligible_publication(self) -> RecommendationPublication | None:
+        """Find a valid publication to retain while a market run recovers."""
+        if not self.path.exists():
+            return None
+        self.initialize()
+        conn = self._connect(writable=False)
+        try:
+            rows = conn.execute("SELECT payload_json FROM recommendation_publications ORDER BY published_at DESC").fetchall()
+            for row in rows:
+                publication = RecommendationPublication.model_validate_json(str(row["payload_json"]))
+                plan = self.load_plan(publication.plan_id)
+                if plan is not None and publication_ineligibility(plan) is None:
+                    return publication
+            return None
+        finally:
+            conn.close()
+
+    def restore_current_publication(self, publication_id: str) -> RecommendationPublication:
+        """Repair a legacy invalid pointer without modifying historical plans."""
+        with self._transaction() as conn:
+            row = conn.execute("SELECT payload_json FROM recommendation_publications WHERE publication_id=?", (publication_id,)).fetchone()
+            if row is None:
+                raise ContractStoreError("publication_not_found")
+            publication = RecommendationPublication.model_validate_json(str(row["payload_json"]))
+            plan_row = conn.execute("SELECT payload_json FROM recommendation_plans WHERE plan_id=?", (publication.plan_id,)).fetchone()
+            if plan_row is None:
+                raise ContractStoreError("plan_not_found")
+            plan = RecommendationPlan.model_validate_json(str(plan_row["payload_json"]))
+            if publication_ineligibility(plan) is not None:
+                raise PublicationConflict("publication_plan_not_ready")
+            conn.execute(
+                "INSERT INTO current_publication(singleton,publication_id) VALUES(1,?) ON CONFLICT(singleton) DO UPDATE SET publication_id=excluded.publication_id",
+                (publication.publication_id,),
+            )
+            return publication
 
     def current_publication(self) -> RecommendationPublication | None:
         if not self.path.exists():

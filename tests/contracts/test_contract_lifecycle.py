@@ -69,6 +69,7 @@ def test_runtime_producer_and_conversation_are_bound_and_idempotent(tmp_path):
         store,
         spot_loader=lambda: pd.DataFrame({"code": ["000001"], "price": [10.2], "pct_chg": [1.0]}),
     ).produce(now=datetime(2026, 7, 23, 10, 1, tzinfo=TZ))
+    PublicationService(store).publish(plan_id=selected_plan.plan_id, runtime_id=runtime.runtime_id, published_at=datetime(2026, 7, 23, 10, 1, tzinfo=TZ))
     publication = store.current_publication()
     assert runtime.data_quality.state is RuntimeDataState.READY
     assert publication is not None and publication.decision.tradeable_now

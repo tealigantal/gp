@@ -1,15 +1,13 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, HTTPException, Response
 from pydantic import BaseModel, ConfigDict
 
 from ..application.conversation_service import ConversationService
+from ..application.market_runs import MarketRunStore
 from ..store import ContractStore, ContractStoreError, UnsupportedDatabaseSchema
-from ..application.real_producer import RealRecommendationProducer
-from ..application.runtime_producer import RuntimeRecommendationProducer
 from ..contracts.conversation import ConversationSession, ConversationTurn
 
 
@@ -38,14 +36,12 @@ def current_recommendation() -> dict[str, object]:
 
 @router.post("/api/recommendation/refresh")
 def refresh_recommendation() -> dict[str, object]:
-    command = RealRecommendationProducer(ContractStore()).produce(datetime.now(ZoneInfo("Asia/Shanghai")))
-    return command.plan.model_dump(mode="json")
+    raise HTTPException(status_code=409, detail="worker_owned_refresh")
 
 
 @router.post("/api/recommendation/runtime/refresh")
 def refresh_runtime() -> dict[str, object]:
-    runtime = RuntimeRecommendationProducer(ContractStore()).produce(now=datetime.now(ZoneInfo("Asia/Shanghai")))
-    return runtime.model_dump(mode="json")
+    raise HTTPException(status_code=409, detail="worker_owned_refresh")
 
 
 @router.get("/api/lunch/current")
@@ -68,7 +64,9 @@ def current_lunch() -> dict[str, object]:
 
 @router.get("/api/health")
 def health() -> dict[str, object]:
-    return ContractStore().health()
+    payload = ContractStore().health()
+    payload["market_recovery"] = MarketRunStore().health()
+    return payload
 
 
 @router.post("/api/chat")

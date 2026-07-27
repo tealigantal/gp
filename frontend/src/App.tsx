@@ -242,7 +242,11 @@ export function App() {
 
         <div className="engine-card">
           <span className={health?.daily_data_state === 'ready' ? 'live-dot ready' : 'live-dot'} />
-          <div><strong>决策引擎{health?.daily_data_state === 'ready' ? '已就绪' : '准备中'}</strong><small>日线证据 {health?.daily_evidence_date || '待更新'}</small></div>
+          <div>
+            <strong>决策引擎{health?.daily_data_state === 'ready' ? '已就绪' : '准备中'}</strong>
+            <small>日线证据 {health?.daily_evidence_date || '待更新'}</small>
+            {health?.market_recovery && health.market_recovery.state !== 'ready' ? <small>市场数据恢复中 · {health.market_recovery.completed}/{health.market_recovery.total}{health.market_recovery.approximate_universe ? ' · 使用当前分母回补' : ''}</small> : null}
+          </div>
           <ShieldIcon />
         </div>
       </aside>

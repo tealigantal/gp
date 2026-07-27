@@ -7,6 +7,7 @@ from uuid import uuid4
 from ..contracts.publication import RecommendationPublication
 from ..llm.client import LLMClient
 from ..store import ContractStore
+from .market_runs import MarketRunStore
 
 
 class ConversationService:
@@ -83,6 +84,7 @@ class ConversationService:
             "closed": "休市",
         }
         state_names = {"ready": "数据完整", "stale": "数据过期", "unavailable": "数据不可用"}
+        recovery = MarketRunStore().health()
         market_time_context = {
             "当前上海时间": datetime.now(ZoneInfo("Asia/Shanghai")).isoformat(),
             "计划交易日": plan.market_session_date.isoformat() if plan else None,
@@ -94,6 +96,10 @@ class ConversationService:
                 "市场阶段": phase_names.get(runtime.market_phase.value, "未知阶段"),
                 "数据状态": state_names.get(runtime.data_quality.state.value, "未知状态"),
             } if runtime else None,
+            "市场数据恢复": (
+                "恢复中，当前对话继续绑定最近一份完整发布；恢复任务不会生成新的不完整推荐。"
+                if recovery.get("state") != "ready" else "无待恢复市场数据。"
+            ),
         }
         plan_status_names = {"recommend": "存在推荐候选", "no_recommend": "当前无推荐", "unavailable": "推荐不可用"}
         execution_status_names = {"available": "执行数据可用", "pending": "等待执行数据", "unavailable": "执行数据不可用"}

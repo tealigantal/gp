@@ -21,3 +21,4 @@ only the files listed below are retained records.
 | [0010 — Serenity fixed 3% and unified worker isolation](0010-serenity-fixed-three-percent-unified-worker.md) | Current Serenity weight and worker-topology decision. |
 | [0011 — Lunch Top-30 five-minute rerank](0011-lunch-top30-five-minute-rerank.md) | Current immutable lunch-plan semantic extension. |
 | [0012 — Exact daily coverage and bounded Serenity OCR](0012-daily-coverage-and-serenity-ocr.md) | Current exact coverage and bounded OCR decision. |
+| [0013 — Market-day orchestrator and recovery](0013-market-day-orchestrator-and-recovery.md) | Current daily scheduling, recovery, and publication-gate decision. |

@@ -5,6 +5,7 @@ import json
 from ..contracts.catalog import ExecutionStatus
 from ..contracts.ids import content_id
 from ..contracts.publication import PublicationDecision, PublicationLineage, RecommendationPublication
+from ..contracts.publication_policy import require_publication_eligible
 from ..store import ContractStore
 
 
@@ -24,6 +25,7 @@ class PublicationService:
         plan = self.store.load_plan(plan_id)
         if plan is None:
             raise ValueError("plan_not_found")
+        require_publication_eligible(plan)
         runtime = self.store.load_runtime(runtime_id) if runtime_id else None
         if runtime_id and runtime is None:
             raise ValueError("runtime_plan_mismatch")

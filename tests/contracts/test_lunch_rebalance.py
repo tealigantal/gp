@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import date, datetime, timedelta, timezone
+from dataclasses import replace
 import json
 import multiprocessing
 import sqlite3
@@ -14,7 +15,9 @@ from gp_assistant.application.plan_service import PlanService
 from gp_assistant.application.publication_service import PublicationService
 from gp_assistant.application.runtime_producer import RuntimeRecommendationProducer
 from gp_assistant.application.target_resolver import resolve_plan_target
-from gp_assistant.cli import _seed_serenity_target_from_current_plan, _worker_tick
+from gp_assistant.cli import _seed_serenity_target_from_current_plan
+from gp_assistant.application.market_orchestrator import MarketDayOrchestrator
+from gp_assistant.application.market_runs import MarketRunStore
 from gp_assistant.contracts.catalog import CandidateDisposition, MarketPhase, RuntimeDataState
 from gp_assistant.contracts.decision import CandidateDecision, TradePlan
 from gp_assistant.contracts.evidence import (
@@ -143,6 +146,23 @@ def _base_plan(store: ContractStore, *, serenity_active: bool = False):
     return plan, publication
 
 
+def _run_lunch(store: ContractStore, producer: LunchRebalanceProducer, *, now: datetime):
+    """Exercise the worker-owned handoff without reviving producer publication."""
+    result = producer.produce(now=now)
+    if result.state != "ready":
+        return result
+    try:
+        publication = PublicationService(store).publish(
+            plan_id=result.plan_id,
+            runtime_id=result.runtime_id,
+            published_at=now,
+            expected_current_publication_id=result.base_publication_id,
+        )
+    except PublicationConflict:
+        return replace(result, state="unavailable", reason="stale_base_publication")
+    return replace(result, state="published", publication_id=publication.publication_id)
+
+
 def _bars(*, slope: float = 0.0, missing_last: bool = False) -> pd.DataFrame:
     times = pd.date_range("2026-07-24 09:35:00", "2026-07-24 11:30:00", freq="5min")
     rows = []
@@ -193,9 +213,7 @@ def test_complete_lunch_batch_appends_new_plan_and_preserves_database_contract(t
     )
     provider = FakeMinuteProvider()
 
-    result = LunchRebalanceProducer(store, provider=provider).produce(
-        now=datetime(2026, 7, 24, 12, 0, tzinfo=TZ)
-    )
+    result = _run_lunch(store, LunchRebalanceProducer(store, provider=provider), now=datetime(2026, 7, 24, 12, 0, tzinfo=TZ))
 
     assert result.state == "published"
     assert result.plan_id != base_plan.plan_id
@@ -327,75 +345,16 @@ def test_batch_digest_is_stable_and_rejects_unclosed_or_unordered_rows():
 def test_worker_lunch_tick_never_runs_empty_runtime_and_afternoon_keeps_lunch_plan(tmp_path):
     store = ContractStore(tmp_path / "contract.sqlite")
     _base_plan(store)
-
-    class Calls:
-        def __init__(self):
-            self.count = 0
-
-        def produce(self, *args, **kwargs):
-            self.count += 1
-            return None
-
-    real = Calls()
-    runtime = Calls()
-    lunch = LunchRebalanceProducer(store, provider=FakeMinuteProvider())
-    last_plan_at = 1_000.0
-    monotonic_now = lambda: 1_100.0
-
-    before_lunch = _worker_tick(
-        store,
-        now=datetime(2026, 7, 24, 11, 29, tzinfo=TZ),
-        last_plan_at=last_plan_at,
-        plan_interval_sec=1800,
-        real_producer=real,
-        runtime_producer=runtime,
-        lunch_producer=lunch,
-        monotonic_now=monotonic_now,
-    )
-    assert before_lunch == last_plan_at
-    assert real.count == 0
-    assert runtime.count == 1
-    runtime.count = 0
-
-    returned = _worker_tick(
-        store,
-        now=datetime(2026, 7, 24, 11, 30, tzinfo=TZ),
-        last_plan_at=last_plan_at,
-        plan_interval_sec=1800,
-        real_producer=real,
-        runtime_producer=runtime,
-        lunch_producer=lunch,
-        monotonic_now=monotonic_now,
-    )
-    assert returned == last_plan_at
-    assert real.count == 0
-    assert runtime.count == 0
-    assert store.load_plan(store.current_publication().plan_id).producer.name == "real_daily_producer"
-
-    _worker_tick(
-        store,
-        now=datetime(2026, 7, 24, 11, 32, tzinfo=TZ),
-        last_plan_at=last_plan_at,
-        plan_interval_sec=1800,
-        real_producer=real,
-        runtime_producer=runtime,
-        lunch_producer=lunch,
-        monotonic_now=monotonic_now,
-    )
+    provider = FakeMinuteProvider()
+    ledger = MarketRunStore(tmp_path / "market_runs.db")
+    first = MarketDayOrchestrator(store, ledger=ledger, lunch_producer=LunchRebalanceProducer(store, provider=provider), spawn_fetch=False)
+    first._run_lunch_if_due(now=datetime(2026, 7, 24, 11, 32, tzinfo=TZ))
     assert store.load_plan(store.current_publication().plan_id).producer.name == "lunch_5m_producer"
-
-    _worker_tick(
-        store,
-        now=datetime(2026, 7, 24, 13, 30, tzinfo=TZ),
-        last_plan_at=last_plan_at,
-        plan_interval_sec=1800,
-        real_producer=real,
-        runtime_producer=runtime,
-        lunch_producer=lunch,
-        monotonic_now=monotonic_now,
-    )
-    assert real.count == 0
-    assert runtime.count == 1
+    assert ledger.lunch_state("2026-07-24") == "published"
+    calls_after_first = provider.calls
+    restarted = MarketDayOrchestrator(store, ledger=ledger, lunch_producer=LunchRebalanceProducer(store, provider=provider), spawn_fetch=False)
+    restarted._run_lunch_if_due(now=datetime(2026, 7, 24, 12, 0, tzinfo=TZ))
+    assert provider.calls == calls_after_first
 
 
 def test_publication_retry_is_canonical_and_stale_pointer_write_is_rejected(tmp_path):
@@ -434,9 +393,7 @@ def test_publication_retry_is_canonical_and_stale_pointer_write_is_rejected(tmp_
     assert retry == first
     assert retry.published_at == datetime(2026, 7, 24, 10, 0, tzinfo=TZ)
 
-    lunch = LunchRebalanceProducer(store, provider=FakeMinuteProvider()).produce(
-        now=datetime(2026, 7, 24, 12, 0, tzinfo=TZ)
-    )
+    lunch = _run_lunch(store, LunchRebalanceProducer(store, provider=FakeMinuteProvider()), now=datetime(2026, 7, 24, 12, 0, tzinfo=TZ))
     assert lunch.state == "published"
     with pytest.raises(PublicationConflict, match="stale_publication_write"):
         store.commit_publication(first, expected_current_publication_id=first.publication_id)
@@ -461,9 +418,7 @@ def test_llm_receives_product_level_lunch_principle_without_engine_interfaces(tm
 
     store = ContractStore(tmp_path / "contract.sqlite")
     _base_plan(store, serenity_active=True)
-    result = LunchRebalanceProducer(store, provider=FakeMinuteProvider()).produce(
-        now=datetime(2026, 7, 24, 12, 0, tzinfo=TZ)
-    )
+    result = _run_lunch(store, LunchRebalanceProducer(store, provider=FakeMinuteProvider()), now=datetime(2026, 7, 24, 12, 0, tzinfo=TZ))
     assert result.state == "published"
 
     ConversationService(store, narrator=Narrator()).reply(
@@ -493,9 +448,7 @@ def test_lunch_keeps_existing_public_http_shapes(tmp_path, monkeypatch):
     monkeypatch.setenv("GP_SERENITY_CURRENT_DB", str(tmp_path / "serenity.sqlite"))
     store = ContractStore(db_path)
     _base_plan(store)
-    result = LunchRebalanceProducer(store, provider=FakeMinuteProvider()).produce(
-        now=datetime(2026, 7, 24, 12, 0, tzinfo=TZ)
-    )
+    result = _run_lunch(store, LunchRebalanceProducer(store, provider=FakeMinuteProvider()), now=datetime(2026, 7, 24, 12, 0, tzinfo=TZ))
     assert result.state == "published"
 
     from fastapi.testclient import TestClient
@@ -539,9 +492,10 @@ def test_lunch_keeps_existing_public_http_shapes(tmp_path, monkeypatch):
         "daily_data_state",
         "runtime_data_state",
         "publication_state",
-        "tradeability_state",
-        "serenity",
-    }
+            "tradeability_state",
+            "serenity",
+            "market_recovery",
+        }
     recommendation_payload = recommendation.json()
     lunch_payload = lunch.json()
     health_payload = health.json()
@@ -584,9 +538,7 @@ def test_active_serenity_three_percent_survives_lunch_rerank():
 def test_active_serenity_three_percent_survives_lunch_production_and_persistence(tmp_path):
     store = ContractStore(tmp_path / "contract.sqlite")
     _base_plan(store, serenity_active=True)
-    result = LunchRebalanceProducer(store, provider=FakeMinuteProvider()).produce(
-        now=datetime(2026, 7, 24, 12, 0, tzinfo=TZ)
-    )
+    result = _run_lunch(store, LunchRebalanceProducer(store, provider=FakeMinuteProvider()), now=datetime(2026, 7, 24, 12, 0, tzinfo=TZ))
 
     plan = store.load_plan(result.plan_id)
     runtime = store.load_runtime(result.runtime_id)
@@ -607,9 +559,7 @@ def test_active_serenity_three_percent_survives_lunch_production_and_persistence
 def test_manual_lunch_runtime_refresh_preserves_complete_lunch_observation(tmp_path):
     store = ContractStore(tmp_path / "contract.sqlite")
     _base_plan(store)
-    result = LunchRebalanceProducer(store, provider=FakeMinuteProvider()).produce(
-        now=datetime(2026, 7, 24, 12, 0, tzinfo=TZ)
-    )
+    result = _run_lunch(store, LunchRebalanceProducer(store, provider=FakeMinuteProvider()), now=datetime(2026, 7, 24, 12, 0, tzinfo=TZ))
     before = store.current_publication()
     runtime = RuntimeRecommendationProducer(store, spot_loader=lambda: pytest.fail("spot must not load during lunch")).produce(
         now=datetime(2026, 7, 24, 12, 5, tzinfo=TZ)
@@ -623,9 +573,7 @@ def test_worker_restart_seeds_serenity_from_original_frozen_scope_and_base_score
     monkeypatch.setenv("GP_SERENITY_CURRENT_DB", str(tmp_path / "serenity.sqlite"))
     store = ContractStore(tmp_path / "contract.sqlite")
     base_plan, _publication = _base_plan(store)
-    result = LunchRebalanceProducer(store, provider=FakeMinuteProvider()).produce(
-        now=datetime(2026, 7, 24, 12, 0, tzinfo=TZ)
-    )
+    result = _run_lunch(store, LunchRebalanceProducer(store, provider=FakeMinuteProvider()), now=datetime(2026, 7, 24, 12, 0, tzinfo=TZ))
     assert result.state == "published"
 
     _seed_serenity_target_from_current_plan(store, datetime(2026, 7, 24, 12, 5, tzinfo=TZ))
@@ -690,9 +638,7 @@ def test_failure_after_plan_and_runtime_append_keeps_morning_current(tmp_path, m
         raise PublicationConflict("injected_publish_failure")
 
     monkeypatch.setattr(PublicationService, "publish", fail_publish)
-    result = LunchRebalanceProducer(store, provider=FakeMinuteProvider()).produce(
-        now=datetime(2026, 7, 24, 12, 0, tzinfo=TZ)
-    )
+    result = _run_lunch(store, LunchRebalanceProducer(store, provider=FakeMinuteProvider()), now=datetime(2026, 7, 24, 12, 0, tzinfo=TZ))
 
     assert result.state == "unavailable"
     assert store.current_publication() == morning
@@ -802,9 +748,7 @@ def test_afternoon_runtime_keeps_all_top30_lunch_scores_explainable(tmp_path):
 
     store = ContractStore(tmp_path / "contract.sqlite")
     _base_plan(store, serenity_active=True)
-    result = LunchRebalanceProducer(store, provider=FakeMinuteProvider()).produce(
-        now=datetime(2026, 7, 24, 12, 0, tzinfo=TZ)
-    )
+    result = _run_lunch(store, LunchRebalanceProducer(store, provider=FakeMinuteProvider()), now=datetime(2026, 7, 24, 12, 0, tzinfo=TZ))
     lunch_plan = store.load_plan(result.plan_id)
     expected_scores = {item.symbol: item.adaptive_score for item in lunch_plan.evaluated_candidates[:30]}
     selected = [item.symbol for item in lunch_plan.evaluated_candidates if item.disposition is CandidateDisposition.SELECTED]

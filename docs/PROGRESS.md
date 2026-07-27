@@ -1,6 +1,16 @@
 # Current Progress
 
-Last updated: 2026-07-24
+Last updated: 2026-07-27
+
+The worker has been rewritten around a durable market-day ledger rather than the former 60-second/30-minute condition chain. `store/market_runs.db` records frozen denominators, symbol-level exact-date coverage, retry/error evidence, recovery leases and lunch completion; it does not alter `history.db`, `agent.db`, current recommendation contracts or Serenity's atomic 3% rule. The daily producer is now read-only after an exact completed run, and both the publication service and database boundary refuse incomplete/pending plans. API refresh endpoints are worker-owned refusals rather than hidden collection paths. Health and the Chinese workspace display recovery state while keeping the last complete recommendation and its new-chat binding. Full test evidence is recorded below; container recovery observation remains the active operational checkpoint in `docs/plans/2026-07-27-market-day-orchestration-self-healing.md` and ADR 0013.
+
+The local container observation is now live: exact target-date readback found 3042 of 3044 symbols for 2026-07-27 in 1.834 seconds, so the new worker retried only `002036` and `002828`, recorded their route failures and scheduled the next retry. The valid 2026-07-27 publication remains current, while health and the rebuilt workspace clearly show recovery. The external-source gap is deliberately still pending rather than being relabeled as a complete plan.
+
+The 2026-07-27 daily-K incident was traced to two worker/provider contracts, not database corruption and not Serenity: the lunch-rerank change treated “not a lunch plan” as permission to refresh the full market in the afternoon, and the AkShare timeout wrapper held a global lock for each network call, making configured batch concurrency serial. The worker now binds refresh eligibility to the current target's market-session and daily-evidence dates, suppresses full-market refresh in afternoon/closing auction, and retries after close only when that target is not complete. The request policy is context-local, so it retains AkShare-only timeout/header enforcement without serializing concurrent requests. The existing daily-refresh test was revised rather than expanded. See `docs/plans/2026-07-27-worker-daily-refresh-gate.md`.
+
+The authorized local rebuild of only `gp` and `gp-worker` completed. `gp` is healthy, `gp-worker` has no restart, its Serenity child remains separate, and the running worker contains the exact repaired `cli.py`; `web` was left running unchanged. The old current recommendation remains visible while post-close target-date recovery proceeds, which is the intended single recovery path rather than an afternoon retry loop.
+
+The retirement checker now exempts only the explicitly marked 2026-04-01 historical repair brief from its active-contract vocabulary scan. Its preserved historical terminology no longer blocks the current suite, while every current source and document remains checked.
 
 Documentation has been consolidated under `docs/README.md`. The map separates current authorities, execution records, decision records, and historical archive material; ADR and archive indexes now resolve only to retained files. The dated 2026-04-01 repair brief was moved out of the repository root into `docs/archive/history/` and explicitly marked historical. Local Markdown link and whitespace checks passed; this documentation-only maintenance did not change the runtime.
 
