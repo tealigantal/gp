@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date, datetime, time as clock_time, timedelta
+from datetime import date, datetime, time as clock_time
 import json
 import multiprocessing
 from pathlib import Path
@@ -18,17 +18,24 @@ from .daily_refresh import DailyEvidenceRefresher
 from .history_daily import coverage_for_date, latest_daily_date
 from .lunch_rebalance_producer import LunchRebalanceProducer
 from .market_runs import DailyRun, FrozenUniverse, MarketRunStore, RUN_COMPLETE, universe_digest
+from .official_suspension import OfficialSuspensionEvidenceCollector
 from .publication_service import PublicationService
 from .real_producer import RealRecommendationProducer
 from .runtime_producer import RuntimeRecommendationProducer, market_phase
+from ..serenity.service import FIXED_WEIGHT, load_decision, publish_target
 from .trading_calendar import CnATradingCalendar, load_cn_a_calendar
 
 
 _FREEZE_START = clock_time(14, 57)
 _SOURCE_PROBE_START = clock_time(15, 5)
 _DAILY_FETCH_START = clock_time(15, 20)
-_BASE_PLAN_START = clock_time(9, 20)
-_BASE_PLAN_END = clock_time(9, 30)
+# A next-session base plan is meaningful as soon as the preceding session's
+# exact daily evidence is complete.  The window deliberately crosses
+# midnight: a recovery that finishes overnight must not wait until the next
+# session has already started.
+_BASE_PLAN_AFTER_CLOSE_START = clock_time(15, 20)
+_BASE_PLAN_PREOPEN_END = clock_time(9, 30)
+_MAX_OFFICIAL_SUSPENSION_CANDIDATES = 10
 
 
 class MarketClock:
@@ -54,7 +61,7 @@ class MarketClock:
     @classmethod
     def can_build_base_plan(cls, now: datetime) -> bool:
         value = cls.local_time(now)
-        return _BASE_PLAN_START <= value < _BASE_PLAN_END
+        return value >= _BASE_PLAN_AFTER_CLOSE_START or value < _BASE_PLAN_PREOPEN_END
 
     @classmethod
     def can_recover_history(cls, now: datetime) -> bool:
@@ -62,7 +69,14 @@ class MarketClock:
         return phase in {MarketPhase.PREOPEN, MarketPhase.LUNCH, MarketPhase.POSTCLOSE}
 
 
-def _daily_fetch_worker(*, run_db: str, trade_date: str, now_iso: str, lease_sec: int) -> None:
+def _daily_fetch_worker(
+    *,
+    run_db: str,
+    trade_date: str,
+    now_iso: str,
+    lease_sec: int,
+    suspension_collector: OfficialSuspensionEvidenceCollector | None = None,
+) -> None:
     """Complete bounded 100-symbol batches outside the worker heartbeat loop."""
     now = datetime.fromisoformat(now_iso)
     ledger = MarketRunStore(Path(run_db))
@@ -83,10 +97,16 @@ def _daily_fetch_worker(*, run_db: str, trade_date: str, now_iso: str, lease_sec
             return
         ledger.set_source_ready(target, now)
         refresher = DailyEvidenceRefresher(get_provider(prefer="akshare"))
-        deadline = now + timedelta(seconds=cfg.market_run_fetch_budget_sec)
         source = "akshare:" + ">".join(cfg.ak_daily_priority)
         attempted_this_execution: set[str] = set()
-        while missing and datetime.now(now.tzinfo) < deadline:
+        # The parent worker is already isolated from this child process.  A
+        # wall-clock budget for the *entire* market was therefore the wrong
+        # failure boundary: it cut a healthy 3,000-symbol scan after 15
+        # minutes, then imposed an artificial retry wait.  Continue through
+        # every not-yet-attempted symbol, persist after each batch, and leave
+        # retry only for the genuinely unresolved residue.  Individual source
+        # calls retain their provider request timeout and bounded routes.
+        while missing:
             batch = tuple(symbol for symbol in missing if symbol not in attempted_this_execution)[:cfg.market_run_batch_size]
             if not batch:
                 break
@@ -97,14 +117,60 @@ def _daily_fetch_worker(*, run_db: str, trade_date: str, now_iso: str, lease_sec
                 refresher.refresh(symbols=batch, start=target, end=target, target_date=target)
             except Exception as exc:  # noqa: BLE001
                 ledger.mark_attempt_failed(trade_date=target, symbols=batch, now=attempt_now, error=f"{type(exc).__name__}:{exc}")
-                ledger.record_retry(target, now=attempt_now, retry_after_sec=cfg.market_run_retry_interval_sec, error=f"daily_batch_error:{type(exc).__name__}")
-                return
+                break
             present = coverage_for_date(expected, target_date=target)
-            missing = ledger.update_coverage(trade_date=target, target_date=target, rows=present, now=attempt_now)
+            missing = ledger.update_coverage(
+                trade_date=target,
+                target_date=target,
+                rows=present,
+                now=attempt_now,
+                observed_symbols=batch,
+            )
             ledger.heartbeat_lease(name=f"daily-run:{trade_date}", token=token, now=attempt_now, lease_sec=lease_sec)
+            print(
+                json.dumps(
+                    {
+                        "daily_run_progress": {
+                            "trade_date": target,
+                            "batch_size": len(batch),
+                            "covered": len(expected) - len(missing),
+                            "expected": len(expected),
+                            "remaining": len(missing),
+                        }
+                    },
+                    ensure_ascii=False,
+                ),
+                flush=True,
+            )
         if not missing:
             ledger.complete(target, datetime.now(now.tzinfo))
             return
+        # Daily data remains the primary route.  Only after it has tried every
+        # still-missing symbol in this bounded run may an official no-bar fact
+        # resolve a small residue.  This never scans the full universe.
+        if (
+            len(missing) <= _MAX_OFFICIAL_SUSPENSION_CANDIDATES
+            and set(missing).issubset(attempted_this_execution)
+        ):
+            collector = suspension_collector or OfficialSuspensionEvidenceCollector()
+            evidence = collector.resolve(
+                symbols=tuple(missing),
+                trade_date=date.fromisoformat(target),
+                observed_at=datetime.now(now.tzinfo),
+            )
+            if evidence:
+                ledger.exclude_verified_suspensions(trade_date=target, evidence_by_symbol=evidence, now=datetime.now(now.tzinfo))
+                expected = ledger.expected_symbols(target)
+                present = coverage_for_date(expected, target_date=target)
+                missing = ledger.update_coverage(
+                    trade_date=target,
+                    target_date=target,
+                    rows=present,
+                    now=datetime.now(now.tzinfo),
+                )
+                if not missing:
+                    ledger.complete(target, datetime.now(now.tzinfo))
+                    return
         ledger.mark_attempt_failed(trade_date=target, symbols=tuple(missing), now=datetime.now(now.tzinfo))
         ledger.record_retry(target, now=datetime.now(now.tzinfo), retry_after_sec=cfg.market_run_retry_interval_sec, error="daily_coverage_incomplete")
     finally:
@@ -123,6 +189,7 @@ class MarketDayOrchestrator:
         real_producer: RealRecommendationProducer | None = None,
         runtime_producer: RuntimeRecommendationProducer | None = None,
         lunch_producer: LunchRebalanceProducer | None = None,
+        suspension_collector: OfficialSuspensionEvidenceCollector | None = None,
         spawn_fetch: bool = True,
         process_factory: Callable[..., multiprocessing.Process] = multiprocessing.Process,
     ):
@@ -132,6 +199,7 @@ class MarketDayOrchestrator:
         self.real = real_producer or RealRecommendationProducer(store)
         self.runtime = runtime_producer or RuntimeRecommendationProducer(store)
         self.lunch = lunch_producer or LunchRebalanceProducer(store)
+        self.suspension_collector = suspension_collector
         self.spawn_fetch = spawn_fetch
         self.process_factory = process_factory
         self._worker_lease: str | None = None
@@ -275,7 +343,13 @@ class MarketDayOrchestrator:
             process.start()
             self._fetch_process = process
         else:
-            _daily_fetch_worker(run_db=str(self.ledger.path), trade_date=run.trade_date, now_iso=now.isoformat(), lease_sec=cfg.market_run_lease_sec)
+            _daily_fetch_worker(
+                run_db=str(self.ledger.path),
+                trade_date=run.trade_date,
+                now_iso=now.isoformat(),
+                lease_sec=cfg.market_run_lease_sec,
+                suspension_collector=self.suspension_collector,
+            )
 
     def _probe_source(self, run: DailyRun, *, now: datetime) -> bool:
         cfg = load_config()
@@ -310,11 +384,93 @@ class MarketDayOrchestrator:
         current_plan = self.store.load_plan(current.plan_id) if current else None
         target_session = now.date() if MarketClock.local_time(now) < clock_time(15, 0) else calendar.next_open_after(now.date())
         if current_plan and current_plan.market_session_date == target_session and current_plan.daily_evidence_date == required and publication_ineligibility(current_plan) is None:
-            return
-        if not (MarketClock.can_build_base_plan(now) or MarketClock.local_time(now) >= clock_time(15, 20)):
+            # A zero-weight base plan is intentionally publishable while the
+            # isolated Serenity collector works.  Once that *same frozen*
+            # target has an exact complete batch, however, it must be allowed
+            # to create its one 3% successor.  Treating matching dates as an
+            # unconditional no-op would strand the plan forever at 0%.
+            if not self._serenity_upgrade_available(current_plan, now=now):
+                return
+        # A completed run may finish after midnight during self-healing.  It
+        # still belongs to the upcoming session and must publish before that
+        # session opens, rather than waiting for a stale 09:20 retry slot.
+        if not MarketClock.can_build_base_plan(now):
             return
         command = self.real.produce(now, frozen_universe=run.universe)
-        PublicationService(self.store).publish(plan_id=command.plan.plan_id, runtime_id=None, published_at=now)
+        # Producing a complete full-market plan can take minutes.  Admission at
+        # the beginning is not sufficient: a 09:29 start must not move the
+        # public pointer after the 09:30 pre-open deadline.  The immutable plan
+        # may remain as an unpinned audit artifact, but only a completion that
+        # is still in the allowed window can become current.
+        published_at = datetime.now(now.tzinfo)
+        if not MarketClock.can_build_base_plan(published_at):
+            print(
+                json.dumps(
+                    {
+                        "base_plan_unpublished": "generation_window_closed",
+                        "plan_id": command.plan.plan_id,
+                        "started_at": now.isoformat(),
+                        "finished_at": published_at.isoformat(),
+                    },
+                    ensure_ascii=False,
+                ),
+                flush=True,
+            )
+            return
+        PublicationService(self.store).publish(plan_id=command.plan.plan_id, runtime_id=None, published_at=published_at)
+
+    @staticmethod
+    def _serenity_upgrade_available(plan, *, now: datetime) -> bool:
+        """Return true only for a matching, complete 0% → 3% batch upgrade.
+
+        This is a worker-only read/publish-target operation.  It never
+        collects a document and a failure deliberately leaves the already
+        valid zero-weight plan untouched.
+        """
+        if float(plan.serenity.applied_weight) >= FIXED_WEIGHT:
+            return False
+        finalists = tuple(
+            item
+            for item in plan.evaluated_candidates
+            if any(expert.expert == "serenity" for expert in item.experts)
+        )
+        if not finalists or plan.daily_evidence_date is None:
+            return False
+        base_scores = {
+            item.symbol: round(
+                float(item.adaptive_score)
+                - sum(float(expert.contribution) for expert in item.experts if expert.expert == "intraday_5m"),
+                12,
+            )
+            for item in finalists
+        }
+        try:
+            target = publish_target(
+                (item.symbol for item in finalists),
+                market_session_date=plan.market_session_date.isoformat(),
+                daily_evidence_date=plan.daily_evidence_date.isoformat(),
+                universe_digest=plan.candidate_universe.content_digest,
+                base_scores=base_scores,
+                observed_at=now.isoformat(),
+            )
+            return load_decision(target).applied_weight == FIXED_WEIGHT
+        except Exception as exc:  # noqa: BLE001
+            # Serenity availability may never block or invalidate the base
+            # plan.  The child reports collection failures, while this log
+            # makes a target/decision mismatch observable to the operator
+            # instead of silently stranding an otherwise valid 0% plan.
+            print(
+                json.dumps(
+                    {
+                        "serenity_upgrade_skipped": type(exc).__name__,
+                        "market_session_date": plan.market_session_date.isoformat(),
+                        "daily_evidence_date": plan.daily_evidence_date.isoformat(),
+                    },
+                    ensure_ascii=False,
+                ),
+                flush=True,
+            )
+            return False
 
     def _run_runtime_if_due(self, *, now: datetime) -> None:
         if market_phase(now) not in {MarketPhase.MORNING, MarketPhase.AFTERNOON, MarketPhase.CLOSING_AUCTION}:

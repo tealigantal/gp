@@ -4,6 +4,7 @@ import sqlite3
 from types import SimpleNamespace
 
 from gp_assistant.application.conversation_service import ConversationService
+from gp_assistant.application.market_orchestrator import MarketDayOrchestrator
 from gp_assistant.application.plan_service import PlanService
 from gp_assistant.application.publication_service import PublicationService
 from gp_assistant.application.real_producer import RealRecommendationProducer
@@ -158,7 +159,8 @@ def test_uncovered_candidate_cannot_be_selected_after_serenity_penalizes_a_final
     assert by_symbol["000002"].disposition.value == "reserve"
 
 
-def test_serenity_semantic_revision_changes_plan_identity_but_zero_is_stable(tmp_path):
+def test_serenity_semantic_revision_changes_plan_identity_but_zero_is_stable(tmp_path, monkeypatch):
+    monkeypatch.setenv("GP_SERENITY_CURRENT_DB", str(tmp_path / "serenity.db"))
     store = ContractStore(tmp_path / "contracts.db")
     target = resolve_plan_target(
         now=datetime(2026, 7, 24, 9, 0, tzinfo=TZ),
@@ -187,6 +189,39 @@ def test_serenity_semantic_revision_changes_plan_identity_but_zero_is_stable(tmp
     active = create("complete:content", 0.03)
     assert zero_first.plan_id == zero_retry.plan_id
     assert active.plan_id != zero_first.plan_id
+
+    observed = datetime(2026, 7, 24, 9, 2, tzinfo=TZ)
+    zero_upgrade_plan = SimpleNamespace(
+        serenity=SimpleNamespace(applied_weight=0.0),
+        market_session_date=zero_first.market_session_date,
+        daily_evidence_date=zero_first.daily_evidence_date,
+        candidate_universe=zero_first.candidate_universe,
+        evaluated_candidates=(SimpleNamespace(symbol="000001", adaptive_score=0.6, experts=(SimpleNamespace(expert="serenity", contribution=0.0),)),),
+    )
+    assert not MarketDayOrchestrator._serenity_upgrade_available(zero_upgrade_plan, now=observed)
+    serenity_target = publish_target(
+        ("000001",),
+        market_session_date=zero_first.market_session_date.isoformat(),
+        daily_evidence_date=zero_first.daily_evidence_date.isoformat(),
+        universe_digest=zero_first.candidate_universe.content_digest,
+        base_scores={"000001": 0.6},
+        observed_at=observed.isoformat(),
+    )
+    payload = {
+        "schema": "SerenityBatch.v1",
+        "target_id": serenity_target.target_id,
+        "completed_at": observed.isoformat(),
+        "alphas": {"000001": 0.0},
+        "reasons": {"000001": ["serenity_no_relevant_evidence"]},
+        "document_version_ids": [],
+    }
+    batch_id = _commit_batch(serenity_target, payload, [], observed.isoformat())
+    _set_health("ready", target_id=serenity_target.target_id, batch_id=batch_id, updated_at=observed.isoformat())
+    assert MarketDayOrchestrator._serenity_upgrade_available(zero_upgrade_plan, now=observed)
+    assert not MarketDayOrchestrator._serenity_upgrade_available(
+        zero_upgrade_plan.__class__(**{**zero_upgrade_plan.__dict__, "serenity": SimpleNamespace(applied_weight=0.03)}),
+        now=observed,
+    )
 
 
 def test_collector_commits_neutral_only_after_complete_exact_coverage(tmp_path, monkeypatch):

@@ -5,11 +5,6 @@ import { ArrowIcon, ChatIcon, ClockIcon, PlusIcon, RefreshIcon, ShieldIcon, Spar
 
 const prompts = ['今天最值得关注哪几只？', '为什么现在不能直接买？', '比较前三名的风险和胜率']
 
-const phaseLabels: Record<string, string> = {
-  preopen: '开盘前', morning: '上午交易', lunch: '午间休市', afternoon: '下午交易',
-  closing_auction: '收盘竞价', postclose: '已收盘', closed: '休市',
-}
-
 const reasonLabels: Record<string, string> = {
   market_not_in_trading_phase: '当前不在连续交易时段',
   daily_evidence_pending: '日线证据仍在准备',
@@ -35,6 +30,52 @@ const percent = (value: number) => `${(value * 100).toFixed(1)}%`
 const price = (value: number | null | undefined) => value == null ? '—' : `¥${value.toFixed(2)}`
 const shortId = (value: string) => value.replace(/^[^_]+_/, '').slice(0, 8)
 const reasonText = (reason: string) => reasonLabels[reason] || '详细原因请查看当前决策说明'
+
+type MarketStatus = {
+  badge: string
+  pill: string
+  title: string
+  detail: string
+  recovery: string | null
+  tone: 'ready' | 'waiting' | 'review'
+  tradeable: boolean
+}
+
+type NextPlanStatus = {
+  title: string
+  detail: string
+  tone: 'ready' | 'waiting' | 'review'
+}
+
+function describeMarketStatus(health: HealthStatus | null, connectionStale: boolean): MarketStatus {
+  if (connectionStale) return { badge: '状态未知', pill: '状态连接中断 · 禁止执行', title: '实时状态已断开', detail: '旧数据仅供回看，当前执行状态按不可用处理。连接恢复后会自动更新。', recovery: null, tone: 'waiting', tradeable: false }
+  const current = health?.market_now
+  if (!current) return { badge: '状态待确认', pill: '当前状态待确认 · 禁止执行', title: '当前市场状态暂不可用', detail: '为避免把历史盘中观察当作当前状态，页面暂不提供执行结论。', recovery: null, tone: 'waiting', tradeable: false }
+  const planDate = health?.market_session_date || '当前计划'
+  const recovery = null
+  if (current.plan_relation === 'expired') return { badge: '仅供回顾', pill: '市场已收盘 · 计划仅供回顾', title: '当前发布计划已结束', detail: `计划交易日 ${planDate} 已结束，仅供回顾。`, recovery, tone: 'review', tradeable: false }
+  if (current.plan_relation === 'future') return { badge: '等待开盘', pill: '计划尚未生效 · 等待开盘', title: '当前计划尚未进入对应交易日', detail: `该计划面向 ${planDate}，现在只能观察，等待开盘后的运行时核验。`, recovery, tone: 'waiting', tradeable: false }
+  if (current.plan_relation === 'preopen') return { badge: '开盘前', pill: '开盘前 · 等待核验', title: '当前计划等待开盘核验', detail: '开盘前不提供执行结论，盘中运行时核验完成后才会更新。', recovery, tone: 'waiting', tradeable: false }
+  if (current.plan_relation === 'active') {
+    const tradeable = current.tradeable_now
+    return { badge: tradeable ? '可执行' : '仅观察', pill: `${current.market_phase_label} · ${tradeable ? '可执行' : '仅观察'}`, title: tradeable ? '当前计划可执行' : '当前计划仅供观察', detail: tradeable ? '当前运行时核验允许执行；仍请按计划区间与风险边界观察。' : '当前运行时核验未允许执行，暂不提供买入结论。', recovery, tone: tradeable ? 'ready' : 'waiting', tradeable }
+  }
+  return { badge: '暂不可执行', pill: `${current.market_phase_label} · 暂不可执行`, title: '当前市场不可执行', detail: '当前不在可执行交易时段，计划只供研究与回顾。', recovery, tone: 'waiting', tradeable: false }
+}
+
+function describeNextPlanStatus(health: HealthStatus | null, connectionStale: boolean): NextPlanStatus {
+  if (connectionStale || !health?.next_plan_target) return { title: '下一交易日计划状态待确认', detail: '服务端尚未返回目标交易日与日K证据状态，不能据此宣称已有明日完整计划。', tone: 'waiting' }
+  const target = health.next_plan_target
+  const session = target.market_session_date || '待确认'
+  const evidence = target.required_daily_evidence_date || '待确认'
+  if (target.state === 'published') return { title: '下一交易日计划已发布', detail: `目标交易日 ${session} · 日K证据截至 ${evidence}。当前仅等待对应交易日开盘。`, tone: 'ready' }
+  if (target.state === 'ready_to_publish') return { title: '下一交易日计划尚未发布', detail: `目标交易日 ${session} · 所需日K ${evidence} 已完整核验，但新的计划版本尚未发布；下方候选只属于上一份完整计划。`, tone: 'waiting' }
+  if (target.state === 'pending_daily_evidence') {
+    const progress = target.total ? `已完成 ${target.completed}/${target.total} · 失败 ${target.failed}${target.approximate_universe ? ' · 使用当前分母回补' : ''}。补齐后自动发布` : '市场日恢复尚未开始，不能据此宣称已有明日完整计划'
+    return { title: '下一交易日计划生成中', detail: `目标交易日 ${session} · 需日K ${evidence} · ${progress}，当前发布版本仅保留回顾。`, tone: 'waiting' }
+  }
+  return { title: '下一交易日计划状态待确认', detail: '交易日历或日K恢复状态暂不可用，不能据此宣称已有明日完整计划。', tone: 'waiting' }
+}
 
 async function getConsistentCoreState() {
   for (let attempt = 0; attempt < 2; attempt += 1) {
@@ -206,8 +247,11 @@ export function App() {
   }
 
   const selected = useMemo(() => publication?.candidates.filter((candidate) => candidate.disposition === 'selected') || [], [publication])
-  const marketLabel = phaseLabels[health?.market_phase || ''] || '等待市场状态'
-  const tradeable = !connectionStale && publication?.decision.tradeable_now === true
+  const marketStatus = describeMarketStatus(health, connectionStale)
+  const nextPlanStatus = describeNextPlanStatus(health, connectionStale)
+  const reviewOnly = health?.market_now?.plan_relation === 'expired'
+  const marketLabel = health?.market_now?.market_phase_label || '当前状态待确认'
+  const tradeable = marketStatus.tradeable
   const sessionPlanId = activeSession ? publicationPlanById[activeSession.active_publication_id] : null
   const sessionPublicationMismatch = Boolean(activeSession && publication && sessionPlanId && sessionPlanId !== publication.plan_id)
   const sessionPublicationUnknown = Boolean(activeSession && publication && !sessionPlanId && activeSession.active_publication_id !== publication.publication_id)
@@ -259,7 +303,7 @@ export function App() {
             <p>基于真实市场证据生成 1–3 日计划，模型只解释，不替算法选股。</p>
           </div>
           <div className="top-actions">
-            <div className={tradeable ? 'market-pill tradeable' : 'market-pill'}><span />{connectionStale ? '状态连接中断 · 禁止执行' : `${marketLabel} · ${tradeable ? '可执行' : '暂不可执行'}`}</div>
+            <div className={tradeable ? 'market-pill tradeable' : 'market-pill'}><span />{marketStatus.pill}</div>
             <button className="icon-button" onClick={() => void syncState()} disabled={refreshing} aria-label="同步最新状态"><RefreshIcon className={refreshing ? 'spin' : ''} /></button>
           </div>
         </header>
@@ -298,11 +342,12 @@ export function App() {
       </main>
 
       <aside className="insight-panel">
-        <div className="insight-head"><div><span className="eyebrow">当前决策简报</span><h2>今日决策</h2></div><span className={`decision-badge ${tradeable ? 'positive' : ''}`}>{publication?.decision.plan_status === 'recommend' ? '已有计划' : '暂无推荐'}</span></div>
+        <div className="insight-head"><div><span className="eyebrow">{reviewOnly ? '最后完整发布' : '当前决策简报'}</span><h2>{reviewOnly ? '上一份完整计划（仅回顾）' : '当前计划简报'}</h2></div><span className={`decision-badge ${tradeable ? 'positive' : ''}`}>{publication?.decision.plan_status === 'recommend' ? marketStatus.badge : '暂无推荐'}</span></div>
 
-        <div className="asof-card"><ClockIcon /><div><span>计划交易日</span><strong>{health?.market_session_date || '待发布'}</strong><small>证据截至 {health?.daily_evidence_date || '—'}</small></div></div>
+        <div className="asof-card"><ClockIcon /><div><span>{reviewOnly ? '上一份计划交易日' : '计划交易日'}</span><strong>{health?.market_session_date || '待发布'}</strong><small>证据截至 {health?.daily_evidence_date || '—'}</small></div></div>
 
-        {connectionStale ? <div className="state-warning" role="alert"><ShieldIcon /><div><strong>实时状态已断开</strong><span>旧数据仅供回看，当前执行状态按不可用处理。连接恢复后会自动更新。</span></div></div> : null}
+        <section className={`market-status-card ${marketStatus.tone}`} aria-live="polite"><ClockIcon /><div><span>当前发布计划状态 · {health?.market_now && !connectionStale ? dateTime(health.market_now.observed_at) : '待确认'}</span><strong>{marketStatus.title}</strong><p>{marketStatus.detail}</p>{marketStatus.recovery ? <small>{marketStatus.recovery}</small> : null}</div></section>
+        <section className={`market-status-card ${nextPlanStatus.tone}`} aria-live="polite"><ClockIcon /><div><span>下一交易日计划</span><strong>{nextPlanStatus.title}</strong><p>{nextPlanStatus.detail}</p></div></section>
 
         {sessionRuntimeUpdated ? <div className="state-warning"><ClockIcon /><div><strong>同一计划的执行状态已更新</strong><span>对话绑定的候选计划未变，右侧展示的是最新盘中执行状态。</span></div></div> : null}
 
@@ -314,10 +359,10 @@ export function App() {
           <>
             <section className="summary-strip">
               <div><span>入选</span><strong>{selected.length}</strong><small>进入评分 {publication.candidates.length}</small></div>
-              <div><span>执行状态</span><strong className={tradeable ? 'green' : 'amber'}>{tradeable ? '可执行' : '等待'}</strong><small>{marketLabel}</small></div>
+              <div><span>执行状态</span><strong className={tradeable ? 'green' : 'amber'}>{tradeable ? '可执行' : marketStatus.badge}</strong><small>{marketLabel}</small></div>
             </section>
 
-            <div className="section-title"><span>算法入选</span><small>按引擎原始排名</small></div>
+            <div className="section-title"><span>{reviewOnly ? '上一份计划入选（仅回顾）' : '算法入选'}</span><small>{reviewOnly ? '不是下一交易日新计划' : '按引擎原始排名'}</small></div>
             <div className="candidate-list">
               {selected.length ? selected.map((candidate) => (
                 <article className="candidate" key={candidate.symbol}>

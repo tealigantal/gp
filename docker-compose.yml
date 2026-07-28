@@ -32,7 +32,6 @@ x-gp-env: &gp-env
   GP_MARKET_RUN_PROBE_INTERVAL_SEC: ${GP_MARKET_RUN_PROBE_INTERVAL_SEC:-300}
   GP_MARKET_RUN_RETRY_INTERVAL_SEC: ${GP_MARKET_RUN_RETRY_INTERVAL_SEC:-300}
   GP_MARKET_RUN_LEASE_SEC: ${GP_MARKET_RUN_LEASE_SEC:-90}
-  GP_MARKET_RUN_FETCH_BUDGET_SEC: ${GP_MARKET_RUN_FETCH_BUDGET_SEC:-900}
   GP_INTRADAY_FETCH_WORKERS: ${GP_INTRADAY_FETCH_WORKERS:-3}
   GP_INTRADAY_FETCH_TIMEOUT_SEC: ${GP_INTRADAY_FETCH_TIMEOUT_SEC:-180}
   GP_INTRADAY_FETCH_RETRY_MISSING: ${GP_INTRADAY_FETCH_RETRY_MISSING:-1}
@@ -83,6 +82,7 @@ x-gp-volumes: &gp-volumes
 
 x-gp-service: &gp-service
   image: ${GP_BACKEND_IMAGE:-gp-backend}:${GP_BACKEND_TAG:-local}
+  build: *gp-build
   pull_policy: never
   volumes: *gp-volumes
   env_file:
@@ -93,7 +93,6 @@ x-gp-service: &gp-service
 services:
   gp:
     <<: *gp-service
-    build: *gp-build
     command: ["uvicorn", "gp_assistant.gateway.app:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "2", "--proxy-headers", "--forwarded-allow-ips", "*"]
     ports:
       - "8000:8000"

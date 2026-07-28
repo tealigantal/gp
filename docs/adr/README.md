@@ -22,3 +22,5 @@ only the files listed below are retained records.
 | [0011 — Lunch Top-30 five-minute rerank](0011-lunch-top30-five-minute-rerank.md) | Current immutable lunch-plan semantic extension. |
 | [0012 — Exact daily coverage and bounded Serenity OCR](0012-daily-coverage-and-serenity-ocr.md) | Current exact coverage and bounded OCR decision. |
 | [0013 — Market-day orchestrator and recovery](0013-market-day-orchestrator-and-recovery.md) | Current daily scheduling, recovery, and publication-gate decision. |
+| [0014 — Single chat narration and temporal truth](0014-single-chat-narration-temporal-truth.md) | Current single narration authority and answer-time market-state decision. |
+| [0015 — Official suspension evidence for market runs](0015-official-suspension-evidence-for-market-runs.md) | Current official no-bar fact boundary for exact daily coverage. |

@@ -1,3 +1,4 @@
+import json
 from datetime import UTC, date, datetime, timedelta, timezone
 
 import pytest
@@ -7,7 +8,9 @@ from gp_assistant.application.publication_service import PublicationService
 from gp_assistant.application.runtime_service import RuntimeService
 from gp_assistant.application.target_resolver import resolve_plan_target
 from gp_assistant.application.runtime_producer import RuntimeRecommendationProducer
-from gp_assistant.application.conversation_service import ConversationService
+from gp_assistant.application.conversation_service import ConversationService, project_current_market, project_next_plan_target
+from gp_assistant.application.market_runs import MarketRunStore
+from gp_assistant.application.trading_calendar import CnATradingCalendar
 from gp_assistant.contracts.catalog import CandidateDisposition, MarketPhase, RuntimeDataState
 from gp_assistant.contracts.decision import CandidateDecision, TradePlan
 from gp_assistant.contracts.evidence import CandidateUniverseBinding, DecisionPolicyBinding, ProbabilityAssessment, ProducerIdentity, RankingAssessment, RiskAssessment, SerenityDecisionBinding, SignalAssessment
@@ -56,11 +59,15 @@ def test_runtime_producer_and_conversation_are_bound_and_idempotent(tmp_path):
     import pandas as pd
 
     class Narrator:
+        messages = None
+
         def available(self):
             return True, "ok"
 
-        def chat(self, *_args, **_kwargs):
-            return {"choices": [{"message": {"content": "回答严格绑定当前发布。"}}]}
+        def chat(self, messages, **_kwargs):
+            self.messages = messages
+            notice = json.loads(messages[1]["content"])["当前事实"]["时间与执行事实"]["用户可见结论"]
+            return {"choices": [{"message": {"content": f"{notice}\n\n候选结论严格绑定已提供的评分与交易计划。"}}]}
 
     store = ContractStore(tmp_path / "contract.sqlite")
     selected_plan = plan(store)
@@ -73,11 +80,63 @@ def test_runtime_producer_and_conversation_are_bound_and_idempotent(tmp_path):
     publication = store.current_publication()
     assert runtime.data_quality.state is RuntimeDataState.READY
     assert publication is not None and publication.decision.tradeable_now
-    service = ConversationService(store, narrator=Narrator())
+    current_market = project_current_market(
+        plan_date=selected_plan.market_session_date,
+        publication_tradeable=publication.decision.tradeable_now,
+        now=datetime(2026, 7, 23, 16, 2, tzinfo=TZ),
+    )
+    assert current_market == {
+        "observed_at": "2026-07-23T16:02:00+08:00",
+        "market_phase": "postclose",
+        "market_phase_label": "已收盘",
+        "plan_relation": "expired",
+        "tradeable_now": False,
+    }
+    calendar = CnATradingCalendar(
+        open_days=frozenset({date(2026, 7, 22), date(2026, 7, 23), date(2026, 7, 24)}),
+        ref=TradingCalendarRef(calendar_id="cn", revision="1", source="fixture"),
+    )
+    next_target = project_next_plan_target(
+        plan=selected_plan,
+        now=datetime(2026, 7, 23, 16, 2, tzinfo=TZ),
+        recovery={"state": "retry_wait", "target_trade_date": "2026-07-23", "completed": 3042, "total": 3044, "failed": 2, "next_retry_at": "2026-07-23T16:10:00+08:00", "approximate_universe": False},
+        calendar=calendar,
+    )
+    assert next_target == {
+        "observed_at": "2026-07-23T16:02:00+08:00",
+        "market_session_date": "2026-07-24",
+        "required_daily_evidence_date": "2026-07-23",
+        "state": "pending_daily_evidence",
+        "completed": 3042,
+        "total": 3044,
+        "failed": 2,
+        "next_retry_at": "2026-07-23T16:10:00+08:00",
+        "approximate_universe": False,
+    }
+    narrator = Narrator()
+    service = ConversationService(
+        store,
+        narrator=narrator,
+        now_provider=lambda: datetime(2026, 7, 23, 16, 2, tzinfo=TZ),
+        market_runs=MarketRunStore(tmp_path / "market_runs.db"),
+        planning_calendar=calendar,
+    )
     first = service.reply(session_id=None, client_turn_id="turn-1", user_message="说明当前推荐")
     retry = service.reply(session_id=first["session_id"], client_turn_id="turn-1", user_message="说明当前推荐")
     assert retry["reply"] == first["reply"]
     assert retry["publication_id"] == publication.publication_id
+    assert first["reply"].startswith("截至2026年07月23日 16:02（上海时间），市场已收盘。当前展示的计划交易日为2026年07月23日，该交易日已经结束；仅供回顾。")
+    assert "不能作为下一交易日计划" not in first["reply"]
+    assert "目标交易日" in first["reply"]
+    assert first["reply"].count("截至2026年07月23日 16:02（上海时间）") == 1
+    payload = json.loads(narrator.messages[1]["content"])["当前事实"]["时间与执行事实"]
+    assert payload["回答时刻"] == "2026-07-23T16:02:00+08:00"
+    assert payload["计划时间关系"] == "expired"
+    assert payload["当前是否可执行"] is False
+    assert payload["下一交易日计划"]["market_session_date"] == "2026-07-24"
+    assert payload["最后盘中观察"]["最后盘中观察时刻"] == "2026-07-23T10:01:00+08:00"
+    assert "历史运行快照" in payload["最后盘中观察"]["说明"]
+    assert not (tmp_path / "market_runs.db").exists()
 
 
 def test_canonical_conversation_reads_are_available_to_the_workspace(tmp_path, monkeypatch):
@@ -140,10 +199,12 @@ def test_delete_conversation_removes_only_the_session_and_cascaded_turns(tmp_pat
     assert missing.status_code == 404
     assert repeated.status_code == 404
     assert kept.status_code == 200
-    assert [turn["content"] for turn in kept.json()["turns"]] == ["保留这条", "可删除的回复。"]
+    kept_turns = [turn["content"] for turn in kept.json()["turns"]]
+    assert kept_turns[0] == "保留这条"
+    assert kept_turns[1].endswith("可删除的回复。")
     assert resurrection.status_code == 409
     assert resurrection.json()["detail"] == "conversation_deleted"
     assert store.existing_reply(session_id="session_delete", client_turn_id="turn-delete") is None
-    assert store.existing_reply(session_id="session_keep", client_turn_id="turn-keep") == "可删除的回复。"
+    assert store.existing_reply(session_id="session_keep", client_turn_id="turn-keep").endswith("可删除的回复。")
     assert store.current_publication() == publication
     assert store.load_plan(selected_plan.plan_id) == selected_plan

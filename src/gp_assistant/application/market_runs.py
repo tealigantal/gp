@@ -91,6 +91,7 @@ class DailyRunSymbol:
     attempts: int
     source: str | None
     last_error: str | None
+    evidence: dict[str, object] | None
 
 
 class MarketRunStore:
@@ -102,6 +103,15 @@ class MarketRunStore:
     def _connect(self) -> sqlite3.Connection:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         conn = sqlite3.connect(self.path, timeout=5, isolation_level=None)
+        conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA busy_timeout=5000")
+        return conn
+
+    def _connect_readonly(self) -> sqlite3.Connection | None:
+        """Open an existing ledger without creating a directory, file, or schema."""
+        if not self.path.exists():
+            return None
+        conn = sqlite3.connect(f"{self.path.resolve().as_uri()}?mode=ro", uri=True, timeout=5, isolation_level=None)
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA busy_timeout=5000")
         return conn
@@ -136,7 +146,7 @@ class MarketRunStore:
             conn.execute(
                 "CREATE TABLE IF NOT EXISTS daily_run_symbols("
                 "trade_date TEXT NOT NULL, symbol TEXT NOT NULL, status TEXT NOT NULL, reason TEXT, "
-                "attempts INTEGER NOT NULL DEFAULT 0, source TEXT, last_error TEXT, updated_at TEXT NOT NULL, "
+                "attempts INTEGER NOT NULL DEFAULT 0, source TEXT, last_error TEXT, evidence_json TEXT, updated_at TEXT NOT NULL, "
                 "PRIMARY KEY(trade_date,symbol), FOREIGN KEY(trade_date) REFERENCES daily_runs(trade_date))"
             )
             columns = {str(row["name"]) for row in conn.execute("PRAGMA table_info(daily_run_symbols)").fetchall()}
@@ -144,6 +154,7 @@ class MarketRunStore:
                 ("attempts", "INTEGER NOT NULL DEFAULT 0"),
                 ("source", "TEXT"),
                 ("last_error", "TEXT"),
+                ("evidence_json", "TEXT"),
             ):
                 if column not in columns:
                     conn.execute(f"ALTER TABLE daily_run_symbols ADD COLUMN {column} {definition}")
@@ -230,18 +241,49 @@ class MarketRunStore:
         """
         self.initialize()
         with self._transaction() as conn:
-            row = conn.execute("SELECT state FROM daily_runs WHERE trade_date=?", (universe.trade_date,)).fetchone()
+            row = conn.execute("SELECT state,universe_json FROM daily_runs WHERE trade_date=?", (universe.trade_date,)).fetchone()
             if row is None:
                 raise ValueError("daily_run_not_found")
             if str(row["state"]) in {RUN_PENDING, RUN_PROBING, RUN_RETRY_WAIT}:
+                prior_universe = FrozenUniverse.from_payload(json.loads(str(row["universe_json"])))
                 existing = {
-                    str(item["symbol"]): str(item["status"])
-                    for item in conn.execute("SELECT symbol,status FROM daily_run_symbols WHERE trade_date=?", (universe.trade_date,)).fetchall()
+                    str(item["symbol"]): {
+                        "status": str(item["status"]),
+                        "reason": str(item["reason"]) if item["reason"] else None,
+                        "evidence_json": str(item["evidence_json"]) if item["evidence_json"] else None,
+                    }
+                    for item in conn.execute("SELECT symbol,status,reason,evidence_json FROM daily_run_symbols WHERE trade_date=?", (universe.trade_date,)).fetchall()
                 }
-                excluded = set(universe.excluded_symbols)
+                official_excluded = {
+                    symbol
+                    for symbol, item in existing.items()
+                    if item["status"] == "excluded" and item["reason"] == "official_suspension"
+                }
+                excluded = set(universe.excluded_symbols) | official_excluded
+                official_evidence = list(prior_universe.snapshot_meta.get("official_suspension_evidence") or [])
+                snapshot_meta = dict(universe.snapshot_meta)
+                if official_evidence:
+                    snapshot_meta["official_suspension_evidence"] = official_evidence
+                effective_universe = FrozenUniverse(
+                    trade_date=universe.trade_date,
+                    raw_symbols=universe.raw_symbols,
+                    expected_symbols=tuple(symbol for symbol in universe.raw_symbols if symbol not in excluded),
+                    excluded_symbols=tuple(sorted(excluded)),
+                    content_digest=universe_digest(
+                        trade_date=universe.trade_date,
+                        raw_symbols=universe.raw_symbols,
+                        expected_symbols=tuple(symbol for symbol in universe.raw_symbols if symbol not in excluded),
+                        excluded_symbols=tuple(sorted(excluded)),
+                    ),
+                    source=universe.source,
+                    snapshot_meta=snapshot_meta,
+                    approximate=universe.approximate,
+                    captured_at=universe.captured_at,
+                )
                 for symbol in universe.raw_symbols:
+                    official = symbol in official_excluded
                     state = "excluded" if symbol in excluded else "pending"
-                    reason = "trusted_no_trade" if symbol in excluded else None
+                    reason = "official_suspension" if official else "trusted_no_trade" if symbol in excluded else None
                     if symbol in existing:
                         conn.execute(
                             "UPDATE daily_run_symbols SET status=?,reason=?,updated_at=? WHERE trade_date=? AND symbol=?",
@@ -254,9 +296,90 @@ class MarketRunStore:
                         )
                 conn.execute(
                     "UPDATE daily_runs SET universe_json=?,updated_at=? WHERE trade_date=?",
-                    (json.dumps(universe.payload(), ensure_ascii=False, sort_keys=True), _iso(now), universe.trade_date),
+                    (json.dumps(effective_universe.payload(), ensure_ascii=False, sort_keys=True), _iso(now), universe.trade_date),
                 )
         return self.get_run(universe.trade_date)  # type: ignore[return-value]
+
+    def exclude_verified_suspensions(
+        self,
+        *,
+        trade_date: str,
+        evidence_by_symbol: dict[str, dict[str, object]],
+        now: datetime,
+    ) -> DailyRun:
+        """Audit strict official no-bar facts without changing the raw universe.
+
+        This path is intentionally available to reconstructed runs: official
+        evidence is independent from an unavailable same-session spot snapshot.
+        """
+        self.initialize()
+        with self._transaction() as conn:
+            row = conn.execute("SELECT * FROM daily_runs WHERE trade_date=?", (trade_date,)).fetchone()
+            if row is None:
+                raise ValueError("daily_run_not_found")
+            if str(row["state"]) == RUN_COMPLETE:
+                return self._run_from_row(row)
+            universe = FrozenUniverse.from_payload(json.loads(str(row["universe_json"])))
+            raw = set(universe.raw_symbols)
+            accepted = {
+                str(symbol).zfill(6): dict(evidence)
+                for symbol, evidence in evidence_by_symbol.items()
+                if str(symbol).zfill(6) in raw
+                and str(evidence.get("symbol") or "").zfill(6) == str(symbol).zfill(6)
+                and str(evidence.get("trade_date") or "") == trade_date
+                and str(evidence.get("state") or "") == "verified_suspended"
+                and str(evidence.get("effective_suspension_date") or "") == trade_date
+                and str(evidence.get("source") or "").startswith("cninfo+")
+                and str(evidence.get("source_record_id") or "")
+                and str(evidence.get("source_url") or "").startswith("https://")
+                and str(evidence.get("published_at") or "")
+                and str(evidence.get("content_digest") or "")
+                and str(evidence.get("verification_basis") or "")
+                and str(evidence.get("excerpt") or "")
+            }
+            if not accepted:
+                return self._run_from_row(row)
+            excluded = set(universe.excluded_symbols) | set(accepted)
+            expected = tuple(symbol for symbol in universe.raw_symbols if symbol not in excluded)
+            prior_evidence = [
+                item for item in list(universe.snapshot_meta.get("official_suspension_evidence") or [])
+                if isinstance(item, dict) and str(item.get("symbol") or "") not in accepted
+            ]
+            snapshot_meta = dict(universe.snapshot_meta)
+            snapshot_meta["official_suspension_evidence"] = prior_evidence + [accepted[symbol] for symbol in sorted(accepted)]
+            updated_universe = FrozenUniverse(
+                trade_date=universe.trade_date,
+                raw_symbols=universe.raw_symbols,
+                expected_symbols=expected,
+                excluded_symbols=tuple(sorted(excluded)),
+                content_digest=universe_digest(
+                    trade_date=universe.trade_date,
+                    raw_symbols=universe.raw_symbols,
+                    expected_symbols=expected,
+                    excluded_symbols=tuple(sorted(excluded)),
+                ),
+                source=universe.source,
+                snapshot_meta=snapshot_meta,
+                approximate=universe.approximate,
+                captured_at=universe.captured_at,
+            )
+            for symbol, evidence in accepted.items():
+                conn.execute(
+                    "UPDATE daily_run_symbols SET status='excluded',reason='official_suspension',source=?,last_error=NULL,evidence_json=?,updated_at=? "
+                    "WHERE trade_date=? AND symbol=?",
+                    (
+                        str(evidence.get("source") or "cninfo+exchange"),
+                        json.dumps(evidence, ensure_ascii=False, sort_keys=True),
+                        _iso(now),
+                        trade_date,
+                        symbol,
+                    ),
+                )
+            conn.execute(
+                "UPDATE daily_runs SET universe_json=?,updated_at=? WHERE trade_date=?",
+                (json.dumps(updated_universe.payload(), ensure_ascii=False, sort_keys=True), _iso(now), trade_date),
+            )
+        return self.get_run(trade_date)  # type: ignore[return-value]
 
     @staticmethod
     def _run_from_row(row: sqlite3.Row) -> DailyRun:
@@ -331,16 +454,28 @@ class MarketRunStore:
         finally:
             conn.close()
 
-    def update_coverage(self, *, trade_date: str, target_date: str, rows: dict[str, dict[str, object]], now: datetime) -> tuple[str, ...]:
+    def update_coverage(
+        self,
+        *,
+        trade_date: str,
+        target_date: str,
+        rows: dict[str, dict[str, object]],
+        now: datetime,
+        observed_symbols: tuple[str, ...] | None = None,
+    ) -> tuple[str, ...]:
         expected = self.expected_symbols(trade_date)
         missing = tuple(symbol for symbol in expected if str(rows.get(symbol, {}).get("date") or "")[:10] != target_date)
         missing_set = set(missing)
+        expected_set = set(expected)
+        status_symbols = expected if observed_symbols is None else tuple(
+            symbol for symbol in dict.fromkeys(observed_symbols) if symbol in expected_set
+        )
         with self._transaction() as conn:
             conn.executemany(
                 "UPDATE daily_run_symbols SET status=?,reason=?,last_error=?,updated_at=? WHERE trade_date=? AND symbol=?",
                 [
                     ("pending" if symbol in missing_set else "fetched", "target_date_missing" if symbol in missing_set else None, None if symbol not in missing_set else "target_date_missing", _iso(now), trade_date, symbol)
-                    for symbol in expected
+                    for symbol in status_symbols
                 ],
             )
         return missing
@@ -367,7 +502,7 @@ class MarketRunStore:
         conn = self._connect()
         try:
             rows = conn.execute(
-                "SELECT symbol,status,reason,attempts,source,last_error FROM daily_run_symbols WHERE trade_date=? ORDER BY symbol",
+                "SELECT symbol,status,reason,attempts,source,last_error,evidence_json FROM daily_run_symbols WHERE trade_date=? ORDER BY symbol",
                 (trade_date,),
             ).fetchall()
             return tuple(
@@ -375,6 +510,7 @@ class MarketRunStore:
                     symbol=str(row["symbol"]), status=str(row["status"]), reason=str(row["reason"]) if row["reason"] else None,
                     attempts=int(row["attempts"] or 0), source=str(row["source"]) if row["source"] else None,
                     last_error=str(row["last_error"]) if row["last_error"] else None,
+                    evidence=json.loads(str(row["evidence_json"])) if row["evidence_json"] else None,
                 )
                 for row in rows
             )
@@ -407,28 +543,51 @@ class MarketRunStore:
         finally:
             conn.close()
 
-    def health(self) -> dict[str, object]:
+    @staticmethod
+    def _health_from_connection(conn: sqlite3.Connection) -> dict[str, object]:
+        row = conn.execute("SELECT * FROM daily_runs WHERE state != ? ORDER BY trade_date ASC LIMIT 1", (RUN_COMPLETE,)).fetchone()
+        if row is None:
+            checkpoint = conn.execute("SELECT last_complete_trade_date FROM recovery_checkpoints WHERE singleton=1").fetchone()
+            return {
+                "state": "ready",
+                "target_trade_date": str(checkpoint["last_complete_trade_date"]) if checkpoint and checkpoint["last_complete_trade_date"] else None,
+                "completed": 0,
+                "total": 0,
+                "failed": 0,
+                "next_retry_at": None,
+                "approximate_universe": False,
+            }
+        run = MarketRunStore._run_from_row(row)
+        counts = conn.execute(
+            "SELECT COUNT(*) AS total, SUM(CASE WHEN status='fetched' OR status='excluded' THEN 1 ELSE 0 END) AS completed, SUM(CASE WHEN status='failed' THEN 1 ELSE 0 END) AS failed FROM daily_run_symbols WHERE trade_date=?",
+            (run.trade_date,),
+        ).fetchone()
+        return {
+            "state": run.state,
+            "target_trade_date": run.trade_date,
+            "completed": int(counts["completed"] or 0),
+            "total": int(counts["total"] or 0),
+            "failed": int(counts["failed"] or 0),
+            "next_retry_at": run.next_retry_at,
+            "approximate_universe": run.universe.approximate,
+        }
+
+    def health(self, *, initialize: bool = True) -> dict[str, object]:
+        """Report recovery state; public readers set ``initialize=False`` to stay read-only."""
+        if not initialize:
+            conn = self._connect_readonly()
+            if conn is None:
+                return {"state": "not_started", "target_trade_date": None, "completed": 0, "total": 0, "failed": 0, "next_retry_at": None, "approximate_universe": False}
+            try:
+                return self._health_from_connection(conn)
+            except sqlite3.OperationalError:
+                return {"state": "unavailable", "target_trade_date": None, "completed": 0, "total": 0, "failed": 0, "next_retry_at": None, "approximate_universe": False}
+            finally:
+                conn.close()
         self.initialize()
         conn = self._connect()
         try:
-            row = conn.execute("SELECT * FROM daily_runs WHERE state != ? ORDER BY trade_date ASC LIMIT 1", (RUN_COMPLETE,)).fetchone()
-            if row is None:
-                last = self.last_complete_trade_date()
-                return {"state": "ready", "target_trade_date": last, "completed": 0, "total": 0, "failed": 0, "next_retry_at": None, "approximate_universe": False}
-            run = self._run_from_row(row)
-            counts = conn.execute(
-                "SELECT COUNT(*) AS total, SUM(CASE WHEN status='fetched' OR status='excluded' THEN 1 ELSE 0 END) AS completed, SUM(CASE WHEN status='failed' THEN 1 ELSE 0 END) AS failed FROM daily_run_symbols WHERE trade_date=?",
-                (run.trade_date,),
-            ).fetchone()
-            return {
-                "state": run.state,
-                "target_trade_date": run.trade_date,
-                "completed": int(counts["completed"] or 0),
-                "total": int(counts["total"] or 0),
-                "failed": int(counts["failed"] or 0),
-                "next_retry_at": run.next_retry_at,
-                "approximate_universe": run.universe.approximate,
-            }
+            return self._health_from_connection(conn)
         finally:
             conn.close()
 

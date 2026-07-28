@@ -495,6 +495,8 @@ def test_lunch_keeps_existing_public_http_shapes(tmp_path, monkeypatch):
             "tradeability_state",
             "serenity",
             "market_recovery",
+            "market_now",
+            "next_plan_target",
         }
     recommendation_payload = recommendation.json()
     lunch_payload = lunch.json()
@@ -507,6 +509,8 @@ def test_lunch_keeps_existing_public_http_shapes(tmp_path, monkeypatch):
     assert lunch_payload["tradeable_now"] is False
     assert isinstance(lunch_payload["reason_codes"], list)
     assert isinstance(health_payload["serenity"], dict)
+    assert set(health_payload["market_now"]) == {"observed_at", "market_phase", "market_phase_label", "plan_relation", "tradeable_now"}
+    assert set(health_payload["next_plan_target"]) == {"observed_at", "market_session_date", "required_daily_evidence_date", "state", "completed", "total", "failed", "next_retry_at", "approximate_universe"}
 
 
 def test_active_serenity_three_percent_survives_lunch_rerank():
@@ -707,16 +711,16 @@ def test_write_lock_is_exclusive_across_spawned_processes(tmp_path):
 
 
 @pytest.mark.parametrize(
-    "leaked_content",
+    ("leaked_content", "expected_error"),
     (
-        "内部 plan_id 是 abc。",
-        "内部 reason_codes 为 lunch_break。",
-        "请调用 /api/lunch/current。",
-        "数据保存在 SQLite 表中。",
-        "```json\n{\"score\": 1}\n```",
+        ("内部 plan_id 是 abc。", "narration_unsafe_internal_detail"),
+        ("内部 reason_codes 为 lunch_break。", "narration_unsafe_internal_detail"),
+        ("请调用 /api/lunch/current。", "narration_unsafe_internal_detail"),
+        ("数据保存在 SQLite 表中。", "narration_unsafe_internal_detail"),
+        ("当前时间是2026年7月24日收盘集合竞价时段（14:59），供明日开盘后参考。", "narration_current_time_restatement"),
     ),
 )
-def test_llm_internal_identifier_output_is_rejected_before_persistence(tmp_path, leaked_content):
+def test_llm_internal_identifier_output_is_rejected_before_persistence(tmp_path, leaked_content, expected_error):
     class LeakingNarrator:
         def available(self):
             return True, "ok"
@@ -726,8 +730,13 @@ def test_llm_internal_identifier_output_is_rejected_before_persistence(tmp_path,
 
     store = ContractStore(tmp_path / "contract.sqlite")
     _base_plan(store)
-    with pytest.raises(ValueError, match="narration_unsafe_internal_detail"):
-        ConversationService(store, narrator=LeakingNarrator()).reply(
+    with pytest.raises(ValueError, match=expected_error):
+        ConversationService(
+            store,
+            narrator=LeakingNarrator(),
+            now_provider=lambda: datetime(2026, 7, 24, 16, 0, tzinfo=TZ),
+            market_runs=MarketRunStore(tmp_path / "market_runs.db"),
+        ).reply(
             session_id="unsafe",
             client_turn_id="turn-1",
             user_message="解释推荐",

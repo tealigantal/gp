@@ -4,7 +4,7 @@
 
 ## Objective
 
-Build a dependable A-share main-board recommendation chat agent. Every recommendation and follow-up must bind to one immutable RecommendationPublication projected only from one RecommendationPlan and an optional RuntimeObservation; no retired recommendation, execution, or operational API may provide an alternative answer.
+Build a dependable A-share main-board recommendation chat agent. Every recommendation and follow-up must bind to one immutable RecommendationPublication projected only from one RecommendationPlan and an optional RuntimeObservation; answer-time market status is a separate deterministic projection and may never be replaced by a historical runtime snapshot. No retired recommendation, narration, execution, or operational API may provide an alternative answer.
 
 ## User and Problem
 

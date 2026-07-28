@@ -19,6 +19,24 @@ export interface HealthStatus {
     next_retry_at: string | null
     approximate_universe: boolean
   }
+  market_now?: {
+    observed_at: string
+    market_phase: string
+    market_phase_label: string
+    plan_relation: 'missing' | 'expired' | 'future' | 'preopen' | 'active' | 'inactive' | string
+    tradeable_now: boolean
+  }
+  next_plan_target?: {
+    observed_at: string
+    market_session_date: string | null
+    required_daily_evidence_date: string | null
+    state: 'published' | 'ready_to_publish' | 'pending_daily_evidence' | 'unavailable' | string
+    completed: number
+    total: number
+    failed: number
+    next_retry_at: string | null
+    approximate_universe: boolean
+  }
 }
 
 export interface TradePlan {

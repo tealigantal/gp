@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import sqlite3
 from collections import defaultdict
+from datetime import date, timedelta
 
 import pandas as pd
 
@@ -43,6 +44,8 @@ def coverage_for_date(symbols: list[str] | tuple[str, ...], *, target_date: str)
     try:
         output: dict[str, dict[str, object]] = {}
         normalized_target = str(target_date)[:10]
+        target_day = date.fromisoformat(normalized_target)
+        next_day = (target_day + timedelta(days=1)).isoformat()
         query_symbols = {
             canonical_query_id({"kind": "daily", "provider": "akshare", "symbol": str(symbol).zfill(6)}): str(symbol).zfill(6)
             for symbol in symbols
@@ -55,9 +58,10 @@ def coverage_for_date(symbols: list[str] | tuple[str, ...], *, target_date: str)
                 SELECT i.query_id, i.payload, i.item_time
                 FROM items i
                 WHERE i.query_id IN ({placeholders})
-                  AND substr(i.item_time, 1, 10)=?
+                  AND i.item_time>=?
+                  AND i.item_time<?
                 """,
-                [*query_ids, normalized_target],
+                [*query_ids, normalized_target, next_day],
             ).fetchall()
             for query_id, payload, item_time in rows:
                 parsed = json.loads(payload)

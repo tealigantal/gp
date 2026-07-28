@@ -19,7 +19,10 @@
 - [x] 2026-07-27：在发布服务及存储边界加入完整计划门禁，并禁用 API 手工采集入口。
 - [x] 2026-07-27：已修改既有测试（未新增测试文件或测试数量），目标回归与全套默认测试通过。
 - [x] 2026-07-27：重建 `gp`/`gp-worker`/`web` 后完成实际恢复观察：旧完整发布保留，精确核验为 3042/3044，两只缺口写入失败与下次重试时间。
-- [ ] 继续运行中的外部源恢复尚未补齐两只缺口；完整后才允许下一版本发布。
+- [x] 2026-07-28：官方停牌证据补齐两只缺口，2026-07-27 精确覆盖完成 3042/3042。
+- [x] 2026-07-28：重建后实测跨午夜完成的恢复会在接管 lease 后发布下一交易日计划；`publication_09b756…` 已用 2026-07-27 的 3042/3042 证据发布 2026-07-28 计划。
+- [x] 2026-07-28：发布窗口在全市场计算完成后再次核验；09:29 起算、09:30 完成的测试证明不会在盘中移动当前指针，生产 `gp`/`gp-worker` 已重新部署该门禁与 Serenity 升级异常事件。
+- [x] 2026-07-28：移除 900 秒全市场总预算；日K子进程改为连续完成所有未尝试的持久化批次，仅在完整一轮后的真实缺口进入重试，既有测试覆盖跨越旧预算仍续跑下一批。精确覆盖查询改为命中既有 `(query_id,item_time)` 索引的日期范围，账本每批只写本批状态，避免重扫和重写完整 3044 只分母。
 
 ## Plan of Work
 
@@ -27,7 +30,9 @@
 2. 账本对每股票记录待处理、已覆盖、失败和可信停牌排除；每批后从 `history.db` 对目标日期重新核验，仅续跑缺口。
 3. 启动时从最近连续完成日（首次从已存日K最大日期推断）向前恢复，缺历史分母时明确记录 `reconstructed_current_universe`，且不生成历史日推荐。
 4. 仅完整、READY 的推荐或合法 no-recommend 可推进 `current_publication`；恢复时保留最后完整发布。
-5. 基础计划、运行时、午盘、Serenity 和 T+5 分别运行在既定窗口，互不借用触发条件。
+5. 基础计划、运行时、午盘、Serenity 和 T+5 分别运行在既定窗口，互不借用触发条件；基础计划从收盘日K完整后一直允许到目标日 09:30，以覆盖跨午夜自愈。
+
+The full-market calculation admission window and publication commit window are identical. If a calculation starts before 09:30 and ends after it, its immutable plan is retained only for audit and cannot replace `current_publication`; the worker emits a structured reason. Serenity target/decision lookup failure is also a structured worker event while the valid 0% base remains current.
 
 ## Concrete Steps
 
@@ -40,7 +45,7 @@
 
 已执行：目标合约测试与 `python -m pytest -q`。它们覆盖旧日期不能冒充目标日、任务中断后仅缺口续跑、可信停牌边界、冻结分母纯读建计划、源未就绪只探测、发布门禁、午盘重启不重复及运行时不自动移动指针。
 
-已执行：容器重建后的真实恢复观察。`/api/health` 连续十次返回 200；`market_recovery` 显示 3042/3044、两只失败、下一次重试时间和近似分母标记；浏览器实际显示“市场数据恢复中”且没有错误覆盖层。当前源未补齐两只缺口，所以完整发布这一最终条件仍由运行中的账本负责，未被伪造为通过。
+已执行：容器重建后的真实恢复观察。日K缺口经官方停牌事实完成后，worker 在跨午夜接管 lease，读取 2026-07-27 的 3042/3042 精确覆盖并发布 2026-07-28 新计划；`/api/health`、`/api/recommendation/current`、真实聊天和桌面/手机浏览器都读取该新发布。旧完整发布没有在覆盖不完整时被替换，且本次发布没有重抓或删除已完成日K。
 
 ## Idempotence and Recovery
 
@@ -59,7 +64,7 @@
 
 ## Interfaces and Dependencies
 
-`/api/health` 新增只读 `market_recovery`；推荐、聊天和会话响应形状不变。前端仅展示中文恢复提示。AkShare 日K仍严格按 `sina → em → tx` 路由优先级；批大小、探测/重试间隔、租约及抓取预算由 `GP_MARKET_RUN_*` 配置。
+`/api/health` 新增只读 `market_recovery`；推荐、聊天和会话响应形状不变。前端仅展示中文恢复提示。AkShare 日K仍严格按 `sina → em → tx` 路由优先级；批大小、探测/重试间隔与租约由 `GP_MARKET_RUN_*` 配置。单请求由来源超时和路由边界控制，不存在全市场总抓取预算。
 
 ## Outcomes & Retrospective
 

@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, HTTPException, Response
 from pydantic import BaseModel, ConfigDict
 
-from ..application.conversation_service import ConversationService
+from ..application.conversation_service import ConversationService, project_current_market, project_next_plan_target
 from ..application.market_runs import MarketRunStore
 from ..store import ContractStore, ContractStoreError, UnsupportedDatabaseSchema
 from ..contracts.conversation import ConversationSession, ConversationTurn
@@ -64,8 +65,23 @@ def current_lunch() -> dict[str, object]:
 
 @router.get("/api/health")
 def health() -> dict[str, object]:
-    payload = ContractStore().health()
-    payload["market_recovery"] = MarketRunStore().health()
+    store = ContractStore()
+    payload = store.health()
+    publication = store.current_publication()
+    plan = store.load_plan(publication.plan_id) if publication else None
+    now = datetime.now(ZoneInfo("Asia/Shanghai"))
+    payload["market_now"] = project_current_market(
+        plan_date=plan.market_session_date if plan else None,
+        publication_tradeable=bool(publication and publication.decision.tradeable_now),
+        now=now,
+    )
+    recovery = MarketRunStore().health(initialize=False)
+    payload["market_recovery"] = recovery
+    payload["next_plan_target"] = project_next_plan_target(
+        plan=plan,
+        now=now,
+        recovery=recovery,
+    )
     return payload
 
 

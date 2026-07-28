@@ -35,6 +35,8 @@
 
 最终 `gp` 与 `gp-worker` 均运行镜像 `sha256:c10be816d0671792fcdb27d94ad7e8720af4cf8737750ad4c5471e4509f3aa41`；Serenity 服务文件和提示词文件的容器摘要分别与本地一致。旧单独容器数量为 0，旧 `store/serenity/evidence.db` 保留未删，新合同写入独立的 `current.db`。当前真实状态为 degraded/0%，这是数据不完整时的正确生产结果，不是接入失败。
 
+2026-07-28 follow-up: the first post-recovery base plan correctly used the stable 0% lane while its target batch was pending. A live batch then completed, but the market-day same-date guard prevented the promised successor plan. The guard now admits only a matching, atomically ready 0% → 3% successor. Worker evidence shows the resulting `publication_ec20…` is active at 3%, retains the same 2026-07-28 session and 2026-07-27 daily evidence, and does not re-run when the active plan is revisited.
+
 ## Context and Orientation
 
 当前推荐入口位于 `src/gp_assistant/application/real_producer.py`、`plan_service.py` 和 `decision_engine.py`；合同位于 `src/gp_assistant/contracts/`；统一 worker 入口位于 `src/gp_assistant/cli.py`。Serenity 当前只剩 `src/gp_assistant/serenity/policy.py`，而 Compose 已只保留 `gp`、`gp-worker`、`web`。运行证据目录是共享卷 `store/`，不得纳入 Git 或做破坏性迁移。
