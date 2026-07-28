@@ -24,3 +24,4 @@ only the files listed below are retained records.
 | [0013 — Market-day orchestrator and recovery](0013-market-day-orchestrator-and-recovery.md) | Current daily scheduling, recovery, and publication-gate decision. |
 | [0014 — Single chat narration and temporal truth](0014-single-chat-narration-temporal-truth.md) | Current single narration authority and answer-time market-state decision. |
 | [0015 — Official suspension evidence for market runs](0015-official-suspension-evidence-for-market-runs.md) | Current official no-bar fact boundary for exact daily coverage. |
+| [0016 — Manual tail-entry narration](0016-manual-tail-entry-narration.md) | Current user-operated tail-entry checklist boundary for the sole chat narrator. |

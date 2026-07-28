@@ -136,6 +136,15 @@ def test_runtime_producer_and_conversation_are_bound_and_idempotent(tmp_path):
     assert payload["下一交易日计划"]["market_session_date"] == "2026-07-24"
     assert payload["最后盘中观察"]["最后盘中观察时刻"] == "2026-07-23T10:01:00+08:00"
     assert "历史运行快照" in payload["最后盘中观察"]["说明"]
+    full_payload = json.loads(narrator.messages[1]["content"])["当前事实"]
+    manual_tail = full_payload["尾盘人工盯盘规则"]
+    assert manual_tail["观察窗口"] == "14:45至14:56；14:57进入收盘集合竞价后，不建议首次入场。"
+    assert "尾盘量比至少1.3" in manual_tail["通用条件"][3]
+    assert manual_tail["表达限制"].startswith("没有实时指标数值时")
+    assert full_payload["候选列表"][0]["日线信号类型"] == "trend"
+    prompt = narrator.messages[0]["content"]
+    assert "尾盘人工盯盘" in prompt
+    assert "不得编造当前量比" in prompt
     assert not (tmp_path / "market_runs.db").exists()
 
 
