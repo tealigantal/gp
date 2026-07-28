@@ -167,7 +167,8 @@ def test_interrupted_run_retries_only_uncovered_symbols(tmp_path, monkeypatch):
     assert all(item.attempts == 1 for item in continuous_ledger.symbols("2026-07-24"))
 
 
-def test_stale_snapshot_cannot_exclude_and_resumed_stock_reenters_expected_set():
+def test_stale_snapshot_cannot_exclude_and_resumed_stock_reenters_expected_set(tmp_path, monkeypatch):
+    monkeypatch.setenv("GP_STORE_DIR", str(tmp_path / "store"))
     eligible = frozenset({"000001", "000002"})
     now = datetime(2026, 7, 24, 16, 40, tzinfo=TZ)
     stale = RealRecommendationProducer._no_bar_expected_symbols(_spot(), eligible_symbols=eligible, snapshot_meta=_meta(stale=True), now=now, required_daily_date=date(2026, 7, 24), is_open=True)
@@ -209,6 +210,41 @@ def test_stale_snapshot_cannot_exclude_and_resumed_stock_reenters_expected_set()
         client=Client(), verifier=Verifier(), parser=lambda *_args, **_kwargs: ("公司股票自2026年7月25日开市起继续停牌", "parsed"),
     ).resolve(symbols=("000002",), trade_date=date(2026, 7, 24), observed_at=now)
     assert no_proof == {}
+
+    class SpotProvider:
+        @staticmethod
+        def get_spot_snapshot():
+            return _spot()
+
+        @staticmethod
+        def last_snapshot_meta():
+            return _meta()
+
+    ledger = MarketRunStore(tmp_path / "reconstructed_same_day_runs.db")
+    reconstructed = FrozenUniverse(
+        trade_date="2026-07-24", raw_symbols=("000001", "000002"), expected_symbols=("000001", "000002"), excluded_symbols=(),
+        content_digest=universe_digest(trade_date="2026-07-24", raw_symbols=("000001", "000002"), expected_symbols=("000001", "000002"), excluded_symbols=()),
+        source="reconstructed_current_universe:fixture", snapshot_meta={"source": "fixture"}, approximate=True,
+        captured_at="2026-07-24T16:20:00+08:00",
+    )
+    run = ledger.ensure_run(universe=reconstructed, now=now)
+    orchestrator = MarketDayOrchestrator(ContractStore(tmp_path / "reconstructed_contracts.db"), ledger=ledger, provider=SpotProvider(), spawn_fetch=False)
+    monkeypatch.setattr(
+        "gp_assistant.application.market_orchestrator.coverage_for_date",
+        lambda symbols, **_kwargs: {"000001": {"date": "2026-07-24"}} if "000001" in symbols else {},
+    )
+    finalized = orchestrator._finalize_same_day_exclusions(run, now=now, calendar=_Calendar())
+    assert finalized.state == "complete"
+    assert finalized.universe.approximate is True
+    assert finalized.universe.expected_symbols == ("000001",)
+    assert finalized.universe.excluded_symbols == ("000002",)
+    states = {item.symbol: (item.status, item.reason) for item in ledger.symbols("2026-07-24")}
+    assert states == {"000001": ("fetched", None), "000002": ("excluded", "trusted_no_trade")}
+
+    historical = orchestrator._freeze_universe(trade_date=date(2026, 7, 23), now=now, calendar=_Calendar(), reconstructed=True)
+    assert historical.approximate is True
+    assert historical.expected_symbols == ("000001", "000002")
+    assert historical.excluded_symbols == ()
 
 
 def test_plan_reads_one_frozen_universe_and_never_polls_spot(tmp_path, monkeypatch):

@@ -17,10 +17,13 @@ Serenity 已有官方公告传输、交易所复核和 PDF 解析能力，但其
 
 `market_runs.db` 的 `daily_run_symbols.evidence_json` 追加保存该事实；账本将对应状态设为 `excluded / official_suspension`，但保留 raw universe，重算 expected denominator。该路径可用于 `reconstructed_current_universe`，因为它不依赖陈旧现货。计划、聊天和 API 仍只读已完成 run。
 
+同日全零现货是与官方公告并列的独立事实，不应被错误地与分母的 `approximate` 标记绑定：错过 14:57 只说明分母没有当时的冻结证据，不会把后续同日新鲜、字段完整、目标会话匹配的现货变成旧数据。因此未完成的当前日 `reconstructed_current_universe` 可以在抓取前和每次调度前收敛这种事实，但必须保留其近似 provenance；历史重建日仍不能使用当前现货。相反，前一日公告“预计停牌不超过 N 个交易日”只是最长预期，不能推导次一目标日仍停牌，官方公告通道继续只接受 PDF 的精确目标日文本。
+
 ## Consequences
 
 - 停牌事实与 Serenity 评分重新分属两个明确契约：前者是日K完整性事实，后者仍是 Top-30 的原子 0%/3% 辅助。
 - 不能用官方公告大规模代替日K源；全市场失败时仍会 fail closed，不会扫描全部公告。
+- 当前日恢复既不会把缺失的历史日期伪装成完成，也不会把最长预计停牌期推断为目标日停牌；可信同日全零事实仍需通过原有 stale/fallback/session/字段门禁。
 - 既有 `market_runs.db` 只做一列可加迁移，`history.db`、产品库、公开 HTTP 合同和 Serenity 证据均不迁移。
 - 深交所使用公告 ID 复核；上交所当前适配器为代码加规范标题复核，账本会记录其 verification basis，不能表述为公告 ID 精确匹配。
 

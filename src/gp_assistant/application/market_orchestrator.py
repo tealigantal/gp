@@ -289,7 +289,13 @@ class MarketDayOrchestrator:
                 spot, eligible_symbols=frozenset(raw), snapshot_meta=snapshot_meta, now=now,
                 required_daily_date=trade_date, is_open=calendar.is_open(now.date()),
             )
-            if same_day and MarketClock.local_time(now) >= clock_time(15, 0) and not reconstructed
+            # A post-close recovery run can be reconstructed only because the
+            # 14:57 denominator freeze was missed.  That provenance must stay
+            # visible, but it does not make a *fresh, target-session* all-zero
+            # spot fact stale or ambiguous.  The predicate above still rejects
+            # fallback, stale, cross-day and incomplete snapshots; historical
+            # reconstructed runs remain ineligible through ``same_day``.
+            if same_day and MarketClock.local_time(now) >= clock_time(15, 0)
             else frozenset()
         )
         expected = tuple(symbol for symbol in raw if symbol not in excluded)
@@ -302,10 +308,34 @@ class MarketDayOrchestrator:
         )
 
     def _finalize_same_day_exclusions(self, run: DailyRun, *, now: datetime, calendar: CnATradingCalendar) -> DailyRun:
-        if run.universe.approximate or run.state == RUN_COMPLETE:
+        # ``approximate`` describes the denominator capture, not the quality
+        # of a later same-session no-trade fact.  Recheck an unfinished current
+        # day with the original provenance intact; never apply this path to an
+        # historical reconstructed run.
+        if run.state == RUN_COMPLETE or run.trade_date != now.date().isoformat():
             return run
-        universe = self._freeze_universe(trade_date=date.fromisoformat(run.trade_date), now=now, calendar=calendar, reconstructed=False)
-        return self.ledger.replace_universe_before_fetch(universe=universe, now=now)
+        universe = self._freeze_universe(
+            trade_date=date.fromisoformat(run.trade_date),
+            now=now,
+            calendar=calendar,
+            reconstructed=run.universe.approximate,
+        )
+        updated = self.ledger.replace_universe_before_fetch(universe=universe, now=now)
+        # A same-day no-trade fact can be the final missing evidence.  Re-read
+        # the already persisted daily bars immediately instead of leaving a
+        # now-complete run behind an obsolete retry timer.
+        expected = self.ledger.expected_symbols(updated.trade_date)
+        present = coverage_for_date(expected, target_date=updated.trade_date)
+        missing = self.ledger.update_coverage(
+            trade_date=updated.trade_date,
+            target_date=updated.trade_date,
+            rows=present,
+            now=now,
+        )
+        if not missing:
+            self.ledger.complete(updated.trade_date, now)
+            return self.ledger.get_run(updated.trade_date)  # type: ignore[return-value]
+        return self.ledger.get_run(updated.trade_date)  # type: ignore[return-value]
 
     def _select_due_run(self, *, target_date: date, now: datetime) -> DailyRun | None:
         target = self.ledger.get_run(target_date.isoformat())
