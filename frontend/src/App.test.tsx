@@ -41,7 +41,7 @@ describe('GP chat workspace', () => {
       return jsonResponse([])
     }))
 
-    render(<App />)
+    const view = render(<App />)
     expect(await screen.findByText('今天，想先看什么？')).toBeInTheDocument()
     expect(screen.getByText('中信证券')).toBeInTheDocument()
     expect(screen.getByText('58.0%')).toBeInTheDocument()
@@ -54,6 +54,23 @@ describe('GP chat workspace', () => {
     expect(screen.getByText('上一份计划入选（仅回顾）')).toBeInTheDocument()
     expect(screen.getByText('下一交易日计划尚未发布')).toBeInTheDocument()
     expect(screen.getByText(/目标交易日 2026-07-27 · 所需日K 2026-07-24 已完整核验，但新的计划版本尚未发布；下方候选只属于上一份完整计划/)).toBeInTheDocument()
+
+    view.unmount()
+    vi.stubGlobal('fetch', vi.fn((input: string | URL) => {
+      const url = String(input)
+      if (url.includes('/api/health')) return jsonResponse({
+        ...health,
+        market_recovery: { ...health.market_recovery, state: 'retry_wait', completed: 3042, total: 3044, failed: 2, approximate_universe: true },
+        next_plan_target: { ...health.next_plan_target, state: 'pending_daily_evidence', completed: 3042, total: 3044, failed: 2, approximate_universe: true },
+      })
+      if (url.includes('/api/recommendation/current')) return jsonResponse(publication)
+      return jsonResponse([])
+    }))
+    render(<App />)
+    expect(await screen.findByText('下一计划数据恢复中')).toBeInTheDocument()
+    expect(screen.getByText('目标日K 2026-07-24')).toBeInTheDocument()
+    expect(screen.getByText('已完成 3042/3044 · 使用当前分母回补')).toBeInTheDocument()
+    expect(screen.queryByText('决策引擎已就绪')).not.toBeInTheDocument()
   })
 
   it('sends a new chat and replaces the optimistic turn with canonical turns', async () => {

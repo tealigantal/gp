@@ -249,6 +249,14 @@ export function App() {
   const selected = useMemo(() => publication?.candidates.filter((candidate) => candidate.disposition === 'selected') || [], [publication])
   const marketStatus = describeMarketStatus(health, connectionStale)
   const nextPlanStatus = describeNextPlanStatus(health, connectionStale)
+  const nextPlanRecovering = health?.next_plan_target?.state === 'pending_daily_evidence'
+  const marketRecovering = health?.market_recovery?.state !== 'ready' || nextPlanRecovering
+  const engineTitle = marketRecovering
+    ? '下一计划数据恢复中'
+    : `决策引擎${health?.daily_data_state === 'ready' ? '已就绪' : '准备中'}`
+  const engineEvidence = marketRecovering
+    ? `目标日K ${health?.next_plan_target?.required_daily_evidence_date || health?.market_recovery?.target_trade_date || '待确认'}`
+    : `日线证据 ${health?.daily_evidence_date || '待更新'}`
   const reviewOnly = health?.market_now?.plan_relation === 'expired'
   const marketLabel = health?.market_now?.market_phase_label || '当前状态待确认'
   const tradeable = marketStatus.tradeable
@@ -285,11 +293,11 @@ export function App() {
         </nav>
 
         <div className="engine-card">
-          <span className={health?.daily_data_state === 'ready' ? 'live-dot ready' : 'live-dot'} />
+          <span className={!marketRecovering && health?.daily_data_state === 'ready' ? 'live-dot ready' : 'live-dot'} />
           <div>
-            <strong>决策引擎{health?.daily_data_state === 'ready' ? '已就绪' : '准备中'}</strong>
-            <small>日线证据 {health?.daily_evidence_date || '待更新'}</small>
-            {health?.market_recovery && health.market_recovery.state !== 'ready' ? <small>市场数据恢复中 · {health.market_recovery.completed}/{health.market_recovery.total}{health.market_recovery.approximate_universe ? ' · 使用当前分母回补' : ''}</small> : null}
+            <strong>{engineTitle}</strong>
+            <small>{engineEvidence}</small>
+            {marketRecovering && health?.market_recovery ? <small>已完成 {health.market_recovery.completed}/{health.market_recovery.total}{health.market_recovery.approximate_universe ? ' · 使用当前分母回补' : ''}</small> : null}
           </div>
           <ShieldIcon />
         </div>
