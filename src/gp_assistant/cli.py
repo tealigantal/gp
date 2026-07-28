@@ -10,15 +10,11 @@ import uvicorn
 
 from .gateway.app import app
 from .migrate_contracts import migrate
-from .application.real_producer import RealRecommendationProducer
-from .application.lunch_rebalance_producer import LunchRebalanceProducer, is_lunch_plan
-from .application.runtime_producer import RuntimeRecommendationProducer, market_phase
-from .contracts.catalog import MarketPhase
+from .application.market_orchestrator import MarketDayOrchestrator
 from .store import ContractStore
 from .serenity.service import publish_target as publish_serenity_target
 from .serenity.service import run_loop as run_serenity_loop
 from datetime import datetime
-from collections.abc import Callable
 from zoneinfo import ZoneInfo
 
 
@@ -55,54 +51,11 @@ def _worker_tick(
     store: ContractStore,
     *,
     now: datetime,
-    last_plan_at: float | None,
-    plan_interval_sec: int,
-    real_producer: RealRecommendationProducer | None = None,
-    runtime_producer: RuntimeRecommendationProducer | None = None,
-    lunch_producer: LunchRebalanceProducer | None = None,
-    monotonic_now: Callable[[], float] | None = None,
-) -> float | None:
-    monotonic_clock = monotonic_now or time.monotonic
-    phase = market_phase(now)
-    current_publication = store.current_publication()
-    current_plan = store.load_plan(current_publication.plan_id) if current_publication else None
-    current_session_ready = bool(
-        current_plan
-        and current_plan.market_session_date == now.date()
-        and current_plan.candidate_universe.complete
-    )
-    plan_due = last_plan_at is None or monotonic_clock() - last_plan_at >= max(60, plan_interval_sec)
-    real = real_producer or RealRecommendationProducer(store)
-    runtime = runtime_producer or RuntimeRecommendationProducer(store)
-    lunch = lunch_producer or LunchRebalanceProducer(store)
-
-    if phase is MarketPhase.LUNCH:
-        if plan_due and not current_session_ready:
-            try:
-                real.produce(now, refresh_daily=True)
-            except Exception as exc:  # noqa: BLE001
-                print(json.dumps({"worker_plan_error": f"{type(exc).__name__}:{exc}"}, ensure_ascii=False), flush=True)
-            finally:
-                last_plan_at = monotonic_clock()
-        result = lunch.produce(now=now)
-        if result.state not in {"published", "reused"}:
-            print(json.dumps({"lunch_rebalance": result.state, "reason": result.reason}, ensure_ascii=False), flush=True)
-        return last_plan_at
-
-    lunch_plan_current = bool(
-        current_session_ready
-        and is_lunch_plan(current_plan)
-        and phase in {MarketPhase.AFTERNOON, MarketPhase.CLOSING_AUCTION}
-    )
-    if plan_due and not lunch_plan_current:
-        try:
-            real.produce(now, refresh_daily=True)
-        except Exception as exc:  # noqa: BLE001
-            print(json.dumps({"worker_plan_error": f"{type(exc).__name__}:{exc}"}, ensure_ascii=False), flush=True)
-        finally:
-            last_plan_at = monotonic_clock()
-    runtime.produce(now=now)
-    return last_plan_at
+    orchestrator: MarketDayOrchestrator | None = None,
+) -> dict[str, object]:
+    """One pure scheduling heartbeat; all collection remains worker-owned."""
+    active = orchestrator or MarketDayOrchestrator(store)
+    return active.tick(now=now)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -113,28 +66,18 @@ def main(argv: list[str] | None = None) -> int:
     serve.add_argument("--port", type=int, default=8000)
     cutover = commands.add_parser("migrate-contracts")
     cutover.add_argument("--database", required=True)
-    commands.add_parser("refresh-plan")
-    commands.add_parser("refresh-daily")
-    commands.add_parser("refresh-runtime")
     worker = commands.add_parser("worker")
-    worker.add_argument("--plan-interval-sec", type=int, default=1800)
     worker.add_argument("--runtime-interval-sec", type=int, default=60)
     args = parser.parse_args(argv)
     if args.command == "serve":
         uvicorn.run(app, host=args.host, port=args.port)
     elif args.command == "migrate-contracts":
         print(json.dumps(migrate(args.database), ensure_ascii=False, indent=2))
-    elif args.command == "refresh-plan":
-        print(RealRecommendationProducer(ContractStore()).produce(datetime.now(ZoneInfo("Asia/Shanghai"))).plan.model_dump_json())
-    elif args.command == "refresh-daily":
-        print(RealRecommendationProducer(ContractStore()).produce(datetime.now(ZoneInfo("Asia/Shanghai")), refresh_daily=True).plan.model_dump_json())
-    elif args.command == "refresh-runtime":
-        print(RuntimeRecommendationProducer(ContractStore()).produce(now=datetime.now(ZoneInfo("Asia/Shanghai"))).model_dump_json())
     else:
         worker_store = ContractStore()
+        worker_orchestrator = MarketDayOrchestrator(worker_store)
         serenity_process = None
         serenity_restart_after = 0.0
-        last_plan_at = None
         while True:
             now = datetime.now(ZoneInfo("Asia/Shanghai"))
             if os.getenv("GP_SERENITY_MODE", "native").strip().lower() != "off":
@@ -156,12 +99,12 @@ def main(argv: list[str] | None = None) -> int:
                         serenity_process.start()
                         serenity_restart_after = time.monotonic() + 30.0
             try:
-                last_plan_at = _worker_tick(
+                tick = _worker_tick(
                     worker_store,
                     now=now,
-                    last_plan_at=last_plan_at,
-                    plan_interval_sec=args.plan_interval_sec,
+                    orchestrator=worker_orchestrator,
                 )
+                print(json.dumps({"market_day": tick}, ensure_ascii=False), flush=True)
             except Exception as exc:  # noqa: BLE001
                 print(json.dumps({"worker_error": f"{type(exc).__name__}:{exc}"}, ensure_ascii=False), flush=True)
             time.sleep(max(10, args.runtime_interval_sec))

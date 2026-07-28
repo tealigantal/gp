@@ -10,6 +10,7 @@ No new dependencies are introduced; API signatures are preserved.
 from __future__ import annotations
 
 from typing import Dict, Any, Optional, List
+from contextvars import ContextVar
 import json
 import os
 import threading
@@ -26,6 +27,45 @@ from ..core.paths import cache_dir
 
 
 _REQUEST_PATCH_LOCK = threading.RLock()
+_REQUEST_TIMEOUT_CONTEXT: ContextVar[float | None] = ContextVar("gp_akshare_request_timeout", default=None)
+_REQUEST_PATCH_INSTALLED = False
+
+
+def _install_requests_timeout_patch() -> None:
+    """Install one context-local AkShare request policy without serializing requests."""
+    global _REQUEST_PATCH_INSTALLED
+    if _REQUEST_PATCH_INSTALLED:
+        return
+    import requests  # type: ignore
+
+    with _REQUEST_PATCH_LOCK:
+        if _REQUEST_PATCH_INSTALLED:
+            return
+        original = requests.sessions.Session.request
+
+        def wrapped(session, method, url, **kwargs):  # noqa: ANN001
+            timeout_sec = _REQUEST_TIMEOUT_CONTEXT.get()
+            if timeout_sec is not None and isinstance(url, str):
+                host = url.lower()
+                if "eastmoney.com" in host or "sina.com" in host or "sinajs.cn" in host:
+                    configured = kwargs.get("timeout")
+                    try:
+                        effective = max(float(configured), timeout_sec) if configured is not None else timeout_sec
+                    except (TypeError, ValueError):
+                        effective = timeout_sec
+                    kwargs["timeout"] = max(0.01, effective)
+                    headers = dict(kwargs.get("headers") or {})
+                    headers.setdefault("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120 Safari/537.36")
+                    if "eastmoney.com" in host:
+                        headers.setdefault("Referer", "https://quote.eastmoney.com/")
+                    else:
+                        headers.setdefault("Referer", "https://finance.sina.com.cn/")
+                    kwargs["headers"] = headers
+            return original(session, method, url, **kwargs)
+
+        setattr(wrapped, "_gp_timeout_wrapped", True)
+        requests.sessions.Session.request = wrapped  # type: ignore
+        _REQUEST_PATCH_INSTALLED = True
 
 
 def _snapshot_content_digest(df: pd.DataFrame) -> str:
@@ -978,66 +1018,13 @@ class AkShareProvider(MarketDataProvider):
         raise payload
 
     def _with_requests_timeout(self, fn):  # noqa: ANN001
-        import requests  # type: ignore
-
-        with _REQUEST_PATCH_LOCK:
-            original = requests.sessions.Session.request
-            if getattr(original, "_gp_timeout_wrapped", False):
-                return fn()
-
-            def wrapped(session, method, url, **kwargs):  # noqa: ANN001
-                # Only enforce for AkShare-related hosts; leave others (e.g., LLM providers) untouched
-                is_ak_host = False
-                try:
-                    if isinstance(url, str):
-                        u = url.lower()
-                        if ("eastmoney.com" in u) or ("sina.com" in u) or ("sinajs.cn" in u):
-                            is_ak_host = True
-                except Exception:
-                    is_ak_host = False
-
-                if is_ak_host:
-                    to = kwargs.get("timeout", None)
-                    eff = None
-                    try:
-                        eff = float(to) if to is not None else None
-                    except Exception:
-                        eff = None
-                    # Choose the larger of existing timeout and provider's timeout; enforce a positive floor
-                    base = self.timeout_sec if isinstance(self.timeout_sec, (int, float)) else 0
-                    try:
-                        base = float(base)
-                    except Exception:
-                        base = 0.0
-                    if eff is None or (isinstance(base, (int, float)) and eff < base):
-                        eff = float(base)
-                    if eff is None or eff <= 0:
-                        eff = 10.0  # safe minimum to avoid 0 meaning immediate timeout
-                    kwargs["timeout"] = eff
-                    try:
-                        hdrs = dict(kwargs.get("headers") or {})
-                        hdrs.setdefault(
-                            "User-Agent",
-                            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120 Safari/537.36",
-                        )
-                        if isinstance(url, str):
-                            if "eastmoney.com" in url:
-                                hdrs.setdefault("Referer", "https://quote.eastmoney.com/")
-                            elif "sina.com" in url or "sinajs.cn" in url:
-                                hdrs.setdefault("Referer", "https://finance.sina.com.cn/")
-                        kwargs["headers"] = hdrs
-                    except Exception:
-                        pass
-                # Non-AkShare hosts fall through with original kwargs (no forced timeout)
-                return original(session, method, url, **kwargs)
-
-            try:
-                setattr(wrapped, "_gp_timeout_wrapped", True)
-                requests.sessions.Session.request = wrapped  # type: ignore
-                return fn()
-            finally:
-                if requests.sessions.Session.request is wrapped:
-                    requests.sessions.Session.request = original  # type: ignore
+        _install_requests_timeout_patch()
+        timeout_sec = max(0.01, float(self.timeout_sec))
+        token = _REQUEST_TIMEOUT_CONTEXT.set(timeout_sec)
+        try:
+            return fn()
+        finally:
+            _REQUEST_TIMEOUT_CONTEXT.reset(token)
 
     def _call_with_retry(self, fn, retries: int = 3):  # noqa: ANN001
         import random

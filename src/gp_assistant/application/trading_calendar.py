@@ -17,19 +17,54 @@ class CnATradingCalendar:
     ref: TradingCalendarRef
 
     def is_open(self, value: date) -> bool:
+        self._require_covered(value)
         return value in self.open_days
 
+    @property
+    def first_open_day(self) -> date:
+        return min(self.open_days)
+
+    @property
+    def last_open_day(self) -> date:
+        return max(self.open_days)
+
+    def _require_covered(self, value: date) -> None:
+        if value < self.first_open_day or value > self.last_open_day:
+            raise ValueError("trading_calendar_out_of_range")
+
     def next_open_after(self, value: date) -> date:
+        if value >= self.last_open_day:
+            raise ValueError("trading_calendar_out_of_range")
         cursor = value + timedelta(days=1)
-        while cursor not in self.open_days:
+        while cursor <= self.last_open_day and cursor not in self.open_days:
             cursor += timedelta(days=1)
+        if cursor > self.last_open_day:
+            raise ValueError("trading_calendar_out_of_range")
         return cursor
 
     def previous_open_before(self, value: date) -> date:
+        if value <= self.first_open_day:
+            raise ValueError("trading_calendar_out_of_range")
         cursor = value - timedelta(days=1)
-        while cursor not in self.open_days:
+        while cursor >= self.first_open_day and cursor not in self.open_days:
             cursor -= timedelta(days=1)
+        if cursor < self.first_open_day:
+            raise ValueError("trading_calendar_out_of_range")
         return cursor
+
+    def previous_open_on_or_before(self, value: date) -> date:
+        if value < self.first_open_day:
+            raise ValueError("trading_calendar_out_of_range")
+        if value in self.open_days:
+            return value
+        return self.previous_open_before(value + timedelta(days=1))
+
+    def open_days_between(self, start: date, end: date) -> tuple[date, ...]:
+        if end < start:
+            return ()
+        self._require_covered(start)
+        self._require_covered(end)
+        return tuple(day for day in sorted(self.open_days) if start <= day <= end)
 
 
 @lru_cache(maxsize=1)

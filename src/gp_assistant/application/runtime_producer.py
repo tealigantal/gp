@@ -6,9 +6,9 @@ import pandas as pd
 
 from ..contracts.catalog import MarketPhase, RuntimeDataState
 from ..contracts.runtime import MarketGate, RuntimeDataQuality, RuntimeObservation, SymbolExecutionState
+from ..contracts.publication_policy import require_publication_eligible
 from ..providers.factory import get_provider
 from ..store import ContractStore
-from .publication_service import PublicationService
 from .runtime_service import RuntimeService
 
 
@@ -38,43 +38,23 @@ class RuntimeRecommendationProducer:
         plan = self.store.load_plan(plan_id) if plan_id else self._current_plan()
         if plan is None:
             raise ValueError("plan_not_found")
+        require_publication_eligible(plan)
         phase = market_phase(now)
         selected = tuple(item for item in plan.evaluated_candidates if item.disposition.value == "selected")
         if plan.market_session_date != now.date():
-            return self._commit_and_publish(
-                plan=plan,
-                now=now,
-                phase=phase,
-                quality=RuntimeDataQuality(state=RuntimeDataState.UNAVAILABLE, source="akshare:spot", reason_codes=("runtime_session_not_current",)),
-                gate=MarketGate(state="deny", score=0.0, reason_codes=("runtime_session_not_current",)),
-                states=(),
-            )
+            raise ValueError("runtime_session_not_current")
         if phase is MarketPhase.LUNCH:
             current = self.store.current_publication()
             current_runtime = self.store.load_runtime(current.runtime_id) if current and current.plan_id == plan.plan_id and current.runtime_id else None
             if current_runtime is not None:
                 return current_runtime
         if phase not in {MarketPhase.MORNING, MarketPhase.AFTERNOON, MarketPhase.CLOSING_AUCTION}:
-            return self._commit_and_publish(
-                plan=plan,
-                now=now,
-                phase=phase,
-                quality=RuntimeDataQuality(state=RuntimeDataState.UNAVAILABLE, source="akshare:spot", reason_codes=("market_not_in_trading_phase",)),
-                gate=MarketGate(state="deny", score=0.0, reason_codes=("market_not_in_trading_phase",)),
-                states=(),
-            )
+            raise ValueError("market_not_in_trading_phase")
         if not selected:
-            return self._commit_and_publish(
-                plan=plan,
-                now=now,
-                phase=phase,
-                quality=RuntimeDataQuality(state=RuntimeDataState.UNAVAILABLE, source="akshare:spot", reason_codes=("no_selected_candidate",)),
-                gate=MarketGate(state="deny", score=0.0, reason_codes=("no_selected_candidate",)),
-                states=(),
-            )
+            raise ValueError("no_selected_candidate")
         spot = self.spot_loader()
         if not isinstance(spot, pd.DataFrame) or spot.empty or not {"code", "price", "pct_chg"}.issubset(spot.columns):
-            return self._commit_and_publish(
+            return self._commit(
                 plan=plan,
                 now=now,
                 phase=phase,
@@ -108,13 +88,13 @@ class RuntimeRecommendationProducer:
             score=0.0 if missing else 1.0,
             reason_codes=("runtime_symbol_missing",) if missing else (),
         )
-        return self._commit_and_publish(plan=plan, now=now, phase=phase, quality=quality, gate=gate, states=tuple(states))
+        return self._commit(plan=plan, now=now, phase=phase, quality=quality, gate=gate, states=tuple(states))
 
     def _current_plan(self):
         publication = self.store.current_publication()
         return self.store.load_plan(publication.plan_id) if publication else None
 
-    def _commit_and_publish(self, *, plan, now: datetime, phase: MarketPhase, quality: RuntimeDataQuality, gate: MarketGate, states: tuple[SymbolExecutionState, ...]) -> RuntimeObservation:
+    def _commit(self, *, plan, now: datetime, phase: MarketPhase, quality: RuntimeDataQuality, gate: MarketGate, states: tuple[SymbolExecutionState, ...]) -> RuntimeObservation:
         observation = RuntimeObservation(
             runtime_id="pending",
             plan_id=plan.plan_id,
@@ -129,6 +109,4 @@ class RuntimeRecommendationProducer:
             producer_name="real_runtime_producer",
             producer_revision="1",
         )
-        runtime = RuntimeService(self.store).observe(observation)
-        PublicationService(self.store).publish(plan_id=plan.plan_id, runtime_id=runtime.runtime_id, published_at=now)
-        return runtime
+        return RuntimeService(self.store).observe(observation)

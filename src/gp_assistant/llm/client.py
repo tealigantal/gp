@@ -4,7 +4,7 @@ import json
 import os
 from datetime import datetime, timezone
 from pathlib import Path
-from threading import Lock, local
+from threading import Lock
 from time import monotonic
 from typing import Any, Dict, List, Optional, Tuple
 from uuid import uuid4
@@ -20,8 +20,6 @@ from ..runtime.context_budget import (
 
 
 _STATUS_LOCK = Lock()
-_TRACE_LOCAL = local()
-_PRODUCT_VERIFICATION_MAX_AGE_SEC = 1800.0
 _RUNTIME_STATUS: Dict[str, Any] = {
     "last_call_success": None,
     "last_success_at": None,
@@ -31,11 +29,6 @@ _RUNTIME_STATUS: Dict[str, Any] = {
     "last_latency_ms": None,
     "last_response_model": None,
     "last_response_id": None,
-    "product_chat_last_success": None,
-    "product_chat_last_success_at": None,
-    "product_chat_last_error_at": None,
-    "product_chat_last_error": None,
-    "product_chat_last_stage": None,
 }
 
 
@@ -115,168 +108,6 @@ def _record_call(
             }
         )
     _update_runtime_status(update)
-    trace = {
-        "stage": str(stage),
-        "success": bool(success),
-        "http_status": http_status,
-        "latency_ms": update["last_latency_ms"],
-        "request_model": request_model,
-        "response_model": str((response or {}).get("model") or "") or None,
-        "response_id": str((response or {}).get("id") or "") or None,
-        "error_type": type(error).__name__ if error is not None else None,
-    }
-    calls = list(getattr(_TRACE_LOCAL, "calls", []))
-    calls.append(trace)
-    _TRACE_LOCAL.calls = calls
-
-
-def reset_llm_call_trace() -> None:
-    _TRACE_LOCAL.calls = []
-
-
-def current_llm_call_trace() -> List[Dict[str, Any]]:
-    return [dict(item) for item in list(getattr(_TRACE_LOCAL, "calls", []))]
-
-
-def validate_product_llm_trace(trace: List[Dict[str, Any]]) -> None:
-    def valid(item: Dict[str, Any]) -> bool:
-        status = item.get("http_status")
-        return bool(
-            item.get("success") is True
-            and isinstance(status, int)
-            and 200 <= status < 300
-            and str(item.get("request_model") or "")
-            and str(item.get("response_model") or "")
-            and str(item.get("response_id") or "")
-        )
-
-    routing_index = next(
-        (
-            index
-            for index, item in enumerate(trace)
-            if str(item.get("stage") or "")
-            in {"intent_routing", "intent_routing_repair"}
-            and valid(item)
-        ),
-        None,
-    )
-    narration_index = next(
-        (
-            index
-            for index, item in enumerate(trace)
-            if str(item.get("stage") or "") == "tool_evidence" and valid(item)
-        ),
-        None,
-    )
-    repair_indices = [
-        index
-        for index, item in enumerate(trace)
-        if str(item.get("stage") or "") == "tool_evidence_repair"
-    ]
-    if (
-        routing_index is None
-        or narration_index is None
-        or narration_index <= routing_index
-        or (
-            repair_indices
-            and (
-                repair_indices[-1] <= narration_index
-                or not valid(trace[repair_indices[-1]])
-            )
-        )
-    ):
-        raise RuntimeError("product_llm_trace_missing_real_two_stage_evidence")
-
-
-def record_product_chat(
-    *,
-    success: bool,
-    stage: str,
-    error: BaseException | None = None,
-    trace: List[Dict[str, Any]] | None = None,
-) -> None:
-    if success:
-        validate_product_llm_trace(list(trace or []))
-    now = _utc_now()
-    update: Dict[str, Any] = {
-        "product_chat_last_success": bool(success),
-        "product_chat_last_stage": str(stage),
-    }
-    if success:
-        update.update(
-            {
-                "product_chat_last_success_at": now,
-                "product_chat_last_error": None,
-            }
-        )
-    else:
-        update.update(
-            {
-                "product_chat_last_error_at": now,
-                "product_chat_last_error": (
-                    f"{type(error).__name__}:{error}" if error is not None else "unknown"
-                ),
-            }
-        )
-    _update_runtime_status(update)
-
-
-def llm_status() -> Dict[str, Any]:
-    client = LLMClient()
-    configured, reason = client.available()
-    with _STATUS_LOCK:
-        runtime = {**_RUNTIME_STATUS, **_read_persisted_runtime_status()}
-    success_at = None
-    try:
-        success_at = datetime.fromisoformat(
-            str(runtime.get("product_chat_last_success_at") or "").replace("Z", "+00:00")
-        )
-        if success_at.tzinfo is None:
-            success_at = success_at.replace(tzinfo=timezone.utc)
-    except Exception:
-        success_at = None
-    verification_age_sec = (
-        max(0.0, (datetime.now(timezone.utc) - success_at).total_seconds())
-        if success_at is not None
-        else None
-    )
-    verification_fresh = bool(
-        verification_age_sec is not None
-        and verification_age_sec <= _PRODUCT_VERIFICATION_MAX_AGE_SEC
-    )
-    if not configured:
-        verification = "not_configured"
-    elif runtime.get("product_chat_last_success") is False:
-        verification = "error"
-    elif runtime.get("product_chat_last_success") is True and verification_fresh:
-        verification = "ready"
-    elif runtime.get("product_chat_last_success") is True:
-        verification = "stale"
-    else:
-        verification = "unverified"
-    return {
-        "available": bool(configured and runtime.get("last_call_success") is not False),
-        "configured": bool(configured),
-        "configuration_reason": reason,
-        "verification": verification,
-        "verification_fresh": verification_fresh,
-        "verification_age_sec": (
-            round(verification_age_sec, 1) if verification_age_sec is not None else None
-        ),
-        "verification_max_age_sec": _PRODUCT_VERIFICATION_MAX_AGE_SEC,
-        "transport_verification": (
-            "error"
-            if runtime.get("last_call_success") is False
-            else "ready"
-            if runtime.get("last_call_success") is True
-            else "unverified"
-        ),
-        "base_url": client.base_url or None,
-        "model": client.model,
-        **runtime,
-    }
-
-
 class LLMClient:
     """OpenAI Chat Completions compatible client."""
 

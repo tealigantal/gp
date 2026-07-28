@@ -19,6 +19,9 @@ const health = {
   current_publication_id: publication.publication_id, plan_id: publication.plan_id, runtime_id: publication.runtime_id,
   market_session_date: '2026-07-24', daily_evidence_date: '2026-07-23', slot_closed_at: '2026-07-23T15:00:00+08:00',
   market_phase: 'postclose', daily_data_state: 'ready', runtime_data_state: 'unavailable', publication_state: 'recommend', tradeability_state: 'unavailable',
+  market_now: { observed_at: '2026-07-24T16:02:00+08:00', market_phase: 'postclose', market_phase_label: '已收盘', plan_relation: 'expired', tradeable_now: false },
+  market_recovery: { state: 'ready', target_trade_date: '2026-07-24', completed: 0, total: 0, failed: 0, next_retry_at: null, approximate_universe: false },
+  next_plan_target: { observed_at: '2026-07-24T16:02:00+08:00', market_session_date: '2026-07-27', required_daily_evidence_date: '2026-07-24', state: 'ready_to_publish', completed: 0, total: 0, failed: 0, next_retry_at: null, approximate_universe: false },
 }
 
 function jsonResponse(value: unknown, status = 200) {
@@ -45,7 +48,12 @@ describe('GP chat workspace', () => {
     expect(screen.getByText('进入评分 1')).toBeInTheDocument()
     expect(screen.getByText('执行风险')).toBeInTheDocument()
     expect(screen.getByText('34.0%')).toBeInTheDocument()
-    expect(screen.getByText('已收盘 · 暂不可执行')).toBeInTheDocument()
+    expect(screen.getByText('市场已收盘 · 计划仅供回顾')).toBeInTheDocument()
+    expect(screen.getByText('当前发布计划已结束')).toBeInTheDocument()
+    expect(screen.getByText('上一份完整计划（仅回顾）')).toBeInTheDocument()
+    expect(screen.getByText('上一份计划入选（仅回顾）')).toBeInTheDocument()
+    expect(screen.getByText('下一交易日计划尚未发布')).toBeInTheDocument()
+    expect(screen.getByText(/目标交易日 2026-07-27 · 所需日K 2026-07-24 已完整核验，但新的计划版本尚未发布；下方候选只属于上一份完整计划/)).toBeInTheDocument()
   })
 
   it('sends a new chat and replaces the optimistic turn with canonical turns', async () => {
@@ -292,13 +300,13 @@ describe('GP chat workspace', () => {
     vi.stubGlobal('fetch', vi.fn((input: string | URL) => {
       const url = String(input)
       if (failCore && (url.includes('/api/health') || url.includes('/api/recommendation/current'))) return jsonResponse({ detail: 'offline' }, 503)
-      if (url.includes('/api/health')) return jsonResponse({ ...health, market_phase: 'morning', tradeability_state: 'tradeable' })
+      if (url.includes('/api/health')) return jsonResponse({ ...health, market_phase: 'morning', tradeability_state: 'tradeable', market_now: { ...health.market_now, observed_at: '2026-07-24T10:01:00+08:00', market_phase: 'morning', market_phase_label: '上午交易中', plan_relation: 'active', tradeable_now: true } })
       if (url.includes('/api/recommendation/current')) return jsonResponse({ ...publication, decision: { ...publication.decision, tradeable_now: true } })
       return jsonResponse([])
     }))
 
     render(<App />)
-    expect(await screen.findByText('上午交易 · 可执行')).toBeInTheDocument()
+    expect(await screen.findByText('上午交易中 · 可执行')).toBeInTheDocument()
     failCore = true
     fireEvent.click(screen.getByLabelText('同步最新状态'))
     expect(await screen.findByText('实时状态已断开')).toBeInTheDocument()
