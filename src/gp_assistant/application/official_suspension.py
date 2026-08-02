@@ -44,9 +44,20 @@ def _halt_excerpt(text: str, *, trade_date: date) -> str | None:
     normalized = re.sub(r"\s+", "", normalize_cn_text(text))
     target = f"{trade_date.year}年{trade_date.month}月{trade_date.day}日"
     token = re.escape(target)
-    halt = re.compile(token + r".{0,32}?(?:开市|开盘).{0,32}?(?:继续)?停牌")
+    halt_patterns = (
+        # Continued suspensions normally describe the target session from its
+        # opening.  Keep this existing, strongest wording first.
+        re.compile(token + r".{0,32}?(?:开市|开盘).{0,32}?(?:继续)?停牌"),
+        # One-day risk-warning suspensions use an explicit "停牌日期" field or
+        # state that the stock "will halt for one day" without the words
+        # 开市/开盘.  Both still bind the exact target date and do not infer a
+        # halt merely from a missing daily bar.
+        re.compile(r"停牌日期(?:为|：|:)?" + token),
+        re.compile(r"(?:公司)?股票(?:将)?于" + token + r"停牌(?:1天|一天|全天)"),
+    )
     resume = re.compile(token + r".{0,32}?(?:开市|开盘).{0,32}?(?:复牌|恢复交易)")
-    match = halt.search(normalized)
+    matches = [match for pattern in halt_patterns if (match := pattern.search(normalized)) is not None]
+    match = min(matches, key=lambda item: item.start()) if matches else None
     # An earlier notice can say the stock was expected to resume on the target
     # date and the current notice can then explicitly extend the halt.  Only a
     # later same-date resume statement can override the matched halt fact.

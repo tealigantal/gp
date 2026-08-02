@@ -206,6 +206,15 @@ def test_stale_snapshot_cannot_exclude_and_resumed_stock_reenters_expected_set(t
     assert evidence["000002"]["state"] == "verified_suspended"
     assert evidence["000002"]["effective_suspension_date"] == "2026-07-24"
 
+    one_day_halt = OfficialSuspensionEvidenceCollector(
+        client=Client(), verifier=Verifier(), parser=lambda *_args, **_kwargs: (
+            "停牌日期为2026年7月24日。公司股票将于2026年7月24日停牌1天，2026年7月27日起复牌。",
+            "parsed",
+        ),
+    ).resolve(symbols=("000002",), trade_date=date(2026, 7, 24), observed_at=now)
+    assert one_day_halt["000002"]["state"] == "verified_suspended"
+    assert "停牌日期为2026年7月24日" in one_day_halt["000002"]["excerpt"]
+
     no_proof = OfficialSuspensionEvidenceCollector(
         client=Client(), verifier=Verifier(), parser=lambda *_args, **_kwargs: ("公司股票自2026年7月25日开市起继续停牌", "parsed"),
     ).resolve(symbols=("000002",), trade_date=date(2026, 7, 24), observed_at=now)
