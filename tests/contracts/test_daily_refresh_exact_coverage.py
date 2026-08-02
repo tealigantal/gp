@@ -325,3 +325,28 @@ def test_postclose_source_not_ready_only_probes_without_full_market_fetch(tmp_pa
     assert provider.calls == 1
     assert updated is not None and updated.state == "probing"
     assert all(item.attempts == 0 for item in ledger.symbols(run.trade_date))
+
+
+def test_weekend_tick_still_schedules_due_historical_recovery(tmp_path, monkeypatch):
+    now = datetime(2026, 7, 25, 10, 0, tzinfo=TZ)
+    ledger = MarketRunStore(tmp_path / "weekend-market-runs.db")
+    orchestrator = MarketDayOrchestrator(
+        ContractStore(tmp_path / "weekend-contracts.db"),
+        ledger=ledger,
+        spawn_fetch=False,
+    )
+    due = type("DueRun", (), {"trade_date": "2026-07-24"})()
+    calls: list[tuple[str, str]] = []
+    monkeypatch.setattr("gp_assistant.application.market_orchestrator.load_cn_a_calendar", lambda: _Calendar())
+    monkeypatch.setattr(orchestrator, "_ensure_recovery_queue", lambda **_kwargs: due)
+    monkeypatch.setattr(orchestrator, "_select_due_run", lambda **_kwargs: due)
+    monkeypatch.setattr(
+        orchestrator,
+        "_schedule_run",
+        lambda run, *, now, current_target: calls.append((run.trade_date, current_target)),
+    )
+
+    result = orchestrator.tick(now=now)
+
+    assert result["state"] == "closed"
+    assert calls == [("2026-07-24", "2026-07-24")]

@@ -215,13 +215,12 @@ class MarketDayOrchestrator:
             return {"state": "standby", "reason": "worker_lease_held"}
         calendar = load_cn_a_calendar()
         self._repair_invalid_current_pointer()
-        if not calendar.is_open(now.date()):
-            return {"state": "closed", "market_recovery": self.ledger.health()}
+        is_open_session = calendar.is_open(now.date())
         required_date = self._required_daily_date(calendar, now)
-        if MarketClock.can_freeze(now):
+        if is_open_session and MarketClock.can_freeze(now):
             self._ensure_run(trade_date=now.date(), now=now, calendar=calendar, reconstructed=False)
         target_run = self._ensure_recovery_queue(required_date=required_date, now=now, calendar=calendar)
-        if target_run and target_run.trade_date == now.date().isoformat() and MarketClock.can_probe_current_daily(now):
+        if is_open_session and target_run and target_run.trade_date == now.date().isoformat() and MarketClock.can_probe_current_daily(now):
             target_run = self._finalize_same_day_exclusions(target_run, now=now, calendar=calendar)
         selected = self._select_due_run(target_date=required_date, now=now)
         if selected is not None:
@@ -229,6 +228,12 @@ class MarketDayOrchestrator:
         refreshed_target = self.ledger.get_run(required_date.isoformat())
         if refreshed_target and refreshed_target.state == RUN_COMPLETE:
             self._publish_base_if_due(run=refreshed_target, now=now, calendar=calendar)
+        # Historical daily recovery and next-session base publication must be
+        # able to finish overnight and over a weekend.  Only same-session
+        # freezing, lunch reranking and intraday runtime work require an open
+        # exchange session.
+        if not is_open_session:
+            return {"state": "closed", "market_recovery": self.ledger.health()}
         self._run_lunch_if_due(now=now)
         self._run_runtime_if_due(now=now)
         return {"state": "ok", "market_recovery": self.ledger.health()}
