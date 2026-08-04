@@ -382,6 +382,45 @@ class MarketRunStore:
             )
         return self.get_run(trade_date)  # type: ignore[return-value]
 
+    def exclude_lifecycle_symbols(
+        self,
+        *,
+        trade_date: str,
+        exclusions: dict[str, dict[str, object]],
+        now: datetime,
+    ) -> DailyRun:
+        """Apply date-bound lifecycle exclusions using existing run fields."""
+        if not exclusions:
+            return self.get_run(trade_date)  # type: ignore[return-value]
+        self.initialize()
+        with self._transaction() as conn:
+            row = conn.execute("SELECT * FROM daily_runs WHERE trade_date=?", (trade_date,)).fetchone()
+            if row is None or str(row["state"]) == RUN_COMPLETE:
+                return self._run_from_row(row) if row else (_ for _ in ()).throw(ValueError("daily_run_not_found"))
+            universe = FrozenUniverse.from_payload(json.loads(str(row["universe_json"])))
+            accepted = {symbol: value for symbol, value in exclusions.items() if symbol in set(universe.raw_symbols)}
+            if not accepted:
+                return self._run_from_row(row)
+            excluded = set(universe.excluded_symbols) | set(accepted)
+            expected = tuple(symbol for symbol in universe.raw_symbols if symbol not in excluded)
+            meta = dict(universe.snapshot_meta)
+            meta["lifecycle_exclusions"] = list((meta.get("lifecycle_exclusions") or []))
+            known = {str(item.get("symbol")) for item in meta["lifecycle_exclusions"] if isinstance(item, dict)}
+            meta["lifecycle_exclusions"].extend(value for symbol, value in accepted.items() if symbol not in known)
+            updated = FrozenUniverse(
+                trade_date=trade_date, raw_symbols=universe.raw_symbols, expected_symbols=expected,
+                excluded_symbols=tuple(sorted(excluded)),
+                content_digest=universe_digest(trade_date=trade_date, raw_symbols=universe.raw_symbols, expected_symbols=expected, excluded_symbols=tuple(sorted(excluded))),
+                source=universe.source, snapshot_meta=meta, approximate=universe.approximate, captured_at=universe.captured_at,
+            )
+            for symbol, evidence in accepted.items():
+                conn.execute(
+                    "UPDATE daily_run_symbols SET status='excluded',reason=?,last_error=NULL,evidence_json=?,updated_at=? WHERE trade_date=? AND symbol=?",
+                    (str(evidence["reason"]), json.dumps(evidence, ensure_ascii=False, sort_keys=True), _iso(now), trade_date, symbol),
+                )
+            conn.execute("UPDATE daily_runs SET universe_json=?,updated_at=? WHERE trade_date=?", (json.dumps(updated.payload(), ensure_ascii=False, sort_keys=True), _iso(now), trade_date))
+        return self.get_run(trade_date)  # type: ignore[return-value]
+
     @staticmethod
     def _run_from_row(row: sqlite3.Row) -> DailyRun:
         return DailyRun(

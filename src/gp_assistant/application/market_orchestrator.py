@@ -15,6 +15,7 @@ from ..providers.boards import is_mainboard
 from ..providers.factory import get_provider
 from ..store import ContractStore, PublicationConflict
 from .daily_refresh import DailyEvidenceRefresher
+from .daily_anomalies import lifecycle_exclusions
 from .history_daily import coverage_for_date, latest_daily_date
 from .lunch_rebalance_producer import LunchRebalanceProducer
 from .market_runs import DailyRun, FrozenUniverse, MarketRunStore, RUN_COMPLETE, universe_digest
@@ -89,6 +90,9 @@ def _daily_fetch_worker(
         if run is None or run.state == RUN_COMPLETE:
             return
         target = run.trade_date
+        lifecycle = lifecycle_exclusions(trade_date=date.fromisoformat(target), symbols=tuple(run.universe.raw_symbols))
+        if lifecycle:
+            run = ledger.exclude_lifecycle_symbols(trade_date=target, exclusions=lifecycle, now=now)
         expected = ledger.expected_symbols(target)
         present = coverage_for_date(expected, target_date=target)
         missing = ledger.update_coverage(trade_date=target, target_date=target, rows=present, now=now)
