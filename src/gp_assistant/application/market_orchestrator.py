@@ -37,6 +37,7 @@ _DAILY_FETCH_START = clock_time(15, 20)
 _BASE_PLAN_AFTER_CLOSE_START = clock_time(15, 20)
 _BASE_PLAN_PREOPEN_END = clock_time(9, 30)
 _MAX_OFFICIAL_SUSPENSION_CANDIDATES = 10
+_MAX_DEGRADED_PROVIDER_GAPS = 3
 
 
 class MarketClock:
@@ -175,6 +176,19 @@ def _daily_fetch_worker(
                 if not missing:
                     ledger.complete(target, datetime.now(now.tzinfo))
                     return
+        if len(missing) <= _MAX_DEGRADED_PROVIDER_GAPS:
+            degraded = ledger.exclude_retryable_for_degraded(
+                trade_date=target, symbols=tuple(missing), now=datetime.now(now.tzinfo)
+            )
+            expected = ledger.expected_symbols(target)
+            present = coverage_for_date(expected, target_date=target)
+            missing = ledger.update_coverage(
+                trade_date=target, target_date=target, rows=present, now=datetime.now(now.tzinfo)
+            )
+            if not missing:
+                ledger.complete(target, datetime.now(now.tzinfo))
+                print(json.dumps({"daily_run_degraded_release": {"trade_date": target, "excluded": len(degraded.universe.excluded_symbols), "remaining": 0}}, ensure_ascii=False), flush=True)
+                return
         ledger.mark_attempt_failed(trade_date=target, symbols=tuple(missing), now=datetime.now(now.tzinfo))
         ledger.record_retry(target, now=datetime.now(now.tzinfo), retry_after_sec=cfg.market_run_retry_interval_sec, error="daily_coverage_incomplete")
     finally:

@@ -421,6 +421,60 @@ class MarketRunStore:
             conn.execute("UPDATE daily_runs SET universe_json=?,updated_at=? WHERE trade_date=?", (json.dumps(updated.payload(), ensure_ascii=False, sort_keys=True), _iso(now), trade_date))
         return self.get_run(trade_date)  # type: ignore[return-value]
 
+    def exclude_retryable_for_degraded(
+        self,
+        *,
+        trade_date: str,
+        symbols: tuple[str, ...],
+        now: datetime,
+    ) -> DailyRun:
+        """Allow a small, explicitly audited provider gap to be excluded.
+
+        This is a publication-degradation decision, not a suspension claim.
+        It preserves the raw universe and marks the existing run row so the
+        next recovery can still revisit the symbol.
+        """
+        self.initialize()
+        with self._transaction() as conn:
+            row = conn.execute("SELECT * FROM daily_runs WHERE trade_date=?", (trade_date,)).fetchone()
+            if row is None:
+                raise ValueError("daily_run_not_found")
+            if str(row["state"]) == RUN_COMPLETE:
+                return self._run_from_row(row)
+            universe = FrozenUniverse.from_payload(json.loads(str(row["universe_json"])))
+            allowed = {"provider_empty", "provider_unavailable", "provider_payload_invalid"}
+            rows = conn.execute(
+                "SELECT symbol,reason FROM daily_run_symbols WHERE trade_date=? AND symbol IN ({})".format(",".join("?" for _ in symbols)),
+                (trade_date, *symbols),
+            ).fetchall() if symbols else []
+            accepted = {str(item["symbol"]) for item in rows if str(item["reason"] or "") in allowed}
+            if not accepted:
+                return self._run_from_row(row)
+            excluded = set(universe.excluded_symbols) | accepted
+            expected = tuple(symbol for symbol in universe.raw_symbols if symbol not in excluded)
+            meta = dict(universe.snapshot_meta)
+            prior = list(meta.get("degraded_provider_exclusions") or [])
+            known = {str(item.get("symbol")) for item in prior if isinstance(item, dict)}
+            prior.extend(
+                {"symbol": symbol, "trade_date": trade_date, "reason": "degraded_provider_failure", "state": "excluded", "evidence": "provider_failure_after_bounded_retries"}
+                for symbol in sorted(accepted)
+                if symbol not in known
+            )
+            meta["degraded_provider_exclusions"] = prior
+            updated = FrozenUniverse(
+                trade_date=trade_date, raw_symbols=universe.raw_symbols, expected_symbols=expected,
+                excluded_symbols=tuple(sorted(excluded)),
+                content_digest=universe_digest(trade_date=trade_date, raw_symbols=universe.raw_symbols, expected_symbols=expected, excluded_symbols=tuple(sorted(excluded))),
+                source=universe.source, snapshot_meta=meta, approximate=universe.approximate, captured_at=universe.captured_at,
+            )
+            for symbol in accepted:
+                conn.execute(
+                    "UPDATE daily_run_symbols SET status='excluded',reason='degraded_provider_failure',evidence_json=?,updated_at=? WHERE trade_date=? AND symbol=?",
+                    (json.dumps({"symbol": symbol, "trade_date": trade_date, "state": "excluded", "reason": "degraded_provider_failure", "evidence": "provider_failure_after_bounded_retries"}, ensure_ascii=False, sort_keys=True), _iso(now), trade_date, symbol),
+                )
+            conn.execute("UPDATE daily_runs SET universe_json=?,updated_at=? WHERE trade_date=?", (json.dumps(updated.payload(), ensure_ascii=False, sort_keys=True), _iso(now), trade_date))
+        return self.get_run(trade_date)  # type: ignore[return-value]
+
     @staticmethod
     def _run_from_row(row: sqlite3.Row) -> DailyRun:
         return DailyRun(
