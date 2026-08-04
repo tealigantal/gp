@@ -127,3 +127,8 @@ The configured development database passed `integrity_check`, `foreign_key_check
 - Reconstruction discovery: the live ledger was still `retry_wait` on Sunday with a stale `2026-08-01T00:03:06+08:00` retry deadline. A regression now proves a Saturday tick schedules the due prior-session recovery while returning `closed` and leaving lunch/intraday paths unavailable.
 - Final runtime: the rebuilt Sunday worker changed the 2026-07-31 run to `complete`, cleared retry/error fields, and stored `600439` as `excluded`, reason `official_suspension`, source `cninfo+sse`, record `1225449756`, exact effective date `2026-07-31`. Health then reported `next_plan_target.state=published`, market session `2026-08-03`, evidence date `2026-07-31`, plan `plan_3e561dd219b559c6d55393b5`, publication `publication_955d3b265a1e0d97b5098039`.
 - Deployment parity: SHA-256 for `official_suspension.py` and `market_orchestrator.py` matched between the checkout, `gp`, and `gp-worker`; Compose reported backend healthy, worker running, and web healthy.
+## 2026-08-04 daily anomaly routing
+
+- `python -m pytest -q tests/contracts/test_daily_anomalies.py tests/contracts/test_daily_refresh_exact_coverage.py` passed (8 tests).
+- `python -m pytest -q` passed (55 tests).
+- The internal classifier maps provider empty/transport/payload failures to existing retryable run reasons and maps date-bound lifecycle facts to existing `excluded` rows; no public/API contract or raw historical data is changed.

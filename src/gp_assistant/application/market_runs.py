@@ -11,6 +11,7 @@ import sqlite3
 import uuid
 
 from ..core.paths import store_dir
+from .daily_anomalies import classify_missing_daily
 
 
 MARKET_RUN_SCHEMA = "market_runs.v1"
@@ -492,10 +493,16 @@ class MarketRunStore:
     def mark_attempt_failed(self, *, trade_date: str, symbols: tuple[str, ...], now: datetime, error: str = "target_date_missing") -> None:
         if not symbols:
             return
+        disposition, reason = classify_missing_daily(
+            symbol=symbols[0] if symbols else "",
+            trade_date=datetime.fromisoformat(trade_date).date(),
+            error=error,
+        )
+        status = "failed" if disposition == "retry" else disposition
         with self._transaction() as conn:
             conn.executemany(
-                "UPDATE daily_run_symbols SET status='failed',reason='target_date_missing',last_error=?,updated_at=? WHERE trade_date=? AND symbol=?",
-                [(error, _iso(now), trade_date, symbol) for symbol in symbols],
+                "UPDATE daily_run_symbols SET status=?,reason=?,last_error=?,updated_at=? WHERE trade_date=? AND symbol=?",
+                [(status, reason, error, _iso(now), trade_date, symbol) for symbol in symbols],
             )
 
     def symbols(self, trade_date: str) -> tuple[DailyRunSymbol, ...]:
