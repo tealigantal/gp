@@ -1,0 +1,12 @@
+{
+  "schema": "instrument_lifecycle.v1",
+  "records": [
+    {
+      "symbol": "001232",
+      "effective_to": "2026-08-04",
+      "reason": "pre_listing",
+      "source": "exchange_ipo_schedule",
+      "evidence": "正式上市日期为2026-08-05"
+    }
+  ]
+}
