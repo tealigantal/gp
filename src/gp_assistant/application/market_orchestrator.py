@@ -176,6 +176,9 @@ def _daily_fetch_worker(
                 if not missing:
                     ledger.complete(target, datetime.now(now.tzinfo))
                     return
+        # Persist the completed multi-source failure before asking the
+        # bounded degradation policy to decide whether it may be excluded.
+        ledger.mark_attempt_failed(trade_date=target, symbols=tuple(missing), now=datetime.now(now.tzinfo), error="provider_empty")
         if len(missing) <= _MAX_DEGRADED_PROVIDER_GAPS:
             degraded = ledger.exclude_retryable_for_degraded(
                 trade_date=target, symbols=tuple(missing), now=datetime.now(now.tzinfo)
@@ -189,7 +192,6 @@ def _daily_fetch_worker(
                 ledger.complete(target, datetime.now(now.tzinfo))
                 print(json.dumps({"daily_run_degraded_release": {"trade_date": target, "excluded": len(degraded.universe.excluded_symbols), "remaining": 0}}, ensure_ascii=False), flush=True)
                 return
-        ledger.mark_attempt_failed(trade_date=target, symbols=tuple(missing), now=datetime.now(now.tzinfo))
         ledger.record_retry(target, now=datetime.now(now.tzinfo), retry_after_sec=cfg.market_run_retry_interval_sec, error="daily_coverage_incomplete")
     finally:
         ledger.heartbeat_lease(name=f"daily-run:{trade_date}", token=token, now=datetime.now(now.tzinfo), lease_sec=lease_sec)
