@@ -256,6 +256,30 @@ def test_stale_snapshot_cannot_exclude_and_resumed_stock_reenters_expected_set(t
     assert historical.excluded_symbols == ()
 
 
+def test_fetching_run_does_not_reenter_same_day_exclusion_reconciliation(tmp_path, monkeypatch):
+    ledger = MarketRunStore(tmp_path / "fetching_runs.db")
+    now = datetime(2026, 7, 24, 16, 40, tzinfo=TZ)
+    run = ledger.ensure_run(universe=_frozen(), now=now)
+    ledger.set_source_ready(run.trade_date, now)
+    ledger.mark_attempt(trade_date=run.trade_date, symbols=("000001",), now=now, source="fixture")
+    fetching = ledger.get_run(run.trade_date)
+    assert fetching is not None and fetching.state == "fetching"
+
+    class Provider:
+        @staticmethod
+        def get_spot_snapshot():
+            raise AssertionError("fetching runs must not re-enter spot/suspension reconciliation")
+
+    orchestrator = MarketDayOrchestrator(
+        ContractStore(tmp_path / "fetching_contracts.db"),
+        ledger=ledger,
+        provider=Provider(),
+        spawn_fetch=False,
+    )
+    result = orchestrator._finalize_same_day_exclusions(fetching, now=now, calendar=_Calendar())
+    assert result.state == "fetching"
+
+
 def test_plan_reads_one_frozen_universe_and_never_polls_spot(tmp_path, monkeypatch):
     rows = {symbol: {"date": "2026-07-24", "amount": amount, "open": 1, "high": 1, "low": 1, "close": 1, "volume": 1} for symbol, amount in (("000001", 1000.0), ("000002", 800.0))}
     monkeypatch.setattr("gp_assistant.application.real_producer.coverage_for_date", lambda *_args, **_kwargs: rows)

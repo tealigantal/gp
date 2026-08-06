@@ -132,3 +132,16 @@ The configured development database passed `integrity_check`, `foreign_key_check
 - `python -m pytest -q tests/contracts/test_daily_anomalies.py tests/contracts/test_daily_refresh_exact_coverage.py` passed (8 tests).
 - `python -m pytest -q` passed (55 tests).
 - The internal classifier maps provider empty/transport/payload failures to existing retryable run reasons and maps date-bound lifecycle facts to existing `excluded` rows; no public/API contract or raw historical data is changed.
+## 2026-08-06 same-day recovery write-boundary repair
+
+- Reproduced the live failure sequence as a parent heartbeat re-entering same-day exclusion reconciliation while the daily-fetch child was writing the shared market-run ledger; the first observed runtime error was `database is locked`, followed by repeated write failures.
+- Added a state guard so same-day suspension/lifecycle reconciliation runs only for `pending`, `probing`, or `retry_wait` runs and never for `fetching` or `complete` runs.
+- `python -m pytest -q tests/contracts/test_daily_refresh_exact_coverage.py tests/contracts/test_daily_anomalies.py` passed (11 tests); `python -m compileall -q src tests` and `git diff --check` passed.
+- No runtime data, suspension records, container, or database was changed during diagnosis or validation.
+- Local deployment check: `docker compose up -d --build gp-worker` rebuilt the shared backend image and recreated `gp`/`gp-worker` because they share that image; `gp`, `gp-worker`, and `web` are healthy/running. The next heartbeat published the 2026-08-07 plan, and two observed worker heartbeats produced no `worker_error`, `database is locked`, or `readonly database` output.
+
+## 2026-08-06 DeepSeek endpoint/model validation
+
+- The configured model `deepseek-v4-flash` was confirmed by an authenticated container-side `/models` request; the API returned `deepseek-v4-flash` and `deepseek-v4-pro`.
+- Normal chat now uses `https://api.deepseek.com`; strict tool schemas explicitly use `https://api.deepseek.com/beta`.
+- Targeted LLM and recovery tests passed (13 tests), and a real `/api/chat` call returned a Chinese reply with HTTP 200 from `deepseek-v4-flash` after the rebuilt containers started.

@@ -18,7 +18,16 @@ from .daily_refresh import DailyEvidenceRefresher
 from .daily_anomalies import lifecycle_exclusions
 from .history_daily import coverage_for_date, latest_daily_date
 from .lunch_rebalance_producer import LunchRebalanceProducer
-from .market_runs import DailyRun, FrozenUniverse, MarketRunStore, RUN_COMPLETE, universe_digest
+from .market_runs import (
+    DailyRun,
+    FrozenUniverse,
+    MarketRunStore,
+    RUN_COMPLETE,
+    RUN_PENDING,
+    RUN_PROBING,
+    RUN_RETRY_WAIT,
+    universe_digest,
+)
 from .official_suspension import OfficialSuspensionEvidenceCollector
 from .publication_service import PublicationService
 from .real_producer import RealRecommendationProducer
@@ -337,7 +346,11 @@ class MarketDayOrchestrator:
         # of a later same-session no-trade fact.  Recheck an unfinished current
         # day with the original provenance intact; never apply this path to an
         # historical reconstructed run.
-        if run.state == RUN_COMPLETE or run.trade_date != now.date().isoformat():
+        # Once the fetch child owns this run, the parent heartbeat must not
+        # re-enter suspension/lifecycle reconciliation.  That path starts a
+        # write transaction during ledger initialization and can contend with
+        # the child's batch writes on the shared SQLite bind mount.
+        if run.state not in {RUN_PENDING, RUN_PROBING, RUN_RETRY_WAIT} or run.trade_date != now.date().isoformat():
             return run
         universe = self._freeze_universe(
             trade_date=date.fromisoformat(run.trade_date),

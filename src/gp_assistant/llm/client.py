@@ -275,7 +275,14 @@ class LLMClient:
         if not ok:
             raise RuntimeError(f"LLM 未就绪：{reason}")
 
-        url = self.base_url.rstrip("/") + "/chat/completions"
+        # DeepSeek's strict tool-schema mode is exposed on /beta, while the
+        # ordinary OpenAI-compatible chat endpoint is the non-beta base URL.
+        # Keep the configured base URL clean for normal chat and route strict
+        # tools explicitly to the beta surface.
+        tool_base_url = self.base_url.rstrip("/")
+        if tools and any(bool((tool.get("function") or {}).get("strict")) for tool in tools):
+            tool_base_url = tool_base_url.removesuffix("/beta") + "/beta"
+        url = tool_base_url + "/chat/completions"
         request_model = model or self.model or "deepseek-v4-flash"
         payload: Dict[str, Any] = {
             "model": request_model,
