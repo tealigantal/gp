@@ -106,7 +106,10 @@ def _halt_evidence(text: str, *, trade_date: date) -> tuple[str, str] | None:
         continuation = "继续停牌" in normalized or "仍停牌" in normalized
         if max_match is None and not continuation:
             continue
-        if max_match is not None and not continuation and not re.search(r"停牌(?:期间|期限).{0,120}(?:申请复牌|复牌)", normalized):
+        if max_match is not None and not continuation and not (
+            ("停牌期间" in normalized or "停牌期限" in normalized)
+            and ("申请复牌" in normalized or "复牌" in normalized)
+        ):
             continue
         max_days = int(max_match.group("days")) if max_match else 5
         if max_days > 10 or (trade_date - started).days > max_days:
