@@ -10,7 +10,7 @@
 
 - 2026-08-22：容器真实探测确认 4 只股票均能找到 CNINFO 记录、交易所复核通过、PDF 可解析，但 `_halt_excerpt` 对目标日返回空；当前逻辑只接受公告正文直接写目标日期开市/开盘停牌。
 - 2026-08-22：互联网核验确认 4 只股票在 2026-08-20 均处于停牌状态；当前工作区与运行容器均已有官方停牌采集器。
-- 2026-08-22：待实现连续停牌证据类型、回归测试、文档同步、容器重构和真实恢复验收。
+- 2026-08-22：已实现连续停牌证据类型、回归测试、文档同步、容器重构和真实恢复验收。
 
 ## Surprises & Discoveries
 
@@ -26,7 +26,7 @@
 
 ## Outcomes & Retrospective
 
-完成后记录实际覆盖数、4 只股票的证据类型/来源、当前计划发布状态、真实聊天响应和容器镜像/源码一致性。若官方事实仍无法通过，保留 retry，不用降级排除兜底。
+已完成：4 只股票均完成官方证据闭合；2026-08-24 计划已发布；真实聊天返回 HTTP 200 并保持开盘前不可执行；backend worker 源码哈希与工作区一致；无数据卷删除或无关容器清理。若未来官方事实仍无法通过，仍保留 retry，不使用降级排除兜底。
 
 ## Context and Orientation
 
@@ -46,13 +46,10 @@
 
 ## Concrete Steps
 
-- `python -m pytest -q tests/contracts/test_daily_refresh_exact_coverage.py`
-- `python -m pytest -q`
-- `python -m compileall -q src tests`
-- `docker compose config --quiet`
-- `docker compose build gp gp-worker web`
-- `docker compose up -d --no-deps gp gp-worker web`
-- 读取 `/api/health`、`/api/recommendation/current`，检查 4 只证据和恢复账本；执行一次临时 `/api/chat` 并删除会话。
+- 已执行 `python -m pytest -q tests/contracts/test_daily_refresh_exact_coverage.py`（7 passed）和 `python -m pytest -q`（58 passed）。
+- 已执行 `python -m compileall -q src tests`、`docker compose config --quiet`、`git diff --check`。
+- 已执行 `docker compose build gp gp-worker web`、`docker compose up -d --no-deps gp gp-worker web`，并在最终 matcher 调整后重建/重构 `gp` 与 `gp-worker`。
+- 已读取 `/api/health`、`/api/recommendation/current`、账本证据和容器状态；真实 `/api/chat` 返回 200，临时会话删除返回 204。
 
 ## Validation and Acceptance
 
