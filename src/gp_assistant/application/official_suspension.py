@@ -39,14 +39,36 @@ def _published_before_open(value: object, *, trade_date: date) -> str | None:
     return published.isoformat() if published <= opening else None
 
 
-def _halt_excerpt(text: str, *, trade_date: date) -> str | None:
-    """Require an exact target-date open suspension, never infer it from timing."""
+def _date_token(value: date) -> str:
+    return f"{value.year}年{value.month}月{value.day}日"
+
+
+def _positive_resume_exists(normalized: str, *, trade_date: date, start: int = 0) -> bool:
+    """Reject a real target-date resume, but not a statement that it cannot resume."""
+    token = re.escape(_date_token(trade_date))
+    pattern = re.compile(token + r".{0,48}?(?:开市|开盘).{0,32}?(?:复牌|恢复交易)")
+    for match in pattern.finditer(normalized, start):
+        context = normalized[max(start, match.start() - 48):match.start()]
+        if re.search(r"(?:无法|未能|不能|不得|不(?:会|得|再)?在)", context):
+            continue
+        return True
+    return False
+
+
+def _halt_evidence(text: str, *, trade_date: date) -> tuple[str, str] | None:
+    """Return an auditable exact-date or bounded-continuation halt fact.
+
+    A missing bar remains retryable unless the parsed official document binds
+    the target date directly, explicitly continues an earlier halt, or gives a
+    short declared halt window that still contains the target date.  The
+    latter is accepted only together with identity/exchange verification and
+    a complete pre-open announcement; it is never inferred from provider
+    emptiness alone.
+    """
     normalized = re.sub(r"\s+", "", normalize_cn_text(text))
-    target = f"{trade_date.year}年{trade_date.month}月{trade_date.day}日"
+    target = _date_token(trade_date)
     token = re.escape(target)
-    halt_patterns = (
-        # Continued suspensions normally describe the target session from its
-        # opening.  Keep this existing, strongest wording first.
+    exact_patterns = (
         re.compile(token + r".{0,32}?(?:开市|开盘).{0,32}?(?:继续)?停牌"),
         # One-day risk-warning suspensions use an explicit "停牌日期" field or
         # state that the stock "will halt for one day" without the words
@@ -55,17 +77,49 @@ def _halt_excerpt(text: str, *, trade_date: date) -> str | None:
         re.compile(r"停牌日期(?:为|：|:)?" + token),
         re.compile(r"(?:公司)?股票(?:将)?于" + token + r"停牌(?:1天|一天|全天)"),
     )
-    resume = re.compile(token + r".{0,32}?(?:开市|开盘).{0,32}?(?:复牌|恢复交易)")
-    matches = [match for pattern in halt_patterns if (match := pattern.search(normalized)) is not None]
+    matches = [match for pattern in exact_patterns if (match := pattern.search(normalized)) is not None]
     match = min(matches, key=lambda item: item.start()) if matches else None
-    # An earlier notice can say the stock was expected to resume on the target
-    # date and the current notice can then explicitly extend the halt.  Only a
-    # later same-date resume statement can override the matched halt fact.
-    if match is None or resume.search(normalized, match.end()):
-        return None
-    start = max(0, match.start() - 72)
-    end = min(len(normalized), match.end() + 144)
-    return normalized[start:end]
+    if match is not None and not _positive_resume_exists(normalized, trade_date=trade_date, start=match.end()):
+        start = max(0, match.start() - 72)
+        end = min(len(normalized), match.end() + 144)
+        return normalized[start:end], "exact_target_date"
+
+    # Multi-day notices commonly say "自 8 月 19 日开市起继续停牌" while the
+    # target session is 8 月 20 日.  Bind the start date and require explicit
+    # continuation language; do not carry a bare missing-bar result forward.
+    date_pattern = re.compile(
+        r"自(?P<year>20\d{2})年(?P<month>\d{1,2})月(?P<day>\d{1,2})日.{0,40}?(?:开市|开盘).{0,40}?停牌"
+    )
+    for candidate in date_pattern.finditer(normalized):
+        started = date(int(candidate.group("year")), int(candidate.group("month")), int(candidate.group("day")))
+        if started > trade_date:
+            continue
+        window = normalized[max(0, candidate.start() - 80):min(len(normalized), candidate.end() + 180)]
+        if "继续停牌" not in window and "仍停牌" not in window and "停牌" not in window:
+            continue
+        if _positive_resume_exists(normalized, trade_date=trade_date, start=candidate.end()):
+            continue
+        # A declared maximum window is accepted only when it is short and the
+        # target remains inside it.  It is an auditable bounded continuation,
+        # not a prediction of future suspension.
+        max_match = re.search(r"不超过(?P<days>\d{1,2})个交易日", window)
+        if max_match is None and "继续停牌" not in window and "仍停牌" not in window:
+            continue
+        if max_match is not None and "继续停牌" not in window and "仍停牌" not in window and not re.search(r"停牌(?:期间|期限).{0,40}(?:申请复牌|复牌)", window):
+            continue
+        max_days = int(max_match.group("days")) if max_match else 5
+        if max_days > 10 or (trade_date - started).days > max_days:
+            continue
+        start = max(0, candidate.start() - 72)
+        end = min(len(normalized), candidate.end() + 180)
+        return normalized[start:end], "continuation_halt"
+    return None
+
+
+def _halt_excerpt(text: str, *, trade_date: date) -> str | None:
+    """Compatibility wrapper returning only the audited text excerpt."""
+    evidence = _halt_evidence(text, trade_date=trade_date)
+    return evidence[0] if evidence else None
 
 
 @dataclass(frozen=True)
@@ -80,6 +134,7 @@ class OfficialSuspensionEvidence:
     verification_basis: str
     verified_at: str
     excerpt: str
+    evidence_kind: str = "exact_target_date"
 
     def payload(self) -> dict[str, object]:
         return {
@@ -95,6 +150,7 @@ class OfficialSuspensionEvidence:
             "verification_basis": self.verification_basis,
             "verified_at": self.verified_at,
             "excerpt": self.excerpt,
+            "evidence_kind": self.evidence_kind,
         }
 
 
@@ -170,9 +226,10 @@ class OfficialSuspensionEvidenceCollector:
                     continue
                 if parse_state != "parsed":
                     continue
-                excerpt = _halt_excerpt(text, trade_date=trade_date)
-                if excerpt is None:
+                halt_evidence = _halt_evidence(text, trade_date=trade_date)
+                if halt_evidence is None:
                     continue
+                excerpt, evidence_kind = halt_evidence
                 evidence = OfficialSuspensionEvidence(
                     symbol=symbol,
                     trade_date=trade_date.isoformat(),
@@ -184,6 +241,7 @@ class OfficialSuspensionEvidenceCollector:
                     verification_basis="szse_announcement_id" if not symbol.startswith("6") else "sse_symbol_title",
                     verified_at=observed_at.astimezone(_SHANGHAI).isoformat() if observed_at.tzinfo else observed_at.replace(tzinfo=_SHANGHAI).isoformat(),
                     excerpt=excerpt,
+                    evidence_kind=evidence_kind,
                 )
                 output[symbol] = evidence.payload()
                 break

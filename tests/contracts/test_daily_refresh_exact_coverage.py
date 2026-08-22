@@ -220,6 +220,39 @@ def test_stale_snapshot_cannot_exclude_and_resumed_stock_reenters_expected_set(t
     ).resolve(symbols=("000002",), trade_date=date(2026, 7, 24), observed_at=now)
     assert no_proof == {}
 
+    continuation_text = {
+        "000002": "公司股票自2026年7月23日开市起继续停牌，停牌时间预计不超过3个交易日。",
+        "000003": "公司股票自2026年7月24日开市起继续停牌，预计无法在2026年7月24日开市起复牌。",
+        "000004": "公司股票自2026年7月22日开市起停牌，股票继续停牌，停牌时间预计不超过5个交易日。",
+        "000005": "公司股票自2026年7月22日开市起停牌，停牌时间预计不超过5个交易日。",
+    }
+
+    class ContinuationClient(Client):
+        def load_stock_map(self):
+            return {symbol: {"org_id": f"fixture-{symbol}"} for symbol in continuation_text}
+
+        def fetch_symbol(self, symbol, *_args, **_kwargs):
+            return {
+                "complete": True,
+                "backlog": False,
+                "records": [{
+                    "symbol": symbol, "title": "关于继续停牌的公告", "published_at": "2026-07-24T08:00:00+08:00",
+                    "source_record_id": f"fixture-{symbol}", "source_url": f"https://official.example/{symbol}.pdf",
+                }],
+            }
+
+        @staticmethod
+        def download_pdf(url, **_kwargs):
+            return url.rsplit("/", 1)[-1].split(".", 1)[0].encode()
+
+    continuation = OfficialSuspensionEvidenceCollector(
+        client=ContinuationClient(), verifier=Verifier(), parser=lambda document, *_args, **_kwargs: (continuation_text[document.decode()], "parsed"),
+    ).resolve(symbols=tuple(continuation_text), trade_date=date(2026, 7, 24), observed_at=now)
+    assert continuation["000002"]["evidence_kind"] == "continuation_halt"
+    assert continuation["000003"]["evidence_kind"] == "exact_target_date"
+    assert continuation["000004"]["evidence_kind"] == "continuation_halt"
+    assert "000005" not in continuation
+
     class SpotProvider:
         @staticmethod
         def get_spot_snapshot():

@@ -1,6 +1,8 @@
 # Current Progress
 
-Last updated: 2026-08-02
+Last updated: 2026-08-22
+
+2026-08-22 连续停牌证据修复进行中：当前运行 worker 能找到 `002084`、`002445`、`002906`、`600984` 的 CNINFO 公告，交易所复核和 PDF 解析也通过，但旧 `_halt_excerpt` 只接受正文直接写目标日开市/开盘停牌，因而 4 只都返回普通 provider failure。实现已扩展为受限 `exact_target_date` / `continuation_halt` 证据，保留公告时间、身份、交易所、PDF、复牌冲突和有限窗口门禁；目标是让连续停牌闭合精确日K覆盖而不是放宽为缺失即停牌。目标测试和编译已通过，容器重构与真实恢复验收待完成。
 
 2026-08-02 official one-day suspension recovery: diagnosed the live 2026-07-31 coverage residue as `600439` after 76 daily-source attempts. CNINFO announcement `1225449756` and the SSE verifier prove an all-day 2026-07-31 halt with 2026-08-03 resumption as `ST瑞贝卡`; PDF parsing succeeded, but the exact-date matcher accepted only wording containing “开市/开盘”. The matcher now also accepts an exact “停牌日期” field or an exact target-date “停牌1天/一天/全天” statement while retaining pre-open publication, exchange verification, parsed-PDF and same-date resume rejection gates. Container reconstruction then exposed a second causal defect: a Friday 23:58 failure due at Saturday 00:03 was never retried because closed-session `tick()` returned before historical recovery scheduling. Closed days now continue frozen historical recovery and next-session base publication while same-session freezing, lunch and intraday work stay disabled. Targeted tests, the 52-test default backend suite, compilation and a live read-only collector probe passed before the final reconstruction.
 

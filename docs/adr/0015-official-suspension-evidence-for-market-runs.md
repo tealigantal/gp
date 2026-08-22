@@ -13,7 +13,7 @@ Serenity 已有官方公告传输、交易所复核和 PDF 解析能力，但其
 
 新增 `application.official_suspension.OfficialSuspensionEvidenceCollector`。它只复用 CNINFO 的严格传输、交易所复核与受限 PDF 文本解析，不读取或写入 Serenity batch/store，也不接触选股、评分或发布。
 
-日K子 worker 先完成普通 `sina → em → tx` 日K尝试和精确重读；仅在仍缺失不超过十只、且本轮均已尝试后，才对这些股票逐只调用官方事实通道。事实必须同时绑定：目标代码、目标日、开盘前公告时间、CNINFO 记录、交易所复核、PDF 中“目标日开市/开盘停牌”的明确文本和文档摘要。任一网络、解析、时间、身份、复核或文本歧义失败都不排除。
+日K子 worker 先完成普通 `sina → em → tx` 日K尝试和精确重读；仅在仍缺失不超过十只、且本轮均已尝试后，才对这些股票逐只调用官方事实通道。事实必须同时绑定：目标代码、目标日、开盘前公告时间、CNINFO 记录、交易所复核、解析后的 PDF 和文档摘要。PDF 可以用三种受限证据表达绑定目标日：直接写目标日开市/开盘停牌；写明起始日不晚于目标日且明确“继续/仍停牌”；或写明一个不超过十个交易日的停牌窗口，并同时出现停牌期间/期限与复牌安排。后一类不是从缺失日K推断，而是对公告声明的有限窗口进行目标日内核验；仅有“预计可能停牌”或无边界的最长预期仍不排除。任一网络、解析、时间、身份、复核、复牌冲突或窗口边界失败都不排除。
 
 `market_runs.db` 的 `daily_run_symbols.evidence_json` 追加保存该事实；账本将对应状态设为 `excluded / official_suspension`，但保留 raw universe，重算 expected denominator。该路径可用于 `reconstructed_current_universe`，因为它不依赖陈旧现货。计划、聊天和 API 仍只读已完成 run。
 
@@ -23,7 +23,7 @@ Serenity 已有官方公告传输、交易所复核和 PDF 解析能力，但其
 
 - 停牌事实与 Serenity 评分重新分属两个明确契约：前者是日K完整性事实，后者仍是 Top-30 的原子 0%/3% 辅助。
 - 不能用官方公告大规模代替日K源；全市场失败时仍会 fail closed，不会扫描全部公告。
-- 当前日恢复既不会把缺失的历史日期伪装成完成，也不会把最长预计停牌期推断为目标日停牌；可信同日全零事实仍需通过原有 stale/fallback/session/字段门禁。
+- 当前日恢复既不会把缺失的历史日期伪装成完成，也不会把无边界的最长预计停牌期推断为目标日停牌；有明确起始日、继续停牌语义或有限停牌窗口的公告可形成只针对一个精确目标日的 `continuation_halt` 事实，可信同日全零事实仍需通过原有 stale/fallback/session/字段门禁。
 - 既有 `market_runs.db` 只做一列可加迁移，`history.db`、产品库、公开 HTTP 合同和 Serenity 证据均不迁移。
 - 深交所使用公告 ID 复核；上交所当前适配器为代码加规范标题复核，账本会记录其 verification basis，不能表述为公告 ID 精确匹配。
 
