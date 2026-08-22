@@ -88,7 +88,7 @@ def _halt_evidence(text: str, *, trade_date: date) -> tuple[str, str] | None:
     # target session is 8 月 20 日.  Bind the start date and require explicit
     # continuation language; do not carry a bare missing-bar result forward.
     date_pattern = re.compile(
-        r"自(?P<year>20\d{2})年(?P<month>\d{1,2})月(?P<day>\d{1,2})日.{0,40}?(?:开市|开盘).{0,40}?停牌"
+        r"自(?P<year>20\d{2})年(?P<month>\d{1,2})月(?P<day>\d{1,2})日.{0,40}?(?:开市|开盘).{0,40}?(?:开始)?停牌"
     )
     for candidate in date_pattern.finditer(normalized):
         started = date(int(candidate.group("year")), int(candidate.group("month")), int(candidate.group("day")))
@@ -102,10 +102,11 @@ def _halt_evidence(text: str, *, trade_date: date) -> tuple[str, str] | None:
         # A declared maximum window is accepted only when it is short and the
         # target remains inside it.  It is an auditable bounded continuation,
         # not a prediction of future suspension.
-        max_match = re.search(r"不超过(?P<days>\d{1,2})个交易日", window)
-        if max_match is None and "继续停牌" not in window and "仍停牌" not in window:
+        max_match = re.search(r"不超过\s*(?P<days>\d{1,2})\s*个交易日", normalized)
+        continuation = "继续停牌" in normalized or "仍停牌" in normalized
+        if max_match is None and not continuation:
             continue
-        if max_match is not None and "继续停牌" not in window and "仍停牌" not in window and not re.search(r"停牌(?:期间|期限).{0,40}(?:申请复牌|复牌)", window):
+        if max_match is not None and not continuation and not re.search(r"停牌(?:期间|期限).{0,120}(?:申请复牌|复牌)", normalized):
             continue
         max_days = int(max_match.group("days")) if max_match else 5
         if max_days > 10 or (trade_date - started).days > max_days:
