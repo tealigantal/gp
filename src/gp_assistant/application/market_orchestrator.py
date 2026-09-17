@@ -3,6 +3,8 @@ from __future__ import annotations
 from datetime import date, datetime, time as clock_time
 import json
 import multiprocessing
+import sys
+import signal
 from pathlib import Path
 from typing import Callable
 
@@ -14,6 +16,7 @@ from ..core.config import load_config
 from ..providers.boards import is_mainboard
 from ..providers.factory import get_provider
 from ..store import ContractStore, PublicationConflict
+from ..search.history_store import recover_history_database, note_cleanup_error
 from .daily_refresh import DailyEvidenceRefresher
 from .daily_anomalies import lifecycle_exclusions
 from .history_daily import coverage_for_date, latest_daily_date
@@ -30,7 +33,7 @@ from .market_runs import (
 )
 from .official_suspension import OfficialSuspensionEvidenceCollector
 from .publication_service import PublicationService
-from .real_producer import RealRecommendationProducer
+from .real_producer import RealRecommendationProducer, DAILY_PRODUCER_REVISION
 from .runtime_producer import RuntimeRecommendationProducer, market_phase
 from ..serenity.service import FIXED_WEIGHT, load_decision, publish_target
 from .trading_calendar import CnATradingCalendar, load_cn_a_calendar
@@ -46,7 +49,6 @@ _DAILY_FETCH_START = clock_time(15, 20)
 _BASE_PLAN_AFTER_CLOSE_START = clock_time(15, 20)
 _BASE_PLAN_PREOPEN_END = clock_time(9, 30)
 _MAX_OFFICIAL_SUSPENSION_CANDIDATES = 10
-_MAX_DEGRADED_PROVIDER_GAPS = 3
 
 
 class MarketClock:
@@ -89,6 +91,9 @@ def _daily_fetch_worker(
     suspension_collector: OfficialSuspensionEvidenceCollector | None = None,
 ) -> None:
     """Complete bounded 100-symbol batches outside the worker heartbeat loop."""
+    if multiprocessing.parent_process() is not None:
+        signal.signal(signal.SIGTERM, signal.SIG_DFL)
+        signal.signal(signal.SIGINT, signal.SIG_DFL)
     now = datetime.fromisoformat(now_iso)
     ledger = MarketRunStore(Path(run_db))
     token = ledger.acquire_lease(name=f"daily-run:{trade_date}", now=now, lease_sec=lease_sec)
@@ -96,6 +101,7 @@ def _daily_fetch_worker(
         return
     cfg = load_config()
     try:
+        recover_history_database()
         run = ledger.get_run(trade_date)
         if run is None or run.state == RUN_COMPLETE:
             return
@@ -127,11 +133,9 @@ def _daily_fetch_worker(
             attempted_this_execution.update(batch)
             attempt_now = datetime.now(now.tzinfo)
             ledger.mark_attempt(trade_date=target, symbols=batch, now=attempt_now, source=source)
-            try:
-                refresher.refresh(symbols=batch, start=target, end=target, target_date=target)
-            except Exception as exc:  # noqa: BLE001
-                ledger.mark_attempt_failed(trade_date=target, symbols=batch, now=attempt_now, error=f"{type(exc).__name__}:{exc}")
-                break
+            # Raised failures are not evidence of absent bars. Preserve them
+            # in the outer retry handler instead of treating them as exclusions.
+            refresher.refresh(symbols=batch, start=target, end=target, target_date=target)
             present = coverage_for_date(expected, target_date=target)
             missing = ledger.update_coverage(
                 trade_date=target,
@@ -185,25 +189,25 @@ def _daily_fetch_worker(
                 if not missing:
                     ledger.complete(target, datetime.now(now.tzinfo))
                     return
-        # Persist the completed multi-source failure before asking the
-        # bounded degradation policy to decide whether it may be excluded.
+        # Missing provider rows remain coverage failures, never no-trade facts.
         ledger.mark_attempt_failed(trade_date=target, symbols=tuple(missing), now=datetime.now(now.tzinfo), error="provider_empty")
-        if len(missing) <= _MAX_DEGRADED_PROVIDER_GAPS:
-            degraded = ledger.exclude_retryable_for_degraded(
-                trade_date=target, symbols=tuple(missing), now=datetime.now(now.tzinfo)
-            )
-            expected = ledger.expected_symbols(target)
-            present = coverage_for_date(expected, target_date=target)
-            missing = ledger.update_coverage(
-                trade_date=target, target_date=target, rows=present, now=datetime.now(now.tzinfo)
-            )
-            if not missing:
-                ledger.complete(target, datetime.now(now.tzinfo))
-                print(json.dumps({"daily_run_degraded_release": {"trade_date": target, "excluded": len(degraded.universe.excluded_symbols), "remaining": 0}}, ensure_ascii=False), flush=True)
-                return
         ledger.record_retry(target, now=datetime.now(now.tzinfo), retry_after_sec=cfg.market_run_retry_interval_sec, error="daily_coverage_incomplete")
+    except Exception as exc:
+        error = f"{type(exc).__name__}:{exc}; sqlite={getattr(exc, 'sqlite_errorname', None)}"
+        print(json.dumps({"daily_run_error": {"trade_date": trade_date, "error": error}}, ensure_ascii=False), flush=True)
+        try:
+            ledger.record_retry(trade_date, now=datetime.now(now.tzinfo), retry_after_sec=cfg.market_run_retry_interval_sec, error=error)
+        except Exception as record_error:
+            note_cleanup_error(exc, f"failed to persist daily error: {record_error}")
+        raise
     finally:
-        ledger.heartbeat_lease(name=f"daily-run:{trade_date}", token=token, now=datetime.now(now.tzinfo), lease_sec=lease_sec)
+        original_error = sys.exc_info()[1]
+        try:
+            ledger.release_lease(name=f"daily-run:{trade_date}", token=token)
+        except Exception as release_error:
+            if original_error is None:
+                raise
+            note_cleanup_error(original_error, f"failed to release daily lease: {release_error}")
 
 
 class MarketDayOrchestrator:
@@ -233,6 +237,7 @@ class MarketDayOrchestrator:
         self.process_factory = process_factory
         self._worker_lease: str | None = None
         self._fetch_process: multiprocessing.Process | None = None
+        self._fetch_trade_date: str | None = None
 
     def tick(self, *, now: datetime) -> dict[str, object]:
         self.ledger.initialize()
@@ -242,6 +247,22 @@ class MarketDayOrchestrator:
         )
         if self._worker_lease is None:
             return {"state": "standby", "reason": "worker_lease_held"}
+        self.ledger.reopen_provider_exclusions(now=now)
+        self._reap_fetch_process(now=now)
+        # A live child owns its own preflight and write lane. Avoid contending
+        # with that writer; repair abandoned journals before any parent reads.
+        if self._fetch_process is None:
+            try:
+                recover_history_database()
+            except Exception as exc:
+                try:
+                    health = self.ledger.health()
+                    trade_date = health.get("target_trade_date")
+                    if trade_date and health.get("state") != "ready":
+                        self.ledger.record_retry(str(trade_date), now=now, retry_after_sec=cfg.market_run_retry_interval_sec, error=f"history_storage:{type(exc).__name__}:{exc}")
+                except Exception as record_error:
+                    note_cleanup_error(exc, f"failed to persist history preflight error: {record_error}")
+                raise
         calendar = load_cn_a_calendar()
         self._repair_invalid_current_pointer()
         is_open_session = calendar.is_open(now.date())
@@ -390,6 +411,35 @@ class MarketDayOrchestrator:
         other = self.ledger.get_run(str(health.get("target_trade_date") or ""))
         return other if other and other.state != RUN_COMPLETE and self.ledger.retry_due(other, now) else None
 
+    def _reap_fetch_process(self, *, now: datetime) -> None:
+        process = self._fetch_process
+        if process is None or process.is_alive():
+            return
+        process.join(timeout=0)
+        if process.exitcode != 0 and self._fetch_trade_date is not None:
+            run = self.ledger.get_run(self._fetch_trade_date)
+            if run is not None and run.state != RUN_COMPLETE and not (run.state == RUN_RETRY_WAIT and run.last_error):
+                self.ledger.record_retry(run.trade_date, now=now, retry_after_sec=load_config().market_run_retry_interval_sec, error=f"daily_process_exit:{process.exitcode}")
+        process.close()
+        self._fetch_process = None
+        self._fetch_trade_date = None
+
+    def shutdown(self, *, timeout: float = 20.0) -> None:
+        process = self._fetch_process
+        if process is not None:
+            process.join(timeout=timeout)
+            if process.is_alive():
+                process.terminate()
+                process.join(timeout=5)
+            if process.is_alive():
+                process.kill()
+                process.join(timeout=5)
+            if process.is_alive():
+                raise RuntimeError("daily_process_shutdown_timeout")
+            self._reap_fetch_process(now=datetime.now().astimezone())
+        if self._worker_lease:
+            self.ledger.release_lease(name="market-day-orchestrator", token=self._worker_lease)
+
     def _schedule_run(self, run: DailyRun, *, now: datetime, current_target: str) -> None:
         is_current_daily = run.trade_date == now.date().isoformat()
         if is_current_daily and not MarketClock.can_fetch_current_daily(now):
@@ -410,6 +460,7 @@ class MarketDayOrchestrator:
             )
             process.start()
             self._fetch_process = process
+            self._fetch_trade_date = run.trade_date
         else:
             _daily_fetch_worker(
                 run_db=str(self.ledger.path),
@@ -451,7 +502,7 @@ class MarketDayOrchestrator:
         current = self.store.current_publication()
         current_plan = self.store.load_plan(current.plan_id) if current else None
         target_session = now.date() if MarketClock.local_time(now) < clock_time(15, 0) else calendar.next_open_after(now.date())
-        if current_plan and current_plan.market_session_date == target_session and current_plan.daily_evidence_date == required and publication_ineligibility(current_plan) is None:
+        if current_plan and current_plan.producer.revision == DAILY_PRODUCER_REVISION and current_plan.market_session_date == target_session and current_plan.daily_evidence_date == required and publication_ineligibility(current_plan) is None:
             # A zero-weight base plan is intentionally publishable while the
             # isolated Serenity collector works.  Once that *same frozen*
             # target has an exact complete batch, however, it must be allowed

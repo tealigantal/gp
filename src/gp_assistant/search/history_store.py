@@ -6,6 +6,7 @@ import threading
 import time
 import os
 import uuid
+import sys
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from hashlib import sha256
@@ -24,6 +25,13 @@ _SCHEMA_INIT_PATHS: set[str] = set()
 _ENSURED_QUERIES: set[tuple[str, str]] = set()
 
 _SQLITE_JOURNAL_MODES = {"DELETE", "PERSIST", "TRUNCATE", "WAL"}
+
+
+def note_cleanup_error(original: BaseException, message: str) -> None:
+    """Preserve the primary error on all supported Python versions."""
+    if hasattr(original, "add_note"):
+        original.add_note(message)
+    print(message, file=sys.stderr, flush=True)
 
 
 def _sqlite_journal_mode() -> str:
@@ -118,11 +126,36 @@ def history_db_lane():
         _DB_LOCK_STATE.depth = depth + 1
         yield
     finally:
+        original_error = sys.exc_info()[1]
         next_depth = max(int(getattr(_DB_LOCK_STATE, "depth", 1) or 1) - 1, 0)
         _DB_LOCK_STATE.depth = next_depth
-        if outermost and token is not None:
-            _release_process_lock(path, token)
-        _DB_LOCK.release()
+        try:
+            if outermost and token is not None:
+                _release_process_lock(path, token)
+        except OSError as cleanup_error:
+            if original_error is None:
+                raise
+            note_cleanup_error(original_error, f"history lock cleanup failed: {cleanup_error}")
+        finally:
+            _DB_LOCK.release()
+
+
+def recover_history_database() -> None:
+    """Worker-only preflight: let SQLite recover an interrupted transaction.
+
+    Public readers stay read-only. Never delete a journal or create a missing
+    history database here. The first schema read on a mode=rw connection lets
+    SQLite perform its own rollback under its normal filesystem locks.
+    """
+    path = _db_path()
+    if not path.exists():
+        return
+    with history_db_lane():
+        conn = sqlite3.connect(f"{path.resolve().as_uri()}?mode=rw", uri=True, timeout=15.0)
+        try:
+            conn.execute("SELECT count(*) FROM sqlite_master").fetchone()
+        finally:
+            conn.close()
 
 
 def _connect() -> sqlite3.Connection:
@@ -135,7 +168,8 @@ def _connect() -> sqlite3.Connection:
         conn.execute("PRAGMA synchronous=NORMAL")
         conn.execute("PRAGMA busy_timeout=10000")
     except Exception:
-        pass
+        conn.close()
+        raise
 
     # Schema init per database path (important for tests that monkeypatch GP_STORE_DIR)
     if dbp not in _SCHEMA_INIT_PATHS:

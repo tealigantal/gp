@@ -30,7 +30,7 @@ class AdaptiveDecisionEngine:
         result: list[CandidateDecision] = []
         for position, candidate in enumerate(ordered, start=1):
             selection_eligible = selection_eligible_symbols is None or candidate.symbol in selection_eligible_symbols
-            if selection_eligible and candidate.adaptive_score >= 0.5 and selected < maximum_selected:
+            if selection_eligible and "nonpositive_net_edge" not in candidate.ranking.reason_codes and candidate.adaptive_score >= 0.5 and selected < maximum_selected:
                 disposition = CandidateDisposition.SELECTED
                 selected += 1
             elif candidate.adaptive_score >= 0.4:

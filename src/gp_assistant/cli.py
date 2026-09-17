@@ -5,6 +5,8 @@ import json
 import multiprocessing
 import os
 import time
+import signal
+import threading
 
 import uvicorn
 
@@ -12,6 +14,7 @@ from .gateway.app import app
 from .migrate_contracts import migrate
 from .application.market_orchestrator import MarketDayOrchestrator
 from .store import ContractStore
+from .market_memory.maintenance import run_loop as run_memory_loop
 from .serenity.service import publish_target as publish_serenity_target
 from .serenity.service import run_loop as run_serenity_loop
 from datetime import datetime
@@ -58,6 +61,13 @@ def _worker_tick(
     return active.tick(now=now)
 
 
+def _serenity_child(*, interval_sec: int) -> None:
+    # fork must not inherit the parent's cooperative shutdown handler.
+    signal.signal(signal.SIGTERM, signal.SIG_DFL)
+    signal.signal(signal.SIGINT, signal.SIG_DFL)
+    run_serenity_loop(interval_sec=interval_sec)
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="gp-assistant")
     commands = parser.add_subparsers(dest="command", required=True)
@@ -77,9 +87,20 @@ def main(argv: list[str] | None = None) -> int:
         worker_store = ContractStore()
         worker_orchestrator = MarketDayOrchestrator(worker_store)
         serenity_process = None
+        memory_process = None
         serenity_restart_after = 0.0
-        while True:
+        stopping = threading.Event()
+        signal.signal(signal.SIGTERM, lambda *_args: stopping.set())
+        signal.signal(signal.SIGINT, lambda *_args: stopping.set())
+        while not stopping.is_set():
             now = datetime.now(ZoneInfo("Asia/Shanghai"))
+            if memory_process is None or not memory_process.is_alive():
+                if memory_process is not None:
+                    memory_process.join(timeout=0)
+                    print(json.dumps({"memory_process_exit": memory_process.exitcode}), flush=True)
+                    memory_process.close()
+                memory_process = multiprocessing.Process(target=run_memory_loop, name="gp-memory")
+                memory_process.start()
             if os.getenv("GP_SERENITY_MODE", "native").strip().lower() != "off":
                 if serenity_process is None or not serenity_process.is_alive():
                     if time.monotonic() >= serenity_restart_after:
@@ -91,7 +112,7 @@ def main(argv: list[str] | None = None) -> int:
                         except Exception as exc:  # noqa: BLE001
                             print(json.dumps({"serenity_target_seed_error": f"{type(exc).__name__}:{exc}"}, ensure_ascii=False), flush=True)
                         serenity_process = multiprocessing.Process(
-                            target=run_serenity_loop,
+                            target=_serenity_child,
                             kwargs={"interval_sec": int(os.getenv("GP_SERENITY_POLL_INTERVAL_SEC", "60"))},
                             name="gp-serenity",
                             daemon=False,
@@ -107,7 +128,22 @@ def main(argv: list[str] | None = None) -> int:
                 print(json.dumps({"market_day": tick}, ensure_ascii=False), flush=True)
             except Exception as exc:  # noqa: BLE001
                 print(json.dumps({"worker_error": f"{type(exc).__name__}:{exc}"}, ensure_ascii=False), flush=True)
-            time.sleep(max(10, args.runtime_interval_sec))
+            stopping.wait(max(10, args.runtime_interval_sec))
+        try:
+            worker_orchestrator.shutdown()
+        finally:
+            if memory_process is not None:
+                memory_process.terminate()
+                memory_process.join(timeout=5)
+                if memory_process.is_alive():
+                    memory_process.kill()
+                    memory_process.join(timeout=5)
+            if serenity_process is not None:
+                serenity_process.terminate()
+                serenity_process.join(timeout=5)
+                if serenity_process.is_alive():
+                    serenity_process.kill()
+                    serenity_process.join(timeout=5)
     return 0
 
 

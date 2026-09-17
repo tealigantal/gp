@@ -130,7 +130,7 @@ def test_serenity_only_changes_frozen_finalists_without_truncating_candidate_sco
 
     assert [item.symbol for item in fused] == [item.symbol for item in base]
     assert [round(item.adaptive_score, 6) for item in fused] == [0.63, 0.52, 0.5, 0.45]
-    assert [item.ranking.score for item in fused] == [item.ranking.score for item in base]
+    assert [item.ranking.score for item in fused] == [item.adaptive_score for item in fused]
     assert fused[-1] == base[-1]
     assert fused[-1].experts == ()
 

@@ -206,6 +206,10 @@ class MarketRunStore:
             )
             return cursor.rowcount == 1
 
+    def release_lease(self, *, name: str, token: str) -> None:
+        with self._transaction() as conn:
+            conn.execute("DELETE FROM task_leases WHERE name=? AND token=?", (name, token))
+
     def ensure_run(self, *, universe: FrozenUniverse, now: datetime) -> DailyRun:
         self.initialize()
         with self._transaction() as conn:
@@ -421,59 +425,36 @@ class MarketRunStore:
             conn.execute("UPDATE daily_runs SET universe_json=?,updated_at=? WHERE trade_date=?", (json.dumps(updated.payload(), ensure_ascii=False, sort_keys=True), _iso(now), trade_date))
         return self.get_run(trade_date)  # type: ignore[return-value]
 
-    def exclude_retryable_for_degraded(
-        self,
-        *,
-        trade_date: str,
-        symbols: tuple[str, ...],
-        now: datetime,
-    ) -> DailyRun:
-        """Allow a small, explicitly audited provider gap to be excluded.
-
-        This is a publication-degradation decision, not a suspension claim.
-        It preserves the raw universe and marks the existing run row so the
-        next recovery can still revisit the symbol.
-        """
+    def reopen_provider_exclusions(self, *, now: datetime) -> int:
+        """Revoke legacy provider-only exclusions, retaining their audit evidence."""
         self.initialize()
+        changed = 0
         with self._transaction() as conn:
-            row = conn.execute("SELECT * FROM daily_runs WHERE trade_date=?", (trade_date,)).fetchone()
-            if row is None:
-                raise ValueError("daily_run_not_found")
-            if str(row["state"]) == RUN_COMPLETE:
-                return self._run_from_row(row)
-            universe = FrozenUniverse.from_payload(json.loads(str(row["universe_json"])))
-            allowed = {"provider_empty", "provider_unavailable", "provider_payload_invalid"}
-            rows = conn.execute(
-                "SELECT symbol,reason FROM daily_run_symbols WHERE trade_date=? AND symbol IN ({})".format(",".join("?" for _ in symbols)),
-                (trade_date, *symbols),
-            ).fetchall() if symbols else []
-            accepted = {str(item["symbol"]) for item in rows if str(item["reason"] or "") in allowed}
-            if not accepted:
-                return self._run_from_row(row)
-            excluded = set(universe.excluded_symbols) | accepted
-            expected = tuple(symbol for symbol in universe.raw_symbols if symbol not in excluded)
-            meta = dict(universe.snapshot_meta)
-            prior = list(meta.get("degraded_provider_exclusions") or [])
-            known = {str(item.get("symbol")) for item in prior if isinstance(item, dict)}
-            prior.extend(
-                {"symbol": symbol, "trade_date": trade_date, "reason": "degraded_provider_failure", "state": "excluded", "evidence": "provider_failure_after_bounded_retries"}
-                for symbol in sorted(accepted)
-                if symbol not in known
-            )
-            meta["degraded_provider_exclusions"] = prior
-            updated = FrozenUniverse(
-                trade_date=trade_date, raw_symbols=universe.raw_symbols, expected_symbols=expected,
-                excluded_symbols=tuple(sorted(excluded)),
-                content_digest=universe_digest(trade_date=trade_date, raw_symbols=universe.raw_symbols, expected_symbols=expected, excluded_symbols=tuple(sorted(excluded))),
-                source=universe.source, snapshot_meta=meta, approximate=universe.approximate, captured_at=universe.captured_at,
-            )
-            for symbol in accepted:
-                conn.execute(
-                    "UPDATE daily_run_symbols SET status='excluded',reason='degraded_provider_failure',evidence_json=?,updated_at=? WHERE trade_date=? AND symbol=?",
-                    (json.dumps({"symbol": symbol, "trade_date": trade_date, "state": "excluded", "reason": "degraded_provider_failure", "evidence": "provider_failure_after_bounded_retries"}, ensure_ascii=False, sort_keys=True), _iso(now), trade_date, symbol),
-                )
-            conn.execute("UPDATE daily_runs SET universe_json=?,updated_at=? WHERE trade_date=?", (json.dumps(updated.payload(), ensure_ascii=False, sort_keys=True), _iso(now), trade_date))
-        return self.get_run(trade_date)  # type: ignore[return-value]
+            dates = conn.execute("SELECT DISTINCT trade_date FROM daily_run_symbols WHERE status='excluded' AND reason='degraded_provider_failure'").fetchall()
+            for item in dates:
+                day = str(item["trade_date"])
+                row = conn.execute("SELECT * FROM daily_runs WHERE trade_date=?", (day,)).fetchone()
+                universe = FrozenUniverse.from_payload(json.loads(row["universe_json"]))
+                bad = conn.execute("SELECT symbol,evidence_json FROM daily_run_symbols WHERE trade_date=? AND status='excluded' AND reason='degraded_provider_failure'", (day,)).fetchall()
+                restored = {str(x["symbol"]) for x in bad}
+                excluded = tuple(x for x in universe.excluded_symbols if x not in restored)
+                expected = tuple(x for x in universe.raw_symbols if x not in excluded)
+                meta = dict(universe.snapshot_meta)
+                audit = list(meta.get("revoked_provider_exclusions") or [])
+                audit.extend({"symbol": x["symbol"], "revoked_at": _iso(now), "prior_evidence": json.loads(x["evidence_json"] or "null")} for x in bad)
+                meta["revoked_provider_exclusions"] = audit
+                meta.pop("degraded_provider_exclusions", None)
+                updated = FrozenUniverse(trade_date=day, raw_symbols=universe.raw_symbols, expected_symbols=expected, excluded_symbols=excluded,
+                    content_digest=universe_digest(trade_date=day, raw_symbols=universe.raw_symbols, expected_symbols=expected, excluded_symbols=excluded),
+                    source=universe.source, snapshot_meta=meta, approximate=universe.approximate, captured_at=universe.captured_at)
+                conn.execute("UPDATE daily_run_symbols SET status='failed',reason='provider_exclusion_revoked',last_error='provider_gap_requires_evidence',updated_at=? WHERE trade_date=? AND status='excluded' AND reason='degraded_provider_failure'", (_iso(now),day))
+                conn.execute("UPDATE daily_runs SET universe_json=?,state=?,completed_at=NULL,next_retry_at=NULL,last_error='provider_exclusion_revoked',updated_at=? WHERE trade_date=?", (json.dumps(updated.payload(),ensure_ascii=False,sort_keys=True),RUN_RETRY_WAIT,_iso(now),day))
+                changed += len(bad)
+            if dates:
+                earliest = min(str(x["trade_date"]) for x in dates)
+                previous = conn.execute("SELECT MAX(trade_date) FROM daily_runs WHERE trade_date<? AND state=?", (earliest,RUN_COMPLETE)).fetchone()[0]
+                conn.execute("UPDATE recovery_checkpoints SET last_complete_trade_date=?,updated_at=? WHERE singleton=1", (previous,_iso(now)))
+        return changed
 
     @staticmethod
     def _run_from_row(row: sqlite3.Row) -> DailyRun:

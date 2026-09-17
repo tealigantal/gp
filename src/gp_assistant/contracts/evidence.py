@@ -46,6 +46,11 @@ class ProbabilityAssessment(ContractModel):
     confidence: float
     effective_sample_size: float
     uncertainty: float
+    # Historical immutable plans predate these facts. New daily producer
+    # always supplies them; None means unrecorded, never an estimated zero.
+    expected_return_3d: float | None = None
+    estimated_cost: float | None = None
+    expected_net_return: float | None = None
 
 
 class RiskAssessment(ContractModel):

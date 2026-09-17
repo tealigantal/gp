@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from datetime import date, datetime, time as clock_time
 import math
+import json
+from hashlib import sha256
 
 import pandas as pd
 
@@ -12,7 +14,9 @@ from ..market_memory.retrieval import retrieve_similar_events
 from ..market_memory.store import list_events_before
 from ..core.config import load_config
 from ..probability_engine.engine import infer_probability
-from ..risk_engine.engine import assess_candidate_risk, rank_candidate
+from ..risk_engine.engine import assess_candidate_risk
+from ..decision_engine.scoring import score_candidate, REVISION, ROUND_TRIP_COST
+from ..market_memory.maintenance import ready as memory_ready, POLICY as MEMORY_POLICY
 from .history_daily import coverage_for_date, frames as history_frames
 from ..serenity.policy import bind
 from ..serenity.service import FIXED_WEIGHT, POLICY_REVISION, load_decision, publish_target
@@ -21,6 +25,8 @@ from .plan_service import PlanService
 from .target_resolver import resolve_plan_target
 from .trading_calendar import load_cn_a_calendar
 from .market_runs import FrozenUniverse
+
+DAILY_PRODUCER_REVISION = "4"
 
 
 class RealRecommendationProducer:
@@ -94,6 +100,8 @@ class RealRecommendationProducer:
         """
         if frozen_universe is None:
             raise ValueError("frozen_universe_required")
+        if frozen_universe.snapshot_meta.get("fallback") or frozen_universe.snapshot_meta.get("stale"):
+            raise ValueError("frozen_universe_untrusted")
         trading_calendar = load_cn_a_calendar()
         is_open = trading_calendar.is_open(now.date())
         next_open = trading_calendar.next_open_after(now.date())
@@ -127,8 +135,14 @@ class RealRecommendationProducer:
         )
         universe_source = f"{frozen_universe.source}+history.db:daily"
         universe = CandidateUniverseBinding(candidate_universe_id=f"universe_{evidence_day}_{digest[:16]}", content_digest=digest, total_count=len(raw_eligible), eligible_count=len(covered_symbols), complete=True, source=universe_source)
+        memory = memory_ready(evidence_day, tuple(raw_eligible), tuple(expected_tradable))
+        cases = list_events_before(evidence_day, require_outcome=True, limit=4000, known_at=now, policy=MEMORY_POLICY)
+        if len(cases) < 80:
+            raise ValueError("mature_memory_insufficient")
+        case_digest = sha256(json.dumps([(e.event_id, e.first_seen_at, e.outcome) for e in cases], sort_keys=True).encode()).hexdigest()
+        decision_digest = sha256(f"{digest}:{memory['run_id']}:{case_digest}".encode()).hexdigest()
         pool = sorted(covered_symbols, key=lambda symbol: float(covered_rows[symbol].get("amount") or 0.0), reverse=True)[:200]
-        base_candidates = self._candidates(history_frames(pool), evidence_day) if target.state is PlanTargetState.READY else ()
+        base_candidates = self._candidates(history_frames(pool, as_of=evidence_day), evidence_day, known_at=now, market_context=memory["context"], event_pool=cases) if target.state is PlanTargetState.READY else ()
         finalists = tuple(sorted(base_candidates, key=lambda item: (-item.adaptive_score, item.symbol))[:30])
         serenity_decision = None
         if finalists and target.daily_evidence_date is not None:
@@ -154,7 +168,7 @@ class RealRecommendationProducer:
             reason_codes=serenity_decision.reason_codes if serenity_decision else ("serenity_target_unavailable",),
         )
         serenity_revision = serenity_decision.semantic_revision if serenity_decision else f"{POLICY_REVISION}:zero:no_target"
-        command = PlanService(self.store).get_or_create(target=target, universe=universe, policy=DecisionPolicyBinding(revision="adaptive_kernel_v3_serenity", adaptive_policy_state_version=f"1:{serenity_revision}", selection_policy="full_market_liquidity_ranked_top30", risk_profile="normal"), producer=ProducerIdentity(name="real_daily_producer", revision="2", source_digest=digest), evaluated_candidates=candidates, serenity=serenity_binding, generated_at=now, selection_eligible_symbols=frozenset(item.symbol for item in finalists))
+        command = PlanService(self.store).get_or_create(target=target, universe=universe, policy=DecisionPolicyBinding(revision=REVISION, adaptive_policy_state_version=f"{memory['run_id']}:{serenity_revision}", selection_policy="full_market_liquidity_ranked_top30", risk_profile="normal"), producer=ProducerIdentity(name="real_daily_producer", revision=DAILY_PRODUCER_REVISION, source_digest=decision_digest), evaluated_candidates=candidates, serenity=serenity_binding, generated_at=now, selection_eligible_symbols=frozenset(item.symbol for item in finalists))
         return command
 
     @staticmethod
@@ -188,22 +202,25 @@ class RealRecommendationProducer:
                 candidate.model_copy(
                     update={
                         "adaptive_score": final_score,
+                        "ranking": candidate.ranking.model_copy(update={"score": final_score}),
                         "experts": (*candidate.experts, expert),
                     }
                 )
             )
         return tuple(fused)
 
-    def _candidates(self, frames: dict[str, pd.DataFrame], evidence_day: str | None) -> tuple[CandidateDecision, ...]:
+    def _candidates(self, frames: dict[str, pd.DataFrame], evidence_day: str, *, known_at: datetime, market_context: dict, event_pool=None) -> tuple[CandidateDecision, ...]:
         pool = sorted(frames, key=lambda symbol: float(frames[symbol].iloc[-1].get("amount") or 0.0), reverse=True)[:200]
-        retrieval_pool = list_events_before(str(evidence_day), require_outcome=True, limit=4000)
+        retrieval_pool = event_pool if event_pool is not None else list_events_before(str(evidence_day), require_outcome=True, limit=4000, known_at=known_at, policy=MEMORY_POLICY)
+        if len(retrieval_pool) < 80:
+            raise ValueError("mature_memory_insufficient")
         candidates: list[CandidateDecision] = []
         for symbol in pool:
             signal = build_signal_events_for_symbol(
                 symbol=symbol,
                 df=frames[symbol],
                 as_of=str(evidence_day),
-                market_context={"market_regime": "C"},
+                market_context=market_context,
                 # Historical events are produced by the dedicated offline
                 # evidence-maintenance lane.  Building transient history here
                 # would neither be persisted nor affect this current plan.
@@ -214,8 +231,8 @@ class RealRecommendationProducer:
             retrieval = retrieve_similar_events(signal.current_event, as_of=str(evidence_day), event_pool=retrieval_pool)
             probability = infer_probability(current_event=signal.current_event.__dict__, retrieval=retrieval)
             risk = assess_candidate_risk(signal=signal.current_event.__dict__, probability=probability)
-            ranking = rank_candidate(probability=probability, risk=risk)
+            ranking = score_candidate(probability=probability["up_probability_3d"], execution_quality=risk["execution_quality"], confidence=probability["confidence"], drawdown_probability=probability["drawdown_probability"], expected_return=probability["expected_return_3d"])
             features = signal.current_event.features
-            score = max(0.0, min(1.0, 0.5 * probability["up_probability_3d"] + 0.3 * risk["execution_quality"] + 0.2 * probability["confidence"] - 0.2 * probability["drawdown_probability"]))
-            candidates.append(CandidateDecision(symbol=symbol, name=symbol, disposition=CandidateDisposition.REJECTED, adaptive_score=score, recommendation_strength="normal" if score >= .55 else "cautious", signal=SignalAssessment(score=float(features.get("trend_strength") or 0.0), label=signal.current_event.signal_type, reason_codes=()), probability=ProbabilityAssessment(probability=probability["up_probability_3d"], confidence=probability["confidence"], effective_sample_size=probability["evidence"]["effective_sample_size"], uncertainty=probability["uncertainty"]), risk=RiskAssessment(score=risk["risk_adjustment"], execution_risk=1-risk["risk_adjustment"], reason_codes=tuple(risk["risk_flags"])), ranking=RankingAssessment(score=ranking["ranking_score"], rank=0, reason_codes=()), experts=(), trade_plan=TradePlan(entry_low=risk["entry"].get("low"), entry_high=risk["entry"].get("high"), stop_price=risk["stop"].get("price"), take_profit_prices=tuple(risk["take_profit"].get("targets") or ()), action="watch", reason_codes=tuple(risk["risk_flags"])), reason_codes=tuple(risk["risk_flags"])))
+            score = ranking["score"]
+            candidates.append(CandidateDecision(symbol=symbol, name=symbol, disposition=CandidateDisposition.REJECTED, adaptive_score=score, recommendation_strength="normal" if score >= .55 else "cautious", signal=SignalAssessment(score=float(features.get("trend_strength") or 0.0), label=signal.current_event.signal_type, reason_codes=()), probability=ProbabilityAssessment(probability=probability["up_probability_3d"], confidence=probability["confidence"], effective_sample_size=probability["evidence"]["effective_sample_size"], uncertainty=probability["uncertainty"], expected_return_3d=probability["expected_return_3d"], estimated_cost=ROUND_TRIP_COST, expected_net_return=ranking["expected_net_return"]), risk=RiskAssessment(score=risk["risk_adjustment"], execution_risk=1-risk["risk_adjustment"], reason_codes=tuple(risk["risk_flags"])), ranking=RankingAssessment(score=score, rank=0, reason_codes=ranking["reason_codes"]), experts=(), trade_plan=TradePlan(entry_low=risk["entry"].get("low"), entry_high=risk["entry"].get("high"), stop_price=risk["stop"].get("price"), take_profit_prices=tuple(risk["take_profit"].get("targets") or ()), action="watch", reason_codes=tuple(risk["risk_flags"])), reason_codes=tuple(risk["risk_flags"])))
         return tuple(candidates)

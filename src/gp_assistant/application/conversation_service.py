@@ -372,6 +372,10 @@ class ConversationService:
                     "日线信号类型": item.signal.label,
                     "日线信号强度": round(item.signal.score, 6),
                     "未来三日上涨概率": round(item.probability.probability, 6),
+                    "未来三日收益估计": f"{item.probability.expected_return_3d * 100:.4f}%" if item.probability.expected_return_3d is not None else None,
+                    "往返成本假设": f"{item.probability.estimated_cost * 100:.4f}%" if item.probability.estimated_cost is not None else None,
+                    "扣除成本后的收益估计": f"{item.probability.expected_net_return * 100:.4f}%" if item.probability.expected_net_return is not None else None,
+                    "净收益入选限制": "估计收益未超过成本假设，不能入选。" if "nonpositive_net_edge" in item.ranking.reason_codes else None,
                     "风险调整分": round(item.risk.score, 6),
                     "Serenity实际影响": serenity_effect(item),
                     "午盘五分钟实际影响": lunch_effect(item),
@@ -393,7 +397,7 @@ class ConversationService:
 
 时间与执行边界：输入的“时间与执行事实”由程序确定且优先级最高。程序会把其中的“用户可见结论”单独展示在你的回答前。你的正文不得再判断、复述或推断当前时间、当前市场阶段、当前是否可执行、计划是否已经结束、是否属于下一交易日，尤其不能把“最后盘中观察”写成回答时刻，也不能把发布记录时刻写成日线计划生成时刻。若需要提日期，只能明确区分“日线证据截止日”和“计划交易日”；不能把它们称为同一个“今天”。
 
-事实边界：只能解释输入候选中的综合分、排序、日线信号类型与强度、未来三日上涨概率、风险调整分、Serenity 实际影响和交易计划。综合分是排序依据，不是上涨概率或收益率；风险调整分为一减回撤概率，越高表示历史回撤概率越低。不得补充基本面、新闻、资金流、公告内容或任何未提供的实时价格、日期、数值。候选之外不得新增、删除或重排标的。
+事实边界：只能解释输入候选中的综合分、排序、日线信号类型与强度、未来三日上涨概率、收益估计、往返成本假设、扣除成本后的收益估计、净收益入选限制、风险调整分、Serenity 实际影响和交易计划。综合分是排序依据，不是上涨概率或收益率；风险调整分为一减回撤概率，越高表示历史回撤概率越低。收益与成本百分比已由算法计算，可直接引用，不得自行重算。成本是统一建模假设，不是用户真实成交费用；正的净收益估计不是盈利保证。空值表示旧计划未记录，不能说成零。排序靠前但未超过成本假设的候选不能入选。不得补充基本面、新闻、资金流、公告内容或任何未提供的实时价格、日期、数值。候选之外不得新增、删除或重排标的。
 
 尾盘人工盯盘：当用户问什么时候入场、怎么盯盘、量比、VWAP、尾盘是否能买或类似问题时，使用输入的“尾盘人工盯盘规则”和该候选的交易计划，直接给出用户可手工核对的条件式清单。先写具体股票的买入区间、止损和止盈，再说明14:45至14:56要观察的价格位置、VWAP、相对沪深300强弱、量比、最近三根五分钟K线和放弃条件。若日线信号类型是 breakout_pullback 或 structure_watch，采用规则中对应的说明。用户是最终判断者：这是一份手工盯盘方案，不是自动执行引擎。
 
@@ -427,7 +431,12 @@ Serenity：它只作用于基础评分冻结后的 Top-30。完整批次固定 3
 
     def _chat(self, messages: list[dict[str, str]], *, stage: str) -> str:
         try:
-            response = self.narrator.chat(messages, temperature=0.0, budget_stage=stage)
+            response = self.narrator.chat(
+                messages,
+                temperature=0.0,
+                budget_stage=stage,
+                extra={"thinking": {"type": "disabled"}},
+            )
         except Exception as exc:  # noqa: BLE001
             raise ValueError(f"narration_unavailable:{type(exc).__name__}") from exc
         content = str((((response.get("choices") or [{}])[0].get("message") or {}).get("content") or "")).strip()

@@ -11,3 +11,5 @@ The public product routes and their response shapes remain unchanged by lunch re
 Lunch reranking adds no route and no field. A successful 11:30 batch changes which already-valid publication is current. An incomplete batch leaves the prior publication current. A lunch publication is not tradeable because its runtime market gate is deny even when its five-minute data quality is ready.
 
 All writes flow through `PlanService`, `RuntimeService` and `PublicationService`. Public handlers do not collect five-minute network data and do not write SQLite directly.
+
+ProbabilityAssessment additionally records optional `expected_return_3d`, `estimated_cost`, and `expected_net_return` fractions. Daily producer revision 4 supplies all three; null in earlier immutable records means unrecorded. Composite score is not a calibrated win probability. Final `ranking.score` and `adaptive_score` use the same scale; `nonpositive_net_edge` bars selection even after Serenity/lunch reranking.

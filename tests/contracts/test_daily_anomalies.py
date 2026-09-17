@@ -38,12 +38,19 @@ def test_lifecycle_exclusions_use_target_date(monkeypatch, tmp_path):
     assert lifecycle_exclusions(trade_date=date(2026, 8, 5), symbols=("001232",)) == {}
 
 
-def test_bounded_provider_gap_can_use_existing_excluded_contract(tmp_path):
-    store = MarketRunStore(tmp_path / "market_runs.db")
-    universe = FrozenUniverse("2026-08-03", ("000001", "603221"), ("000001", "603221"), (), "d", "fixture", {}, False, "2026-08-03T15:00:00+08:00")
+def test_provider_gap_remains_required_and_legacy_exclusion_is_revoked(tmp_path):
+    import json
     from datetime import datetime, timezone
-    store.ensure_run(universe=universe, now=datetime.now(timezone.utc))
-    store.mark_attempt_failed(trade_date="2026-08-03", symbols=("603221",), now=datetime.now(timezone.utc), error="sina empty")
-    updated = store.exclude_retryable_for_degraded(trade_date="2026-08-03", symbols=("603221",), now=datetime.now(timezone.utc))
-    assert updated.universe.expected_symbols == ("000001",)
-    assert next(item for item in store.symbols("2026-08-03") if item.symbol == "603221").reason == "degraded_provider_failure"
+    store = MarketRunStore(tmp_path / "market_runs.db")
+    universe = FrozenUniverse("2026-08-03", ("000001", "603221"), ("000001",), ("603221",), "d", "fixture", {}, False, "2026-08-03T15:00:00+08:00")
+    now = datetime.now(timezone.utc)
+    store.ensure_run(universe=universe, now=now)
+    with store._transaction() as conn:
+        conn.execute("UPDATE daily_run_symbols SET reason='degraded_provider_failure',evidence_json=? WHERE symbol='603221'", (json.dumps({"reason":"legacy_provider_gap"}),))
+    assert store.reopen_provider_exclusions(now=now) == 1
+    assert store.reopen_provider_exclusions(now=now) == 0
+    run = store.get_run("2026-08-03")
+    assert run.state == "retry_wait"
+    assert run.universe.expected_symbols == ("000001", "603221")
+    assert run.universe.excluded_symbols == ()
+    assert run.universe.snapshot_meta["revoked_provider_exclusions"][0]["prior_evidence"] == {"reason":"legacy_provider_gap"}

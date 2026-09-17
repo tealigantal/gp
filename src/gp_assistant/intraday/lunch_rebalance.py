@@ -19,7 +19,7 @@ from ..contracts.evidence import ExpertContribution
 
 BENCHMARK_SYMBOL = "000300"
 LUNCH_SOURCE = "akshare:sina:5m"
-LUNCH_POLICY_REVISION = "lunch_5m_direct_rerank_v1"
+LUNCH_POLICY_REVISION = "lunch_5m_direct_rerank_v2"
 _COLUMNS = ("trade_time", "open", "high", "low", "close", "vol", "amount")
 
 
@@ -279,6 +279,7 @@ def rerank_lunch_candidates(
             candidate.model_copy(
                 update={
                     "adaptive_score": round(final_score, 12),
+                    "ranking": candidate.ranking.model_copy(update={"score": round(final_score, 12)}),
                     "experts": (*candidate.experts, intraday_expert),
                 }
             )

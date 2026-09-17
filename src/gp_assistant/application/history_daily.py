@@ -100,27 +100,21 @@ def latest_daily_date() -> str | None:
         conn.close()
 
 
-def frames(symbols: list[str], *, limit: int = 150) -> dict[str, pd.DataFrame]:
+def frames(symbols: list[str], *, limit: int = 150, as_of: str | None = None, minimum_rows: int = 80) -> dict[str, pd.DataFrame]:
+    """Indexed, bounded, date-truncated history; never truncate before as-of."""
     if not symbols:
         return {}
     path = history_db_path()
     conn = sqlite3.connect(f"{path.resolve().as_uri()}?mode=ro", uri=True)
     try:
-        output: dict[str, list[dict[str, object]]] = defaultdict(list)
-        for start in range(0, len(symbols), 400):
-            chunk = symbols[start:start + 400]
-            placeholders = ",".join("?" for _ in chunk)
-            rows = conn.execute(f"""
-                SELECT json_extract(q.params, '$.symbol'), i.payload
-                FROM queries q JOIN items i ON i.query_id=q.id
-                WHERE json_extract(q.params, '$.kind')='daily'
-                  AND json_extract(q.params, '$.provider')='akshare'
-                  AND json_extract(q.params, '$.symbol') IN ({placeholders})
-                ORDER BY i.item_time DESC
-            """, chunk).fetchall()
-            for symbol, payload in rows:
-                if len(output[str(symbol)]) < limit:
-                    output[str(symbol)].append(json.loads(payload))
-        return {symbol: pd.DataFrame(list(reversed(rows))) for symbol, rows in output.items() if len(rows) >= 80}
+        conn.execute("BEGIN")
+        output = {}
+        end = (date.fromisoformat(as_of) + timedelta(days=1)).isoformat() if as_of else "9999-12-31"
+        for symbol in sorted(set(symbols)):
+            query_id = canonical_query_id({"kind": "daily", "provider": "akshare", "symbol": str(symbol).zfill(6)})
+            rows = conn.execute("SELECT payload FROM items WHERE query_id=? AND item_time<? ORDER BY item_time DESC LIMIT ?", (query_id,end,limit)).fetchall()
+            if len(rows) >= minimum_rows:
+                output[symbol] = pd.DataFrame([json.loads(row[0]) for row in reversed(rows)])
+        return output
     finally:
         conn.close()

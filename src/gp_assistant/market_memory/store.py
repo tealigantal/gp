@@ -13,6 +13,9 @@ from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional
 
 from ..core.paths import store_dir
+from ..search.history_store import _acquire_process_lock as acquire_history_lock, note_cleanup_error
+import sys
+from datetime import date, datetime, time as clock_time, timezone
 def iso_day(value: object) -> str:
     return str(value or "").replace("/", "-")[:10]
 from ..runtime.utils import now_iso
@@ -55,20 +58,7 @@ def _event_root() -> Path:
 
 
 def _acquire_process_lock(path: Path, *, timeout_sec: float = 1.2) -> str:
-    deadline = time.monotonic() + timeout_sec
-    token = uuid.uuid4().hex
-    while True:
-        try:
-            fd = os.open(str(path), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
-            try:
-                os.write(fd, f"{os.getpid()} {time.time():.6f} {token}\n".encode("utf-8"))
-            finally:
-                os.close(fd)
-            return token
-        except FileExistsError:
-            if time.monotonic() >= deadline:
-                raise TimeoutError(f"Timed out waiting for market memory lock: {path}")
-            time.sleep(0.05)
+    return acquire_history_lock(path, timeout_sec=timeout_sec)
 
 
 def _release_process_lock(path: Path, token: str) -> None:
@@ -93,9 +83,16 @@ def memory_db_lane():
         yield
     finally:
         _DB_STATE.depth = max(int(getattr(_DB_STATE, "depth", 1) or 1) - 1, 0)
-        if outermost and token is not None:
-            _release_process_lock(path, token)
-        _DB_LOCK.release()
+        original = sys.exc_info()[1]
+        try:
+            if outermost and token is not None:
+                _release_process_lock(path, token)
+        except OSError as exc:
+            if original is None:
+                raise
+            note_cleanup_error(original, f"memory lock cleanup failed: {exc}")
+        finally:
+            _DB_LOCK.release()
 
 
 def _connect(*, writable: bool = False) -> sqlite3.Connection | None:
@@ -202,8 +199,10 @@ def upsert_market_events(events: Iterable[MarketMemoryEvent]) -> int:
     for event in rows:
         signal_day = iso_day(event.signal_trading_day)
         available_day = iso_day(event.outcome_available_trading_day)
-        if signal_day is None or (event.outcome_complete and (available_day is None or available_day <= signal_day)):
+        date.fromisoformat(signal_day)
+        if not event.outcome_complete or not available_day or available_day <= signal_day:
             raise ValueError("market_memory_date_contract_invalid")
+        date.fromisoformat(available_day)
         if not str(event.first_seen_at or "").strip() or "+" not in str(event.first_seen_at) and "Z" not in str(event.first_seen_at):
             raise ValueError("market_memory_first_seen_timezone_required")
     with memory_db_lane():
@@ -211,6 +210,7 @@ def upsert_market_events(events: Iterable[MarketMemoryEvent]) -> int:
         assert conn is not None
         try:
             conn.execute("BEGIN IMMEDIATE")
+            before = conn.total_changes
             conn.executemany(
                 """
                 INSERT INTO market_events(
@@ -227,13 +227,22 @@ def upsert_market_events(events: Iterable[MarketMemoryEvent]) -> int:
                 ) for event in rows],
             )
             conn.execute("COMMIT")
-            return len(rows)
-        except Exception:
-            if conn.in_transaction:
-                conn.execute("ROLLBACK")
+            return conn.total_changes - before
+        except Exception as primary:
+            try:
+                if conn.in_transaction:
+                    conn.execute("ROLLBACK")
+            except Exception as secondary:
+                note_cleanup_error(primary, f"memory rollback failed: {secondary}")
             raise
         finally:
-            conn.close()
+            primary = sys.exc_info()[1]
+            try:
+                conn.close()
+            except Exception as secondary:
+                if primary is None:
+                    raise
+                note_cleanup_error(primary, f"memory connection close failed: {secondary}")
 
 
 def _row_to_event(row: sqlite3.Row) -> MarketMemoryEvent:
@@ -254,7 +263,9 @@ def _row_to_event(row: sqlite3.Row) -> MarketMemoryEvent:
     )
 
 
-def list_events_before(as_of: str, *, require_outcome: bool = True, limit: Optional[int] = None) -> List[MarketMemoryEvent]:
+def list_events_before(as_of: str, *, require_outcome: bool = True, limit: Optional[int] = None, known_at: datetime | None = None, policy: str | None = None) -> List[MarketMemoryEvent]:
+    if known_at is not None and known_at.utcoffset() is None:
+        raise ValueError("market_memory_known_at_timezone_required")
     conn = _connect()
     if conn is None:
         return []
@@ -265,7 +276,27 @@ def list_events_before(as_of: str, *, require_outcome: bool = True, limit: Optio
         if require_outcome:
             sql += " AND outcome_complete=1 AND outcome_available_trading_day IS NOT NULL AND outcome_available_trading_day < ?"
             params.append(cutoff)
-        sql += " ORDER BY signal_trading_day DESC"
+        observed = known_at or datetime.combine(date.fromisoformat(cutoff), clock_time.max, tzinfo=timezone.utc)
+        sql += " AND julianday(first_seen_at)<=julianday(?)"
+        params.append(observed.isoformat())
+        if policy is not None:
+            sql += " AND json_extract(data_provenance_json,'$.memory_policy')=?"
+            params.append(policy)
+            maintenance = store_dir() / "memory_maintenance.db"
+            if not maintenance.exists():
+                return []
+            conn.execute("ATTACH DATABASE ? AS maintenance", (maintenance.resolve().as_uri() + "?mode=ro",))
+            sql += " AND json_extract(data_provenance_json,'$.maintenance_run') IN (SELECT run_id FROM maintenance.runs WHERE state='complete' AND julianday(json_extract(payload,'$.completed_at'))<=julianday(?))"
+            params.append(observed.isoformat())
+            # A failed old batch may resume after a replacement committed.
+            # Its staged cases must not multiply the first committed version.
+            sql = sql.replace("SELECT * FROM market_events", "SELECT market_events.*, (SELECT julianday(json_extract(payload,'$.completed_at')) FROM maintenance.runs WHERE run_id=json_extract(market_events.data_provenance_json,'$.maintenance_run')) AS batch_committed_at FROM market_events", 1)
+            sql = "SELECT * FROM (SELECT committed.*, ROW_NUMBER() OVER (PARTITION BY symbol,signal_trading_day ORDER BY batch_committed_at,event_id) AS version_position FROM (" + sql + ") committed) WHERE version_position=1"
+            # Spread a bounded pool across recent mature dates instead of
+            # letting one market-wide day fill the entire nearest-case pool.
+            sql = "SELECT * FROM (SELECT scoped.*, ROW_NUMBER() OVER (PARTITION BY signal_trading_day ORDER BY event_id) AS day_position, DENSE_RANK() OVER (ORDER BY signal_trading_day DESC) AS day_age FROM (" + sql + ") scoped) WHERE day_age<=250 ORDER BY day_position,signal_trading_day DESC,event_id"
+        else:
+            sql += " ORDER BY signal_trading_day DESC,event_id"
         if limit is not None:
             sql += " LIMIT ?"
             params.append(int(limit))

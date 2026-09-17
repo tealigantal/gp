@@ -5,16 +5,16 @@ x-gp-build: &gp-build
     PIP_INDEX_URL: ${PIP_INDEX_URL:-https://pypi.org/simple}
     APT_DEBIAN_MIRROR: ${APT_DEBIAN_MIRROR:-http://deb.debian.org/debian}
     APT_SECURITY_MIRROR: ${APT_SECURITY_MIRROR:-http://deb.debian.org/debian-security}
-    HTTP_PROXY: ${HTTP_PROXY:-}
-    HTTPS_PROXY: ${HTTPS_PROXY:-}
-    ALL_PROXY: ${ALL_PROXY:-}
+    HTTP_PROXY: ${GP_BUILD_HTTP_PROXY:-}
+    HTTPS_PROXY: ${GP_BUILD_HTTPS_PROXY:-}
+    ALL_PROXY: ${GP_BUILD_ALL_PROXY:-}
     GP_BUILD_REVISION: ${GP_BUILD_REVISION:-local}
 
 x-gp-env: &gp-env
   TZ: ${TZ:-Asia/Shanghai}
-  HTTP_PROXY: ${HTTP_PROXY:-}
-  HTTPS_PROXY: ${HTTPS_PROXY:-}
-  ALL_PROXY: ${ALL_PROXY:-}
+  HTTP_PROXY: ${GP_RUNTIME_HTTP_PROXY:-}
+  HTTPS_PROXY: ${GP_RUNTIME_HTTPS_PROXY:-}
+  ALL_PROXY: ${GP_RUNTIME_ALL_PROXY:-}
 
   GP_RUN_MODE: ${GP_RUN_MODE:-prod}
   GP_HISTORY_SQLITE_JOURNAL_MODE: ${GP_HISTORY_SQLITE_JOURNAL_MODE:-DELETE}
@@ -76,7 +76,7 @@ x-gp-volumes: &gp-volumes
   - ./data:/app/data
   - ./results:/app/results
   - ./universe:/app/universe
-  - ./store:/app/store
+  - gp-runtime-store:/app/store
   - ./cache:/app/cache
   - ./configs:/app/configs
 
@@ -97,7 +97,7 @@ services:
     ports:
       - "8000:8000"
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health', timeout=3)"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.build_opener(urllib.request.ProxyHandler({})).open('http://127.0.0.1:8000/api/health', timeout=3)"]
       interval: 10s
       timeout: 5s
       retries: 12
@@ -107,6 +107,7 @@ services:
   gp-worker:
     <<: *gp-service
     command: ["python", "-m", "gp_assistant.cli", "worker"]
+    stop_grace_period: 60s
     depends_on:
       gp:
         condition: service_healthy
@@ -119,13 +120,13 @@ services:
         BASE_NODE_IMAGE: ${BASE_NODE_IMAGE:-docker.m.daocloud.io/library/node:20-alpine}
         BASE_NGINX_IMAGE: ${BASE_NGINX_IMAGE:-docker.m.daocloud.io/library/nginx:1.25-alpine}
         NPM_REGISTRY: ${NPM_REGISTRY:-https://registry.npmmirror.com}
-        HTTP_PROXY: ${HTTP_PROXY:-}
-        HTTPS_PROXY: ${HTTPS_PROXY:-}
-        ALL_PROXY: ${ALL_PROXY:-}
+        HTTP_PROXY: ${GP_BUILD_HTTP_PROXY:-}
+        HTTPS_PROXY: ${GP_BUILD_HTTPS_PROXY:-}
+        ALL_PROXY: ${GP_BUILD_ALL_PROXY:-}
     environment:
-      HTTP_PROXY: ${HTTP_PROXY:-}
-      HTTPS_PROXY: ${HTTPS_PROXY:-}
-      ALL_PROXY: ${ALL_PROXY:-}
+      HTTP_PROXY: ${GP_RUNTIME_HTTP_PROXY:-}
+      HTTPS_PROXY: ${GP_RUNTIME_HTTPS_PROXY:-}
+      ALL_PROXY: ${GP_RUNTIME_ALL_PROXY:-}
     depends_on:
       gp:
         condition: service_healthy
@@ -140,3 +141,8 @@ services:
       retries: 6
       start_period: 10s
     restart: unless-stopped
+
+volumes:
+  gp-runtime-store:
+    external: true
+    name: ${GP_RUNTIME_STORE_VOLUME:-gp-runtime-store}

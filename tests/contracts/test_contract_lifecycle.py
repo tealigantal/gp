@@ -60,12 +60,14 @@ def test_runtime_producer_and_conversation_are_bound_and_idempotent(tmp_path):
 
     class Narrator:
         messages = None
+        kwargs = None
 
         def available(self):
             return True, "ok"
 
         def chat(self, messages, **_kwargs):
             self.messages = messages
+            self.kwargs = _kwargs
             notice = json.loads(messages[1]["content"])["当前事实"]["时间与执行事实"]["用户可见结论"]
             return {"choices": [{"message": {"content": f"{notice}\n\n候选结论严格绑定已提供的评分与交易计划。"}}]}
 
@@ -145,7 +147,16 @@ def test_runtime_producer_and_conversation_are_bound_and_idempotent(tmp_path):
     prompt = narrator.messages[0]["content"]
     assert "尾盘人工盯盘" in prompt
     assert "不得编造当前量比" in prompt
+    assert narrator.kwargs["extra"] == {"thinking": {"type": "disabled"}}
     assert not (tmp_path / "market_runs.db").exists()
+    assert full_payload["候选列表"][0]["扣除成本后的收益估计"] is None
+    enriched = publication.candidates[0].model_copy(update={"probability": publication.candidates[0].probability.model_copy(
+        update={"expected_return_3d": .012, "estimated_cost": .003, "expected_net_return": .009})})
+    service._narrate(publication.model_copy(update={"candidates": (enriched,)}), "解释净收益", now=datetime(2026, 7, 23, 16, 2, tzinfo=TZ))
+    facts = json.loads(narrator.messages[1]["content"])["当前事实"]["候选列表"][0]
+    assert facts["未来三日收益估计"] == "1.2000%"
+    assert facts["往返成本假设"] == "0.3000%"
+    assert facts["扣除成本后的收益估计"] == "0.9000%"
 
 
 def test_canonical_conversation_reads_are_available_to_the_workspace(tmp_path, monkeypatch):

@@ -54,6 +54,42 @@
               "title": "Effective Sample Size",
               "type": "number"
             },
+            "estimated_cost": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Estimated Cost"
+            },
+            "expected_net_return": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Expected Net Return"
+            },
+            "expected_return_3d": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Expected Return 3D"
+            },
             "probability": {
               "title": "Probability",
               "type": "number"
@@ -745,6 +781,42 @@
           "title": "Effective Sample Size",
           "type": "number"
         },
+        "estimated_cost": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Estimated Cost"
+        },
+        "expected_net_return": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Expected Net Return"
+        },
+        "expected_return_3d": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Expected Return 3D"
+        },
         "probability": {
           "title": "Probability",
           "type": "number"
@@ -1229,6 +1301,42 @@
               "title": "Effective Sample Size",
               "type": "number"
             },
+            "estimated_cost": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Estimated Cost"
+            },
+            "expected_net_return": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Expected Net Return"
+            },
+            "expected_return_3d": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Expected Return 3D"
+            },
             "probability": {
               "title": "Probability",
               "type": "number"
@@ -1688,6 +1796,42 @@
             "effective_sample_size": {
               "title": "Effective Sample Size",
               "type": "number"
+            },
+            "estimated_cost": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Estimated Cost"
+            },
+            "expected_net_return": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Expected Net Return"
+            },
+            "expected_return_3d": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Expected Return 3D"
             },
             "probability": {
               "title": "Probability",

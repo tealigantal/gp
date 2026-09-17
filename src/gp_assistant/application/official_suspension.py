@@ -22,7 +22,6 @@ from ..serenity.text import normalize_cn_text
 
 
 _SHANGHAI = ZoneInfo("Asia/Shanghai")
-_TITLE_SUSPENSION = re.compile(r"停牌")
 
 
 def _published_before_open(value: object, *, trade_date: date) -> str | None:
@@ -46,10 +45,10 @@ def _date_token(value: date) -> str:
 def _positive_resume_exists(normalized: str, *, trade_date: date, start: int = 0) -> bool:
     """Reject a real target-date resume, but not a statement that it cannot resume."""
     token = re.escape(_date_token(trade_date))
-    pattern = re.compile(token + r".{0,48}?(?:开市|开盘).{0,32}?(?:复牌|恢复交易)")
+    pattern = re.compile(token + r"(?:[^。；]{0,48}?(?:开市|开盘)(?:起|后|时)?|(?:[（(]星期[一二三四五六日天][）)])?起)(?:复牌|恢复交易)")
     for match in pattern.finditer(normalized, start):
-        context = normalized[max(start, match.start() - 48):match.start()]
-        if re.search(r"(?:无法|未能|不能|不得|不(?:会|得|再)?在)", context):
+        context = normalized[max(start, match.start() - 48):match.end()]
+        if re.search(r"(?:无法|未能|不能|不得|不(?:会|得|再)?在|此前预计|原预计)", context):
             continue
         return True
     return False
@@ -67,8 +66,17 @@ def _halt_evidence(text: str, *, trade_date: date) -> tuple[str, str] | None:
     """
     normalized = re.sub(r"\s+", "", normalize_cn_text(text))
     target = _date_token(trade_date)
+    if _positive_resume_exists(normalized, trade_date=trade_date):
+        return None
+    interval = re.compile(r"(?P<y>20\d{2})年(?P<m>\d{1,2})月(?P<d>\d{1,2})日至(?:(?P<ey>20\d{2})年)?(?:(?P<em>\d{1,2})月)?(?P<ed>\d{1,2})日.{0,180}?期间.{0,40}?(?:股票|股份).{0,15}?停牌")
+    for item in interval.finditer(normalized):
+        started = date(int(item['y']), int(item['m']), int(item['d']))
+        ended = date(int(item['ey'] or item['y']), int(item['em'] or item['m']), int(item['ed']))
+        if started <= trade_date <= ended and (ended-started).days <= 15:
+            return normalized[max(0,item.start()-40):item.end()+80], "explicit_halt_interval"
     token = re.escape(target)
     exact_patterns = (
+        re.compile(r"自" + token + r"(?:[（(]星期[一二三四五六日天][）)])?起(?:开始)?停牌"),
         re.compile(token + r".{0,32}?(?:开市|开盘).{0,32}?(?:继续)?停牌"),
         # One-day risk-warning suspensions use an explicit "停牌日期" field or
         # state that the stock "will halt for one day" without the words
@@ -88,7 +96,7 @@ def _halt_evidence(text: str, *, trade_date: date) -> tuple[str, str] | None:
     # target session is 8 月 20 日.  Bind the start date and require explicit
     # continuation language; do not carry a bare missing-bar result forward.
     date_pattern = re.compile(
-        r"自(?P<year>20\d{2})年(?P<month>\d{1,2})月(?P<day>\d{1,2})日.{0,40}?(?:开市|开盘).{0,40}?(?:开始)?停牌"
+        r"自(?P<year>20\d{2})年(?P<month>\d{1,2})月(?P<day>\d{1,2})日(?:.{0,40}?(?:开市|开盘).{0,40}?(?:开始)?|(?:[（(]星期[一二三四五六日天][）)])?起(?:开始)?)停牌"
     )
     for candidate in date_pattern.finditer(normalized):
         started = date(int(candidate.group("year")), int(candidate.group("month")), int(candidate.group("day")))
@@ -103,7 +111,7 @@ def _halt_evidence(text: str, *, trade_date: date) -> tuple[str, str] | None:
         # target remains inside it.  It is an auditable bounded continuation,
         # not a prediction of future suspension.
         max_match = re.search(r"不超过\s*(?P<days>\d{1,2})\s*个交易日", normalized)
-        continuation = "继续停牌" in normalized or "仍停牌" in normalized
+        continuation = any(term in window for term in ("继续停牌", "仍停牌", "连续停牌"))
         if max_match is None and not continuation:
             continue
         if max_match is not None and not continuation and not (
@@ -118,6 +126,15 @@ def _halt_evidence(text: str, *, trade_date: date) -> tuple[str, str] | None:
         end = min(len(normalized), candidate.end() + 180)
         return normalized[start:end], "continuation_halt"
     return None
+
+
+def _resume_effective_by(normalized: str, *, trade_date: date) -> bool:
+    """A newer earlier-session resumption also ends a carried-forward halt."""
+    for match in re.finditer(r"(20\d{2})年(\d{1,2})月(\d{1,2})日", normalized):
+        effective = date(*(int(value) for value in match.groups()))
+        if effective <= trade_date and _positive_resume_exists(normalized, trade_date=effective):
+            return True
+    return False
 
 
 def _halt_excerpt(text: str, *, trade_date: date) -> str | None:
@@ -213,23 +230,29 @@ class OfficialSuspensionEvidenceCollector:
                 continue
             if not bool(page.get("complete")) or bool(page.get("backlog")):
                 continue
+            candidates = []
+            ambiguous = []
             for record in page.get("records") or []:
                 if not isinstance(record, Mapping) or str(record.get("symbol") or "") != symbol:
-                    continue
-                if not _TITLE_SUSPENSION.search(str(record.get("title") or "")):
                     continue
                 published_at = _published_before_open(record.get("published_at"), trade_date=trade_date)
                 if published_at is None:
                     continue
                 try:
                     if not self.verifier.verify(dict(record), start=start, end=trade_date):
+                        ambiguous.append(published_at)
                         continue
                     document = self.client.download_pdf(str(record["source_url"]), max_bytes=self.pdf_max_bytes)
                     text, parse_state = self.parser(document, max_pages=40, max_chars=250_000, timeout_sec=20.0)
                 except Exception:
+                    ambiguous.append(published_at)
                     continue
                 if parse_state != "parsed":
+                    ambiguous.append(published_at)
                     continue
+                normalized = re.sub(r"\s+", "", normalize_cn_text(text))
+                if _resume_effective_by(normalized, trade_date=trade_date):
+                    ambiguous.append(published_at)
                 halt_evidence = _halt_evidence(text, trade_date=trade_date)
                 if halt_evidence is None:
                     continue
@@ -247,6 +270,11 @@ class OfficialSuspensionEvidenceCollector:
                     excerpt=excerpt,
                     evidence_kind=evidence_kind,
                 )
-                output[symbol] = evidence.payload()
-                break
+                candidates.append(evidence)
+            if candidates:
+                latest = max(candidates, key=lambda item: item.published_at)
+                # A newer explicit fact supersedes older incomplete documents.
+                # Same-time or later uncertainty/conflict must still fail closed.
+                if not any(stamp >= latest.published_at for stamp in ambiguous):
+                    output[symbol] = latest.payload()
         return output

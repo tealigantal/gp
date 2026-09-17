@@ -28,7 +28,7 @@ def assess_candidate_risk(*, signal: Dict[str, Any], probability: Dict[str, Any]
     pullback_quality = _safe_float(features.get("pullback_quality"), 0.5)
     volume_confirmation = min(1.0, _safe_float(features.get("volume_ratio"), 1.0) / 2.5)
     liquidity = _safe_float(features.get("liquidity_score"), 0.5)
-    execution_quality = _clamp(0.35 * pullback_quality + 0.25 * volume_confirmation + 0.20 * liquidity + 0.20 * confidence)
+    execution_quality = _clamp((0.35 * pullback_quality + 0.25 * volume_confirmation + 0.20 * liquidity) / 0.80)
     stop_pct = max(0.03, atr_pct * 1.35)
     target_pct = max(0.025, min(0.12, max(expected_return, atr_pct * 1.4)))
     if close <= 0:
@@ -41,7 +41,7 @@ def assess_candidate_risk(*, signal: Dict[str, Any], probability: Dict[str, Any]
         entry = {"kind": "zone", "low": low, "high": high, "price": low}
         stop = {
             "kind": "close_below_support",
-            "price": close * (1.0 - stop_pct),
+            "price": low * (1.0 - stop_pct),
             "text": "收盘有效跌破相似事件风险边界",
             "invalidation": "收盘有效跌破相似事件风险边界",
         }
@@ -67,7 +67,7 @@ def assess_candidate_risk(*, signal: Dict[str, Any], probability: Dict[str, Any]
         "diagnostics": {
             "execution_state": "actionable" if execution_quality >= 0.55 and not risk_flags else "observe_only",
             "actionable": bool(execution_quality >= 0.55 and not risk_flags),
-            "reward_risk": float(target_pct / max(stop_pct, 1e-6)),
+            "reward_risk": float((take["price"] - high) / (high - stop["price"])) if close > 0 else None,
         },
         "failure_modes": list((probability.get("evidence") or {}).get("major_failure_modes") or []),
     }

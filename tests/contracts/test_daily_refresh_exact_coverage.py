@@ -318,6 +318,9 @@ def test_plan_reads_one_frozen_universe_and_never_polls_spot(tmp_path, monkeypat
     monkeypatch.setattr("gp_assistant.application.real_producer.coverage_for_date", lambda *_args, **_kwargs: rows)
     monkeypatch.setattr("gp_assistant.application.real_producer.history_frames", lambda *_args, **_kwargs: {})
     monkeypatch.setattr("gp_assistant.application.real_producer.load_cn_a_calendar", lambda: _Calendar())
+    from types import SimpleNamespace
+    monkeypatch.setattr("gp_assistant.application.real_producer.memory_ready", lambda *args: {"context": {"market_regime": "B"}, "run_id": "fixture"})
+    monkeypatch.setattr("gp_assistant.application.real_producer.list_events_before", lambda *args, **kwargs: [SimpleNamespace(event_id=str(i),first_seen_at="2026-07-24",outcome={}) for i in range(80)])
     called = {"spot": 0}
     command = RealRecommendationProducer(ContractStore(tmp_path / "contracts.db"), spot_loader=lambda: called.__setitem__("spot", called["spot"] + 1)).produce(
         datetime(2026, 7, 24, 16, 40, tzinfo=TZ), frozen_universe=_frozen(),
