@@ -33,6 +33,7 @@ Plans retain their outcome and evidence; they are not replacement contracts.
 | [2026-07-24 lunch Top-30 five-minute rerank](plans/2026-07-24-lunch-five-minute-rerank.md) | Implemented and locally validated; its stated review status is historical. |
 | [2026-07-24 Serenity fixed 3% unified worker](plans/2026-07-24-serenity-fixed-three-percent-worker.md) | Implemented and locally deployed. |
 | [2026-07-28 official suspension evidence](plans/2026-07-28-official-suspension-evidence.md) | Implemented and worker-verified against the real remaining daily-coverage residue. |
+| [2026-09-18 suspension evidence resolution](plans/2026-09-18-suspension-evidence-resolution.md) | Deployed; native official evidence resolved both missing symbols and completed exact 3044/3044 coverage. |
 | [2026-07-23 chat-agent showcase UI](plans/2026-07-23-chat-agent-showcase-ui.md) | Completed historical implementation record. |
 | [2026-07-23 frontend workspace reconnection](plans/2026-07-23-frontend-workspace-reconnection.md) | Completed historical implementation record. |
 | [2026-07-23 contract-kernel hard cutover](plans/2026-07-23-contract-kernel-hard-cutover.md) | Completed destructive migration record; do not repeat against the current store. |

@@ -172,13 +172,24 @@ def _daily_fetch_worker(
             and set(missing).issubset(attempted_this_execution)
         ):
             collector = suspension_collector or OfficialSuspensionEvidenceCollector()
-            evidence = collector.resolve(
+            resolution = collector.resolve(
                 symbols=tuple(missing),
                 trade_date=date.fromisoformat(target),
                 observed_at=datetime.now(now.tzinfo),
             )
-            if evidence:
-                ledger.exclude_verified_suspensions(trade_date=target, evidence_by_symbol=evidence, now=datetime.now(now.tzinfo))
+            ledger.record_suspension_diagnostics(
+                trade_date=target, diagnostics_by_symbol=resolution.diagnostics_by_symbol, now=datetime.now(now.tzinfo),
+            )
+            print(json.dumps({"official_suspension_check": {
+                "trade_date": target,
+                "symbols": {symbol: {"state": item["state"], "reason": item["reason"],
+                                     "document_failures": [{"id": doc.get("source_record_id"), "reason": doc["reason"],
+                                                            "error": doc.get("error"), "blocking": doc.get("blocking")}
+                                                           for doc in item.get("documents", []) if doc["reason"] != "evaluated"]}
+                            for symbol, item in resolution.diagnostics_by_symbol.items()},
+            }}, ensure_ascii=False), flush=True)
+            if resolution.evidence_by_symbol:
+                ledger.exclude_verified_suspensions(trade_date=target, evidence_by_symbol=resolution.evidence_by_symbol, now=datetime.now(now.tzinfo))
                 expected = ledger.expected_symbols(target)
                 present = coverage_for_date(expected, target_date=target)
                 missing = ledger.update_coverage(

@@ -386,6 +386,37 @@ class MarketRunStore:
             )
         return self.get_run(trade_date)  # type: ignore[return-value]
 
+    def record_suspension_diagnostics(
+        self, *, trade_date: str, diagnostics_by_symbol: dict[str, dict[str, object]], now: datetime,
+    ) -> None:
+        """Keep the latest failed evidence check alongside the provider error.
+
+        Operational JSON only: never change coverage, completed runs, fetched
+        rows or verified exclusions. Subsequent provider retries retain it.
+        """
+        with self._transaction() as conn:
+            run = conn.execute("SELECT state FROM daily_runs WHERE trade_date=?", (trade_date,)).fetchone()
+            if run is None:
+                raise ValueError("daily_run_not_found")
+            if str(run["state"]) == RUN_COMPLETE:
+                return
+            for symbol, diagnostic in diagnostics_by_symbol.items():
+                if (diagnostic.get("symbol") != symbol or diagnostic.get("trade_date") != trade_date
+                        or diagnostic.get("state") != "unresolved"):
+                    continue
+                row = conn.execute(
+                    "SELECT evidence_json FROM daily_run_symbols WHERE trade_date=? AND symbol=? "
+                    "AND status NOT IN ('excluded','fetched')", (trade_date, symbol),
+                ).fetchone()
+                if row is None:
+                    continue
+                evidence = json.loads(str(row["evidence_json"])) if row["evidence_json"] else {}
+                evidence["suspension_check"] = diagnostic
+                conn.execute(
+                    "UPDATE daily_run_symbols SET evidence_json=?,updated_at=? WHERE trade_date=? AND symbol=?",
+                    (json.dumps(evidence, ensure_ascii=False, sort_keys=True), _iso(now), trade_date, symbol),
+                )
+
     def exclude_lifecycle_symbols(
         self,
         *,

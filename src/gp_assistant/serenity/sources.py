@@ -300,11 +300,17 @@ class ExchangeVerifier:
         self.session = session or requests.Session()
         self.session.headers.update({"User-Agent": "Mozilla/5.0 (compatible; GP-Serenity/1.0; local-research)"})
 
-    def verify(self, record: Dict[str, Any], *, start: date, end: date) -> bool:
-        symbol = str(record.get("symbol") or "")
-        return self._verify_sse(record, start=start, end=end) if symbol.startswith("6") else self._verify_szse(record, start=start, end=end)
+    def verify(self, record: Dict[str, Any], *, start: date, end: date, raise_on_error: bool = False) -> bool:
+        """Optionally preserve transport errors for operational evidence audits.
 
-    def _verify_szse(self, record: Dict[str, Any], *, start: date, end: date) -> bool:
+        Existing Serenity callers retain their boolean verification contract.
+        A strict caller distinguishes unavailable verification from no listing.
+        """
+        symbol = str(record.get("symbol") or "")
+        verify = self._verify_sse if symbol.startswith("6") else self._verify_szse
+        return verify(record, start=start, end=end, raise_on_error=raise_on_error)
+
+    def _verify_szse(self, record: Dict[str, Any], *, start: date, end: date, raise_on_error: bool = False) -> bool:
         url = "https://www.szse.cn/api/disc/announcement/annList"
         try:
             wanted = str(record.get("source_record_id") or "")
@@ -331,9 +337,11 @@ class ExchangeVerifier:
                     break
             return False
         except Exception:
+            if raise_on_error:
+                raise
             return False
 
-    def _verify_sse(self, record: Dict[str, Any], *, start: date, end: date) -> bool:
+    def _verify_sse(self, record: Dict[str, Any], *, start: date, end: date, raise_on_error: bool = False) -> bool:
         url = "https://query.sse.com.cn/security/stock/queryCompanyBulletin.do"
         base_params = {
             "isPagination": "true",
@@ -378,4 +386,6 @@ class ExchangeVerifier:
                     break
             return False
         except Exception:
+            if raise_on_error:
+                raise
             return False

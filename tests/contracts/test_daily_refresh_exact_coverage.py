@@ -8,7 +8,7 @@ import pandas as pd
 from gp_assistant.application.daily_refresh import DailyEvidenceRefresher
 from gp_assistant.application.market_orchestrator import MarketClock, MarketDayOrchestrator, _daily_fetch_worker
 from gp_assistant.application.market_runs import FrozenUniverse, MarketRunStore, universe_digest
-from gp_assistant.application.official_suspension import OfficialSuspensionEvidenceCollector
+from gp_assistant.application.official_suspension import OfficialSuspensionEvidenceCollector, SuspensionResolution
 from gp_assistant.application.real_producer import RealRecommendationProducer
 from gp_assistant.contracts.market import TradingCalendarRef
 from gp_assistant.store import ContractStore
@@ -96,7 +96,7 @@ def test_interrupted_run_retries_only_uncovered_symbols(tmp_path, monkeypatch):
     class Collector:
         def resolve(self, *, symbols, trade_date, observed_at):
             assert symbols == ("000002",)
-            return {
+            return SuspensionResolution(evidence_by_symbol={
                 "000002": {
                     "symbol": "000002", "trade_date": trade_date.isoformat(), "state": "verified_suspended",
                     "source": "cninfo+szse", "source_record_id": "fixture-announcement", "source_url": "https://official.example/fixture.pdf",
@@ -104,7 +104,7 @@ def test_interrupted_run_retries_only_uncovered_symbols(tmp_path, monkeypatch):
                     "effective_suspension_date": "2026-07-24", "verification_basis": "szse_announcement_id",
                     "verified_at": observed_at.isoformat(), "excerpt": "自2026年7月24日开市起停牌",
                 }
-            }
+            })
 
     worker_now = datetime.now(TZ)
     recovery_ledger = MarketRunStore(tmp_path / "recovery_market_runs.db")
@@ -167,7 +167,7 @@ def test_interrupted_run_retries_only_uncovered_symbols(tmp_path, monkeypatch):
     assert all(item.attempts == 1 for item in continuous_ledger.symbols("2026-07-24"))
 
 
-def test_stale_snapshot_cannot_exclude_and_resumed_stock_reenters_expected_set(tmp_path, monkeypatch):
+def test_stale_snapshot_cannot_exclude_and_resumed_stock_reenters_expected_set(tmp_path, monkeypatch, suspension_calendar):
     monkeypatch.setenv("GP_STORE_DIR", str(tmp_path / "store"))
     eligible = frozenset({"000001", "000002"})
     now = datetime(2026, 7, 24, 16, 40, tzinfo=TZ)
@@ -200,24 +200,27 @@ def test_stale_snapshot_cannot_exclude_and_resumed_stock_reenters_expected_set(t
             return True
 
     collector = OfficialSuspensionEvidenceCollector(
+        calendar=suspension_calendar,
         client=Client(), verifier=Verifier(), parser=lambda *_args, **_kwargs: ("此前预计2026年7月24日开市起复牌。公司股票自2026年7月24日开市起继续停牌", "parsed"),
     )
-    evidence = collector.resolve(symbols=("000002",), trade_date=date(2026, 7, 24), observed_at=now)
+    evidence = collector.resolve(symbols=("000002",), trade_date=date(2026, 7, 24), observed_at=now).evidence_by_symbol
     assert evidence["000002"]["state"] == "verified_suspended"
     assert evidence["000002"]["effective_suspension_date"] == "2026-07-24"
 
     one_day_halt = OfficialSuspensionEvidenceCollector(
+        calendar=suspension_calendar,
         client=Client(), verifier=Verifier(), parser=lambda *_args, **_kwargs: (
             "停牌日期为2026年7月24日。公司股票将于2026年7月24日停牌1天，2026年7月27日起复牌。",
             "parsed",
         ),
-    ).resolve(symbols=("000002",), trade_date=date(2026, 7, 24), observed_at=now)
+    ).resolve(symbols=("000002",), trade_date=date(2026, 7, 24), observed_at=now).evidence_by_symbol
     assert one_day_halt["000002"]["state"] == "verified_suspended"
     assert "停牌日期为2026年7月24日" in one_day_halt["000002"]["excerpt"]
 
     no_proof = OfficialSuspensionEvidenceCollector(
+        calendar=suspension_calendar,
         client=Client(), verifier=Verifier(), parser=lambda *_args, **_kwargs: ("公司股票自2026年7月25日开市起继续停牌", "parsed"),
-    ).resolve(symbols=("000002",), trade_date=date(2026, 7, 24), observed_at=now)
+    ).resolve(symbols=("000002",), trade_date=date(2026, 7, 24), observed_at=now).evidence_by_symbol
     assert no_proof == {}
 
     continuation_text = {
@@ -246,8 +249,9 @@ def test_stale_snapshot_cannot_exclude_and_resumed_stock_reenters_expected_set(t
             return url.rsplit("/", 1)[-1].split(".", 1)[0].encode()
 
     continuation = OfficialSuspensionEvidenceCollector(
+        calendar=suspension_calendar,
         client=ContinuationClient(), verifier=Verifier(), parser=lambda document, *_args, **_kwargs: (continuation_text[document.decode()], "parsed"),
-    ).resolve(symbols=tuple(continuation_text), trade_date=date(2026, 7, 24), observed_at=now)
+    ).resolve(symbols=tuple(continuation_text), trade_date=date(2026, 7, 24), observed_at=now).evidence_by_symbol
     assert continuation["000002"]["evidence_kind"] == "continuation_halt"
     assert continuation["000003"]["evidence_kind"] == "exact_target_date"
     assert continuation["000004"]["evidence_kind"] == "continuation_halt"
@@ -287,6 +291,51 @@ def test_stale_snapshot_cannot_exclude_and_resumed_stock_reenters_expected_set(t
     assert historical.approximate is True
     assert historical.expected_symbols == ("000001", "000002")
     assert historical.excluded_symbols == ()
+
+
+def test_worker_persists_unresolved_evidence_without_changing_coverage(tmp_path, monkeypatch, capsys):
+    now = datetime.now(TZ)
+    ledger = MarketRunStore(tmp_path / "unresolved.db")
+    ledger.ensure_run(universe=_frozen(), now=now)
+    diagnostic = {"symbol": "000002", "trade_date": "2026-07-24", "state": "unresolved",
+                  "reason": "unresolved_status_disclosure", "policy_revision": "official-suspension.v2",
+                  "documents": [{"source_record_id": "resume", "reason": "parse_page_limit", "blocking": True}]}
+
+    class Collector:
+        def resolve(self, **_kwargs):
+            return SuspensionResolution(diagnostics_by_symbol={"000002": diagnostic})
+
+    class Provider:
+        def get_daily_batch(self, symbols, *_args):
+            return {symbol: pd.DataFrame() for symbol in symbols}
+
+    monkeypatch.setattr("gp_assistant.application.market_orchestrator.get_provider", lambda **_kwargs: Provider())
+    monkeypatch.setattr("gp_assistant.application.market_orchestrator.coverage_for_date",
+                        lambda *_args, **_kwargs: {"000001": {"date": "2026-07-24"}})
+    _daily_fetch_worker(run_db=str(ledger.path), trade_date="2026-07-24", now_iso=now.isoformat(),
+                        lease_sec=600, suspension_collector=Collector())
+    assert ledger.get_run("2026-07-24").state == "retry_wait"
+    assert ledger.expected_symbols("2026-07-24") == ("000001", "000002")
+    symbols = {item.symbol: item for item in ledger.symbols("2026-07-24")}
+    assert symbols["000001"].status == "fetched" and symbols["000001"].evidence is None
+    assert symbols["000002"].status == "failed" and symbols["000002"].last_error == "provider_empty"
+    assert symbols["000002"].evidence["suspension_check"] == diagnostic
+    assert '"reason": "parse_page_limit"' in capsys.readouterr().out
+    ledger.mark_attempt(trade_date="2026-07-24", symbols=("000002",), now=now, source="fixture")
+    ledger.update_coverage(trade_date="2026-07-24", target_date="2026-07-24", rows={"000001": {"date": "2026-07-24"}}, now=now)
+    assert ledger.symbols("2026-07-24")[1].evidence["suspension_check"] == diagnostic
+    # Wrong-date and fetched-symbol diagnostics cannot mutate other facts.
+    before = ledger.symbols("2026-07-24")
+    ledger.record_suspension_diagnostics(trade_date="2026-07-24", now=now, diagnostics_by_symbol={
+        "000001": dict(diagnostic, symbol="000001"), "000002": dict(diagnostic, trade_date="2026-07-23"),
+    })
+    assert ledger.symbols("2026-07-24") == before
+    ledger.update_coverage(trade_date="2026-07-24", target_date="2026-07-24",
+                           rows={s: {"date": "2026-07-24"} for s in ("000001", "000002")}, now=now)
+    ledger.complete("2026-07-24", now)
+    before = ledger.symbols("2026-07-24")
+    ledger.record_suspension_diagnostics(trade_date="2026-07-24", now=now, diagnostics_by_symbol={"000002": diagnostic})
+    assert ledger.symbols("2026-07-24") == before
 
 
 def test_fetching_run_does_not_reenter_same_day_exclusion_reconciliation(tmp_path, monkeypatch):
