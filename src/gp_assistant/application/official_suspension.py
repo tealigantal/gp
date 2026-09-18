@@ -127,6 +127,7 @@ class OfficialSuspensionEvidenceCollector:
             halts: list[_Witness] = []
             resumes: list[_Witness] = []
             unknown: list[str | None] = []
+            disclosures: list[tuple[str, Mapping[str, object], str]] = []
             documents: list[dict[str, object]] = []
             diagnostic["documents"] = documents
             for record in page.get("records") or []:
@@ -152,6 +153,8 @@ class OfficialSuspensionEvidenceCollector:
                 role = disclosure_role(str(record.get("title") or ""))
                 doc["document_role"] = role
                 blocking = role != "ancillary_document"
+                disclosure_index = len(disclosures)
+                disclosures.append((published_at, record, ""))
 
                 def reject(reason: str, exc: Exception | None = None) -> None:
                     doc.update({"reason": reason, "blocking": blocking})
@@ -180,6 +183,7 @@ class OfficialSuspensionEvidenceCollector:
                 if parse_state != "parsed":
                     reject(f"parse_{parse_state}")
                     continue
+                disclosures[disclosure_index] = (published_at, record, text)
                 try:
                     facts = parse_status_facts(text)
                     evaluated = [(fact, fact.validity(trade_date, calendar)) for fact in facts]
@@ -205,6 +209,13 @@ class OfficialSuspensionEvidenceCollector:
             latest = max(halts, key=lambda item: (item.published_at, item.fact.starts_on))
             if any(stamp is None or stamp >= latest.published_at for stamp in unknown):
                 diagnostic["reason"] = "unresolved_status_disclosure"
+                continue
+            triggers = [str(record.get("source_record_id") or "unknown") for stamp, record, text in disclosures
+                        if stamp >= latest.published_at
+                        and record.get("source_record_id") != latest.record["source_record_id"]
+                        and latest.fact.may_fulfil_resumption(title=str(record.get("title") or ""), text=text)]
+            if triggers:
+                diagnostic.update({"reason": "resumption_condition_may_be_fulfilled", "conflicting_record_ids": triggers})
                 continue
             # Effective chronology matters: an old resume cannot cancel a new
             # later suspension, nor can a restatement erase an effective resume.

@@ -6,6 +6,7 @@ from zoneinfo import ZoneInfo
 import pandas as pd
 
 from gp_assistant.application.daily_refresh import DailyEvidenceRefresher
+from gp_assistant.application.conversation_service import project_next_plan_target
 from gp_assistant.application.market_orchestrator import MarketClock, MarketDayOrchestrator, _daily_fetch_worker
 from gp_assistant.application.market_runs import FrozenUniverse, MarketRunStore, universe_digest
 from gp_assistant.application.official_suspension import OfficialSuspensionEvidenceCollector, SuspensionResolution
@@ -15,6 +16,35 @@ from gp_assistant.store import ContractStore
 
 
 TZ = ZoneInfo("Asia/Shanghai")
+
+
+def test_target_coverage_is_independent_of_older_backlog(tmp_path, suspension_calendar):
+    from dataclasses import replace
+
+    ledger = MarketRunStore(tmp_path / "scoped.db")
+    now = datetime(2026, 7, 24, 16, tzinfo=TZ)
+    assert ledger.health(initialize=False, trade_date="2026-07-24")["state"] == "not_started"
+    assert not ledger.path.exists()
+    ledger.ensure_run(universe=replace(_frozen(), trade_date="2026-07-23"), now=now)
+    ledger.ensure_run(universe=_frozen(), now=now)
+    ledger.update_coverage(trade_date="2026-07-24", target_date="2026-07-24", rows={
+        "000001": {"date": "2026-07-24", "open": 1, "high": 1, "low": 1, "close": 1, "volume": 1, "amount": 1},
+    }, now=now)
+    read = lambda day: ledger.health(initialize=False, trade_date=day)
+    target = project_next_plan_target(plan=None, now=now, recovery_for_date=read, calendar=suspension_calendar)
+    assert target["required_daily_evidence_date"] == "2026-07-24"
+    assert (target["state"], target["completed"], target["total"]) == ("pending_daily_evidence", 1, 2)
+    assert ledger.health(initialize=False)["target_trade_date"] == "2026-07-23"
+    ledger.update_coverage(trade_date="2026-07-24", target_date="2026-07-24", rows={
+        symbol: {"date": "2026-07-24", "open": 1, "high": 1, "low": 1, "close": 1, "volume": 1, "amount": 1}
+        for symbol in _frozen().expected_symbols
+    }, now=now)
+    ledger.complete("2026-07-24", now)
+    before = ledger.path.read_bytes()
+    target = project_next_plan_target(plan=None, now=now, recovery_for_date=read, calendar=suspension_calendar)
+    assert (target["state"], target["completed"], target["total"]) == ("ready_to_publish", 2, 2)
+    assert read("2026-07-22")["state"] == "not_started"
+    assert ledger.path.read_bytes() == before
 
 
 class _Calendar:

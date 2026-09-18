@@ -1,5 +1,18 @@
 # Suspension evidence resolution (2026-09-18)
 
+## Follow-up: historical conditional halt and independent status scopes
+
+User authorized continuation and remote submission. Scope: recognize an issuer's affirmative dated halt ending on a subsequent disclosure, and stop mixing oldest-backlog coverage with the required next-plan evidence date. Preserve official verification, bounded duration, immutable plans, scoring and database schema.
+
+- [x] Latest live diagnostics establish the actual 603221 blocker: 1225452030 (2026-08-01) explicitly halts from August 3 until its investigation disclosure, but v2 interpreted that as one day. The older unreadable 1225439758 is not the decisive blocker because a newer explicit fact supersedes it. This corrects the initial provisional diagnosis below.
+- [x] v3 records the coordinated resumption condition, applies the existing five-session bound, and preserves dated-resume/unresolved-newer-disclosure vetoes. No OCR/classifier expansion or issuer exception is needed.
+- [x] Exact-date read-only ledger health supplies next-plan projections in both health and chat. Oldest-backlog health remains independent. Sidebar uses each scope's own date, counts and state; missing/stale projections remain unknown.
+- [x] 180 complete backend tests, 18 frontend tests, typecheck, lint/build, compileall, contract manifest/retirement and selection self-check passed. Independent read-only review found an initially missing condition-fulfilment conflict; regression and complete-batch title/text checking close it, including unreadable relevant reports. Final review has no remaining blockers.
+- [x] Final live collector replay verified 603221/1225452030 for 2026-08-04 as two inclusive sessions, condition `investigation_disclosure`. Source: [official 2026-08-01 notice](https://static.cninfo.com.cn/finalpage/2026-08-01/1225452030.PDF), PDF SHA256 `e4568a1464577e7a94c6623dacb15895ab6987bfdbb86945a44d5837fce50f9b`. This is retrospective announcement verification, not a return backtest.
+- [ ] Native recovery and deployed page/chat verification; commit and push after acceptance.
+
+Validation includes one-day/foreign/uncertain/unbound conditions, fifth/sixth trading-session limits, actual dated resumption, unreadable newer notices, completed required date despite older backlog, and missing exact dates without database creation or checkpoint inference. Deploy only changed consumers (`gp`, `gp-worker`, `web`), retaining volumes. Normal retry owns ledger recovery; never manually exclude a symbol. Rollback uses previous images and leaves immutable versions intact. Record final observed outcomes here.
+
 ## Purpose / Big Picture
 
 Fix missed official suspension exclusions without treating provider-empty as proof. Keep the frozen full-market universe and exact-date coverage contract, production database schema, immutable plans, scoring and Serenity unchanged.
@@ -52,3 +65,5 @@ At the initial post-recovery publication check, the unchanged producer correctly
 Final live acceptance at 18:40: maintenance completed all 3052 symbols at 18:37:51, then the native worker published `plan_db335e12f6125307591602e7` / `publication_0cf8e40be6c02a6f9b64ca47` for 2026-09-21 with 2026-09-18 evidence, producer5 and scoring v6. Complete raw/eligible scope=3052/3044, scored=198, frozen=30, selected=3. All 198 stored core/final scores and net returns reproduced from G/L/N/A0/n0 and the single Serenity contribution. The page displayed 000993/002428/002851 at 55.6/55.3/55.2 and waiting-for-open status. Real `/api/chat` on that exact publication confirmed dates, scores and observation-only status; its disposable session DELETE returned204. Old plan/publication payload hashes were rechecked after publication and remained unchanged. The new Serenity batch was unavailable and correctly contributed0%; no active3% batch or return improvement is claimed.
 
 Code `90511de` was pushed to main and both [CI jobs](https://github.com/tealigantal/gp/actions/runs/35335005505) passed. Remaining independent issue: the 2026-08-04/603221 historical gap remains unresolved; the sidebar still conflates that backlog with the next-plan date, while the authoritative plan card correctly shows the new publication. This bounded repair did not change that presentation logic or historical recovery policy.
+
+Follow-up pre-deployment baseline at 22:07: real chat on `publication_1401dafd1e1a0d2357320188` correctly describes September 21 / September 18 and observation-only; disposable conversation deleted (204). Existing Serenity batch is now ready. Captured SHA256 for every existing payload: 83 plans and 4717 publications. Browser reproduced the misleading sidebar against the correctly published target card.

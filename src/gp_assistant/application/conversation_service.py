@@ -115,7 +115,7 @@ def project_current_market(*, plan_date, publication_tradeable: bool, now: datet
     }
 
 
-def project_next_plan_target(*, plan, now: datetime, recovery: dict[str, object], calendar: CnATradingCalendar | None = None) -> dict[str, object]:
+def project_next_plan_target(*, plan, now: datetime, recovery_for_date: Callable[[str], dict[str, object]], calendar: CnATradingCalendar | None = None) -> dict[str, object]:
     """Project the separate plan-generation target; this never starts recovery work."""
     if now.tzinfo is None:
         raise ValueError("narration_clock_timezone_missing")
@@ -140,6 +140,7 @@ def project_next_plan_target(*, plan, now: datetime, recovery: dict[str, object]
         }
 
     required_date = required_evidence.isoformat()
+    recovery = recovery_for_date(required_date)
     tracking_required = recovery.get("target_trade_date") == required_date
     recovery_state = str(recovery.get("state") or "unavailable")
     completed_daily_date = required_evidence if tracking_required and recovery_state == "ready" else None
@@ -273,8 +274,10 @@ class ConversationService:
         else:
             conclusion = f"截至{now:%Y年%m月%d日 %H:%M}（上海时间），市场{phase_name}；当前不可执行。"
 
-        recovery = self.market_runs.health(initialize=False)
-        next_target = project_next_plan_target(plan=plan, now=now, recovery=recovery, calendar=self.planning_calendar)
+        next_target = project_next_plan_target(
+            plan=plan, now=now, calendar=self.planning_calendar,
+            recovery_for_date=lambda day: self.market_runs.health(initialize=False, trade_date=day),
+        )
         target_date = next_target["market_session_date"]
         evidence_date = next_target["required_daily_evidence_date"]
         target_state = str(next_target["state"])

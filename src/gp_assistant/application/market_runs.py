@@ -656,9 +656,14 @@ class MarketRunStore:
             conn.close()
 
     @staticmethod
-    def _health_from_connection(conn: sqlite3.Connection) -> dict[str, object]:
-        row = conn.execute("SELECT * FROM daily_runs WHERE state != ? ORDER BY trade_date ASC LIMIT 1", (RUN_COMPLETE,)).fetchone()
+    def _health_from_connection(conn: sqlite3.Connection, trade_date: str | None = None) -> dict[str, object]:
+        row = (conn.execute("SELECT * FROM daily_runs WHERE trade_date=?", (trade_date,)).fetchone()
+               if trade_date is not None else
+               conn.execute("SELECT * FROM daily_runs WHERE state != ? ORDER BY trade_date ASC LIMIT 1", (RUN_COMPLETE,)).fetchone())
         if row is None:
+            if trade_date is not None:
+                return {"state": "not_started", "target_trade_date": trade_date, "completed": 0,
+                        "total": 0, "failed": 0, "next_retry_at": None, "approximate_universe": False}
             checkpoint = conn.execute("SELECT last_complete_trade_date FROM recovery_checkpoints WHERE singleton=1").fetchone()
             return {
                 "state": "ready",
@@ -675,7 +680,7 @@ class MarketRunStore:
             (run.trade_date,),
         ).fetchone()
         return {
-            "state": run.state,
+            "state": "ready" if run.state == RUN_COMPLETE else run.state,
             "target_trade_date": run.trade_date,
             "completed": int(counts["completed"] or 0),
             "total": int(counts["total"] or 0),
@@ -684,22 +689,26 @@ class MarketRunStore:
             "approximate_universe": run.universe.approximate,
         }
 
-    def health(self, *, initialize: bool = True) -> dict[str, object]:
-        """Report recovery state; public readers set ``initialize=False`` to stay read-only."""
+    def health(self, *, initialize: bool = True, trade_date: str | None = None) -> dict[str, object]:
+        """Read one exact date or the oldest backlog; never mix their scopes.
+
+        Public readers set ``initialize=False`` to stay read-only. A completed
+        checkpoint is not proof of coverage for a missing requested date.
+        """
         if not initialize:
             conn = self._connect_readonly()
             if conn is None:
-                return {"state": "not_started", "target_trade_date": None, "completed": 0, "total": 0, "failed": 0, "next_retry_at": None, "approximate_universe": False}
+                return {"state": "not_started", "target_trade_date": trade_date, "completed": 0, "total": 0, "failed": 0, "next_retry_at": None, "approximate_universe": False}
             try:
-                return self._health_from_connection(conn)
+                return self._health_from_connection(conn, trade_date)
             except sqlite3.OperationalError:
-                return {"state": "unavailable", "target_trade_date": None, "completed": 0, "total": 0, "failed": 0, "next_retry_at": None, "approximate_universe": False}
+                return {"state": "unavailable", "target_trade_date": trade_date, "completed": 0, "total": 0, "failed": 0, "next_retry_at": None, "approximate_universe": False}
             finally:
                 conn.close()
         self.initialize()
         conn = self._connect()
         try:
-            return self._health_from_connection(conn)
+            return self._health_from_connection(conn, trade_date)
         finally:
             conn.close()
 

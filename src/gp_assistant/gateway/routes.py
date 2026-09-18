@@ -75,12 +75,13 @@ def health() -> dict[str, object]:
         publication_tradeable=bool(publication and publication.decision.tradeable_now),
         now=now,
     )
-    recovery = MarketRunStore().health(initialize=False)
+    market_runs = MarketRunStore()
+    recovery = market_runs.health(initialize=False)
     payload["market_recovery"] = recovery
     payload["next_plan_target"] = project_next_plan_target(
         plan=plan,
         now=now,
-        recovery=recovery,
+        recovery_for_date=lambda day: market_runs.health(initialize=False, trade_date=day),
     )
     return payload
 

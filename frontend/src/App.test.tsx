@@ -33,6 +33,43 @@ afterEach(() => {
 })
 
 describe('GP chat workspace', () => {
+  it.each([
+    ['published', '下一计划已发布'],
+    ['ready_to_publish', '日K齐备，等待发布'],
+    ['pending_daily_evidence', '下一计划数据恢复中'],
+  ])('keeps historical backlog separate from %s next-plan coverage', async (state, title) => {
+    vi.stubGlobal('fetch', vi.fn((input: string | URL) => {
+      const url = String(input)
+      if (url.includes('/api/health')) return jsonResponse({
+        ...health,
+        market_recovery: { ...health.market_recovery, state: 'retry_wait', target_trade_date: '2026-07-02', completed: 7, total: 8, approximate_universe: true },
+        next_plan_target: { ...health.next_plan_target, state, completed: 19, total: 20 },
+      })
+      if (url.includes('/api/recommendation/current')) return jsonResponse(publication)
+      return jsonResponse([])
+    }))
+    render(<App />)
+    expect(await screen.findByText(title)).toBeInTheDocument()
+    expect(screen.getByText('目标日K 2026-07-24')).toBeInTheDocument()
+    expect(screen.getByText('历史日K回补 2026-07-02 · 已完成 7/8 · 使用当前分母回补')).toBeInTheDocument()
+    expect(screen.queryByText('已完成 7/8 · 使用当前分母回补')).not.toBeInTheDocument()
+    if (state === 'pending_daily_evidence') expect(screen.getByText('已完成 19/20')).toBeInTheDocument()
+    else expect(screen.queryByText('下一计划数据恢复中')).not.toBeInTheDocument()
+  })
+
+  it('does not infer ready status from missing target projections', async () => {
+    vi.stubGlobal('fetch', vi.fn((input: string | URL) => {
+      const url = String(input)
+      if (url.includes('/api/health')) return jsonResponse({ ...health, next_plan_target: undefined, market_recovery: undefined })
+      if (url.includes('/api/recommendation/current')) return jsonResponse(publication)
+      return jsonResponse([])
+    }))
+    render(<App />)
+    expect(await screen.findByText('计划状态待确认')).toBeInTheDocument()
+    expect(screen.getByText('目标日K 待确认')).toBeInTheDocument()
+    expect(screen.queryByText('下一计划数据恢复中')).not.toBeInTheDocument()
+  })
+
   it('renders canonical publication facts without deriving a new ranking', async () => {
     vi.stubGlobal('fetch', vi.fn((input: string | URL) => {
       const url = String(input)

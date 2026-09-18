@@ -101,7 +101,7 @@ def test_runtime_producer_and_conversation_are_bound_and_idempotent(tmp_path):
     next_target = project_next_plan_target(
         plan=selected_plan,
         now=datetime(2026, 7, 23, 16, 2, tzinfo=TZ),
-        recovery={"state": "retry_wait", "target_trade_date": "2026-07-23", "completed": 3042, "total": 3044, "failed": 2, "next_retry_at": "2026-07-23T16:10:00+08:00", "approximate_universe": False},
+        recovery_for_date=lambda day: {"state": "retry_wait", "target_trade_date": day, "completed": 3042, "total": 3044, "failed": 2, "next_retry_at": "2026-07-23T16:10:00+08:00", "approximate_universe": False},
         calendar=calendar,
     )
     assert next_target == {

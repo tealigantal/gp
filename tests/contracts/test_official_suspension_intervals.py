@@ -21,6 +21,57 @@ CICC = (
     "并将于刊登A股异议股东收购请求权申报结果公告当日复牌。"
 )
 INTERVAL = "申报期间：2026年9月15日至2026年9月17日。申报期间公司A股股票停牌。"
+ALICE = "本公司股票将于2026年8月3日（星期一）开市起停牌，自披露核查公告后复牌。"
+
+
+def test_condition_bound_halt_real_notice_and_chronology(suspension_calendar):
+    # Actual 1225452030 PDF, page 1, published 2026-08-01. This is
+    # retrospective parser evidence, not a point-in-time price backtest.
+    halt = record("1225452030", symbol="603221", text=ALICE, published="2026-08-01T00:00:00+08:00")
+    older_unreadable = record("1225439758", symbol="603221", title="股东会法律意见书",
+                              text="", state="unparsed", published="2026-07-24T00:00:00+08:00")
+    result = resolve([halt, older_unreadable], suspension_calendar, date(2026, 8, 4))
+    evidence = result.evidence_by_symbol["603221"]
+    assert evidence["elapsed_sessions"] == 2
+    assert evidence["policy_revision"] == "official-suspension.v3"
+    assert evidence["status_fact"]["resumption_condition"] == "自披露核查公告后复牌"
+    assert evidence["status_fact"]["ends_on"] is None
+    assert effective(ALICE, date(2026, 8, 7), suspension_calendar)
+    assert not effective(ALICE, date(2026, 8, 10), suspension_calendar)
+    resume = record("resume", symbol="603221", title="核查完成及复牌公告",
+                    text="本公司股票自2026年8月4日起复牌。", published="2026-08-04T00:00:00+08:00")
+    assert not resolve([halt, resume], suspension_calendar, date(2026, 8, 4)).evidence_by_symbol
+    unresolved = dict(resume, _text="", _state="unparsed")
+    assert not resolve([halt, unresolved], suspension_calendar, date(2026, 8, 4)).evidence_by_symbol
+    outcome = record("outcome", symbol="603221", title="股票交易异常波动核查结果公告",
+                     text="本公司已完成相关核查，不存在应披露而未披露的重大事项。",
+                     published="2026-08-04T00:00:00+08:00")
+    conflict = resolve([halt, outcome], suspension_calendar, date(2026, 8, 4))
+    assert not conflict.evidence_by_symbol
+    assert conflict.diagnostics_by_symbol["603221"]["reason"] == "resumption_condition_may_be_fulfilled"
+    assert conflict.diagnostics_by_symbol["603221"]["conflicting_record_ids"] == ["outcome"]
+    ancillary_trigger = dict(outcome, title="专项核查报告书", _text="", _state="page_limit")
+    assert not resolve([halt, ancillary_trigger], suspension_calendar, date(2026, 8, 4)).evidence_by_symbol
+    earlier = dict(outcome, published_at="2026-07-31T00:00:00+08:00")
+    assert resolve([halt, earlier], suspension_calendar, date(2026, 8, 4)).evidence_by_symbol
+    # A fresh explicit halt in the result notice is new evidence, not an
+    # indefinite extension of the old condition.
+    ongoing = dict(outcome, _text="公司股票自2026年8月4日开市起停牌。")
+    assert resolve([halt, ongoing], suspension_calendar, date(2026, 8, 4)).evidence_by_symbol["603221"]["source_record_id"] == "outcome"
+
+
+@pytest.mark.parametrize("text", [
+    ALICE.replace("将于", "拟于"),
+    ALICE.replace("本公司", "其他公司"),
+    ALICE.replace("停牌，", "停牌1天，"),
+    ALICE.replace("，自披露", "。自披露"),
+    ALICE.replace("，自披露", "，其他公司自披露"),
+    ALICE.replace("后复牌", "后可能复牌"),
+    ALICE.replace("后复牌", "后复牌的申请未获批准"),
+    "本公司股票将于2026年8月3日开市起停牌。市场预计披露核查公告后复牌。",
+])
+def test_conditional_resume_does_not_extend_unbound_halts(suspension_calendar, text):
+    assert not effective(text, date(2026, 8, 4), suspension_calendar)
 
 
 def record(key="halt", *, symbol="601995", title="关于A股股票停牌的公告",

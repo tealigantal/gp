@@ -15,7 +15,7 @@ from ..serenity.text import normalize_cn_text
 from .trading_calendar import CnATradingCalendar
 
 
-POLICY_REVISION = "official-suspension.v2"
+POLICY_REVISION = "official-suspension.v3"
 MAX_HALT_SESSIONS = 10
 CONTINUATION_SESSIONS = 5
 _DATE = r"20\d{2}年\d{1,2}月\d{1,2}日"
@@ -82,6 +82,21 @@ class TradingStatusFact:
     session_limit: int
     kind: str
     excerpt: str
+    resumption_condition: str | None = None
+    resumption_trigger: Literal["investigation_disclosure", "result_disclosure", "further_disclosure"] | None = None
+
+    def may_fulfil_resumption(self, *, title: str, text: str) -> bool:
+        """A later possible trigger withdraws proof; it does not prove trading.
+
+        Even an undated investigation/result notice can satisfy the original
+        condition. Ambiguity must not preserve a no-bar exclusion. An explicit
+        newer halt is resolved separately by the collector's chronology.
+        """
+        if self.resumption_trigger == "investigation_disclosure":
+            return bool(re.search(r"核查|核实", normalize(title) + normalize(text)))
+        if self.resumption_trigger == "result_disclosure":
+            return "结果" in normalize(title) + normalize(text)
+        return self.resumption_trigger == "further_disclosure"
 
     def validity(self, target: date, calendar: CnATradingCalendar) -> str:
         if not calendar.is_open(target):
@@ -107,6 +122,8 @@ class TradingStatusFact:
             "ends_on": self.ends_on.isoformat() if self.ends_on else None,
             "session_limit": self.session_limit, "duration_unit": "trading_session",
             "kind": self.kind, "excerpt": self.excerpt,
+            "resumption_condition": self.resumption_condition,
+            "resumption_trigger": self.resumption_trigger,
         }
 
 
@@ -182,7 +199,21 @@ def parse_status_facts(text: str) -> tuple[TradingStatusFact, ...]:
             # sentences. Ambiguous historical episodes fail conservatively.
             start = min(_date(other["day"]) for other in asserted_starts if other.start() <= match.start())
         one_day = re.match(r"(?:1天|一天|1个交易日|一个交易日)", text[match.end():])
-        if not one_day and (continuing or (declared and period)):
+        # An affirmative halt can end on a future disclosure rather than a
+        # known date. Bind that condition to the immediately coordinated
+        # issuer clause, never to another sentence/company or a forecast.
+        condition = re.match(
+            r"[，,](?:并)?(?:自|待)(?:披露|刊登)(?P<topic>核查|核查结果|相关|结果)公告(?:后|当日)(?:复牌|恢复交易)(?=[。；，,]|$)",
+            text[match.end():],
+        )
+        if not one_day and condition:
+            facts.append(TradingStatusFact(
+                "halted", start, None, limit, "conditional_resumption_halt", window,
+                condition.group()[1:],
+                "investigation_disclosure" if condition["topic"].startswith("核查")
+                else "result_disclosure" if condition["topic"] == "结果" else "further_disclosure",
+            ))
+        elif not one_day and (continuing or (declared and period)):
             facts.append(TradingStatusFact("halted", start, None, limit, "continuation_halt", window))
         else:
             facts.append(TradingStatusFact("halted", start, start, 1, "exact_target_date", window))
