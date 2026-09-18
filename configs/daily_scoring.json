@@ -1,0 +1,23 @@
+{
+  "revision": "daily_score_v6_smoothed_gain_loss",
+  "n0": 20.0,
+  "a0": 0.03997941946323374,
+  "round_trip_cost": 0.003,
+  "reference": {
+    "frozen_at": "2026-09-18T15:40:07+08:00",
+    "evidence_date": "2026-09-17",
+    "known_at": "2026-09-17T23:01:39.040592+08:00",
+    "source": "local Docker volume gp-runtime-store-20260917 mounted at /app/store; events/market_memory.db; committed mature_breadth_v2_committed; production date-balanced common retrieval pool, limit=4000, latest <=250 signal dates",
+    "case_count": 4000,
+    "symbol_count": 2145,
+    "signal_date_count": 155,
+    "signal_date_range": ["2026-01-21", "2026-09-09"],
+    "outcome_available_date_range": ["2026-01-28", "2026-09-16"],
+    "maintenance_run_id": "c732fc4169af58d33bcc2a427c0496dab03107a1671a94c82c6a8e4bb2fc4ad3",
+    "maintenance_completed_at": "2026-09-17T22:57:14.746261+08:00",
+    "source_plan_id": "plan_6456cfcd2e311a3c2af184e1",
+    "source_digest": "9f2be0fbb44f2d092dd1882ef4f599d6f44e7f3f307693d94fc3b8dcd39c0ef6",
+    "digest_method": "SHA256 canonical JSON sorted by event_id, fields event_id,signal_trading_day,outcome_available_trading_day,first_seen_at,return_3d,cost; sort_keys=True,separators=(',',':'),allow_nan=False",
+    "statistic": "fsum(abs(return_3d - 0.003)) / 4000; decimal returns; n0=20 is an initial policy value, not optimized"
+  }
+}

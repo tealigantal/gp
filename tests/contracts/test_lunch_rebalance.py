@@ -10,6 +10,8 @@ import pandas as pd
 import pytest
 
 from gp_assistant.application.lunch_rebalance_producer import LunchRebalanceProducer, LunchWriteBusy, _CrossProcessLock
+from gp_assistant.application.real_producer import DAILY_PRODUCER_REVISION
+from gp_assistant.decision_engine.scoring import REVISION as SCORING_REVISION
 from gp_assistant.application.conversation_service import ConversationService
 from gp_assistant.application.plan_service import PlanService
 from gp_assistant.application.publication_service import PublicationService
@@ -33,7 +35,7 @@ from gp_assistant.contracts.evidence import (
 )
 from gp_assistant.contracts.market import TradingCalendarRef
 from gp_assistant.contracts.ids import content_id
-from gp_assistant.intraday.lunch_rebalance import LunchBatchUnavailable, collect_lunch_batch, rerank_lunch_candidates
+from gp_assistant.intraday.lunch_rebalance import LunchBatchUnavailable, collect_lunch_batch, observe_lunch_candidates
 from gp_assistant.serenity.service import POLICY_REVISION, load_active_target
 from gp_assistant.store import ContractStore, ContractStoreError, PublicationConflict
 
@@ -73,14 +75,14 @@ def _candidate(symbol: str, score: float, *, finalist: bool) -> CandidateDecisio
         signal=SignalAssessment(score=0.5, label="trend", reason_codes=()),
         probability=ProbabilityAssessment(probability=0.6, confidence=0.7, effective_sample_size=30, uncertainty=0.2),
         risk=RiskAssessment(score=0.7, execution_risk=0.3, reason_codes=()),
-        ranking=RankingAssessment(score=score * 0.8, rank=0, reason_codes=()),
+        ranking=RankingAssessment(score=score, rank=0, reason_codes=(), core_score=score, policy_revision=SCORING_REVISION),
         experts=experts,
         trade_plan=TradePlan(entry_low=10.0, entry_high=11.0, stop_price=9.0, take_profit_prices=(12.0,), action="watch", reason_codes=()),
         reason_codes=(),
     )
 
 
-def _base_plan(store: ContractStore, *, serenity_active: bool = False):
+def _base_plan(store: ContractStore, *, serenity_active: bool = False, obsolete: bool = False):
     finalists = tuple(
         _candidate(f"{index + 1:06d}", 0.90 - index * 0.01, finalist=True)
         for index in range(30)
@@ -121,12 +123,12 @@ def _base_plan(store: ContractStore, *, serenity_active: bool = False):
             source="fixture",
         ),
         policy=DecisionPolicyBinding(
-            revision="adaptive_kernel_v3_serenity",
+            revision="daily_score_v5_causal_memory" if obsolete else SCORING_REVISION,
             adaptive_policy_state_version="base",
             selection_policy="full_market_liquidity_ranked_top30",
             risk_profile="normal",
         ),
-        producer=ProducerIdentity(name="real_daily_producer", revision="2", source_digest="daily"),
+        producer=ProducerIdentity(name="real_daily_producer", revision="4" if obsolete else DAILY_PRODUCER_REVISION, source_digest="daily"),
         evaluated_candidates=(*finalists, outsider),
         serenity=SerenityDecisionBinding(
             reference_id="serenity-batch" if serenity_active else None,
@@ -161,6 +163,15 @@ def _run_lunch(store: ContractStore, producer: LunchRebalanceProducer, *, now: d
     except PublicationConflict:
         return replace(result, state="unavailable", reason="stale_base_publication")
     return replace(result, state="published", publication_id=publication.publication_id)
+
+
+def test_new_lunch_refuses_old_formula_base_without_touching_history(tmp_path):
+    store = ContractStore(tmp_path / "contract.sqlite")
+    base, publication = _base_plan(store, obsolete=True)
+    result = LunchRebalanceProducer(store, batch_loader=lambda *a, **kw: pytest.fail("must reject before collection")).produce(now=datetime(2026, 7, 24, 12, 0, tzinfo=TZ))
+    assert result.state == "unavailable" and result.reason == "obsolete_base_scoring_policy"
+    assert store.load_plan(base.plan_id) == base
+    assert store.current_publication() == publication
 
 
 def _bars(*, slope: float = 0.0, missing_last: bool = False) -> pd.DataFrame:
@@ -226,7 +237,9 @@ def test_complete_lunch_batch_appends_new_plan_and_preserves_database_contract(t
     assert current.runtime_id == runtime.runtime_id
     assert lunch_plan.producer.name == "lunch_5m_producer"
     assert len(lunch_plan.evaluated_candidates) == 31
-    assert lunch_plan.evaluated_candidates[0].symbol != base_plan.evaluated_candidates[0].symbol
+    assert [c.symbol for c in lunch_plan.evaluated_candidates] == [c.symbol for c in base_plan.evaluated_candidates]
+    assert [c.adaptive_score for c in lunch_plan.evaluated_candidates] == [c.adaptive_score for c in base_plan.evaluated_candidates]
+    assert lunch_plan.decision_policy.selection_policy == "daily_top30_lunch_observation_only"
     outsider = next(item for item in lunch_plan.evaluated_candidates if item.symbol == "600999")
     assert outsider.disposition is not CandidateDisposition.SELECTED
     assert runtime.market_phase is MarketPhase.LUNCH
@@ -414,7 +427,7 @@ def test_llm_receives_product_level_lunch_principle_without_engine_interfaces(tm
 
         def chat(self, messages, **_kwargs):
             captured["messages"] = messages
-            return {"choices": [{"message": {"content": "午盘已按上午闭合数据重排，但午休不能交易。"}}]}
+            return {"choices": [{"message": {"content": "午盘技术指标仅作附加观察，原评分保持不变。"}}]}
 
     store = ContractStore(tmp_path / "contract.sqlite")
     _base_plan(store, serenity_active=True)
@@ -429,9 +442,10 @@ def test_llm_receives_product_level_lunch_principle_without_engine_interfaces(tm
 
     system_prompt = captured["messages"][0]["content"]
     user_payload = captured["messages"][1]["content"]
-    assert "45% 是股票上午涨跌相对沪深300的强弱" in system_prompt
+    assert "技术指标仅作附加观察，不改写总分" in system_prompt
     assert "午休市场门禁始终禁止交易" in system_prompt
-    assert "午盘最终排序分" in user_payload
+    assert "保留的综合分" in user_payload
+    assert "原总分及公告贡献保持不变" in user_payload
     assert "相对早盘综合分的实际改变量" in user_payload
     assert "batch_digest" not in user_payload
     assert "lunch_5m_producer" not in user_payload
@@ -529,12 +543,12 @@ def test_active_serenity_three_percent_survives_lunch_rerank():
             )
         }
     )
-    reranked = rerank_lunch_candidates(
+    reranked = observe_lunch_candidates(
         (first, *candidates[1:]),
         eligible_symbols=frozenset(symbols),
         batch=batch,
     )
-    expected = min(1.0, batch.signals[first.symbol].score + 0.03)
+    expected = first.adaptive_score
     assert reranked[0].adaptive_score == pytest.approx(expected)
     assert next(expert for expert in reranked[0].experts if expert.expert == "serenity").weight == 0.03
 
@@ -553,7 +567,10 @@ def test_active_serenity_three_percent_survives_lunch_production_and_persistence
     assert plan.serenity.applied_weight == 0.03
     assert serenity.weight == 0.03
     assert serenity.contribution == 0.03
-    assert first.adaptive_score == pytest.approx(min(1.0, signal_by_symbol[first.symbol] + 0.03))
+    assert first.adaptive_score == 0.90
+    assert first.ranking.score == first.adaptive_score
+    assert next(e for e in first.experts if e.expert == "intraday_5m").contribution == 0
+    assert signal_by_symbol[first.symbol] != first.adaptive_score
     assert all(
         next(expert for expert in item.experts if expert.expert == "serenity").weight == 0.03
         for item in plan.evaluated_candidates[:30]
@@ -753,7 +770,7 @@ def test_afternoon_runtime_keeps_all_top30_lunch_scores_explainable(tmp_path):
 
         def chat(self, messages, **_kwargs):
             captured["payload"] = json.loads(messages[1]["content"])
-            return {"choices": [{"message": {"content": "午盘排序依据仍可解释。"}}]}
+            return {"choices": [{"message": {"content": "午盘观察保留原评分。"}}]}
 
     store = ContractStore(tmp_path / "contract.sqlite")
     _base_plan(store, serenity_active=True)
@@ -777,4 +794,4 @@ def test_afternoon_runtime_keeps_all_top30_lunch_scores_explainable(tmp_path):
         if item["午盘五分钟实际影响"] is not None
     ]
     assert len(effects) == 30
-    assert all(effect["午盘最终排序分"] == round(expected_scores[symbol], 6) for symbol, effect in effects)
+    assert all(effect["保留的综合分"] == round(expected_scores[symbol]*100, 4) for symbol, effect in effects)

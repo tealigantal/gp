@@ -314,6 +314,13 @@ def test_fetching_run_does_not_reenter_same_day_exclusion_reconciliation(tmp_pat
 
 
 def test_plan_reads_one_frozen_universe_and_never_polls_spot(tmp_path, monkeypatch):
+    import json
+    from gp_assistant.decision_engine.scoring import REVISION
+    # Synthetic policy available at this test's July clock, not production A0.
+    monkeypatch.setenv("GP_CONFIGS_DIR", str(tmp_path))
+    (tmp_path / "daily_scoring.json").write_text(json.dumps(dict(
+        revision=REVISION, n0=20., a0=.02, round_trip_cost=.003,
+        reference=dict(frozen_at="2026-07-23T00:00:00+08:00", evidence_date="2026-07-22", case_count=1, source_digest="fixture"))), encoding="utf-8")
     rows = {symbol: {"date": "2026-07-24", "amount": amount, "open": 1, "high": 1, "low": 1, "close": 1, "volume": 1} for symbol, amount in (("000001", 1000.0), ("000002", 800.0))}
     monkeypatch.setattr("gp_assistant.application.real_producer.coverage_for_date", lambda *_args, **_kwargs: rows)
     monkeypatch.setattr("gp_assistant.application.real_producer.history_frames", lambda *_args, **_kwargs: {})

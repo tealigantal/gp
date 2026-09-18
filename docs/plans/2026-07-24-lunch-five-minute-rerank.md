@@ -1,5 +1,7 @@
 # 午盘 Top-30 五分钟重排 ExecPlan
 
+2026-09-18 scoring update: direct technical reranking below is historical. Current lunch behavior preserves daily scores and adds observations only; see [current scoring record](../smoothed_scoring_20260918.md). Collection, atomicity, and scope requirements remain active.
+
 ## Purpose / Big Picture
 
 在交易日 11:30 收盘后，用完整闭合的上午 5 分钟行情对早盘计划冻结的 Top-30 重新排序。早盘 `RecommendationPlan` 永久保留，午盘结果是新的不可变计划版本；数据库表结构、Pydantic 合同字段和 HTTP 响应形状全部不变。任一股票、沪深300或任一闭合时点缺失时，不创建午盘计划、不切换 current publication，也不清空早盘结果。

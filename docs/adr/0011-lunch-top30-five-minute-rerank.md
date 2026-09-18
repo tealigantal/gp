@@ -1,5 +1,7 @@
 # ADR 0011 — 午盘 Top-30 五分钟重排
 
+2026-09-18 scoring update: direct technical reranking below is historical. Current lunch behavior preserves daily scores and adds observations only; see [current scoring record](../smoothed_scoring_20260918.md). Collection, atomicity, and scope requirements remain active.
+
 - **Status:** Accepted
 - **Date:** 2026-07-24
 

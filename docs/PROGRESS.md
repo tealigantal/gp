@@ -1,6 +1,8 @@
 # Current Progress
 
-Last updated: 2026-08-22
+Last updated: 2026-09-18
+
+2026-09-18 bounded scoring implementation: v6 gain/loss smoothing, frozen real common-pool A0, daily producer5, observation-only Top-3 and lunch revision3 implemented. Candidate scope, return labels, T+5 maintenance, and deployment topology remain unchanged. Same frozen-input comparison covers 199 candidates; 120 backend tests, frontend lint/typecheck/14 tests/build and required contract/compile checks passed. Authorized deployment completed; formal historical publication retained while next-session daily evidence is pending. Live legacy-plan chat/display and isolated new-policy production API/real-LLM route verified; independent historical audit supports same-input mathematics, not a multi-date return backtest. The temporary verification database isolation incident and recovery are recorded. Details: [scoring record](smoothed_scoring_20260918.md).
 
 2026-08-22 连续停牌证据修复进行中：当前运行 worker 能找到 `002084`、`002445`、`002906`、`600984` 的 CNINFO 公告，交易所复核和 PDF 解析也通过，但旧 `_halt_excerpt` 只接受正文直接写目标日开市/开盘停牌，因而 4 只都返回普通 provider failure。实现已扩展为受限 `exact_target_date` / `continuation_halt` 证据，保留公告时间、身份、交易所、PDF、复牌冲突和有限窗口门禁；目标是让连续停牌闭合精确日K覆盖而不是放宽为缺失即停牌。目标测试和编译已通过，容器重构与真实恢复验收待完成。
 

@@ -34,6 +34,7 @@ from .market_runs import (
 from .official_suspension import OfficialSuspensionEvidenceCollector
 from .publication_service import PublicationService
 from .real_producer import RealRecommendationProducer, DAILY_PRODUCER_REVISION
+from ..decision_engine.scoring import REVISION as SCORING_REVISION, scoring_policy_digest
 from .runtime_producer import RuntimeRecommendationProducer, market_phase
 from ..serenity.service import FIXED_WEIGHT, load_decision, publish_target
 from .trading_calendar import CnATradingCalendar, load_cn_a_calendar
@@ -502,7 +503,11 @@ class MarketDayOrchestrator:
         current = self.store.current_publication()
         current_plan = self.store.load_plan(current.plan_id) if current else None
         target_session = now.date() if MarketClock.local_time(now) < clock_time(15, 0) else calendar.next_open_after(now.date())
-        if current_plan and current_plan.producer.revision == DAILY_PRODUCER_REVISION and current_plan.market_session_date == target_session and current_plan.daily_evidence_date == required and publication_ineligibility(current_plan) is None:
+        if (current_plan and current_plan.producer.revision == DAILY_PRODUCER_REVISION
+                and current_plan.decision_policy.revision == SCORING_REVISION
+                and current_plan.decision_policy.adaptive_policy_state_version.split(":")[1:2] == [scoring_policy_digest()]
+                and current_plan.market_session_date == target_session and current_plan.daily_evidence_date == required
+                and publication_ineligibility(current_plan) is None):
             # A zero-weight base plan is intentionally publishable while the
             # isolated Serenity collector works.  Once that *same frozen*
             # target has an exact complete batch, however, it must be allowed

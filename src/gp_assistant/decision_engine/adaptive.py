@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import math
+
 from ..contracts.catalog import CandidateDisposition
 from ..contracts.decision import CandidateDecision
 
@@ -14,6 +16,12 @@ class AdaptiveDecisionEngine:
         maximum_selected: int = 3,
         selection_eligible_symbols: frozenset[str] | None = None,
     ) -> tuple[CandidateDecision, ...]:
+        maximum_selected = min(3, max(0, maximum_selected))
+        for candidate in candidates:
+            if not math.isfinite(candidate.adaptive_score) or not 0 <= candidate.adaptive_score <= 1:
+                raise ValueError("candidate_score_invalid")
+            if candidate.ranking.score != candidate.adaptive_score:
+                raise ValueError("candidate_score_mismatch")
         if selection_eligible_symbols is None:
             ordered = sorted(candidates, key=lambda item: (-item.adaptive_score, item.symbol))
         else:
@@ -30,10 +38,11 @@ class AdaptiveDecisionEngine:
         result: list[CandidateDecision] = []
         for position, candidate in enumerate(ordered, start=1):
             selection_eligible = selection_eligible_symbols is None or candidate.symbol in selection_eligible_symbols
-            if selection_eligible and "nonpositive_net_edge" not in candidate.ranking.reason_codes and candidate.adaptive_score >= 0.5 and selected < maximum_selected:
+            restricted = candidate.trade_plan.action in {"blocked", "unavailable", "suspended", "halted", "do_not_trade"}
+            if selection_eligible and not restricted and selected < maximum_selected:
                 disposition = CandidateDisposition.SELECTED
                 selected += 1
-            elif candidate.adaptive_score >= 0.4:
+            elif not restricted:
                 disposition = CandidateDisposition.RESERVE
             else:
                 disposition = CandidateDisposition.REJECTED

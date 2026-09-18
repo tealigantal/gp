@@ -57,7 +57,7 @@ export interface CandidateDecision {
   signal: { score: number; label: string; reason_codes: string[] }
   probability: { probability: number; confidence: number; effective_sample_size: number; uncertainty: number }
   risk: { score: number; execution_risk: number; reason_codes: string[] }
-  ranking: { score: number; rank: number; reason_codes: string[] }
+  ranking: { score: number; rank: number; reason_codes: string[]; gain?: number | null; loss?: number | null; support?: number | null; a0?: number | null; n0?: number | null; core_score?: number | null; policy_revision?: string | null }
   trade_plan: TradePlan
   reason_codes: string[]
 }

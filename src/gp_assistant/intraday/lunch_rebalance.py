@@ -19,7 +19,7 @@ from ..contracts.evidence import ExpertContribution
 
 BENCHMARK_SYMBOL = "000300"
 LUNCH_SOURCE = "akshare:sina:5m"
-LUNCH_POLICY_REVISION = "lunch_5m_direct_rerank_v2"
+LUNCH_POLICY_REVISION = "lunch_5m_observation_only_v3"
 _COLUMNS = ("trade_time", "open", "high", "low", "close", "vol", "amount")
 
 
@@ -248,7 +248,7 @@ def collect_lunch_batch_isolated(
     return payload
 
 
-def rerank_lunch_candidates(
+def observe_lunch_candidates(
     candidates: tuple[CandidateDecision, ...],
     *,
     eligible_symbols: frozenset[str],
@@ -256,32 +256,25 @@ def rerank_lunch_candidates(
 ) -> tuple[CandidateDecision, ...]:
     if eligible_symbols != frozenset(batch.signals):
         raise LunchBatchUnavailable("lunch_signal_scope_mismatch")
-    reranked: list[CandidateDecision] = []
+    observed: list[CandidateDecision] = []
     for candidate in candidates:
         if candidate.symbol not in eligible_symbols:
-            reranked.append(candidate)
+            observed.append(candidate)
             continue
         signal = batch.signals[candidate.symbol]
-        serenity_contribution = sum(
-            float(expert.contribution)
-            for expert in candidate.experts
-            if expert.expert == "serenity" and float(expert.weight) == 0.03
-        )
-        serenity_contribution = max(-0.03, min(0.03, serenity_contribution))
-        final_score = _clip01(signal.score + serenity_contribution)
+        # Technical observations contain no comparable gain/loss evidence.
+        # Preserve the complete daily score, including its existing Serenity.
         intraday_expert = ExpertContribution(
             expert="intraday_5m",
-            contribution=round(final_score - float(candidate.adaptive_score), 12),
-            weight=1.0,
-            reason_codes=signal.reason_codes,
+            contribution=0.0,
+            weight=0.0,
+            reason_codes=(*signal.reason_codes, "lunch_observation_only"),
         )
-        reranked.append(
+        observed.append(
             candidate.model_copy(
                 update={
-                    "adaptive_score": round(final_score, 12),
-                    "ranking": candidate.ranking.model_copy(update={"score": round(final_score, 12)}),
-                    "experts": (*candidate.experts, intraday_expert),
+                    "experts": (*(value for value in candidate.experts if value.expert != "intraday_5m"), intraday_expert),
                 }
             )
         )
-    return tuple(reranked)
+    return tuple(observed)

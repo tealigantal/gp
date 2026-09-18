@@ -18,16 +18,18 @@ from ..intraday.lunch_rebalance import (
     LunchFiveMinuteBatch,
     collect_lunch_batch,
     collect_lunch_batch_isolated,
-    rerank_lunch_candidates,
+    observe_lunch_candidates,
 )
 from ..providers.factory import get_provider
+from ..decision_engine.scoring import REVISION as SCORING_REVISION
+from .real_producer import DAILY_PRODUCER_REVISION
 from ..store import ContractStore
 from .plan_service import PlanService
 from .runtime_service import RuntimeService
 
 
 LUNCH_PRODUCER_NAME = "lunch_5m_producer"
-LUNCH_PRODUCER_REVISION = "2"
+LUNCH_PRODUCER_REVISION = "3"
 _PROCESS_LOCK = threading.Lock()
 _FINALITY_DELAY = time(11, 32)
 
@@ -110,6 +112,8 @@ class LunchRebalanceProducer:
             if plan is None or plan.market_session_date != now.date():
                 return LunchRebalanceResult("unavailable", None, None, None, None, "current_base_plan_unavailable")
             if is_lunch_plan(plan):
+                if plan.producer.revision != LUNCH_PRODUCER_REVISION:
+                    return LunchRebalanceResult("unavailable", plan.plan_id, None, publication.publication_id, None, "obsolete_lunch_policy")
                 return LunchRebalanceResult(
                     "reused",
                     plan.plan_id,
@@ -117,6 +121,12 @@ class LunchRebalanceProducer:
                     publication.publication_id if publication else None,
                     plan.producer.source_digest,
                 )
+            if (plan.producer.revision != DAILY_PRODUCER_REVISION
+                    or plan.decision_policy.revision != SCORING_REVISION
+                    or any(candidate.ranking.core_score is None
+                           or candidate.ranking.policy_revision != SCORING_REVISION
+                           for candidate in plan.evaluated_candidates)):
+                return LunchRebalanceResult("unavailable", plan.plan_id, None, publication.publication_id, None, "obsolete_base_scoring_policy")
             finalist_symbols = frozenset(
                 candidate.symbol
                 for candidate in plan.evaluated_candidates
@@ -152,7 +162,7 @@ class LunchRebalanceProducer:
                 return LunchRebalanceResult("unavailable", plan.plan_id, None, publication.publication_id, None, str(exc))
             if batch.slot_closed_at > now:
                 return LunchRebalanceResult("unavailable", plan.plan_id, None, publication.publication_id, None, "lunch_slot_not_closed")
-            candidates = rerank_lunch_candidates(
+            candidates = observe_lunch_candidates(
                 plan.evaluated_candidates,
                 eligible_symbols=finalist_symbols,
                 batch=batch,
@@ -213,9 +223,9 @@ class LunchRebalanceProducer:
                 target=target,
                 universe=base_plan.candidate_universe,
                 policy=DecisionPolicyBinding(
-                    revision="adaptive_kernel_v4_lunch_5m",
+                    revision=base_plan.decision_policy.revision,
                     adaptive_policy_state_version=f"{LUNCH_POLICY_REVISION}:{batch.content_digest}",
-                    selection_policy="daily_top30_then_lunch_5m_rerank",
+                    selection_policy="daily_top30_lunch_observation_only",
                     risk_profile=base_plan.decision_policy.risk_profile,
                 ),
                 producer=ProducerIdentity(

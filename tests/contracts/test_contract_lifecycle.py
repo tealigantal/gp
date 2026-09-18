@@ -144,7 +144,15 @@ def test_runtime_producer_and_conversation_are_bound_and_idempotent(tmp_path):
     assert "尾盘量比至少1.3" in manual_tail["通用条件"][3]
     assert manual_tail["表达限制"].startswith("没有实时指标数值时")
     assert full_payload["候选列表"][0]["日线信号类型"] == "trend"
+    assert full_payload["当前结论"]["优先观察对象"] == ["000001"]
+    reserve = publication.candidates[0].model_copy(update={"symbol": "600000", "disposition": CandidateDisposition.RESERVE,
+        "ranking": publication.candidates[0].ranking.model_copy(update={"rank": 1})})
+    service._narrate(publication.model_copy(update={"candidates": (reserve, *publication.candidates)}), "解释已选对象", now=datetime(2026, 7, 23, 16, 2, tzinfo=TZ))
+    selection_facts = json.loads(narrator.messages[1]["content"])["当前事实"]
+    assert selection_facts["当前结论"]["优先观察对象"] == ["000001"]
+    assert [item["股票代码"] for item in selection_facts["候选列表"]] == ["600000", "000001"]
     prompt = narrator.messages[0]["content"]
+    assert "不能自行取总排序前三名替代" in prompt
     assert "尾盘人工盯盘" in prompt
     assert "不得编造当前量比" in prompt
     assert narrator.kwargs["extra"] == {"thinking": {"type": "disabled"}}
@@ -157,6 +165,17 @@ def test_runtime_producer_and_conversation_are_bound_and_idempotent(tmp_path):
     assert facts["未来三日收益估计"] == "1.2000%"
     assert facts["往返成本假设"] == "0.3000%"
     assert facts["扣除成本后的收益估计"] == "0.9000%"
+    assert "未保存净收益估计" in full_payload["候选列表"][0]["净收益风险事实"]
+    assert "净收益估计为正" in facts["净收益风险事实"]
+    assert "不能据此断言整份计划采用旧评分" in narrator.messages[0]["content"]
+    # Risk comes from the recorded net return, including older records without a reason code.
+    for net in (0., -.001):
+        nonpositive = enriched.model_copy(update={"probability": enriched.probability.model_copy(
+            update={"expected_net_return": net})})
+        service._narrate(publication.model_copy(update={"candidates": (nonpositive,)}), "解释风险", now=datetime(2026, 7, 23, 16, 2, tzinfo=TZ))
+        facts = json.loads(narrator.messages[1]["content"])["当前事实"]["候选列表"][0]
+        assert "估计净收益非正" in facts["净收益风险事实"]
+
 
 
 def test_canonical_conversation_reads_are_available_to_the_workspace(tmp_path, monkeypatch):

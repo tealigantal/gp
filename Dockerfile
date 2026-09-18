@@ -45,6 +45,7 @@ RUN HTTP_PROXY="${HTTP_PROXY}" HTTPS_PROXY="${HTTPS_PROXY}" ALL_PROXY="${ALL_PRO
     PIP_NO_CACHE_DIR=0 pip install --retries 5 -r /app/requirements.txt
 
 COPY src/ /app/src/
+COPY configs/daily_scoring.json /app/configs/daily_scoring.json
 COPY pyproject.toml /app/pyproject.toml
 
 EXPOSE 8000

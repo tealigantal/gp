@@ -339,25 +339,35 @@ class ConversationService:
                 explanation = "已核验的官方公告证据形成负向辅助。"
             else:
                 explanation = "批次完整，但没有形成相关的正负方向证据。"
-            return {"实际权重": f"{expert.weight * 100:.0f}%", "综合分实际改变量": round(expert.contribution, 6), "产品说明": explanation}
+            return {"实际权重": f"{expert.weight * 100:.0f}%", "综合分实际改变量": round(expert.contribution * 100, 4), "产品说明": explanation}
 
         def lunch_effect(item) -> dict[str, object] | None:
             expert = next((value for value in item.experts if value.expert == "intraday_5m"), None)
             if expert is None:
                 return None
+            observation_only = "lunch_observation_only" in expert.reason_codes
             return {
-                "午盘最终排序分": round(float(item.adaptive_score), 6),
-                "相对早盘综合分的实际改变量": round(expert.contribution, 6),
-                "产品说明": "上午闭合五分钟数据已直接参与冻结候选范围内的午盘重排。",
+                "保留的综合分" if observation_only else "历史午盘排序分": round(float(item.adaptive_score) * 100, 4),
+                "相对早盘综合分的实际改变量": round(expert.contribution * 100, 4),
+                "产品说明": "午盘技术指标仅作附加观察，未重新估计盈亏证据，原总分及公告贡献保持不变。" if observation_only else "历史计划按当时午盘政策记录，未按新评分重算。",
             }
+
+        def net_return_fact(item) -> str:
+            net_return = item.probability.expected_net_return
+            if net_return is None:
+                return "该历史记录未保存净收益估计，无法判断其正负。"
+            if net_return <= 0:
+                return "估计净收益非正；相对排名靠前不代表正优势或可入场。"
+            return "已记录的净收益估计为正；这不是实际成交收益或入场许可。"
 
         plan_status_names = {"recommend": "存在推荐候选", "no_recommend": "当前无推荐", "unavailable": "推荐不可用"}
         execution_status_names = {"available": "执行数据可用", "pending": "等待执行数据", "unavailable": "执行数据不可用"}
-        disposition_names = {"selected": "入选", "reserve": "备选", "rejected": "未入选"}
+        disposition_names = {"selected": "优先观察", "reserve": "备选观察", "rejected": "未入选"}
         evidence = {
             "当前结论": {
                 "推荐状态": plan_status_names.get(publication.decision.plan_status.value, "未知"),
                 "执行数据状态": execution_status_names.get(publication.decision.execution_status.value, "未知"),
+                "优先观察对象": [item.symbol for item in publication.candidates if item.disposition.value == "selected"],
             },
             "时间与执行事实": temporal,
             "尾盘人工盯盘规则": _MANUAL_TAIL_ENTRY_GUIDANCE,
@@ -367,7 +377,8 @@ class ConversationService:
                     "股票代码": item.symbol,
                     "股票名称": item.name,
                     "入选档位": disposition_names.get(item.disposition.value, "未知"),
-                    "综合分": round(item.adaptive_score, 6),
+                    "综合分": round(item.adaptive_score * 100, 4),
+                    "评分口径": "现有案例的平滑盈亏评分（含已记录公告贡献），不是上涨概率或盈利保证" if item.ranking.core_score is not None else "历史评分，未记录平滑盈亏参数",
                     "排序名次": item.ranking.rank,
                     "日线信号类型": item.signal.label,
                     "日线信号强度": round(item.signal.score, 6),
@@ -375,7 +386,7 @@ class ConversationService:
                     "未来三日收益估计": f"{item.probability.expected_return_3d * 100:.4f}%" if item.probability.expected_return_3d is not None else None,
                     "往返成本假设": f"{item.probability.estimated_cost * 100:.4f}%" if item.probability.estimated_cost is not None else None,
                     "扣除成本后的收益估计": f"{item.probability.expected_net_return * 100:.4f}%" if item.probability.expected_net_return is not None else None,
-                    "净收益入选限制": "估计收益未超过成本假设，不能入选。" if "nonpositive_net_edge" in item.ranking.reason_codes else None,
+                    "净收益风险事实": net_return_fact(item),
                     "风险调整分": round(item.risk.score, 6),
                     "Serenity实际影响": serenity_effect(item),
                     "午盘五分钟实际影响": lunch_effect(item),
@@ -397,7 +408,7 @@ class ConversationService:
 
 时间与执行边界：输入的“时间与执行事实”由程序确定且优先级最高。程序会把其中的“用户可见结论”单独展示在你的回答前。你的正文不得再判断、复述或推断当前时间、当前市场阶段、当前是否可执行、计划是否已经结束、是否属于下一交易日，尤其不能把“最后盘中观察”写成回答时刻，也不能把发布记录时刻写成日线计划生成时刻。若需要提日期，只能明确区分“日线证据截止日”和“计划交易日”；不能把它们称为同一个“今天”。
 
-事实边界：只能解释输入候选中的综合分、排序、日线信号类型与强度、未来三日上涨概率、收益估计、往返成本假设、扣除成本后的收益估计、净收益入选限制、风险调整分、Serenity 实际影响和交易计划。综合分是排序依据，不是上涨概率或收益率；风险调整分为一减回撤概率，越高表示历史回撤概率越低。收益与成本百分比已由算法计算，可直接引用，不得自行重算。成本是统一建模假设，不是用户真实成交费用；正的净收益估计不是盈利保证。空值表示旧计划未记录，不能说成零。排序靠前但未超过成本假设的候选不能入选。不得补充基本面、新闻、资金流、公告内容或任何未提供的实时价格、日期、数值。候选之外不得新增、删除或重排标的。
+事实边界：只能解释输入候选中的综合分、评分口径、排序、日线信号类型与强度、未来三日上涨概率、收益估计、往返成本假设、扣除成本后的收益估计、净收益风险事实、风险调整分、Serenity 实际影响和交易计划。综合分使用0至100分；新口径是现有案例的平滑盈亏评分，证据不足向50收缩，不是上涨概率、实际成交收益或盈利保证；历史计划遵循所记录的历史口径。风险调整分为一减回撤概率，越高表示历史回撤概率越低。收益与成本百分比已由算法计算，可直接引用，不得自行重算。成本是统一建模假设，不是用户真实成交费用。收益和成本空值表示该历史记录未保存，不能说成零；Serenity或午盘影响为空仅表示该候选没有对应影响记录，不能据此断言整份计划采用旧评分。最多3只入选仅代表优先观察；相对排名靠前不代表正优势或现在可入场，非正净收益必须如实提示。不得补充基本面、新闻、资金流、公告内容或任何未提供的实时价格、日期、数值。候选之外不得新增、删除或重排标的。优先观察对象严格采用“当前结论”的已选名单，不能自行取总排序前三名替代；历史计划的总排名与入选名单可能不同。
 
 尾盘人工盯盘：当用户问什么时候入场、怎么盯盘、量比、VWAP、尾盘是否能买或类似问题时，使用输入的“尾盘人工盯盘规则”和该候选的交易计划，直接给出用户可手工核对的条件式清单。先写具体股票的买入区间、止损和止盈，再说明14:45至14:56要观察的价格位置、VWAP、相对沪深300强弱、量比、最近三根五分钟K线和放弃条件。若日线信号类型是 breakout_pullback 或 structure_watch，采用规则中对应的说明。用户是最终判断者：这是一份手工盯盘方案，不是自动执行引擎。
 
@@ -405,9 +416,9 @@ class ConversationService:
 
 Serenity：它只作用于基础评分冻结后的 Top-30。完整批次固定 3% 权重；贡献为0表示没有正负方向证据，权重为0表示整个批次统一归零。不得猜测公告内容，不能把权重、贡献或综合分说成上涨概率。
 
-午盘重排：午盘不会重新扫描全市场。早盘先冻结 Top-30 与交易事实；11:30 后，只有这30只股票及沪深300都具备同一交易日09:35到11:30的24根完整闭合五分钟线，才创建午盘计划。午盘排序分的45% 是股票上午涨跌相对沪深300的强弱，30%是收盘价相对上午成交量加权价格代理的位置，15%是收盘价位于上午最高低区间的位置，10%是最后一小时涨跌；随后仅叠加本批次实际生效的 Serenity 贡献。午休市场门禁始终禁止交易；缺任何一只股票、指数、时点或数值时保留早盘计划，不能假称已经重排。
+午盘观察：午盘不会重新扫描全市场。早盘冻结 Top-30 与交易事实；只有这30只股票及沪深300具备同一交易日09:35到11:30的24根完整闭合五分钟线，才创建午盘观察版本。技术指标仅作附加观察，不改写总分；没有同口径盈亏证据时保留原分和已有公告贡献，不能声称重新估计或完成重排。历史午盘记录只能按其已记录影响说明，不得说成使用了新政策。午休市场门禁始终禁止交易；缺任何输入时保留早盘计划。
 
-表达：先回答用户问题，再逐只说明相关候选。不要输出表格、JSON、接口、数据库、类名、字段名、原因代码或工程实现。每只候选的数值必须绑定该候选的输入事实；无候选时只解释等待条件，不得补充替代股票。""",
+表达：先回答用户问题，再逐只说明相关候选。关于排名与入场的概念关系，只说明“观察名单不是入场许可”；具体可执行性已由前置时间结论回答，正文不要引用或改写用户询问即时买入的原句。不要输出表格、JSON、接口、数据库、类名、字段名、原因代码或工程实现。每只候选的数值必须绑定该候选的输入事实；无候选时只解释等待条件，不得补充替代股票。""",
             },
             {"role": "user", "content": json.dumps({"用户问题": user_message, "当前事实": evidence}, ensure_ascii=False)},
         ]
@@ -418,7 +429,7 @@ Serenity：它只作用于基础评分冻结后的 Top-30。完整批次固定 3
             repair_messages = [
                 *messages,
                 {"role": "assistant", "content": content},
-                {"role": "user", "content": f"上一份草稿违反时间叙述契约：{violation}。请只根据原始事实重写正文；不要写当前时间、市场阶段、可执行性、计划时态或发布时态。"},
+                {"role": "user", "content": f"上一份草稿违反时间叙述契约：{violation}。请只根据原始事实重写正文，不要照抄草稿。具体可执行性已由程序前置说明；正文不要写当前时间、市场阶段、可执行性、计划时态或发布时态，也不要引用用户或草稿中的即时买入短语，包括其否定表达。涉及排序和入场的关系只写“观察名单不是入场许可”。保留所问候选的分数、净收益风险及午盘政策解释。"},
             ]
             content = self._chat(repair_messages, stage="contract_narration_repair")
             content = self._remove_duplicate_temporal_notice(content, str(temporal["用户可见结论"]))

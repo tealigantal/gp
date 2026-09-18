@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from datetime import date
 
+from pydantic import Field
+
 from .base import ContractModel
 from .market import MarketId
 
@@ -63,6 +65,14 @@ class RankingAssessment(ContractModel):
     score: float
     rank: int
     reason_codes: tuple[str, ...]
+    # None means unrecorded in immutable older plans, never synthetic evidence.
+    gain: float | None = Field(default=None, ge=0, allow_inf_nan=False)
+    loss: float | None = Field(default=None, ge=0, allow_inf_nan=False)
+    support: float | None = Field(default=None, gt=0, allow_inf_nan=False)
+    a0: float | None = Field(default=None, gt=0, allow_inf_nan=False)
+    n0: float | None = Field(default=None, gt=0, allow_inf_nan=False)
+    core_score: float | None = Field(default=None, ge=0, le=1, allow_inf_nan=False)
+    policy_revision: str | None = None
 
 
 class ExpertContribution(ContractModel):

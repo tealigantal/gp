@@ -64,14 +64,15 @@ def test_invalid_history_is_not_silently_defaulted():
         m.contexts({"000001":frame})
 
 
-def test_cost_gate_cannot_be_overridden_by_serenity():
-    score = score_candidate(probability=.8,execution_quality=.8,confidence=.9,drawdown_probability=.1,expected_return=.002)
+def test_nonpositive_net_edge_remains_visible_for_observation():
+    score = score_candidate(gain=0.,loss=.001,support=20.,a0=.02,n0=20.)
     assert score["expected_net_return"] < 0
     candidate=_candidate("000001",score["score"])
     candidate=candidate.model_copy(update={"ranking":candidate.ranking.model_copy(update={"reason_codes":score["reason_codes"]})})
     fused=RealRecommendationProducer._apply_serenity((candidate,),SimpleNamespace(applied_weight=.03,alphas={"000001":1.},reasons={},reason_codes=()))
     result=AdaptiveDecisionEngine().select(fused)
-    assert result[0].disposition.value != "selected"
+    assert result[0].disposition.value == "selected"
+    assert "nonpositive_net_edge" in result[0].ranking.reason_codes
     assert fused[0].ranking.score == fused[0].adaptive_score
 
 

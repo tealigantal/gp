@@ -155,7 +155,7 @@ def test_uncovered_candidate_cannot_be_selected_after_serenity_penalizes_a_final
 
     by_symbol = {item.symbol: item for item in selected}
     assert by_symbol["000001"].adaptive_score == 0.48
-    assert by_symbol["000001"].disposition.value == "reserve"
+    assert by_symbol["000001"].disposition.value == "selected"
     assert by_symbol["000002"].disposition.value == "reserve"
 
 
@@ -454,7 +454,7 @@ def test_llm_receives_product_level_serenity_explanation_and_actual_contribution
     user_payload = captured["messages"][1]["content"]
     assert "固定 3%" in system_prompt
     assert "整个批次统一归零" in system_prompt
-    assert '"综合分实际改变量": 0.03' in user_payload
+    assert '"综合分实际改变量": 3.0' in user_payload
     assert '"reference_id"' not in user_payload
     assert '"hidden"' not in user_payload
     assert "serenity_batch_complete" not in user_payload

@@ -10,7 +10,7 @@ const publication = {
     symbol: '600030', name: '中信证券', disposition: 'selected', adaptive_score: 0.61, recommendation_strength: 'normal',
     signal: { score: 0.8, label: 'breakout_pullback', reason_codes: [] },
     probability: { probability: 0.58, confidence: 0.9, effective_sample_size: 80, uncertainty: 0.05 },
-    risk: { score: 0.66, execution_risk: 0.34, reason_codes: [] }, ranking: { score: 0.1, rank: 1, reason_codes: [] },
+    risk: { score: 0.66, execution_risk: 0.34, reason_codes: [] }, ranking: { score: 0.61, rank: 1, reason_codes: [] },
     trade_plan: { entry_low: 26.2, entry_high: 28.9, stop_price: 25.6, take_profit_prices: [30], action: 'watch', reason_codes: [] }, reason_codes: [],
   }],
 }
@@ -45,6 +45,7 @@ describe('GP chat workspace', () => {
     expect(await screen.findByText('今天，想先看什么？')).toBeInTheDocument()
     expect(screen.getByText('中信证券')).toBeInTheDocument()
     expect(screen.getByText('58.0%')).toBeInTheDocument()
+    expect(screen.getByText('61.0分')).toBeInTheDocument()
     expect(screen.getByText('进入评分 1')).toBeInTheDocument()
     expect(screen.getByText('执行风险')).toBeInTheDocument()
     expect(screen.getByText('34.0%')).toBeInTheDocument()

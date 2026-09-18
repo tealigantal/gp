@@ -1,8 +1,11 @@
 from __future__ import annotations
 
-from collections import Counter
-from math import sqrt
+from collections import Counter, defaultdict
+from datetime import date
+from math import sqrt, isfinite, fsum
 from typing import Any, Dict, Iterable, List
+
+from ..decision_engine.scoring import ROUND_TRIP_COST
 
 
 def _safe_float(value: Any, default: float = 0.0) -> float:
@@ -110,13 +113,62 @@ def _prior_probability(
     }
 
 
-def infer_probability(*, current_event: Dict[str, Any], retrieval: Dict[str, Any]) -> Dict[str, Any]:
-    cases = list(retrieval.get("cases") or [])
+def _validated_cases(retrieval: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """Invalid required evidence fails closed; duplicates never add support."""
+    unique: dict[str, Dict[str, Any]] = {}
+    for case in retrieval.get("cases") or []:
+        event_id = case.get("event_id")
+        if not isinstance(event_id, str) or not event_id.strip():
+            raise ValueError("case_event_id_missing")
+        try:
+            day = case["as_of"]
+            if date.fromisoformat(day).isoformat() != day:
+                raise ValueError("noncanonical_date")
+        except (KeyError, TypeError, ValueError) as exc:
+            raise ValueError(f"case_signal_date_invalid:{event_id}") from exc
+        outcome = case.get("outcome") or {}
+        if outcome.get("complete") is not True:
+            raise ValueError(f"case_outcome_incomplete:{event_id}")
+        for name, value in (("return_3d", outcome.get("return_3d")), ("similarity", case.get("similarity"))):
+            if isinstance(value, bool) or not isinstance(value, (int, float)) or not isfinite(value):
+                raise ValueError(f"case_{name}_invalid:{event_id}")
+        if not 0 <= case["similarity"] <= 1:
+            raise ValueError(f"case_similarity_out_of_range:{event_id}")
+        if event_id in unique and unique[event_id] != case:
+            raise ValueError(f"case_event_conflict:{event_id}")
+        unique[event_id] = case
+    cases = list(unique.values())
+    if not cases or not any(case["similarity"] > 0 for case in cases):
+        raise ValueError("gain_loss_evidence_unavailable")
+    return cases
+
+
+def infer_probability(*, current_event: Dict[str, Any], retrieval: Dict[str, Any],
+                      modeled_cost: float = ROUND_TRIP_COST) -> Dict[str, Any]:
+    if not isfinite(modeled_cost) or modeled_cost < 0:
+        raise ValueError("invalid_modeled_cost")
+    cases = _validated_cases(retrieval)
     current_signal_type = str(current_event.get("signal_type") or "")
     current_regime = str((current_event.get("market_context") or {}).get("market_regime") or "")
     weights = [_clamp(_safe_float(case.get("similarity"))) for case in cases]
     returns_1d = [_safe_float((case.get("outcome") or {}).get("return_1d")) for case in cases]
-    returns_3d = [_safe_float((case.get("outcome") or {}).get("return_3d")) for case in cases]
+    returns_3d = [float(case["outcome"]["return_3d"]) for case in cases]
+    total_weight = fsum(weights)
+    date_weights: dict[str, float] = defaultdict(float)
+    gains, losses = [], []
+    for case, weight, gross in zip(cases, weights, returns_3d):
+        weight /= total_weight
+        net = gross - modeled_cost
+        if not isfinite(net):
+            raise ValueError("case_net_return_nonfinite")
+        gains.append(weight * max(net, 0.0))
+        losses.append(weight * max(-net, 0.0))
+        date_weights[case["as_of"]] += weight
+    gain, loss = fsum(gains), fsum(losses)
+    # Cap only roundoff at the mathematical upper bound, not score dispersion.
+    date_support = min(float(len(date_weights)), 1.0 / fsum(weight * weight for weight in date_weights.values()))
+    mean_similarity = total_weight / len(cases)
+    support = date_support * mean_similarity
     drawdowns = [abs(min(0.0, _safe_float((case.get("outcome") or {}).get("max_drawdown")))) for case in cases]
     successes = [1.0 if value > 0.0 else 0.0 for value in returns_3d]
     stop_hits = [1.0 if bool((case.get("outcome") or {}).get("stop_hit") is True) else 0.0 for case in cases]
@@ -130,7 +182,6 @@ def infer_probability(*, current_event: Dict[str, Any], retrieval: Dict[str, Any
     prior_p = _safe_float(prior.get("blended_prior_up_probability_3d"), 0.5)
     posterior_p = (weighted_success * effective_n + prior_p * prior_strength) / max(1.0, effective_n + prior_strength)
     uncertainty = sqrt(max(0.0, posterior_p * (1.0 - posterior_p)) / max(1.0, effective_n + prior_strength))
-    mean_similarity = _safe_float(retrieval.get("mean_similarity"))
     uncertainty = min(0.50, uncertainty + max(0.0, 0.70 - mean_similarity) * 0.20)
     confidence = _clamp((effective_n / 80.0) * 0.65 + mean_similarity * 0.35)
     evidence = {
@@ -138,6 +189,7 @@ def infer_probability(*, current_event: Dict[str, Any], retrieval: Dict[str, Any
         "sample_size": len(cases),
         "effective_sample_size": float(effective_n),
         "mean_similarity": float(mean_similarity),
+        "date_support": date_support,
         "pool_size": int(retrieval.get("pool_size") or len(cases)),
         "success_distribution": _distribution(returns_3d),
         "failure_distribution": {
@@ -152,6 +204,10 @@ def infer_probability(*, current_event: Dict[str, Any], retrieval: Dict[str, Any
     return {
         "up_probability_3d": float(_clamp(posterior_p)),
         "expected_return_3d": float(expected_return),
+        "gain": gain,
+        "loss": loss,
+        "support": support,
+        "expected_net_return": gain - loss,
         "drawdown_probability": float(_clamp(drawdown_probability_nn)),
         "expected_max_drawdown": float(expected_drawdown),
         "uncertainty": float(uncertainty),

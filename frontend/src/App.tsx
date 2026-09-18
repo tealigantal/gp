@@ -370,11 +370,11 @@ export function App() {
               <div><span>执行状态</span><strong className={tradeable ? 'green' : 'amber'}>{tradeable ? '可执行' : marketStatus.badge}</strong><small>{marketLabel}</small></div>
             </section>
 
-            <div className="section-title"><span>{reviewOnly ? '上一份计划入选（仅回顾）' : '算法入选'}</span><small>{reviewOnly ? '不是下一交易日新计划' : '按引擎原始排名'}</small></div>
+            <div className="section-title"><span>{reviewOnly ? '上一份计划入选（仅回顾）' : '优先观察'}</span><small>{reviewOnly ? '不是下一交易日新计划' : '排名不代表正优势或入场许可'}</small></div>
             <div className="candidate-list">
               {selected.length ? selected.map((candidate) => (
                 <article className="candidate" key={candidate.symbol}>
-                  <div className="candidate-top"><span className="rank">{candidate.ranking.rank}</span><div><strong>{candidate.name || candidate.symbol}</strong><small>{candidate.symbol} · {signalLabels[candidate.signal.label] || '算法信号'}</small></div><span className="score">{candidate.adaptive_score.toFixed(3)}</span></div>
+                  <div className="candidate-top"><span className="rank">{candidate.ranking.rank}</span><div><strong>{candidate.name || candidate.symbol}</strong><small>{candidate.symbol} · {signalLabels[candidate.signal.label] || '算法信号'}</small></div><span className="score">{(candidate.adaptive_score * 100).toFixed(1)}分</span></div>
                   <div className="metrics"><span>3日概率 <strong>{percent(candidate.probability.probability)}</strong></span><span>执行风险 <strong>{percent(candidate.risk.execution_risk)}</strong></span></div>
                   <div className="trade-plan"><div><span>观察区间</span><strong>{price(candidate.trade_plan.entry_low)} – {price(candidate.trade_plan.entry_high)}</strong></div><div><span>止损参考</span><strong>{price(candidate.trade_plan.stop_price)}</strong></div></div>
                 </article>

@@ -24,9 +24,9 @@ Serenity is an auxiliary official-announcement dimension, not a second selector.
 
 Relevant official scanning announcements may be read only when their identity, event family and numerical evidence are consistently recognizable within fixed safety limits. Unrelated generic revisions are ignored before retrieval. An uncertain or unreadable relevant announcement never becomes partial evidence: the exact Top-30 batch remains at 0%.
 
-## Lunch five-minute rerank
+## Lunch five-minute observations
 
-After the 11:30 close, GP may publish a new order within the morning plan's frozen Top-30. It requires exact, complete five-minute data for all 30 candidates and CSI300. The lunch score reflects relative morning strength, location versus a volume-weighted price proxy, location within the morning range, and last-hour momentum; the already bound Serenity contribution remains limited to ±0.03. The daily plan and all non-ranking facts remain immutable.
+After the 11:30 close, GP may append technical observations for the morning plan's frozen Top-30. It still requires exact complete five-minute data for all 30 candidates and CSI300. Technical strength and momentum do not change the recommendation score: without comparable gain/loss evidence, retain the daily total and existing Serenity contribution. No completed rerank is claimed; the original plan remains immutable.
 
 If any input is incomplete, GP keeps the morning publication instead of showing an empty lunch result. A successful lunch publication is still non-tradeable during the break. Existing conversations continue to explain the publication they originally used; a new conversation sees the latest lunch publication.
 
@@ -38,4 +38,4 @@ If any input is incomplete, GP keeps the morning publication instead of showing 
 
 ### September 17 scoring correctness
 
-A displayed score is a weighted decision score, not a win percentage and not an artificial cross-sectional percentile. Daily producer4 uses committed mature cases and records expected three-day return, modeled round-trip friction and estimated net return separately. Nonpositive net return prevents selection; confidence contributes once. A legitimate narrow score distribution is retained rather than stretched. These changes have causal and operational validation; superior realized investment performance remains unproven.
+The 0–100 display is the smoothed gain/loss score described in [the frozen policy record](smoothed_scoring_20260918.md), not win probability or a cross-sectional percentile. Weak evidence shrinks towards 50 in either direction. At most three highest-ranked eligible candidates are priority observations; nonpositive expected net return remains visible and does not automatically exclude observation. Ranking alone does not establish positive edge or permission to enter. Invalid evidence and trading restrictions remain effective. Improved realized investment performance has not been established.

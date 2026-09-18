@@ -16,7 +16,7 @@ Its only recommendation lifecycle is:
 
 `RecommendationPlan` → optional `RuntimeObservation` → `RecommendationPublication`
 
-At 11:30 the worker may append a new immutable plan that reranks only the morning plan's frozen Top-30 from one complete five-minute batch. It never rewrites the morning plan or changes the public lifecycle; incomplete lunch data leaves the morning publication current.
+At 11:30 the worker may append an immutable observation version for the morning plan's frozen Top-30 from one complete five-minute batch. Technical observations preserve the daily score and its existing Serenity contribution. Incomplete lunch data leaves the morning publication current. Scores use the [frozen smoothed gain/loss policy](docs/smoothed_scoring_20260918.md); at most three candidates are priority observations, not an entry permission.
 
 Read the [documentation map](docs/README.md) first. Before changing the recommendation path, read [current contracts](docs/contracts/CURRENT_CONTRACTS.md), [retirement record](docs/contracts/RETIRED_CONTRACTS.md), and the [registry](docs/contracts/registry.yaml).
 

@@ -1,6 +1,6 @@
 # Service Contract
 
-The public product routes and their response shapes remain unchanged by lunch reranking.
+The public product routes and their response shapes remain unchanged by lunch observations.
 
 - `GET /api/recommendation/current` returns the canonical `RecommendationPublication` fields: publication ID, plan ID, optional runtime ID, publication time, decision, candidates and lineage.
 - `GET /api/lunch/current` returns market session date, plan/runtime/publication IDs, morning slot close, morning session state, current tradeability and reason codes.
@@ -8,8 +8,8 @@ The public product routes and their response shapes remain unchanged by lunch re
 - `POST /api/chat` binds a new session to the current publication or keeps an existing session on its original publication.
 - Conversation list, detail and delete routes retain their existing canonical contracts.
 
-Lunch reranking adds no route and no field. A successful 11:30 batch changes which already-valid publication is current. An incomplete batch leaves the prior publication current. A lunch publication is not tradeable because its runtime market gate is deny even when its five-minute data quality is ready.
+Lunch observations add no route or field. A successful 11:30 batch changes which already-valid publication is current. An incomplete batch leaves the prior publication current. A lunch publication is not tradeable because its runtime market gate is deny even when its five-minute data quality is ready.
 
 All writes flow through `PlanService`, `RuntimeService` and `PublicationService`. Public handlers do not collect five-minute network data and do not write SQLite directly.
 
-ProbabilityAssessment additionally records optional `expected_return_3d`, `estimated_cost`, and `expected_net_return` fractions. Daily producer revision 4 supplies all three; null in earlier immutable records means unrecorded. Composite score is not a calibrated win probability. Final `ranking.score` and `adaptive_score` use the same scale; `nonpositive_net_edge` bars selection even after Serenity/lunch reranking.
+ProbabilityAssessment records optional `expected_return_3d`, `estimated_cost`, and `expected_net_return` fractions. Daily producer revision 5 supplies all three; null in earlier immutable records means unrecorded. `RankingAssessment` adds nullable `gain`, `loss`, `support`, `a0`, `n0`, `core_score`, `policy_revision` for exact recomputation; older missing fields remain null. Internal final `ranking.score` and `adaptive_score` are identical in 0–1, displayed as 0–100. `nonpositive_net_edge` remains a risk fact and does not bar priority observation. Lunch revision 3 records observation-only influence (zero weight/contribution), retaining daily totals including existing Serenity. See [the scoring policy record](smoothed_scoring_20260918.md).
