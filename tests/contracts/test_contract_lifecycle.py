@@ -9,7 +9,7 @@ from gp_assistant.application.runtime_service import RuntimeService
 from gp_assistant.application.target_resolver import resolve_plan_target
 from gp_assistant.application.runtime_producer import RuntimeRecommendationProducer
 from gp_assistant.application.conversation_service import ConversationService, project_current_market, project_next_plan_target
-from gp_assistant.application.market_runs import MarketRunStore
+from gp_assistant.application.market_runs import FrozenUniverse, MarketRunStore, universe_digest
 from gp_assistant.application.trading_calendar import CnATradingCalendar
 from gp_assistant.contracts.catalog import CandidateDisposition, MarketPhase, RuntimeDataState
 from gp_assistant.contracts.decision import CandidateDecision, TradePlan
@@ -39,6 +39,31 @@ def test_target_lifecycle_and_plan_reuse(tmp_path):
     lunch = resolve_plan_target(now=datetime(2026, 7, 23, 12, 46, tzinfo=TZ), completed_daily_date=date(2026, 7, 22), calendar=TradingCalendarRef(calendar_id="cn", revision="1", source="fixture"), is_open=True, next_open_session=date(2026, 7, 24), required_daily_evidence_date=date(2026, 7, 22))
     assert lunch.market_session_date == date(2026, 7, 23)
     assert lunch.daily_evidence_date == date(2026, 7, 22)
+
+
+def test_chat_temporal_facts_keep_historical_recovery_separate(tmp_path, suspension_calendar):
+    store = ContractStore(tmp_path / "contract.sqlite")
+    selected_plan = plan(store)
+    now = datetime(2026, 7, 22, 17, tzinfo=TZ)
+    publication = PublicationService(store).publish(plan_id=selected_plan.plan_id, runtime_id=None, published_at=now)
+    ledger = MarketRunStore(tmp_path / "runs.sqlite")
+    for day in ("2026-07-21", "2026-07-22"):
+        ledger.ensure_run(universe=FrozenUniverse(
+            trade_date=day, raw_symbols=("000001",), expected_symbols=("000001",), excluded_symbols=(),
+            content_digest=universe_digest(trade_date=day, raw_symbols=("000001",), expected_symbols=("000001",), excluded_symbols=()),
+            source="fixture", snapshot_meta={}, approximate=False, captured_at=now.isoformat(),
+        ), now=now)
+    ledger.update_coverage(trade_date="2026-07-22", target_date="2026-07-22", rows={
+        "000001": {"date": "2026-07-22", "open": 1, "high": 1, "low": 1, "close": 1, "volume": 1, "amount": 1},
+    }, now=now)
+    ledger.complete("2026-07-22", now)
+    service = ConversationService(store, market_runs=ledger, planning_calendar=suspension_calendar)
+    truth = service._temporal_truth(publication, selected_plan, None, now=now)
+    assert truth["历史日K回补"]["target_trade_date"] == "2026-07-21"
+    assert truth["历史日K回补"]["completed"] == 0
+    assert truth["下一交易日计划"]["required_daily_evidence_date"] == "2026-07-22"
+    assert truth["下一交易日计划"]["state"] == "published"
+    assert truth["下一交易日计划"]["completed"] == 1
 
 
 def test_runtime_cannot_change_plan_and_publication_is_linked(tmp_path):

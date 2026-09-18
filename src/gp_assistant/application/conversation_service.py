@@ -295,6 +295,12 @@ class ConversationService:
                 next_summary = f"目标交易日{target_date}的计划需要{evidence_date}日K；市场日恢复尚未开始，不能据此宣称已有新的完整计划。"
         else:
             next_summary = "下一交易日计划状态暂不可确认，不能据此宣称已生成新的完整计划。"
+        recovery = self.market_runs.health(initialize=False)
+        historical_recovery = recovery if (
+            recovery.get("state") not in {"ready", "not_started", "unavailable"}
+            and recovery.get("target_trade_date")
+            and str(recovery["target_trade_date"]) < str(evidence_date or "")
+        ) else None
         conclusion = f"{conclusion}{next_summary}"
 
         runtime_truth = None
@@ -318,6 +324,7 @@ class ConversationService:
             "本次发布是否收盘后": publication.published_at.astimezone(_SHANGHAI).time().hour >= 15,
             "最后盘中观察": runtime_truth,
             "下一交易日计划": next_target,
+            "历史日K回补": historical_recovery,
         }
 
     def _narrate(self, publication: RecommendationPublication, user_message: str, *, now: datetime) -> str:
@@ -410,6 +417,7 @@ class ConversationService:
                 "content": """你是 GP 的唯一中文荐股叙述层。你只解释算法引擎已经确定的候选、排名、分数和交易计划；不能选股、重排、计算或改写结论。
 
 时间与执行边界：输入的“时间与执行事实”由程序确定且优先级最高。程序会把其中的“用户可见结论”单独展示在你的回答前。你的正文不得再判断、复述或推断当前时间、当前市场阶段、当前是否可执行、计划是否已经结束、是否属于下一交易日，尤其不能把“最后盘中观察”写成回答时刻，也不能把发布记录时刻写成日线计划生成时刻。若需要提日期，只能明确区分“日线证据截止日”和“计划交易日”；不能把它们称为同一个“今天”。
+历史回补边界：“历史日K回补”是单独的较早日期任务，其日期和进度不能套用到“下一交易日计划”。下一计划的状态只以自身事实为准；历史回补未完成不代表已发布的下一计划未生成。解释两者关系时必须明确各自日期；没有给出的回补原因不得猜测。
 
 事实边界：只能解释输入候选中的综合分、评分口径、排序、日线信号类型与强度、未来三日上涨概率、收益估计、往返成本假设、扣除成本后的收益估计、净收益风险事实、风险调整分、Serenity 实际影响和交易计划。综合分使用0至100分；新口径是现有案例的平滑盈亏评分，证据不足向50收缩，不是上涨概率、实际成交收益或盈利保证；历史计划遵循所记录的历史口径。风险调整分为一减回撤概率，越高表示历史回撤概率越低。收益与成本百分比已由算法计算，可直接引用，不得自行重算。成本是统一建模假设，不是用户真实成交费用。收益和成本空值表示该历史记录未保存，不能说成零；Serenity或午盘影响为空仅表示该候选没有对应影响记录，不能据此断言整份计划采用旧评分。最多3只入选仅代表优先观察；相对排名靠前不代表正优势或现在可入场，非正净收益必须如实提示。不得补充基本面、新闻、资金流、公告内容或任何未提供的实时价格、日期、数值。候选之外不得新增、删除或重排标的。优先观察对象严格采用“当前结论”的已选名单，不能自行取总排序前三名替代；历史计划的总排名与入选名单可能不同。
 
