@@ -1,0 +1,336 @@
+--- a/src/gp_assistant/decision_engine/scoring.py
++++ b/src/gp_assistant/decision_engine/scoring.py
+@@ -1,4 +1,4 @@
+-"""Smoothed unconditional gain/loss score, not a win probability.
++"""Fixed-scale relative evaluation of smoothed gain/loss, not a win probability.
+ 
+ All returns and costs are fractions. The common reference is frozen offline;
+ production never estimates it from today's candidates.
+@@ -13,13 +13,13 @@
+ 
+ from ..core.paths import configs_dir
+ 
+-REVISION = "daily_score_v6_smoothed_gain_loss"
++REVISION = "daily_score_v7_fixed_scale_gain_loss"
+ ROUND_TRIP_COST = 0.003
+ 
+ 
+ def score_candidate(*, gain: float, loss: float, support: float,
+                     a0: float, n0: float = 20.0) -> dict:
+-    """(N*G + .5*n0*A0) / (N*(G+L) + n0*A0), scaled to avoid overflow."""
++    """Strictly monotone fixed scale of v6; preserve its input scaling."""
+     values = (gain, loss, support, a0, n0)
+     if not all(math.isfinite(v) for v in values):
+         raise ValueError("nonfinite_ranking_input")
+@@ -32,7 +32,8 @@
+     denominator = n * (g + l) + prior * a
+     if denominator <= 0:
+         raise ValueError("gain_loss_scoring_underflow")
+-    score = (n * g + 0.5 * prior * a) / denominator
++    z = n * (g - l) / denominator
++    score = 0.5 + 0.54 * z / (0.08 + abs(z))
+     return {"score": score, "expected_net_return": gain - loss,
+             "reason_codes": () if gain > loss else ("nonpositive_net_edge",)}
+ 
+--- a/configs/daily_scoring.json
++++ b/configs/daily_scoring.json
+@@ -1,5 +1,5 @@
+ {
+-  "revision": "daily_score_v6_smoothed_gain_loss",
++  "revision": "daily_score_v7_fixed_scale_gain_loss",
+   "n0": 20.0,
+   "a0": 0.03997941946323374,
+   "round_trip_cost": 0.003,
+--- a/src/gp_assistant/application/real_producer.py
++++ b/src/gp_assistant/application/real_producer.py
+@@ -26,7 +26,7 @@
+ from .trading_calendar import load_cn_a_calendar
+ from .market_runs import FrozenUniverse
+ 
+-DAILY_PRODUCER_REVISION = "5"
++DAILY_PRODUCER_REVISION = "6"
+ 
+ 
+ class RealRecommendationProducer:
+--- a/src/gp_assistant/application/lunch_rebalance_producer.py
++++ b/src/gp_assistant/application/lunch_rebalance_producer.py
+@@ -29,7 +29,7 @@
+ 
+ 
+ LUNCH_PRODUCER_NAME = "lunch_5m_producer"
+-LUNCH_PRODUCER_REVISION = "3"
++LUNCH_PRODUCER_REVISION = "4"
+ _PROCESS_LOCK = threading.Lock()
+ _FINALITY_DELAY = time(11, 32)
+ 
+--- a/src/gp_assistant/intraday/lunch_rebalance.py
++++ b/src/gp_assistant/intraday/lunch_rebalance.py
+@@ -19,7 +19,7 @@
+ 
+ BENCHMARK_SYMBOL = "000300"
+ LUNCH_SOURCE = "akshare:sina:5m"
+-LUNCH_POLICY_REVISION = "lunch_5m_observation_only_v3"
++LUNCH_POLICY_REVISION = "lunch_5m_observation_only_v4"
+ _COLUMNS = ("trade_time", "open", "high", "low", "close", "vol", "amount")
+ 
+ 
+--- a/src/gp_assistant/application/conversation_service.py
++++ b/src/gp_assistant/application/conversation_service.py
+@@ -388,7 +388,7 @@
+                     "股票名称": item.name,
+                     "入选档位": disposition_names.get(item.disposition.value, "未知"),
+                     "综合分": round(item.adaptive_score * 100, 4),
+-                    "评分口径": "现有案例的平滑盈亏评分（含已记录公告贡献），不是上涨概率或盈利保证" if item.ranking.core_score is not None else "历史评分，未记录平滑盈亏参数",
++                    "评分口径": "总分是固定刻度下的相对评价，不是上涨概率或收益保证。" if item.ranking.core_score is not None else "历史评分，未记录平滑盈亏参数",
+                     "排序名次": item.ranking.rank,
+                     "日线信号类型": item.signal.label,
+                     "日线信号强度": round(item.signal.score, 6),
+@@ -419,7 +419,7 @@
+ 时间与执行边界：输入的“时间与执行事实”由程序确定且优先级最高。程序会把其中的“用户可见结论”单独展示在你的回答前。你的正文不得再判断、复述或推断当前时间、当前市场阶段、当前是否可执行、计划是否已经结束、是否属于下一交易日，尤其不能把“最后盘中观察”写成回答时刻，也不能把发布记录时刻写成日线计划生成时刻。若需要提日期，只能明确区分“日线证据截止日”和“计划交易日”；不能把它们称为同一个“今天”。
+ 历史回补边界：“历史日K回补”是单独的较早日期任务，其日期和进度不能套用到“下一交易日计划”。下一计划的状态只以自身事实为准；历史回补未完成不代表已发布的下一计划未生成。解释两者关系时必须明确各自日期；没有给出的回补原因不得猜测。
+ 
+-事实边界：只能解释输入候选中的综合分、评分口径、排序、日线信号类型与强度、未来三日上涨概率、收益估计、往返成本假设、扣除成本后的收益估计、净收益风险事实、风险调整分、Serenity 实际影响和交易计划。综合分使用0至100分；新口径是现有案例的平滑盈亏评分，证据不足向50收缩，不是上涨概率、实际成交收益或盈利保证；历史计划遵循所记录的历史口径。风险调整分为一减回撤概率，越高表示历史回撤概率越低。收益与成本百分比已由算法计算，可直接引用，不得自行重算。成本是统一建模假设，不是用户真实成交费用。收益和成本空值表示该历史记录未保存，不能说成零；Serenity或午盘影响为空仅表示该候选没有对应影响记录，不能据此断言整份计划采用旧评分。最多3只入选仅代表优先观察；相对排名靠前不代表正优势或现在可入场，非正净收益必须如实提示。不得补充基本面、新闻、资金流、公告内容或任何未提供的实时价格、日期、数值。候选之外不得新增、删除或重排标的。优先观察对象严格采用“当前结论”的已选名单，不能自行取总排序前三名替代；历史计划的总排名与入选名单可能不同。
++事实边界：只能解释输入候选中的综合分、评分口径、排序、日线信号类型与强度、未来三日上涨概率、收益估计、往返成本假设、扣除成本后的收益估计、净收益风险事实、风险调整分、Serenity 实际影响和交易计划。综合分使用0至100分；总分是固定刻度下的相对评价，不是上涨概率或收益保证。直接引用已记录分数，不得再次换算；历史计划遵循所记录的历史口径。风险调整分为一减回撤概率，越高表示历史回撤概率越低。收益与成本百分比已由算法计算，可直接引用，不得自行重算。成本是统一建模假设，不是用户真实成交费用。收益和成本空值表示该历史记录未保存，不能说成零；Serenity或午盘影响为空仅表示该候选没有对应影响记录，不能据此断言整份计划采用旧评分。最多3只入选仅代表优先观察；相对排名靠前不代表正优势或现在可入场，非正净收益必须如实提示。不得补充基本面、新闻、资金流、公告内容或任何未提供的实时价格、日期、数值。候选之外不得新增、删除或重排标的。优先观察对象严格采用“当前结论”的已选名单，不能自行取总排序前三名替代；历史计划的总排名与入选名单可能不同。
+ 
+ 尾盘人工盯盘：当用户问什么时候入场、怎么盯盘、量比、VWAP、尾盘是否能买或类似问题时，使用输入的“尾盘人工盯盘规则”和该候选的交易计划，直接给出用户可手工核对的条件式清单。先写具体股票的买入区间、止损和止盈，再说明14:45至14:56要观察的价格位置、VWAP、相对沪深300强弱、量比、最近三根五分钟K线和放弃条件。若日线信号类型是 breakout_pullback 或 structure_watch，采用规则中对应的说明。用户是最终判断者：这是一份手工盯盘方案，不是自动执行引擎。
+ 
+--- a/tests/contracts/test_smoothed_scoring.py
++++ b/tests/contracts/test_smoothed_scoring.py
+@@ -31,7 +31,11 @@
+ 
+ @pytest.mark.parametrize("gain,loss,expected", [(.05,.01,80.1),(.03,.02,61.8),(.02,.02,53.8),(.01,.03,34.2)])
+ def test_math_fixtures_are_not_production_calibration(gain, loss, expected):
+-    assert score(g=.55*gain, l=.45*loss)*100 == pytest.approx(expected, abs=.05)
++    from tests.contracts.test_fixed_score_scale import v6_score
++    old = v6_score(gain=.55*gain,loss=.45*loss,support=64.,a0=.02,n0=20.)
++    assert old*100 == pytest.approx(expected, abs=.05)
++    z = 2*old-1
++    assert score(g=.55*gain,l=.45*loss) == pytest.approx(.5+.54*z/(.08+abs(z)))
+ 
+ 
+ @pytest.mark.parametrize("g,l", [(0.,0.),(.01,.01),(.03,0.),(0.,.03),(1e-12,0.),(1e300,1e300)])
+@@ -201,6 +205,11 @@
+     target = resolve_plan_target(now=old.generated_at,completed_daily_date=old.daily_evidence_date,
+         calendar=TradingCalendarRef(calendar_id="cn",revision="1",source="fixture"),is_open=True,
+         next_open_session=old.market_session_date,required_daily_evidence_date=old.daily_evidence_date)
++    old = PlanService(store).get_or_create(
++        target=target,universe=old.candidate_universe,
++        policy=old.decision_policy.model_copy(update={"revision":"daily_score_v6_smoothed_gain_loss"}),
++        producer=old.producer.model_copy(update={"revision":"5"}),
++        evaluated_candidates=old.evaluated_candidates,serenity=old.serenity,generated_at=old.generated_at).plan
+     arguments = dict(target=target,universe=old.candidate_universe,
+         policy=old.decision_policy.model_copy(update={"revision":REVISION,"adaptive_policy_state_version":"memory:new_policy_digest:serenity"}),
+         producer=old.producer.model_copy(update={"revision":producer.DAILY_PRODUCER_REVISION}),
+@@ -208,7 +217,9 @@
+     new = PlanService(store).get_or_create(**arguments).plan
+     assert new.plan_id != old.plan_id
+     assert PlanService(store).get_or_create(**arguments).plan == new
++    before_read = store.path.read_bytes()
+     assert store.load_plan(old.plan_id) == old
++    assert store.path.read_bytes() == before_read
+     assert store.load_plan(old.plan_id).evaluated_candidates[0].ranking.gain is None
+ 
+ 
+@@ -233,3 +244,12 @@
+     monkeypatch.setattr(module,"scoring_policy_digest",lambda:"digest_two")
+     with pytest.raises(Rebuild):
+         module.MarketDayOrchestrator._publish_base_if_due(instance,**arguments)
++
++    # Digest, policy revision and producer revision independently invalidate fast reuse.
++    monkeypatch.setattr(module,"scoring_policy_digest",lambda:"digest_one")
++    for field,old_value in [(current.producer,"5"),(current.decision_policy,"daily_score_v6_smoothed_gain_loss")]:
++        saved = field.revision
++        field.revision = old_value
++        with pytest.raises(Rebuild):
++            module.MarketDayOrchestrator._publish_base_if_due(instance,**arguments)
++        field.revision = saved
+--- /dev/null
++++ b/tests/contracts/test_fixed_score_scale.py
+@@ -0,0 +1,147 @@
++"""Fixed evaluation scale acceptance; v6 exists only as a test reference."""
++from copy import deepcopy
++from datetime import datetime, timezone
++import json
++import math
++import random
++from types import SimpleNamespace
++
++import pytest
++
++from gp_assistant.application import real_producer as producer
++from gp_assistant.application.conversation_service import ConversationService
++from gp_assistant.application.lunch_rebalance_producer import LunchRebalanceProducer
++from gp_assistant.core.paths import configs_dir
++from gp_assistant.decision_engine.adaptive import AdaptiveDecisionEngine
++from gp_assistant.decision_engine.scoring import (
++    REVISION, _policy_digest, load_scoring_policy, score_candidate,
++)
++from gp_assistant.intraday.lunch_rebalance import collect_lunch_batch, observe_lunch_candidates
++from gp_assistant.store import ContractStore
++from tests.contracts.test_lunch_rebalance import FakeMinuteProvider, SESSION, TZ, _base_plan
++from tests.contracts.test_serenity_fixed_weight import _candidate
++
++
++def v6_score(*, gain, loss, support, a0, n0=20.):
++    """Exact pre-change valid-input calculation, never a production fallback."""
++    scale = max(gain, loss, a0)
++    weight_scale = max(support, n0)
++    g, l, a = gain / scale, loss / scale, a0 / scale
++    n, prior = support / weight_scale, n0 / weight_scale
++    return (n * g + 0.5 * prior * a) / (n * (g + l) + prior * a)
++
++
++@pytest.mark.parametrize("gain,old_percent,new_percent", [
++    (.006,40.,11.428571428571), (.008,45.,20.), (.010,50.,50.),
++    (.012,55.,80.), (.014,60.,88.571428571429),
++])
++def test_fixed_scale_anchors_through_real_function(gain,old_percent,new_percent):
++    values = dict(gain=gain,loss=.02-gain,support=20.,a0=.02,n0=20.)
++    assert v6_score(**values)*100 == pytest.approx(old_percent)
++    assert score_candidate(**values)["score"]*100 == pytest.approx(new_percent)
++
++
++def test_ranking_matches_v6_including_symbol_ties_and_top30_scope():
++    rng = random.Random(190926)
++    inputs = [dict(gain=rng.uniform(0,.15),loss=rng.uniform(0,.15),
++                   support=rng.uniform(.01,100),a0=.03997941946323374,n0=20.) for _ in range(200)]
++    # Exact ties use the same input, while support and amplitudes vary elsewhere.
++    inputs.extend([deepcopy(inputs[0]), deepcopy(inputs[0])])
++    old = tuple(_candidate(f"{len(inputs)-i:06d}",v6_score(**row)) for i,row in enumerate(inputs))
++    new = tuple(_candidate(c.symbol,score_candidate(**row)["score"]) for c,row in zip(old,inputs))
++    old_order = sorted(old,key=lambda c:(-c.adaptive_score,c.symbol))
++    new_order = sorted(new,key=lambda c:(-c.adaptive_score,c.symbol))
++    assert [c.symbol for c in new_order] == [c.symbol for c in old_order]
++    eligible = frozenset(c.symbol for c in new_order[:30])
++    for values in (old,new):
++        chosen = AdaptiveDecisionEngine().select(values,selection_eligible_symbols=eligible)
++        assert [c.symbol for c in chosen if c.disposition.value=="selected"] == [c.symbol for c in new_order[:3]]
++
++
++@pytest.mark.parametrize("gain,loss", [(0.,0.),(.01,.01),(.03,.005),(.005,.03)])
++def test_return_shape_and_risk_facts_are_unchanged(gain,loss):
++    result = score_candidate(gain=gain,loss=loss,support=20,a0=.04,n0=20)
++    assert set(result) == {"score","expected_net_return","reason_codes"}
++    assert result["expected_net_return"] == gain-loss
++    assert result["reason_codes"] == (() if gain>loss else ("nonpositive_net_edge",))
++
++
++@pytest.mark.parametrize("gain,loss,support,a0,n0", [
++    (1e308,0.,1e308,1e-308,1.), (0.,1e308,1e308,1e-308,1.),
++    (1e-300,0.,1e-300,1e-300,1e-300), (0.,0.,1e308,.04,20.),
++])
++def test_scaled_extreme_inputs_remain_finite(gain,loss,support,a0,n0):
++    result = score_candidate(gain=gain,loss=loss,support=support,a0=a0,n0=n0)
++    assert math.isfinite(result["score"]) and 0 <= result["score"] <= 1
++
++
++def test_policy_identity_changes_without_refreezing_reference():
++    payload = json.loads((configs_dir()/"daily_scoring.json").read_text(encoding="utf-8"))
++    assert payload["revision"] == REVISION == "daily_score_v7_fixed_scale_gain_loss"
++    assert producer.DAILY_PRODUCER_REVISION == "6"
++    assert payload["a0"] == .03997941946323374
++    assert payload["n0"] == 20. and payload["round_trip_cost"] == .003
++    assert payload["reference"]["frozen_at"] == "2026-09-18T15:40:07+08:00"
++    assert payload["reference"]["source_digest"] == "9f2be0fbb44f2d092dd1882ef4f599d6f44e7f3f307693d94fc3b8dcd39c0ef6"
++    old = {**payload,"revision":"daily_score_v6_smoothed_gain_loss"}
++    loaded = load_scoring_policy(evidence_day="2026-09-18",known_at=datetime(2026,9,19,tzinfo=timezone.utc))
++    assert loaded.digest != _policy_digest(old)
++
++
++def test_new_scale_serenity_once_lunch_preserves_and_final_order_can_change():
++    inputs = [dict(gain=.012,loss=.008,support=20.,a0=.02,n0=20.),
++              dict(gain=.0132,loss=.0068,support=20.,a0=.02,n0=20.)]
++    inputs.extend([dict(gain=.01,loss=.01,support=20.,a0=.02,n0=20.) for _ in range(28)])
++    def candidates(scores):
++        return tuple(_candidate(f"{i+1:06d}",s).model_copy(update={
++            "ranking":_candidate(f"{i+1:06d}",s).ranking.model_copy(update={"core_score":s}),
++        }) for i,s in enumerate(scores))
++    old = candidates([v6_score(**v) for v in inputs])
++    new = candidates([score_candidate(**v)["score"] for v in inputs])
++    decision = SimpleNamespace(applied_weight=.03,alphas={"000001":1.,"000002":0.},reasons={},reason_codes=())
++    old_final = producer.RealRecommendationProducer._apply_serenity(old,decision)
++    new_final = producer.RealRecommendationProducer._apply_serenity(new,decision)
++    assert producer.RealRecommendationProducer._apply_serenity(new_final,decision) == new_final
++    engine = AdaptiveDecisionEngine()
++    # Same base order, but fixed +/-3 points on the new scale can change final order.
++    assert engine.select(old)[0].symbol == engine.select(new)[0].symbol == "000002"
++    assert engine.select(old_final)[0].symbol == "000001"
++    assert engine.select(new_final)[0].symbol == "000002"
++    batch = collect_lunch_batch(FakeMinuteProvider(),tuple(c.symbol for c in new),market_session_date=SESSION,timezone=TZ)
++    observed = observe_lunch_candidates(new_final,eligible_symbols=frozenset(c.symbol for c in new),batch=batch)
++    for base,final,lunch in zip(new,new_final,observed):
++        assert final.ranking.score == final.adaptive_score
++        assert final.ranking.core_score == base.adaptive_score
++        assert final.probability == base.probability == lunch.probability
++        assert lunch.ranking == final.ranking and lunch.adaptive_score == final.adaptive_score
++        assert next(e for e in lunch.experts if e.expert=="serenity") == final.experts[0]
++        assert next(e for e in lunch.experts if e.expert=="intraday_5m").contribution == 0.
++
++
++def test_v6_lunch_identity_is_rejected_before_reuse_or_collection():
++    old = SimpleNamespace(market_session_date=SESSION,plan_id="old_lunch",
++                          producer=SimpleNamespace(name="lunch_5m_producer",revision="3"))
++    publication = SimpleNamespace(plan_id=old.plan_id,publication_id="old_publication")
++    store = SimpleNamespace(current_publication=lambda:publication,load_plan=lambda _:old)
++    result = LunchRebalanceProducer(store,batch_loader=lambda *a,**kw:pytest.fail("must not collect")).produce(
++        now=datetime(2026,7,24,12,tzinfo=TZ))
++    assert result.reason == "obsolete_lunch_policy"
++
++
++def test_narration_quotes_recorded_fixed_scale_without_transforming(tmp_path):
++    store = ContractStore(tmp_path/"contracts.sqlite")
++    _base_plan(store)
++    captured = {}
++    class Narrator:
++        def available(self): return True,"ok"
++        def chat(self,messages,**kwargs):
++            captured["messages"] = messages
++            return {"choices":[{"message":{"content":"仅供优先观察。"}}]}
++    before = store.current_publication()
++    ConversationService(store,narrator=Narrator()).reply(session_id="fixed",client_turn_id="first",user_message="解释评分")
++    payload = json.loads(captured["messages"][1]["content"])
++    facts = payload["当前事实"]["候选列表"]
++    assert [c["综合分"] for c in facts] == [round(c.adaptive_score*100,4) for c in before.candidates]
++    assert all(c["评分口径"] == "总分是固定刻度下的相对评价，不是上涨概率或收益保证。" for c in facts)
++    assert "不得再次换算" in captured["messages"][0]["content"]
++    assert store.current_publication() == before
+--- a/tests/contracts/test_lunch_rebalance.py
++++ b/tests/contracts/test_lunch_rebalance.py
+@@ -123,12 +123,12 @@
+             source="fixture",
+         ),
+         policy=DecisionPolicyBinding(
+-            revision="daily_score_v5_causal_memory" if obsolete else SCORING_REVISION,
++            revision="daily_score_v6_smoothed_gain_loss" if obsolete else SCORING_REVISION,
+             adaptive_policy_state_version="base",
+             selection_policy="full_market_liquidity_ranked_top30",
+             risk_profile="normal",
+         ),
+-        producer=ProducerIdentity(name="real_daily_producer", revision="4" if obsolete else DAILY_PRODUCER_REVISION, source_digest="daily"),
++        producer=ProducerIdentity(name="real_daily_producer", revision="5" if obsolete else DAILY_PRODUCER_REVISION, source_digest="daily"),
+         evaluated_candidates=(*finalists, outsider),
+         serenity=SerenityDecisionBinding(
+             reference_id="serenity-batch" if serenity_active else None,
+--- a/frontend/src/App.test.tsx
++++ b/frontend/src/App.test.tsx
+@@ -33,6 +33,20 @@
+ })
+ 
+ describe('GP chat workspace', () => {
++  it.each([0.11428571428571, 0.2, 0.5, 0.8, 0.88571428571429, 0.83])('displays recorded score %s once on the percentage scale', async (score) => {
++    const value = { ...publication, candidates: [{ ...publication.candidates[0], adaptive_score: score,
++      ranking: { ...publication.candidates[0].ranking, score } }] }
++    vi.stubGlobal('fetch', vi.fn((input: string | URL) => {
++      const url = String(input)
++      if (url.includes('/api/health')) return jsonResponse(health)
++      if (url.includes('/api/recommendation/current')) return jsonResponse(value)
++      return jsonResponse([])
++    }))
++    render(<App />)
++    expect(await screen.findByText(`${(score * 100).toFixed(1)}分`)).toBeInTheDocument()
++    expect(screen.getByText('58.0%')).toBeInTheDocument()
++  })
++
+   it.each([
+     ['published', '下一计划已发布'],
+     ['ready_to_publish', '日K齐备，等待发布'],
