@@ -31,7 +31,11 @@ def score(g=.02, l=.01, n=64., a0=.02, n0=20.):
 
 @pytest.mark.parametrize("gain,loss,expected", [(.05,.01,80.1),(.03,.02,61.8),(.02,.02,53.8),(.01,.03,34.2)])
 def test_math_fixtures_are_not_production_calibration(gain, loss, expected):
-    assert score(g=.55*gain, l=.45*loss)*100 == pytest.approx(expected, abs=.05)
+    from tests.contracts.test_fixed_score_scale import v6_score
+    old = v6_score(gain=.55*gain,loss=.45*loss,support=64.,a0=.02,n0=20.)
+    assert old*100 == pytest.approx(expected, abs=.05)
+    z = 2*old-1
+    assert score(g=.55*gain,l=.45*loss) == pytest.approx(.5+.54*z/(.08+abs(z)))
 
 
 @pytest.mark.parametrize("g,l", [(0.,0.),(.01,.01),(.03,0.),(0.,.03),(1e-12,0.),(1e300,1e300)])
@@ -201,6 +205,11 @@ def test_new_policy_and_producer_never_reuse_or_rewrite_old_plan(tmp_path):
     target = resolve_plan_target(now=old.generated_at,completed_daily_date=old.daily_evidence_date,
         calendar=TradingCalendarRef(calendar_id="cn",revision="1",source="fixture"),is_open=True,
         next_open_session=old.market_session_date,required_daily_evidence_date=old.daily_evidence_date)
+    old = PlanService(store).get_or_create(
+        target=target,universe=old.candidate_universe,
+        policy=old.decision_policy.model_copy(update={"revision":"daily_score_v6_smoothed_gain_loss"}),
+        producer=old.producer.model_copy(update={"revision":"5"}),
+        evaluated_candidates=old.evaluated_candidates,serenity=old.serenity,generated_at=old.generated_at).plan
     arguments = dict(target=target,universe=old.candidate_universe,
         policy=old.decision_policy.model_copy(update={"revision":REVISION,"adaptive_policy_state_version":"memory:new_policy_digest:serenity"}),
         producer=old.producer.model_copy(update={"revision":producer.DAILY_PRODUCER_REVISION}),
@@ -208,7 +217,9 @@ def test_new_policy_and_producer_never_reuse_or_rewrite_old_plan(tmp_path):
     new = PlanService(store).get_or_create(**arguments).plan
     assert new.plan_id != old.plan_id
     assert PlanService(store).get_or_create(**arguments).plan == new
+    before_read = store.path.read_bytes()
     assert store.load_plan(old.plan_id) == old
+    assert store.path.read_bytes() == before_read
     assert store.load_plan(old.plan_id).evaluated_candidates[0].ranking.gain is None
 
 
@@ -233,3 +244,12 @@ def test_scheduler_fast_reuse_checks_frozen_policy_digest(monkeypatch):
     monkeypatch.setattr(module,"scoring_policy_digest",lambda:"digest_two")
     with pytest.raises(Rebuild):
         module.MarketDayOrchestrator._publish_base_if_due(instance,**arguments)
+
+    # Digest, policy revision and producer revision independently invalidate fast reuse.
+    monkeypatch.setattr(module,"scoring_policy_digest",lambda:"digest_one")
+    for field,old_value in [(current.producer,"5"),(current.decision_policy,"daily_score_v6_smoothed_gain_loss")]:
+        saved = field.revision
+        field.revision = old_value
+        with pytest.raises(Rebuild):
+            module.MarketDayOrchestrator._publish_base_if_due(instance,**arguments)
+        field.revision = saved

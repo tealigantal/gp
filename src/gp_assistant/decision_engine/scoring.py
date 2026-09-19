@@ -1,4 +1,4 @@
-"""Smoothed unconditional gain/loss score, not a win probability.
+"""Fixed-scale relative evaluation of smoothed gain/loss, not a win probability.
 
 All returns and costs are fractions. The common reference is frozen offline;
 production never estimates it from today's candidates.
@@ -13,13 +13,13 @@ import math
 
 from ..core.paths import configs_dir
 
-REVISION = "daily_score_v6_smoothed_gain_loss"
+REVISION = "daily_score_v7_fixed_scale_gain_loss"
 ROUND_TRIP_COST = 0.003
 
 
 def score_candidate(*, gain: float, loss: float, support: float,
                     a0: float, n0: float = 20.0) -> dict:
-    """(N*G + .5*n0*A0) / (N*(G+L) + n0*A0), scaled to avoid overflow."""
+    """Strictly monotone fixed scale of v6; preserve its input scaling."""
     values = (gain, loss, support, a0, n0)
     if not all(math.isfinite(v) for v in values):
         raise ValueError("nonfinite_ranking_input")
@@ -32,7 +32,8 @@ def score_candidate(*, gain: float, loss: float, support: float,
     denominator = n * (g + l) + prior * a
     if denominator <= 0:
         raise ValueError("gain_loss_scoring_underflow")
-    score = (n * g + 0.5 * prior * a) / denominator
+    z = n * (g - l) / denominator
+    score = 0.5 + 0.54 * z / (0.08 + abs(z))
     return {"score": score, "expected_net_return": gain - loss,
             "reason_codes": () if gain > loss else ("nonpositive_net_edge",)}
 

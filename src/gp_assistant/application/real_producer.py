@@ -26,7 +26,7 @@ from .target_resolver import resolve_plan_target
 from .trading_calendar import load_cn_a_calendar
 from .market_runs import FrozenUniverse
 
-DAILY_PRODUCER_REVISION = "5"
+DAILY_PRODUCER_REVISION = "6"
 
 
 class RealRecommendationProducer:

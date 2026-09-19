@@ -123,12 +123,12 @@ def _base_plan(store: ContractStore, *, serenity_active: bool = False, obsolete:
             source="fixture",
         ),
         policy=DecisionPolicyBinding(
-            revision="daily_score_v5_causal_memory" if obsolete else SCORING_REVISION,
+            revision="daily_score_v6_smoothed_gain_loss" if obsolete else SCORING_REVISION,
             adaptive_policy_state_version="base",
             selection_policy="full_market_liquidity_ranked_top30",
             risk_profile="normal",
         ),
-        producer=ProducerIdentity(name="real_daily_producer", revision="4" if obsolete else DAILY_PRODUCER_REVISION, source_digest="daily"),
+        producer=ProducerIdentity(name="real_daily_producer", revision="5" if obsolete else DAILY_PRODUCER_REVISION, source_digest="daily"),
         evaluated_candidates=(*finalists, outsider),
         serenity=SerenityDecisionBinding(
             reference_id="serenity-batch" if serenity_active else None,

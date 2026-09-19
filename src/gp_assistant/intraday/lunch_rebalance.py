@@ -19,7 +19,7 @@ from ..contracts.evidence import ExpertContribution
 
 BENCHMARK_SYMBOL = "000300"
 LUNCH_SOURCE = "akshare:sina:5m"
-LUNCH_POLICY_REVISION = "lunch_5m_observation_only_v3"
+LUNCH_POLICY_REVISION = "lunch_5m_observation_only_v4"
 _COLUMNS = ("trade_time", "open", "high", "low", "close", "vol", "amount")
 
 

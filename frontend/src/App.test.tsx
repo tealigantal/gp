@@ -33,6 +33,20 @@ afterEach(() => {
 })
 
 describe('GP chat workspace', () => {
+  it.each([0.11428571428571, 0.2, 0.5, 0.8, 0.88571428571429, 0.83])('displays recorded score %s once on the percentage scale', async (score) => {
+    const value = { ...publication, candidates: [{ ...publication.candidates[0], adaptive_score: score,
+      ranking: { ...publication.candidates[0].ranking, score } }] }
+    vi.stubGlobal('fetch', vi.fn((input: string | URL) => {
+      const url = String(input)
+      if (url.includes('/api/health')) return jsonResponse(health)
+      if (url.includes('/api/recommendation/current')) return jsonResponse(value)
+      return jsonResponse([])
+    }))
+    render(<App />)
+    expect(await screen.findByText(`${(score * 100).toFixed(1)}分`)).toBeInTheDocument()
+    expect(screen.getByText('58.0%')).toBeInTheDocument()
+  })
+
   it.each([
     ['published', '下一计划已发布'],
     ['ready_to_publish', '日K齐备，等待发布'],

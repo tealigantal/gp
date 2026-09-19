@@ -1,5 +1,5 @@
 {
-  "revision": "daily_score_v6_smoothed_gain_loss",
+  "revision": "daily_score_v7_fixed_scale_gain_loss",
   "n0": 20.0,
   "a0": 0.03997941946323374,
   "round_trip_cost": 0.003,

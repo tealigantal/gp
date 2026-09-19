@@ -29,7 +29,7 @@ from .runtime_service import RuntimeService
 
 
 LUNCH_PRODUCER_NAME = "lunch_5m_producer"
-LUNCH_PRODUCER_REVISION = "3"
+LUNCH_PRODUCER_REVISION = "4"
 _PROCESS_LOCK = threading.Lock()
 _FINALITY_DELAY = time(11, 32)
 
