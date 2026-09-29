@@ -73,7 +73,8 @@ class OfficialSuspensionEvidenceCollector:
         self.pdf_max_bytes = max(1, int(pdf_max_bytes))
 
     def resolve(self, *, symbols: tuple[str, ...], trade_date: date,
-                observed_at: datetime) -> SuspensionResolution:
+                observed_at: datetime,
+                disclosure_start_by_symbol: Mapping[str, date] | None = None) -> SuspensionResolution:
         wanted = tuple(sorted({str(symbol).zfill(6) for symbol in symbols}))
         checked_at = (observed_at.replace(tzinfo=_SHANGHAI) if observed_at.tzinfo is None
                       else observed_at.astimezone(_SHANGHAI)).isoformat()
@@ -112,12 +113,16 @@ class OfficialSuspensionEvidenceCollector:
             return fail_all("discovery_failed", exc)
         for symbol in wanted:
             diagnostic = diagnostics[symbol]
+            # Persisted proof only widens discovery; it never authorizes a
+            # current exclusion. Re-fetch and verify the entire interval.
+            symbol_start = min(start, (disclosure_start_by_symbol or {}).get(symbol, start))
+            diagnostic["disclosure_start"] = symbol_start.isoformat()
             stock = stock_map.get(symbol)
             if not isinstance(stock, Mapping) or not str(stock.get("org_id") or ""):
                 diagnostic["reason"] = "issuer_identity_missing"
                 continue
             try:
-                page = self.client.fetch_symbol(symbol, str(stock["org_id"]), start=start, end=trade_date)
+                page = self.client.fetch_symbol(symbol, str(stock["org_id"]), start=symbol_start, end=trade_date)
             except Exception as exc:
                 diagnostic.update({"reason": "discovery_failed", "error": f"{type(exc).__name__}:{exc}"[:500]})
                 continue
@@ -167,7 +172,7 @@ class OfficialSuspensionEvidenceCollector:
                     reject("document_identity_missing")
                     continue
                 try:
-                    if not self.verifier.verify(dict(record), start=start, end=trade_date, raise_on_error=True):
+                    if not self.verifier.verify(dict(record), start=symbol_start, end=trade_date, raise_on_error=True):
                         reject("exchange_unverified")
                         continue
                 except Exception as exc:
@@ -206,7 +211,8 @@ class OfficialSuspensionEvidenceCollector:
             if not halts:
                 diagnostic["reason"] = "no_effective_halt"
                 continue
-            latest = max(halts, key=lambda item: (item.published_at, item.fact.starts_on))
+            latest = max(halts, key=lambda item: (item.published_at, item.fact.starts_on,
+                                                item.fact.kind == "halt_until_delisting"))
             if any(stamp is None or stamp >= latest.published_at for stamp in unknown):
                 diagnostic["reason"] = "unresolved_status_disclosure"
                 continue
@@ -215,7 +221,9 @@ class OfficialSuspensionEvidenceCollector:
                         and record.get("source_record_id") != latest.record["source_record_id"]
                         and latest.fact.may_fulfil_resumption(title=str(record.get("title") or ""), text=text)]
             if triggers:
-                diagnostic.update({"reason": "resumption_condition_may_be_fulfilled", "conflicting_record_ids": triggers})
+                diagnostic.update({"reason": "terminal_status_requires_revalidation"
+                                   if latest.fact.kind == "halt_until_delisting" else "resumption_condition_may_be_fulfilled",
+                                   "conflicting_record_ids": triggers})
                 continue
             # Effective chronology matters: an old resume cannot cancel a new
             # later suspension, nor can a restatement erase an effective resume.

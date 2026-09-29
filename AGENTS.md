@@ -27,6 +27,7 @@ Before changing the recommendation path, read `docs/contracts/CURRENT_CONTRACTS.
 - `src/gp_assistant/ARCHITECTURE.md`: detailed backend decision architecture and LLM boundary.
 - `docs/service_contract.md`: HTTP and domain-output contracts.
 - `docs/data_freshness_policy.md`: freshness and as-of rules.
+- `docs/tail_entry.md`: single-source tail-entry evidence, assessment and dialogue contract.
 - `docs/historical_validation.md`: historical replay method and recorded results.
 - `docs/VALIDATION.md`: cross-cutting validation ledger.
 - `docs/PROGRESS.md`: recoverable current status.
@@ -55,10 +56,10 @@ The backend has no verified Ruff or static-type-check command. Do not claim thos
 - A production "全市场" recommendation must use a current, complete, traceable full-market candidate universe. Do not silently narrow it to a static watchlist, prior picks, a cache fragment, or another small fallback. If the complete universe or its required data is unavailable, fail closed with an explicit unavailable/no-recommendation result.
 - Treat any change that disables, bypasses, narrows, replaces, or degrades the production candidate-universe source as a consequential product change. Before making it, prove that the replacement preserves the required coverage and freshness, record its provenance and counts, and obtain explicit user approval when it changes the user-visible recommendation scope.
 - Validate the real production journey at the coverage boundary: record and check candidate source, total input universe, eligible main-board count, scored count, selected count, as-of date, and fallback status. Freshness checks over only selected symbols must not be described as full-market completeness, and readiness must fail when the configured full-market coverage invariant is not satisfied.
-- Adaptive Decision Engine owns selection. The LLM may route and narrate but may not invent or change candidates, scores, prices, probabilities, or actions.
+- Adaptive Decision Engine owns selection. The LLM may route, explain and form a separate entry judgment from validated minute evidence, but may not invent or change candidates, scores, prices, probabilities, or the original plan.
 - Do not use keyword matching or `if`/`else` text branches to produce, suppress, narrow, rerank, or replace user-facing LLM conclusions. In particular, do not treat incidental words or characters in a preference such as “收益大一点” as a fixed Top-N quantity or a single-symbol instruction.
 - For a follow-up that refines a prior candidate list, preserve the complete structured candidate scope from that canonical run. Pass the relevant candidate facts to the LLM for explanation; never collapse the scope to `focus_symbol` or fabricate a keyword-triggered answer. Any deterministic filtering or ordering must consume explicit structured user constraints and must remain separate from the LLM's output generation.
-- Network data collection must not run inside `/api/chat`, book locks, or decision rendering.
+- Full-market/daily/Serenity collection must not run inside `/api/chat`, book locks, or decision rendering. The authorized tail-entry tool may request a bounded relevant-symbol refresh through the sole EntryService, outside database transactions.
 - Historical and adaptive learning paths must respect as-of availability and T+5 maturity; never place future outcomes in readable pending state.
 - `store/`, `cache/`, and `results/` are runtime artifacts. Preserve user data and never stage them unless explicitly requested.
 - `selection_engine/` is legacy/reference and low-level support, not the production ranking authority.

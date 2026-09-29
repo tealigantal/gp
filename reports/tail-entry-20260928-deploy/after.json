@@ -1,0 +1,142 @@
+{
+  "health": {
+    "current_publication_id": "publication_86679a1dbe9c8b7689c49e4c",
+    "plan_id": "plan_a175a3d68bb867852994fe2a",
+    "runtime_id": null,
+    "market_session_date": "2026-09-28",
+    "daily_evidence_date": "2026-09-24",
+    "slot_closed_at": null,
+    "market_phase": null,
+    "daily_data_state": "ready",
+    "runtime_data_state": "unavailable",
+    "publication_state": "recommend",
+    "tradeability_state": "unavailable",
+    "serenity": {
+      "mode": "native",
+      "state": "ready",
+      "target_ready": true,
+      "batch_ready": true
+    },
+    "market_now": {
+      "observed_at": "2026-09-28T01:46:37.938562+08:00",
+      "market_phase": "preopen",
+      "market_phase_label": "开盘前",
+      "plan_relation": "preopen",
+      "tradeable_now": false
+    },
+    "market_recovery": {
+      "state": "retry_wait",
+      "target_trade_date": "2026-08-21",
+      "completed": 3045,
+      "total": 3046,
+      "failed": 1,
+      "next_retry_at": "2026-09-28T01:48:38.873129+08:00",
+      "approximate_universe": true
+    },
+    "next_plan_target": {
+      "observed_at": "2026-09-28T01:46:37.938562+08:00",
+      "market_session_date": "2026-09-28",
+      "required_daily_evidence_date": "2026-09-24",
+      "state": "published",
+      "completed": 3052,
+      "total": 3052,
+      "failed": 0,
+      "next_retry_at": null,
+      "approximate_universe": false
+    }
+  },
+  "publication_id": "publication_86679a1dbe9c8b7689c49e4c",
+  "plan_id": "plan_a175a3d68bb867852994fe2a",
+  "entries": {
+    "plan_id": "plan_a175a3d68bb867852994fe2a",
+    "observed_at": "2026-09-28T01:46:37.958712+08:00",
+    "symbols": {
+      "003006": {
+        "state": "unavailable",
+        "current": false,
+        "valid_until": null,
+        "error": null,
+        "message": "本次未取得有效行情或模型确认，不能据此判断走弱或适合买入。",
+        "assessment": null,
+        "previous": null
+      },
+      "603268": {
+        "state": "unavailable",
+        "current": false,
+        "valid_until": null,
+        "error": null,
+        "message": "本次未取得有效行情或模型确认，不能据此判断走弱或适合买入。",
+        "assessment": null,
+        "previous": null
+      },
+      "603920": {
+        "state": "unavailable",
+        "current": false,
+        "valid_until": null,
+        "error": null,
+        "message": "本次未取得有效行情或模型确认，不能据此判断走弱或适合买入。",
+        "assessment": null,
+        "previous": null
+      }
+    }
+  },
+  "dialogues": [
+    {
+      "question": "第一只现在能买吗？请说明依据和行情时间。",
+      "status": 200,
+      "reply": "003006：本次未完成当前行情与入场确认。当前不在交易日14:35至14:57的尾盘评估窗口内。",
+      "publication_id": "publication_86679a1dbe9c8b7689c49e4c",
+      "error": null
+    },
+    {
+      "question": "那第二只呢？",
+      "status": 200,
+      "reply": "603268：本次未完成当前行情与入场确认。当前不在交易日14:35至14:57的尾盘评估窗口内。",
+      "publication_id": "publication_86679a1dbe9c8b7689c49e4c",
+      "error": null
+    },
+    {
+      "question": "刚才不是说走弱了吗？",
+      "status": 200,
+      "reply": "603268：本次未完成当前行情与入场确认。本次未取得有效行情或模型确认，不能据此判断走弱或适合买入。\n\n没有此前正式评估可供比较，未完成确认不代表已经判定走弱。",
+      "publication_id": "publication_86679a1dbe9c8b7689c49e4c",
+      "error": null
+    },
+    {
+      "question": "我已经买了一部分，还适合加吗？",
+      "status": 200,
+      "reply": "603268：本次未完成当前行情与入场确认。当前不在交易日14:35至14:57的尾盘评估窗口内。",
+      "publication_id": "publication_86679a1dbe9c8b7689c49e4c",
+      "error": null
+    }
+  ],
+  "immutable_comparison": {
+    "recommendation_plans": {
+      "before": 91,
+      "after": 91,
+      "changed_or_missing": 0
+    },
+    "recommendation_publications": {
+      "before": 5262,
+      "after": 5262,
+      "changed_or_missing": 0
+    },
+    "runtime_observations": {
+      "before": 5176,
+      "after": 5176,
+      "changed_or_missing": 0
+    }
+  },
+  "source_parity": {
+    "gp": {
+      "files": 203,
+      "mismatches": [],
+      "missing_in_image": []
+    },
+    "gp-worker": {
+      "files": 203,
+      "mismatches": [],
+      "missing_in_image": []
+    }
+  }
+}

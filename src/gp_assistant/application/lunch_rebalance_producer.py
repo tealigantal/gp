@@ -4,8 +4,6 @@ from dataclasses import dataclass
 from datetime import datetime, time
 from hashlib import sha256
 import json
-import os
-from pathlib import Path
 import threading
 
 from ..contracts.catalog import MarketPhase, PlanTargetState, RuntimeDataState
@@ -26,59 +24,13 @@ from .real_producer import DAILY_PRODUCER_REVISION
 from ..store import ContractStore
 from .plan_service import PlanService
 from .runtime_service import RuntimeService
+from .process_lock import CrossProcessLock, OperationBusy
 
 
 LUNCH_PRODUCER_NAME = "lunch_5m_producer"
 LUNCH_PRODUCER_REVISION = "4"
 _PROCESS_LOCK = threading.Lock()
 _FINALITY_DELAY = time(11, 32)
-
-
-class LunchWriteBusy(RuntimeError):
-    pass
-
-
-class _CrossProcessLock:
-    def __init__(self, path: Path):
-        self.path = path
-        self.handle = None
-
-    def __enter__(self):
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        self.handle = self.path.open("a+b")
-        self.handle.seek(0, os.SEEK_END)
-        if self.handle.tell() == 0:
-            self.handle.write(b"0")
-            self.handle.flush()
-        self.handle.seek(0)
-        try:
-            if os.name == "nt":
-                import msvcrt
-
-                msvcrt.locking(self.handle.fileno(), msvcrt.LK_NBLCK, 1)
-            else:
-                import fcntl
-
-                fcntl.flock(self.handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except OSError as exc:
-            self.handle.close()
-            self.handle = None
-            raise LunchWriteBusy("lunch_write_busy") from exc
-        return self
-
-    def __exit__(self, exc_type, exc, traceback):
-        if self.handle is None:
-            return
-        self.handle.seek(0)
-        if os.name == "nt":
-            import msvcrt
-
-            msvcrt.locking(self.handle.fileno(), msvcrt.LK_UNLCK, 1)
-        else:
-            import fcntl
-
-            fcntl.flock(self.handle.fileno(), fcntl.LOCK_UN)
-        self.handle.close()
 
 
 @dataclass(frozen=True)
@@ -175,7 +127,7 @@ class LunchRebalanceProducer:
             source_digest = sha256(json.dumps(source_payload, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
             lock_path = self.store.path.with_name(f".{self.store.path.name}.lunch-rebalance.lock")
             try:
-                with _CrossProcessLock(lock_path):
+                with CrossProcessLock(lock_path):
                     current = self.store.current_publication()
                     if current is None or current.publication_id != publication.publication_id:
                         current_plan = self.store.load_plan(current.plan_id) if current else None
@@ -197,7 +149,7 @@ class LunchRebalanceProducer:
                         batch=batch,
                         source_digest=source_digest,
                     )
-            except LunchWriteBusy as exc:
+            except OperationBusy as exc:
                 return LunchRebalanceResult("unavailable", plan.plan_id, None, publication.publication_id, batch.content_digest, str(exc))
 
     def _commit(

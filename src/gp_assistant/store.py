@@ -9,6 +9,7 @@ from pathlib import Path
 import sqlite3
 from typing import Iterator
 
+from .contracts.entry import EntryAssessment
 from .contracts.conversation import ConversationSession, ConversationTurn
 from .contracts.catalog import ExecutionStatus
 from .contracts.decision import RecommendationPlan
@@ -73,7 +74,7 @@ class ContractStore:
                 try:
                     row = readonly.execute("SELECT value FROM schema_metadata WHERE key='schema'").fetchone()
                     turn_columns = {str(column["name"]) for column in readonly.execute("PRAGMA table_info(turns)")}
-                    if row is not None and str(row["value"]) == DATABASE_SCHEMA and "client_turn_id" in turn_columns:
+                    if row is not None and str(row["value"]) == DATABASE_SCHEMA and "client_turn_id" in turn_columns and readonly.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='entry_attempts'").fetchone():
                         return
                     if row is not None and str(row["value"]) != DATABASE_SCHEMA:
                         raise UnsupportedDatabaseSchema("unsupported_database_schema")
@@ -96,6 +97,9 @@ class ContractStore:
             elif str(row["value"]) != DATABASE_SCHEMA:
                 raise UnsupportedDatabaseSchema("unsupported_database_schema")
             for statement in (
+                "CREATE TABLE IF NOT EXISTS entry_assessments(assessment_id TEXT PRIMARY KEY, plan_id TEXT NOT NULL REFERENCES recommendation_plans(plan_id), symbol TEXT NOT NULL, scenario TEXT NOT NULL, assessed_at TEXT NOT NULL, payload_json TEXT NOT NULL)",
+                "CREATE INDEX IF NOT EXISTS idx_entry_lookup ON entry_assessments(plan_id,symbol,scenario,assessed_at)",
+                "CREATE TABLE IF NOT EXISTS entry_attempts(plan_id TEXT NOT NULL REFERENCES recommendation_plans(plan_id), symbol TEXT NOT NULL, scenario TEXT NOT NULL, mode TEXT NOT NULL, attempted_at TEXT NOT NULL, state TEXT NOT NULL, error TEXT, PRIMARY KEY(plan_id,symbol,scenario,mode))",
                 "CREATE TABLE IF NOT EXISTS recommendation_plans(plan_id TEXT PRIMARY KEY, lookup_digest TEXT NOT NULL UNIQUE, payload_json TEXT NOT NULL, payload_digest TEXT NOT NULL UNIQUE, generated_at TEXT NOT NULL)",
                 "CREATE TABLE IF NOT EXISTS runtime_observations(runtime_id TEXT PRIMARY KEY, plan_id TEXT NOT NULL REFERENCES recommendation_plans(plan_id), payload_json TEXT NOT NULL, payload_digest TEXT NOT NULL UNIQUE, observed_at TEXT NOT NULL)",
                 "CREATE TABLE IF NOT EXISTS recommendation_publications(publication_id TEXT PRIMARY KEY, plan_id TEXT NOT NULL REFERENCES recommendation_plans(plan_id), runtime_id TEXT REFERENCES runtime_observations(runtime_id), payload_json TEXT NOT NULL, payload_digest TEXT NOT NULL UNIQUE, published_at TEXT NOT NULL)",
@@ -500,3 +504,48 @@ class ContractStore:
             "tradeability_state": "tradeable" if publication and publication.decision.tradeable_now else "unavailable",
             "serenity": public_serenity,
         }
+
+    def entry_history(self, plan_id: str, symbol: str, scenario: str, *, limit: int = 2, mode: str = "live", before: datetime | None = None) -> list[EntryAssessment]:
+        self.initialize()
+        conn = self._connect(writable=False)
+        try:
+            rows = conn.execute("SELECT payload_json FROM entry_assessments WHERE plan_id=? AND symbol=? AND scenario=? AND json_extract(payload_json,'$.mode')=? AND (? IS NULL OR assessed_at<=?) ORDER BY assessed_at DESC, rowid DESC LIMIT ?", (plan_id, symbol, scenario, mode, before.isoformat() if before else None, before.isoformat() if before else None, limit)).fetchall()
+            return [EntryAssessment.model_validate_json(row["payload_json"]) for row in rows]
+        finally:
+            conn.close()
+
+    def entry_by_id(self, assessment_id: str) -> EntryAssessment | None:
+        self.initialize()
+        conn = self._connect(writable=False)
+        try:
+            row = conn.execute("SELECT payload_json FROM entry_assessments WHERE assessment_id=?", (assessment_id,)).fetchone()
+            return EntryAssessment.model_validate_json(row["payload_json"]) if row else None
+        finally:
+            conn.close()
+
+    def cached_entry_evidence(self, plan_id: str, symbol: str, *, now: datetime):
+        self.initialize()
+        conn = self._connect(writable=False)
+        try:
+            row = conn.execute("SELECT payload_json FROM entry_assessments WHERE plan_id=? AND symbol=? AND json_extract(payload_json,'$.mode')='live' AND assessed_at<=? ORDER BY assessed_at DESC LIMIT 1", (plan_id, symbol, now.isoformat())).fetchone()
+            return EntryAssessment.model_validate_json(row["payload_json"]).evidence if row else None
+        finally:
+            conn.close()
+
+    def commit_entry(self, assessment: EntryAssessment) -> EntryAssessment:
+        with self._transaction() as conn:
+            conn.execute("INSERT OR IGNORE INTO entry_assessments VALUES(?,?,?,?,?,?)", (assessment.assessment_id, assessment.plan_id, assessment.symbol, assessment.scenario, assessment.assessed_at.isoformat(), assessment.model_dump_json()))
+        return self.entry_by_id(assessment.assessment_id)
+
+    def record_entry_attempt(self, plan_id, symbol, scenario, now, state, error=None, *, mode="live"):
+        with self._transaction() as conn:
+            conn.execute("INSERT INTO entry_attempts VALUES(?,?,?,?,?,?,?) ON CONFLICT(plan_id,symbol,scenario,mode) DO UPDATE SET attempted_at=excluded.attempted_at,state=excluded.state,error=excluded.error", (plan_id, symbol, scenario, mode, now.isoformat(), state, error))
+
+    def entry_attempt(self, plan_id, symbol, scenario, *, mode="live"):
+        self.initialize()
+        conn = self._connect(writable=False)
+        try:
+            row = conn.execute("SELECT * FROM entry_attempts WHERE plan_id=? AND symbol=? AND scenario=? AND mode=?", (plan_id,symbol,scenario,mode)).fetchone()
+            return dict(row) if row else None
+        finally:
+            conn.close()

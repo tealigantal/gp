@@ -8,6 +8,7 @@ from pydantic import BaseModel, ConfigDict
 
 from ..application.conversation_service import ConversationService, project_current_market, project_next_plan_target
 from ..application.market_runs import MarketRunStore
+from ..application.entry_service import EntryService
 from ..store import ContractStore, ContractStoreError, UnsupportedDatabaseSchema
 from ..contracts.conversation import ConversationSession, ConversationTurn
 
@@ -18,6 +19,7 @@ router = APIRouter()
 class ChatRequest(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
     session_id: str | None = None
+    publication_id: str | None
     client_turn_id: str
     message: str
 
@@ -33,6 +35,20 @@ def current_recommendation() -> dict[str, object]:
     if publication is None:
         raise HTTPException(status_code=404, detail="publication_not_found")
     return publication.model_dump(mode="json")
+
+
+@router.get("/api/entry/current")
+def current_entry(plan_id: str) -> dict[str, object]:
+    store = ContractStore()
+    plan = store.load_plan(plan_id)
+    if plan is None:
+        raise HTTPException(status_code=404, detail="plan_not_found")
+    service = EntryService(store)
+    now = datetime.now(ZoneInfo("Asia/Shanghai"))
+    return {"plan_id": plan_id, "observed_at": now.isoformat(), "symbols": {
+        c.symbol: service.read(plan_id, c.symbol, "new_position", now=now)
+        for c in plan.evaluated_candidates if c.disposition.value == "selected"
+    }}
 
 
 @router.post("/api/recommendation/refresh")
@@ -89,7 +105,7 @@ def health() -> dict[str, object]:
 @router.post("/api/chat")
 def chat(request: ChatRequest) -> dict[str, object]:
     try:
-        return ConversationService(ContractStore()).reply(session_id=request.session_id, client_turn_id=request.client_turn_id, user_message=request.message)
+        return ConversationService(ContractStore()).reply(session_id=request.session_id, client_turn_id=request.client_turn_id, user_message=request.message, publication_id=request.publication_id)
     except ContractStoreError as exc:
         reason = str(exc)
         status = 409 if reason in {"conversation_deleted", "session_publication_mismatch"} else 500

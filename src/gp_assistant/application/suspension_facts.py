@@ -15,7 +15,7 @@ from ..serenity.text import normalize_cn_text
 from .trading_calendar import CnATradingCalendar
 
 
-POLICY_REVISION = "official-suspension.v3"
+POLICY_REVISION = "official-suspension.v4"
 MAX_HALT_SESSIONS = 10
 CONTINUATION_SESSIONS = 5
 _DATE = r"20\d{2}年\d{1,2}月\d{1,2}日"
@@ -79,7 +79,7 @@ class TradingStatusFact:
     state: Literal["halted", "resumed"]
     starts_on: date
     ends_on: date | None
-    session_limit: int
+    session_limit: int | None
     kind: str
     excerpt: str
     resumption_condition: str | None = None
@@ -92,6 +92,21 @@ class TradingStatusFact:
         condition. Ambiguity must not preserve a no-bar exclusion. An explicit
         newer halt is resolved separately by the collector's chronology.
         """
+        if self.kind == "halt_until_delisting":
+            # A withdrawal/correction or actual delisting announcement needs
+            # fresh lifecycle proof, not indefinite reuse of this old halt.
+            title_change = re.search(
+                r"撤销|撤回|取消|更正|摘牌|终止上市决定|终止上市暨摘牌|终止上市及摘牌|"
+                r"股票(?:在上海证券交易所)?终止上市(?:的)?公告",
+                normalize(title),
+            )
+            body_change = re.search(
+                r"(?:本公司|公司)(?:A股)?(?:股票)?(?:已|决定|将)?(?:撤销|撤回|取消|更正)"
+                r"[^。；]{0,30}(?:停牌|终止上市|摘牌)|"
+                rf"{_ISSUER}(?:将)?(?:于|自){_DATE}(?:起)?(?:终止上市|摘牌)",
+                normalize(text),
+            )
+            return bool(title_change or body_change)
         if self.resumption_trigger == "investigation_disclosure":
             return bool(re.search(r"核查|核实", normalize(title) + normalize(text)))
         if self.resumption_trigger == "result_disclosure":
@@ -109,6 +124,10 @@ class TradingStatusFact:
             return "effective"
         if self.ends_on is not None and target > self.ends_on:
             return "interval_ended"
+        if self.kind == "halt_until_delisting" and self.session_limit is None and self.ends_on is None:
+            return "effective"
+        if self.session_limit is None:
+            return "unsupported_duration"
         if self.session_limit <= 0 or self.session_limit > MAX_HALT_SESSIONS:
             return "unsupported_duration"
         # Inclusive: the initial suspension session consumes one session.
@@ -120,7 +139,8 @@ class TradingStatusFact:
         return {
             "state": self.state, "starts_on": self.starts_on.isoformat(),
             "ends_on": self.ends_on.isoformat() if self.ends_on else None,
-            "session_limit": self.session_limit, "duration_unit": "trading_session",
+            "session_limit": self.session_limit,
+            "duration_unit": "terminal_event" if self.kind == "halt_until_delisting" else "trading_session",
             "kind": self.kind, "excerpt": self.excerpt,
             "resumption_condition": self.resumption_condition,
             "resumption_trigger": self.resumption_trigger,
@@ -206,7 +226,16 @@ def parse_status_facts(text: str) -> tuple[TradingStatusFact, ...]:
             r"[，,](?:并)?(?:自|待)(?:披露|刊登)(?P<topic>核查|核查结果|相关|结果)公告(?:后|当日)(?:复牌|恢复交易)(?=[。；，,]|$)",
             text[match.end():],
         )
-        if not one_day and condition:
+        # Only the immediately coordinated issuer assertion can establish a
+        # terminal halt. A title, proposed merger, foreign subject or a later
+        # sentence must not turn an ordinary halt into an indefinite one.
+        terminal = re.match(
+            r"[，,](?:并将于现金选择权申报后继续停牌)?直至终止上市(?=[。；，,]|$)",
+            text[match.end():],
+        )
+        if not one_day and not declared and terminal:
+            facts.append(TradingStatusFact("halted", start, None, None, "halt_until_delisting", window))
+        elif not one_day and condition:
             facts.append(TradingStatusFact(
                 "halted", start, None, limit, "conditional_resumption_halt", window,
                 condition.group()[1:],

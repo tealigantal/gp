@@ -609,6 +609,645 @@
       "title": "DecisionPolicyBinding",
       "type": "object"
     },
+    "EntryAssessment": {
+      "$defs": {
+        "EntryEvidence": {
+          "additionalProperties": false,
+          "properties": {
+            "benchmark_return_15m": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Benchmark Return 15M"
+            },
+            "benchmark_return_30m": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Benchmark Return 30M"
+            },
+            "closes_30m": {
+              "items": {
+                "type": "number"
+              },
+              "title": "Closes 30M",
+              "type": "array"
+            },
+            "cutoff": {
+              "format": "date-time",
+              "title": "Cutoff",
+              "type": "string"
+            },
+            "digest": {
+              "title": "Digest",
+              "type": "string"
+            },
+            "entry_position": {
+              "enum": [
+                "below",
+                "inside",
+                "above",
+                "unrecorded"
+              ],
+              "title": "Entry Position",
+              "type": "string"
+            },
+            "fetched_at": {
+              "format": "date-time",
+              "title": "Fetched At",
+              "type": "string"
+            },
+            "highs_30m": {
+              "items": {
+                "type": "number"
+              },
+              "title": "Highs 30M",
+              "type": "array"
+            },
+            "last_price": {
+              "title": "Last Price",
+              "type": "number"
+            },
+            "limitations": {
+              "items": {
+                "type": "string"
+              },
+              "title": "Limitations",
+              "type": "array"
+            },
+            "lows_30m": {
+              "items": {
+                "type": "number"
+              },
+              "title": "Lows 30M",
+              "type": "array"
+            },
+            "price_basis": {
+              "const": "unadjusted_cny",
+              "title": "Price Basis",
+              "type": "string"
+            },
+            "price_vs_vwap": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Price Vs Vwap"
+            },
+            "price_vs_vwap_15m_ago": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Price Vs Vwap 15M Ago"
+            },
+            "relative_return_30m": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Relative Return 30M"
+            },
+            "request_ms": {
+              "title": "Request Ms",
+              "type": "number"
+            },
+            "return_15m": {
+              "title": "Return 15M",
+              "type": "number"
+            },
+            "return_30m": {
+              "title": "Return 30M",
+              "type": "number"
+            },
+            "return_since_open": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Return Since Open"
+            },
+            "source": {
+              "title": "Source",
+              "type": "string"
+            },
+            "stop_breached": {
+              "title": "Stop Breached",
+              "type": "boolean"
+            },
+            "symbol": {
+              "title": "Symbol",
+              "type": "string"
+            },
+            "trade_constraints": {
+              "items": {
+                "type": "string"
+              },
+              "title": "Trade Constraints",
+              "type": "array"
+            },
+            "volume_recent_15m_to_prior_15m": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Volume Recent 15M To Prior 15M"
+            },
+            "vwap": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Vwap"
+            }
+          },
+          "required": [
+            "source",
+            "symbol",
+            "cutoff",
+            "fetched_at",
+            "digest",
+            "price_basis",
+            "last_price",
+            "return_since_open",
+            "return_15m",
+            "return_30m",
+            "closes_30m",
+            "highs_30m",
+            "lows_30m",
+            "volume_recent_15m_to_prior_15m",
+            "vwap",
+            "price_vs_vwap",
+            "price_vs_vwap_15m_ago",
+            "benchmark_return_15m",
+            "benchmark_return_30m",
+            "relative_return_30m",
+            "entry_position",
+            "stop_breached",
+            "trade_constraints",
+            "limitations",
+            "request_ms"
+          ],
+          "title": "EntryEvidence",
+          "type": "object"
+        },
+        "EntryJudgment": {
+          "additionalProperties": false,
+          "properties": {
+            "action": {
+              "enum": [
+                "consider_entry",
+                "do_not_enter",
+                "wait",
+                "unconfirmed"
+              ],
+              "title": "Action",
+              "type": "string"
+            },
+            "change": {
+              "title": "Change",
+              "type": "string"
+            },
+            "conclusion": {
+              "maxLength": 600,
+              "minLength": 1,
+              "title": "Conclusion",
+              "type": "string"
+            },
+            "evidence_fields": {
+              "items": {
+                "type": "string"
+              },
+              "minItems": 1,
+              "title": "Evidence Fields",
+              "type": "array"
+            },
+            "reasons": {
+              "items": {
+                "type": "string"
+              },
+              "maxItems": 5,
+              "minItems": 1,
+              "title": "Reasons",
+              "type": "array"
+            },
+            "trend": {
+              "enum": [
+                "strengthening",
+                "weakening",
+                "repairing",
+                "pullback",
+                "sideways",
+                "mixed",
+                "unconfirmed"
+              ],
+              "title": "Trend",
+              "type": "string"
+            }
+          },
+          "required": [
+            "action",
+            "trend",
+            "conclusion",
+            "reasons",
+            "evidence_fields",
+            "change"
+          ],
+          "title": "EntryJudgment",
+          "type": "object"
+        }
+      },
+      "additionalProperties": false,
+      "properties": {
+        "assessed_at": {
+          "format": "date-time",
+          "title": "Assessed At",
+          "type": "string"
+        },
+        "assessment_id": {
+          "title": "Assessment Id",
+          "type": "string"
+        },
+        "completed_at": {
+          "format": "date-time",
+          "title": "Completed At",
+          "type": "string"
+        },
+        "evidence": {
+          "$ref": "#/$defs/EntryEvidence"
+        },
+        "judgment": {
+          "$ref": "#/$defs/EntryJudgment"
+        },
+        "mode": {
+          "enum": [
+            "live",
+            "historical"
+          ],
+          "title": "Mode",
+          "type": "string"
+        },
+        "plan_id": {
+          "title": "Plan Id",
+          "type": "string"
+        },
+        "previous_assessment_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Previous Assessment Id"
+        },
+        "scenario": {
+          "enum": [
+            "new_position",
+            "add_position"
+          ],
+          "title": "Scenario",
+          "type": "string"
+        },
+        "symbol": {
+          "title": "Symbol",
+          "type": "string"
+        },
+        "total_ms": {
+          "title": "Total Ms",
+          "type": "number"
+        }
+      },
+      "required": [
+        "assessment_id",
+        "plan_id",
+        "symbol",
+        "scenario",
+        "assessed_at",
+        "completed_at",
+        "mode",
+        "evidence",
+        "judgment",
+        "previous_assessment_id",
+        "total_ms"
+      ],
+      "title": "EntryAssessment",
+      "type": "object"
+    },
+    "EntryEvidence": {
+      "additionalProperties": false,
+      "properties": {
+        "benchmark_return_15m": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Benchmark Return 15M"
+        },
+        "benchmark_return_30m": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Benchmark Return 30M"
+        },
+        "closes_30m": {
+          "items": {
+            "type": "number"
+          },
+          "title": "Closes 30M",
+          "type": "array"
+        },
+        "cutoff": {
+          "format": "date-time",
+          "title": "Cutoff",
+          "type": "string"
+        },
+        "digest": {
+          "title": "Digest",
+          "type": "string"
+        },
+        "entry_position": {
+          "enum": [
+            "below",
+            "inside",
+            "above",
+            "unrecorded"
+          ],
+          "title": "Entry Position",
+          "type": "string"
+        },
+        "fetched_at": {
+          "format": "date-time",
+          "title": "Fetched At",
+          "type": "string"
+        },
+        "highs_30m": {
+          "items": {
+            "type": "number"
+          },
+          "title": "Highs 30M",
+          "type": "array"
+        },
+        "last_price": {
+          "title": "Last Price",
+          "type": "number"
+        },
+        "limitations": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Limitations",
+          "type": "array"
+        },
+        "lows_30m": {
+          "items": {
+            "type": "number"
+          },
+          "title": "Lows 30M",
+          "type": "array"
+        },
+        "price_basis": {
+          "const": "unadjusted_cny",
+          "title": "Price Basis",
+          "type": "string"
+        },
+        "price_vs_vwap": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Price Vs Vwap"
+        },
+        "price_vs_vwap_15m_ago": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Price Vs Vwap 15M Ago"
+        },
+        "relative_return_30m": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Relative Return 30M"
+        },
+        "request_ms": {
+          "title": "Request Ms",
+          "type": "number"
+        },
+        "return_15m": {
+          "title": "Return 15M",
+          "type": "number"
+        },
+        "return_30m": {
+          "title": "Return 30M",
+          "type": "number"
+        },
+        "return_since_open": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Return Since Open"
+        },
+        "source": {
+          "title": "Source",
+          "type": "string"
+        },
+        "stop_breached": {
+          "title": "Stop Breached",
+          "type": "boolean"
+        },
+        "symbol": {
+          "title": "Symbol",
+          "type": "string"
+        },
+        "trade_constraints": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Trade Constraints",
+          "type": "array"
+        },
+        "volume_recent_15m_to_prior_15m": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Volume Recent 15M To Prior 15M"
+        },
+        "vwap": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Vwap"
+        }
+      },
+      "required": [
+        "source",
+        "symbol",
+        "cutoff",
+        "fetched_at",
+        "digest",
+        "price_basis",
+        "last_price",
+        "return_since_open",
+        "return_15m",
+        "return_30m",
+        "closes_30m",
+        "highs_30m",
+        "lows_30m",
+        "volume_recent_15m_to_prior_15m",
+        "vwap",
+        "price_vs_vwap",
+        "price_vs_vwap_15m_ago",
+        "benchmark_return_15m",
+        "benchmark_return_30m",
+        "relative_return_30m",
+        "entry_position",
+        "stop_breached",
+        "trade_constraints",
+        "limitations",
+        "request_ms"
+      ],
+      "title": "EntryEvidence",
+      "type": "object"
+    },
+    "EntryJudgment": {
+      "additionalProperties": false,
+      "properties": {
+        "action": {
+          "enum": [
+            "consider_entry",
+            "do_not_enter",
+            "wait",
+            "unconfirmed"
+          ],
+          "title": "Action",
+          "type": "string"
+        },
+        "change": {
+          "title": "Change",
+          "type": "string"
+        },
+        "conclusion": {
+          "maxLength": 600,
+          "minLength": 1,
+          "title": "Conclusion",
+          "type": "string"
+        },
+        "evidence_fields": {
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Evidence Fields",
+          "type": "array"
+        },
+        "reasons": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 5,
+          "minItems": 1,
+          "title": "Reasons",
+          "type": "array"
+        },
+        "trend": {
+          "enum": [
+            "strengthening",
+            "weakening",
+            "repairing",
+            "pullback",
+            "sideways",
+            "mixed",
+            "unconfirmed"
+          ],
+          "title": "Trend",
+          "type": "string"
+        }
+      },
+      "required": [
+        "action",
+        "trend",
+        "conclusion",
+        "reasons",
+        "evidence_fields",
+        "change"
+      ],
+      "title": "EntryJudgment",
+      "type": "object"
+    },
     "EvidenceWrite": {
       "additionalProperties": false,
       "properties": {

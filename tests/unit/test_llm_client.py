@@ -21,7 +21,8 @@ def test_agent_tool_step_disables_thinking_for_required_tool_choice(monkeypatch)
     assert seen["thinking"] == {"type": "disabled"}
 
 
-def test_strict_tools_use_beta_endpoint_and_normal_chat_uses_base_endpoint(monkeypatch):
+def test_strict_tools_use_beta_endpoint_and_normal_chat_uses_base_endpoint(monkeypatch, tmp_path):
+    monkeypatch.setenv("GP_STORE_DIR", str(tmp_path / "store"))
     urls = []
 
     class Response:

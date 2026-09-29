@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { deleteConversation, friendlyError, getConversation, getConversations, getHealth, getPublication, sendChat } from './api'
-import type { ConversationSession, ConversationTurn, HealthStatus, RecommendationPublication } from './contracts'
+import { deleteConversation, friendlyError, getConversation, getConversations, getHealth, getPublication, getEntries, sendChat } from './api'
+import type { ConversationSession, ConversationTurn, HealthStatus, RecommendationPublication, EntrySnapshot, EntryState } from './contracts'
 import { ArrowIcon, ChatIcon, ClockIcon, PlusIcon, RefreshIcon, ShieldIcon, SparkIcon, TrashIcon, TrendIcon } from './Icons'
 
 const prompts = ['今天最值得关注哪几只？', '为什么现在不能直接买？', '比较前三名的风险和胜率']
@@ -9,7 +9,7 @@ const reasonLabels: Record<string, string> = {
   market_not_in_trading_phase: '当前不在连续交易时段',
   daily_evidence_pending: '日线证据仍在准备',
   runtime_unavailable: '盘中执行数据暂不可用',
-  runtime_pending: '盘中执行状态正在更新',
+  runtime_pending: '等待盘中证据',
   runtime_snapshot_unavailable: '盘中行情快照暂不可用',
   runtime_symbol_missing: '当前候选缺少盘中行情',
   runtime_session_not_current: '明日计划尚未进入对应交易日',
@@ -58,7 +58,7 @@ function describeMarketStatus(health: HealthStatus | null, connectionStale: bool
   if (current.plan_relation === 'preopen') return { badge: '开盘前', pill: '开盘前 · 等待核验', title: '当前计划等待开盘核验', detail: '开盘前不提供执行结论，盘中运行时核验完成后才会更新。', recovery, tone: 'waiting', tradeable: false }
   if (current.plan_relation === 'active') {
     const tradeable = current.tradeable_now
-    return { badge: tradeable ? '可执行' : '仅观察', pill: `${current.market_phase_label} · ${tradeable ? '可执行' : '仅观察'}`, title: tradeable ? '当前计划可执行' : '当前计划仅供观察', detail: tradeable ? '当前运行时核验允许执行；仍请按计划区间与风险边界观察。' : '当前运行时核验未允许执行，暂不提供买入结论。', recovery, tone: tradeable ? 'ready' : 'waiting', tradeable }
+    return { badge: tradeable ? '行情可用' : '待确认', pill: `${current.market_phase_label} · ${tradeable ? '行情可用' : '待确认'}`, title: tradeable ? '交易数据可用' : '当前入场需单股确认', detail: tradeable ? '行情可用不等于适合买入，请查看各股票的正式入场评估。' : '日线排名保持原样；各股票的当下建议由尾盘评估给出。', recovery, tone: tradeable ? 'ready' : 'waiting', tradeable }
   }
   return { badge: '暂不可执行', pill: `${current.market_phase_label} · 暂不可执行`, title: '当前市场不可执行', detail: '当前不在可执行交易时段，计划只供研究与回顾。', recovery, tone: 'waiting', tradeable: false }
 }
@@ -93,6 +93,7 @@ export function App() {
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null)
   const [turns, setTurns] = useState<ConversationTurn[]>([])
   const [draft, setDraft] = useState('')
+  const [entries, setEntries] = useState<EntrySnapshot | null>(null)
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [sendingSessionId, setSendingSessionId] = useState<string | null>(null)
@@ -101,7 +102,7 @@ export function App() {
   const [error, setError] = useState<string | null>(null)
   const [connectionStale, setConnectionStale] = useState(false)
   const [publicationPlanById, setPublicationPlanById] = useState<Record<string, string>>({})
-  const [retryAttempt, setRetryAttempt] = useState<{ message: string; clientTurnId: string; sessionId: string } | null>(null)
+  const [retryAttempt, setRetryAttempt] = useState<{ message: string; clientTurnId: string; sessionId: string; publicationId: string | null } | null>(null)
   const threadEnd = useRef<HTMLDivElement>(null)
   const syncSequence = useRef(0)
   const manualSyncSequence = useRef(0)
@@ -141,7 +142,14 @@ export function App() {
         setHealth(nextCore.value.health)
         setPublication(nextCore.value.publication)
         rememberPublicationPlan(nextCore.value.publication)
+        try {
+          const snapshot = await getEntries(nextCore.value.publication.plan_id)
+          if (sequence === syncSequence.current) setEntries(snapshot)
+        } catch {
+          if (sequence === syncSequence.current) setEntries(null)
+        }
       }
+      if (sequence !== syncSequence.current) return
       if (nextSessions.status === 'fulfilled') acceptSessions(nextSessions.value)
       const coreFailed = nextCore.status === 'rejected'
       setConnectionStale(coreFailed)
@@ -217,6 +225,7 @@ export function App() {
     if (!text || sending || (deletingSessionId !== null && deletingSessionId === activeSessionId)) return
     const clientTurnId = retryAttempt?.message === text ? retryAttempt.clientTurnId : uid()
     const targetSessionId = activeSessionId || (retryAttempt?.message === text ? retryAttempt.sessionId : newSessionId())
+    const visiblePublicationId = retryAttempt?.message === text ? retryAttempt.publicationId : activeSession?.active_publication_id || publication?.publication_id || null
     if (!activeSessionId) selectActiveSessionId(targetSessionId)
     const optimistic: ConversationTurn = {
       turn_id: clientTurnId, session_id: targetSessionId, publication_id: publication?.publication_id || '',
@@ -227,7 +236,7 @@ export function App() {
     setError(null)
     setSendingSessionId(targetSessionId)
     try {
-      const response = await sendChat(text, clientTurnId, targetSessionId)
+      const response = await sendChat(text, clientTurnId, targetSessionId, visiblePublicationId)
       selectActiveSessionId(response.session_id)
       rememberPublicationPlan(response.publication)
       const detail = await getConversation(response.session_id)
@@ -239,7 +248,7 @@ export function App() {
     } catch (cause) {
       setTurns((current) => current.filter((turn) => turn.turn_id !== clientTurnId))
       setDraft(text)
-      setRetryAttempt({ message: text, clientTurnId, sessionId: targetSessionId })
+      setRetryAttempt({ message: text, clientTurnId, sessionId: targetSessionId, publicationId: visiblePublicationId })
       setError(friendlyError(cause))
     } finally {
       setSendingSessionId(null)
@@ -310,7 +319,7 @@ export function App() {
           <div>
             <span className="eyebrow">对话决策工作台</span>
             <h1>和你的 A 股决策 Agent 对话</h1>
-            <p>基于真实市场证据生成 1–3 日计划，模型只解释，不替算法选股。</p>
+            <p>基于真实市场证据生成 1–3 日计划，算法选股，Agent结合真实走势判断入场。</p>
           </div>
           <div className="top-actions">
             <div className={tradeable ? 'market-pill tradeable' : 'market-pill'}><span />{marketStatus.pill}</div>
@@ -346,7 +355,7 @@ export function App() {
               <textarea value={draft} onChange={(event) => { setDraft(event.target.value); if (event.target.value !== retryAttempt?.message) setRetryAttempt(null) }} onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); void submit() } }} placeholder="问问今天的候选、风险或执行条件…" rows={1} disabled={sending || (deletingSessionId !== null && deletingSessionId === activeSessionId)} aria-label="聊天输入" />
               <button onClick={() => void submit()} disabled={!draft.trim() || sending || (deletingSessionId !== null && deletingSessionId === activeSessionId)} aria-label="发送消息"><ArrowIcon /></button>
             </div>
-            <div className="composer-note"><span><ShieldIcon />{activeSession ? '回答沿用本会话绑定发布物' : '回答只引用当前决策发布物'}</span><span>Enter 发送 · Shift + Enter 换行</span></div>
+            <div className="composer-note"><span><ShieldIcon />{activeSession ? '回答沿用本会话绑定发布物' : '回答绑定原计划与真实盘中证据'}</span><span>Enter 发送 · Shift + Enter 换行</span></div>
           </div>
         </section>
       </main>
@@ -369,7 +378,7 @@ export function App() {
           <>
             <section className="summary-strip">
               <div><span>入选</span><strong>{selected.length}</strong><small>进入评分 {publication.candidates.length}</small></div>
-              <div><span>执行状态</span><strong className={tradeable ? 'green' : 'amber'}>{tradeable ? '可执行' : marketStatus.badge}</strong><small>{marketLabel}</small></div>
+              <div><span>执行状态</span><strong className={tradeable ? 'green' : 'amber'}>{tradeable ? '行情可用' : marketStatus.badge}</strong><small>{marketLabel}</small></div>
             </section>
 
             <div className="section-title"><span>{reviewOnly ? '上一份计划入选（仅回顾）' : '优先观察'}</span><small>{reviewOnly ? '不是下一交易日新计划' : '排名不代表正优势或入场许可'}</small></div>
@@ -378,6 +387,7 @@ export function App() {
                 <article className="candidate" key={candidate.symbol}>
                   <div className="candidate-top"><span className="rank">{candidate.ranking.rank}</span><div><strong>{candidate.name || candidate.symbol}</strong><small>{candidate.symbol} · {signalLabels[candidate.signal.label] || '算法信号'}</small></div><span className="score">{(candidate.adaptive_score * 100).toFixed(1)}分</span></div>
                   <div className="metrics"><span>3日概率 <strong>{percent(candidate.probability.probability)}</strong></span><span>执行风险 <strong>{percent(candidate.risk.execution_risk)}</strong></span></div>
+                  <EntryDetail entry={entries?.plan_id === publication.plan_id ? entries.symbols[candidate.symbol] : undefined} disconnected={connectionStale} />
                   <div className="trade-plan"><div><span>观察区间</span><strong>{price(candidate.trade_plan.entry_low)} – {price(candidate.trade_plan.entry_high)}</strong></div><div><span>止损参考</span><strong>{price(candidate.trade_plan.stop_price)}</strong></div></div>
                 </article>
               )) : <div className="empty-candidates"><ShieldIcon /><strong>当前没有入选标的</strong><span>系统选择失败关闭，不会用旧候选填充。</span></div>}
@@ -391,4 +401,23 @@ export function App() {
       </aside>
     </div>
   )
+}
+
+const trendLabels: Record<string, string> = { strengthening: '走势转强', weakening: '近期走弱', repairing: '正在修复', pullback: '正常回踩', sideways: '横盘', mixed: '证据混合', unconfirmed: '未确认' }
+
+function EntryDetail({ entry, disconnected }: { entry: EntryState | undefined; disconnected: boolean }) {
+  const [clock, setClock] = useState(Date.now())
+  useEffect(() => { const timer = window.setInterval(() => setClock(Date.now()), 1000); return () => window.clearInterval(timer) }, [])
+  const current = !disconnected && entry?.current && entry.valid_until && clock < Date.parse(entry.valid_until)
+  const assessment = entry?.assessment
+  return <div className="entry-detail">
+    <strong>{current && assessment ? assessment.judgment.conclusion : entry?.state === 'refreshing' ? '正在刷新入场判断' : assessment ? '历史评估 · 当前未确认' : '尚未取得有效入场评估'}</strong>
+    {assessment && <>
+      <span>{trendLabels[assessment.judgment.trend]}{current ? '' : '（历史）'}</span>
+      {current && <p>{assessment.judgment.reasons.join('；')}</p>}
+      <small>判断 {dateTime(assessment.assessed_at)} · 五分钟走势截至 {dateTime(assessment.evidence.cutoff)}</small>
+      {!current && <details><summary>查看历史评估</summary><p>{assessment.judgment.conclusion}</p><p>{assessment.judgment.reasons.join('；')}</p></details>}
+    </>}
+    {entry?.message && <small>{entry.message}</small>}
+  </div>
 }

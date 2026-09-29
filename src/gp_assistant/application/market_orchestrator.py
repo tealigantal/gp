@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from datetime import date, datetime, time as clock_time
+from datetime import date, datetime, time as clock_time, timedelta
+from time import monotonic
 import json
 import multiprocessing
 import sys
@@ -35,7 +36,8 @@ from .official_suspension import OfficialSuspensionEvidenceCollector
 from .publication_service import PublicationService
 from .real_producer import RealRecommendationProducer, DAILY_PRODUCER_REVISION
 from ..decision_engine.scoring import REVISION as SCORING_REVISION, scoring_policy_digest
-from .runtime_producer import RuntimeRecommendationProducer, market_phase
+from .market_phase import market_phase
+from .entry_service import EntryService, entry_window
 from ..serenity.service import FIXED_WEIGHT, load_decision, publish_target
 from .trading_calendar import CnATradingCalendar, load_cn_a_calendar
 
@@ -176,6 +178,7 @@ def _daily_fetch_worker(
                 symbols=tuple(missing),
                 trade_date=date.fromisoformat(target),
                 observed_at=datetime.now(now.tzinfo),
+                disclosure_start_by_symbol=ledger.suspension_discovery_starts(symbols=tuple(missing), trade_date=target),
             )
             ledger.record_suspension_diagnostics(
                 trade_date=target, diagnostics_by_symbol=resolution.diagnostics_by_symbol, now=datetime.now(now.tzinfo),
@@ -232,7 +235,7 @@ class MarketDayOrchestrator:
         ledger: MarketRunStore | None = None,
         provider=None,
         real_producer: RealRecommendationProducer | None = None,
-        runtime_producer: RuntimeRecommendationProducer | None = None,
+        entry_service: EntryService | None = None,
         lunch_producer: LunchRebalanceProducer | None = None,
         suspension_collector: OfficialSuspensionEvidenceCollector | None = None,
         spawn_fetch: bool = True,
@@ -242,7 +245,7 @@ class MarketDayOrchestrator:
         self.ledger = ledger or MarketRunStore()
         self.provider = provider
         self.real = real_producer or RealRecommendationProducer(store)
-        self.runtime = runtime_producer or RuntimeRecommendationProducer(store)
+        self.entry = entry_service
         self.lunch = lunch_producer or LunchRebalanceProducer(store)
         self.suspension_collector = suspension_collector
         self.spawn_fetch = spawn_fetch
@@ -252,6 +255,7 @@ class MarketDayOrchestrator:
         self._fetch_trade_date: str | None = None
 
     def tick(self, *, now: datetime) -> dict[str, object]:
+        started = monotonic()
         self.ledger.initialize()
         cfg = load_config()
         self._worker_lease = self.ledger.acquire_or_heartbeat_lease(
@@ -297,7 +301,7 @@ class MarketDayOrchestrator:
         if not is_open_session:
             return {"state": "closed", "market_recovery": self.ledger.health()}
         self._run_lunch_if_due(now=now)
-        self._run_runtime_if_due(now=now)
+        self._run_entry_if_due(now=now + timedelta(seconds=monotonic() - started))
         return {"state": "ok", "market_recovery": self.ledger.health()}
 
     @staticmethod
@@ -607,21 +611,23 @@ class MarketDayOrchestrator:
             )
             return False
 
-    def _run_runtime_if_due(self, *, now: datetime) -> None:
-        if market_phase(now) not in {MarketPhase.MORNING, MarketPhase.AFTERNOON, MarketPhase.CLOSING_AUCTION}:
+    def _run_entry_if_due(self, *, now: datetime) -> None:
+        from concurrent.futures import ThreadPoolExecutor
+        calendar = load_cn_a_calendar()
+        if not entry_window(now, calendar):
             return
         current = self.store.current_publication()
         plan = self.store.load_plan(current.plan_id) if current else None
         if plan is None or plan.market_session_date != now.date() or publication_ineligibility(plan) is not None:
             return
-        try:
-            runtime = self.runtime.produce(now=now, plan_id=plan.plan_id)
-            PublicationService(self.store).publish(
-                plan_id=plan.plan_id, runtime_id=runtime.runtime_id, published_at=now,
-                expected_current_publication_id=current.publication_id,
-            )
-        except (PublicationConflict, ValueError) as exc:
-            print(json.dumps({"runtime_skipped": str(exc)}, ensure_ascii=False), flush=True)
+        if self.entry is None:
+            self.entry = EntryService(self.store, calendar=calendar)
+        symbols = [c.symbol for c in plan.evaluated_candidates if c.disposition.value == "selected"]
+        def evaluate(symbol):
+            return self.entry.assess(plan_id=plan.plan_id, symbol=symbol, scenario="new_position", now=now)
+        with ThreadPoolExecutor(max_workers=3) as executor:
+            for result in executor.map(evaluate, symbols):
+                print(json.dumps({"tail_entry": result}, ensure_ascii=False), flush=True)
 
     def _run_lunch_if_due(self, *, now: datetime) -> None:
         if market_phase(now) is not MarketPhase.LUNCH or self.ledger.lunch_state(now.date().isoformat()) is not None:

@@ -124,7 +124,7 @@ def test_interrupted_run_retries_only_uncovered_symbols(tmp_path, monkeypatch):
             return {symbol: pd.DataFrame() for symbol in symbols}
 
     class Collector:
-        def resolve(self, *, symbols, trade_date, observed_at):
+        def resolve(self, *, symbols, trade_date, observed_at, disclosure_start_by_symbol):
             assert symbols == ("000002",)
             return SuspensionResolution(evidence_by_symbol={
                 "000002": {

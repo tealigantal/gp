@@ -48,6 +48,26 @@ export interface TradePlan {
   reason_codes: string[]
 }
 
+export interface EntryState {
+  state: 'ready' | 'refreshing' | 'stale' | 'unavailable'
+  current: boolean
+  valid_until: string | null
+  error: string | null
+  message: string | null
+  assessment: {
+    assessment_id: string
+    assessed_at: string
+    evidence: { cutoff: string; fetched_at: string; limitations: string[] }
+    judgment: { action: string; trend: string; conclusion: string; reasons: string[]; change: string }
+  } | null
+}
+
+export interface EntrySnapshot {
+  plan_id: string
+  observed_at: string
+  symbols: Record<string, EntryState>
+}
+
 export interface CandidateDecision {
   symbol: string
   name: string

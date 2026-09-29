@@ -1,0 +1,95 @@
+{
+  "state": "historical",
+  "current": false,
+  "assessment": {
+    "assessment_id": "entry_eef214de8ef007d44715479d927b5a07",
+    "plan_id": "plan_45e8e24a09a43e58566db117",
+    "symbol": "000001",
+    "scenario": "new_position",
+    "assessed_at": "2026-07-23T14:40:00+08:00",
+    "completed_at": "2026-09-27T23:12:54.023119+08:00",
+    "mode": "historical",
+    "evidence": {
+      "source": "sina:CN_MarketDataService.getKLineData:5m",
+      "symbol": "000001",
+      "cutoff": "2026-07-23T14:40:00+08:00",
+      "fetched_at": "2026-07-23T17:40:00+08:00",
+      "digest": "63bd8d0b629c571571b5cdb99a27ec2dc23fae7dccc1385ecae28992205a72cf",
+      "price_basis": "unadjusted_cny",
+      "last_price": 10.4,
+      "return_since_open": 0.02970297029702973,
+      "return_15m": -0.00952380952380949,
+      "return_30m": 0.0,
+      "closes_30m": [
+        10.4,
+        10.5,
+        10.4,
+        10.5,
+        10.4,
+        10.5,
+        10.4
+      ],
+      "highs_30m": [
+        10.42,
+        10.52,
+        10.42,
+        10.52,
+        10.42,
+        10.52,
+        10.42
+      ],
+      "lows_30m": [
+        10.38,
+        10.48,
+        10.38,
+        10.48,
+        10.38,
+        10.48,
+        10.38
+      ],
+      "volume_recent_15m_to_prior_15m": 1.0,
+      "vwap": 10.365750528541225,
+      "price_vs_vwap": 0.003304099530899496,
+      "price_vs_vwap_15m_ago": 0.013434723339957655,
+      "benchmark_return_15m": 0.0,
+      "benchmark_return_30m": 0.0,
+      "relative_return_30m": 0.0,
+      "entry_position": "inside",
+      "stop_breached": false,
+      "trade_constraints": [],
+      "limitations": [],
+      "request_ms": 0.0
+    },
+    "judgment": {
+      "action": "consider_entry",
+      "trend": "pullback",
+      "conclusion": "全天仍上涨约3%，近15分钟小幅回踩但价格稳在均价上方，处于原计划10.0-11.0区间内且未破止损，可考虑按计划入场。",
+      "reasons": [
+        "今日整体上涨约3%，近半小时基本走平，近15分钟小幅回落，属于上涨后的正常回踩而非转弱。",
+        "价格仍高于当日均价，且相对均价的正向偏离虽较15分钟前收窄，但未跌破均价，结构未破坏。",
+        "最近15分钟与前一15分钟成交量持平，没有出现放量下跌的迹象。",
+        "当前价位于原计划入场区间内，止损未被触发，也没有任何交易限制。",
+        "日线为观察属性，不构成禁止入场的硬约束，结合走势可支持按计划建仓。"
+      ],
+      "evidence_fields": [
+        "last_price",
+        "return_since_open",
+        "return_15m",
+        "return_30m",
+        "closes_30m",
+        "volume_recent_15m_to_prior_15m",
+        "vwap",
+        "price_vs_vwap",
+        "price_vs_vwap_15m_ago",
+        "entry_position",
+        "stop_breached",
+        "trade_constraints"
+      ],
+      "change": ""
+    },
+    "previous_assessment_id": null,
+    "total_ms": 1858.9999999967404
+  },
+  "previous": null,
+  "error": null
+}

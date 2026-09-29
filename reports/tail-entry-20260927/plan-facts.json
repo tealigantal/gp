@@ -1,0 +1,208 @@
+{
+  "plan_id": "plan_a175a3d68bb867852994fe2a",
+  "session": "2026-09-28",
+  "generated_at": "2026-09-24T17:08:46.267743+08:00",
+  "candidates": [
+    {
+      "symbol": "003006",
+      "name": "003006",
+      "disposition": "selected",
+      "adaptive_score": 0.8801547132665313,
+      "recommendation_strength": "observe_only",
+      "signal": {
+        "score": 1.0,
+        "label": "trend_continuation",
+        "reason_codes": []
+      },
+      "probability": {
+        "probability": 0.5154952112532144,
+        "confidence": 0.9164160261458464,
+        "effective_sample_size": 79.82004080636632,
+        "uncertainty": 0.050021013048607024,
+        "expected_return_3d": 0.022307002245161044,
+        "estimated_cost": 0.003,
+        "expected_net_return": 0.019307002245161037
+      },
+      "risk": {
+        "score": 0.5266686546022636,
+        "execution_risk": 0.47333134539773636,
+        "reason_codes": [
+          "drawdown_probability_high",
+          "execution_quality_low"
+        ]
+      },
+      "ranking": {
+        "score": 0.8801547132665313,
+        "rank": 1,
+        "reason_codes": [],
+        "gain": 0.048790247305590805,
+        "loss": 0.029483245060429767,
+        "support": 34.460953250553835,
+        "a0": 0.03997941946323374,
+        "n0": 20.0,
+        "core_score": 0.8801547132665313,
+        "policy_revision": "daily_score_v7_fixed_scale_gain_loss"
+      },
+      "experts": [
+        {
+          "expert": "serenity",
+          "contribution": 0.0,
+          "weight": 0.03,
+          "reason_codes": [
+            "serenity_no_relevant_evidence"
+          ]
+        }
+      ],
+      "trade_plan": {
+        "entry_low": 13.641,
+        "entry_high": 22.866400000000002,
+        "stop_price": 12.877769736540943,
+        "take_profit_prices": [
+          23.95365118939354
+        ],
+        "action": "watch",
+        "reason_codes": [
+          "drawdown_probability_high",
+          "execution_quality_low"
+        ]
+      },
+      "reason_codes": [
+        "drawdown_probability_high",
+        "execution_quality_low"
+      ]
+    },
+    {
+      "symbol": "603268",
+      "name": "603268",
+      "disposition": "selected",
+      "adaptive_score": 0.860975811452271,
+      "recommendation_strength": "observe_only",
+      "signal": {
+        "score": 0.908185676142116,
+        "label": "trend_continuation",
+        "reason_codes": []
+      },
+      "probability": {
+        "probability": 0.5330319147866892,
+        "confidence": 0.9116755739706028,
+        "effective_sample_size": 79.7470977324365,
+        "uncertainty": 0.049953977307695796,
+        "expected_return_3d": 0.021246367063745126,
+        "estimated_cost": 0.003,
+        "expected_net_return": 0.018246367063745134
+      },
+      "risk": {
+        "score": 0.553708598036021,
+        "execution_risk": 0.446291401963979,
+        "reason_codes": [
+          "execution_quality_low"
+        ]
+      },
+      "ranking": {
+        "score": 0.860975811452271,
+        "rank": 2,
+        "reason_codes": [],
+        "gain": 0.0525484080289378,
+        "loss": 0.03430204096519267,
+        "support": 30.443684821173033,
+        "a0": 0.03997941946323374,
+        "n0": 20.0,
+        "core_score": 0.860975811452271,
+        "policy_revision": "daily_score_v7_fixed_scale_gain_loss"
+      },
+      "experts": [
+        {
+          "expert": "serenity",
+          "contribution": 0.0,
+          "weight": 0.03,
+          "reason_codes": [
+            "serenity_no_relevant_evidence"
+          ]
+        }
+      ],
+      "trade_plan": {
+        "entry_low": 160.433,
+        "entry_high": 218.059,
+        "stop_price": 150.92340397253577,
+        "take_profit_prices": [
+          229.1713552063679
+        ],
+        "action": "watch",
+        "reason_codes": [
+          "execution_quality_low"
+        ]
+      },
+      "reason_codes": [
+        "execution_quality_low"
+      ]
+    },
+    {
+      "symbol": "603920",
+      "name": "603920",
+      "disposition": "selected",
+      "adaptive_score": 0.8563582998947465,
+      "recommendation_strength": "observe_only",
+      "signal": {
+        "score": 0.9410052775481655,
+        "label": "trend_continuation",
+        "reason_codes": []
+      },
+      "probability": {
+        "probability": 0.5244922289153396,
+        "confidence": 0.9181520021498663,
+        "effective_sample_size": 79.77520291128666,
+        "uncertainty": 0.04999620366660976,
+        "expected_return_3d": 0.020177757230936795,
+        "estimated_cost": 0.003,
+        "expected_net_return": 0.017177757230936785
+      },
+      "risk": {
+        "score": 0.5302967880804824,
+        "execution_risk": 0.4697032119195176,
+        "reason_codes": [
+          "drawdown_probability_high",
+          "execution_quality_low"
+        ]
+      },
+      "ranking": {
+        "score": 0.8563582998947465,
+        "rank": 3,
+        "reason_codes": [],
+        "gain": 0.05221030165473939,
+        "loss": 0.0350325444238026,
+        "support": 34.156475270401266,
+        "a0": 0.03997941946323374,
+        "n0": 20.0,
+        "core_score": 0.8563582998947465,
+        "policy_revision": "daily_score_v7_fixed_scale_gain_loss"
+      },
+      "experts": [
+        {
+          "expert": "serenity",
+          "contribution": 0.0,
+          "weight": 0.03,
+          "reason_codes": [
+            "serenity_no_relevant_evidence"
+          ]
+        }
+      ],
+      "trade_plan": {
+        "entry_low": 36.489,
+        "entry_high": 45.955,
+        "stop_price": 34.02976356408437,
+        "take_profit_prices": [
+          48.68012350688793
+        ],
+        "action": "watch",
+        "reason_codes": [
+          "drawdown_probability_high",
+          "execution_quality_low"
+        ]
+      },
+      "reason_codes": [
+        "drawdown_probability_high",
+        "execution_quality_low"
+      ]
+    }
+  ]
+}

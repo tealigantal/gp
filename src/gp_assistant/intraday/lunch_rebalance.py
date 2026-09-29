@@ -158,9 +158,9 @@ def collect_lunch_batch(
 
     def fetch(symbol: str) -> tuple[str, pd.DataFrame]:
         if symbol == BENCHMARK_SYMBOL:
-            frame = provider.get_index_minute_bars_5m(symbol, start, end, allow_fallback=False)
+            frame = provider.get_index_minute_bars_5m(symbol, start, end)
         else:
-            frame = provider.get_minute_bars_5m(symbol, start, end, allow_fallback=False)
+            frame = provider.get_minute_bars_5m(symbol, start, end)
         return symbol, _normalize_exact_bars(frame, session_date=market_session_date, symbol=symbol)
 
     fetched: dict[str, pd.DataFrame] = {}

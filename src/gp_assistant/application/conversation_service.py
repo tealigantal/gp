@@ -12,7 +12,10 @@ from ..contracts.publication import RecommendationPublication
 from ..llm.client import LLMClient
 from ..store import ContractStore
 from .market_runs import MarketRunStore
-from .runtime_producer import market_phase
+from .entry_service import EntryService
+from pydantic import BaseModel, ConfigDict
+from typing import Literal
+from .market_phase import market_phase
 from .target_resolver import resolve_plan_target
 from .trading_calendar import CnATradingCalendar, load_cn_a_calendar
 
@@ -28,66 +31,12 @@ _PHASE_NAMES = {
     MarketPhase.CLOSED: "休市",
 }
 _TRADING_PHASES = {MarketPhase.MORNING, MarketPhase.AFTERNOON, MarketPhase.CLOSING_AUCTION}
-_FORBIDDEN_INTERNAL_DETAILS = (
-    "publication_id",
-    "plan_id",
-    "runtime_id",
-    "source_digest",
-    "lookup_digest",
-    "recommendation_plans",
-    "runtime_observations",
-    "recommendation_publications",
-    "contractstore",
-    "recommendationplan",
-    "runtimeobservation",
-    "recommendationpublication",
-    "lunch_5m_producer",
-    "intraday_5m",
-    "serenity_batch",
-    "reason_codes",
-    "batch_digest",
-    "contract_store",
-    "/api/",
-    "sqlite",
-    ".db",
-    ".py",
-    "```",
-    "{\"",
-    "select ",
-    "insert ",
-    "delete from ",
-    "http://",
-    "https://",
-    "数据库表",
-    "接口路径",
-    "字段名",
-)
-
-_MANUAL_TAIL_ENTRY_GUIDANCE = {
-    "定位": "这是前一交易日日K计划在次日下午的人工尾盘盯盘清单。用户自行查看行情软件；系统没有读取或确认这些实时指标，也不会自动下单。",
-    "观察窗口": "14:45至14:56；14:57进入收盘集合竞价后，不建议首次入场。",
-    "通用条件": (
-        "当前价仍在该股计划买入区间内，超过上沿不追、跌破下沿且无法收回则放弃。",
-        "五分钟K线收在当日VWAP上方；若行情软件未显示VWAP，则至少连续两根五分钟K线未收在买入区间下沿以下。",
-        "个股当日走势不弱于沪深300。",
-        "尾盘量比至少1.3，且放量K线不是明显长上影的冲高回落。",
-        "14:20至14:50没有持续走弱，最近三根五分钟K线至少两根收阳。",
-        "用户接受计划止损；跌破止损不补仓。",
-    ),
-    "信号类型说明": {
-        "breakout_pullback": "按突破后回踩处理：重点确认回踩后重新站上VWAP，且没有快速拉离买入区间。",
-        "structure_watch": "按结构观察处理：价格进入区间只是开始，必须同时满足VWAP、相对大盘和尾盘量能条件；任何一项模糊就放弃。",
-    },
-    "表达限制": "没有实时指标数值时，只能让用户在盘面核对条件；不得声称量比、VWAP、相对强弱或尾盘K线已经满足。",
-}
-
-
 def project_current_market(*, plan_date, publication_tradeable: bool, now: datetime) -> dict[str, object]:
     """Project server-clock market truth without mutating a publication or runtime."""
     if now.tzinfo is None:
         raise ValueError("narration_clock_timezone_missing")
     answer_now = now.astimezone(_SHANGHAI)
-    phase = market_phase(answer_now)
+    phase = market_phase(answer_now) if load_cn_a_calendar().is_open(answer_now.date()) else MarketPhase.CLOSED
     if plan_date is None:
         relation = "missing"
         executable = False
@@ -190,15 +139,17 @@ class ConversationService:
         now_provider: Callable[[], datetime] | None = None,
         market_runs: MarketRunStore | None = None,
         planning_calendar: CnATradingCalendar | None = None,
+        entry_service: EntryService | None = None,
     ):
         self.store = store
         self.narrator = narrator or LLMClient()
         self.now_provider = now_provider or (lambda: datetime.now(_SHANGHAI))
         self.market_runs = market_runs or MarketRunStore()
         self.planning_calendar = planning_calendar
+        self.entry_service = entry_service
 
-    def reply(self, *, session_id: str | None, client_turn_id: str, user_message: str) -> dict[str, object]:
-        current = self.store.current_publication()
+    def reply(self, *, session_id: str | None, client_turn_id: str, user_message: str, publication_id: str | None = None) -> dict[str, object]:
+        current = self.store.load_publication(publication_id) if publication_id else self.store.current_publication()
         if current is None:
             raise ValueError("publication_not_found")
         answer_now = self._now()
@@ -217,7 +168,8 @@ class ConversationService:
                 "reply": existing,
                 "publication": publication.model_dump(mode="json"),
             }
-        response = self._narrate(publication, user_message, now=answer_now)
+        history = self.store.read_conversation_session(active_session_id)[1]
+        response = self._narrate(publication, user_message, now=answer_now, history=history)
         committed = self.store.commit_conversation_exchange(
             session_id=active_session_id,
             publication_id=publication.publication_id,
@@ -327,7 +279,7 @@ class ConversationService:
             "历史日K回补": historical_recovery,
         }
 
-    def _narrate(self, publication: RecommendationPublication, user_message: str, *, now: datetime) -> str:
+    def _narrate(self, publication: RecommendationPublication, user_message: str, *, now: datetime, history=()) -> str:
         available, reason = self.narrator.available()
         if not available:
             raise ValueError(f"narration_unavailable:{reason}")
@@ -380,7 +332,6 @@ class ConversationService:
                 "优先观察对象": [item.symbol for item in publication.candidates if item.disposition.value == "selected"],
             },
             "时间与执行事实": temporal,
-            "尾盘人工盯盘规则": _MANUAL_TAIL_ENTRY_GUIDANCE,
             "Serenity产品说明": {"批次结论": serenity_summary, "本次实际权重": f"{(plan.serenity.applied_weight if plan else 0.0) * 100:.0f}%"},
             "候选列表": [
                 {
@@ -411,79 +362,115 @@ class ConversationService:
                 for item in publication.candidates
             ],
         }
-        messages = [
-            {
-                "role": "system",
-                "content": """你是 GP 的唯一中文荐股叙述层。你只解释算法引擎已经确定的候选、排名、分数和交易计划；不能选股、重排、计算或改写结论。
-
-时间与执行边界：输入的“时间与执行事实”由程序确定且优先级最高。程序会把其中的“用户可见结论”单独展示在你的回答前。你的正文不得再判断、复述或推断当前时间、当前市场阶段、当前是否可执行、计划是否已经结束、是否属于下一交易日，尤其不能把“最后盘中观察”写成回答时刻，也不能把发布记录时刻写成日线计划生成时刻。若需要提日期，只能明确区分“日线证据截止日”和“计划交易日”；不能把它们称为同一个“今天”。
-历史回补边界：“历史日K回补”是单独的较早日期任务，其日期和进度不能套用到“下一交易日计划”。下一计划的状态只以自身事实为准；历史回补未完成不代表已发布的下一计划未生成。解释两者关系时必须明确各自日期；没有给出的回补原因不得猜测。
-
-事实边界：只能解释输入候选中的综合分、评分口径、排序、日线信号类型与强度、未来三日上涨概率、收益估计、往返成本假设、扣除成本后的收益估计、净收益风险事实、风险调整分、Serenity 实际影响和交易计划。综合分使用0至100分；总分为本计划生成时记录的相对评价，不是上涨概率或收益保证；不同评分政策的分数不能直接跨版本比较。直接引用已记录分数，不得再次换算；历史计划遵循所记录的历史口径。风险调整分为一减回撤概率，越高表示历史回撤概率越低。收益与成本百分比已由算法计算，可直接引用，不得自行重算。成本是统一建模假设，不是用户真实成交费用。收益和成本空值表示该历史记录未保存，不能说成零；Serenity或午盘影响为空仅表示该候选没有对应影响记录，不能据此断言整份计划采用旧评分。最多3只入选仅代表优先观察；相对排名靠前不代表正优势或现在可入场，非正净收益必须如实提示。不得补充基本面、新闻、资金流、公告内容或任何未提供的实时价格、日期、数值。候选之外不得新增、删除或重排标的。优先观察对象严格采用“当前结论”的已选名单，不能自行取总排序前三名替代；历史计划的总排名与入选名单可能不同。
-
-尾盘人工盯盘：当用户问什么时候入场、怎么盯盘、量比、VWAP、尾盘是否能买或类似问题时，使用输入的“尾盘人工盯盘规则”和该候选的交易计划，直接给出用户可手工核对的条件式清单。先写具体股票的买入区间、止损和止盈，再说明14:45至14:56要观察的价格位置、VWAP、相对沪深300强弱、量比、最近三根五分钟K线和放弃条件。若日线信号类型是 breakout_pullback 或 structure_watch，采用规则中对应的说明。用户是最终判断者：这是一份手工盯盘方案，不是自动执行引擎。
-
-绝不能把人工盯盘规则说成系统已经确认的实时事实：没有输入实时指标值时，不得编造当前量比、VWAP、相对强弱、五分钟K线、当前价格或“已经满足/已触发买入”。不要说“系统会进一步判断”或“系统正在结合盘中数据执行”。应明确说“请在你的行情软件核对”；所有条件通过时使用“可考虑首笔入场”，任一关键条件不满足时使用“当天放弃”。14:57后不建议首次入场。
-
-Serenity：它只作用于基础评分冻结后的 Top-30。完整批次固定 3% 权重；贡献为0表示没有正负方向证据，权重为0表示整个批次统一归零。不得猜测公告内容，不能把权重、贡献或综合分说成上涨概率。
-
-午盘观察：午盘不会重新扫描全市场。早盘冻结 Top-30 与交易事实；只有这30只股票及沪深300具备同一交易日09:35到11:30的24根完整闭合五分钟线，才创建午盘观察版本。技术指标仅作附加观察，不改写总分；没有同口径盈亏证据时保留原分和已有公告贡献，不能声称重新估计或完成重排。历史午盘记录只能按其已记录影响说明，不得说成使用了新政策。午休市场门禁始终禁止交易；缺任何输入时保留早盘计划。
-
-表达：先回答用户问题，再逐只说明相关候选。关于排名与入场的概念关系，只说明“观察名单不是入场许可”；具体可执行性已由前置时间结论回答，正文不要引用或改写用户询问即时买入的原句。不要输出表格、JSON、接口、数据库、类名、字段名、原因代码或工程实现。每只候选的数值必须绑定该候选的输入事实；无候选时只解释等待条件，不得补充替代股票。""",
-            },
-            {"role": "user", "content": json.dumps({"用户问题": user_message, "当前事实": evidence}, ensure_ascii=False)},
+        selected = [item for item in publication.candidates if item.disposition.value == "selected"]
+        evidence["用户所见顺序"] = [item.symbol for item in selected]
+        entry = self.entry_service or EntryService(self.store, model=self.narrator, calendar=self.planning_calendar)
+        messages = [{"role": "system", "content": """你是GP对话Agent，中文、结论先行。真实会话历史和绑定计划是上下文；第一只、第二只始终指用户所见顺序，不能改成后来发布的计划。理解追问、继续、刷新、比较以及已有持仓。普通问候直接简短问候，不复述运行状态、不列推荐名单，不获取行情。需要当下入场判断必须调用evaluate_entry；已有持仓用add_position，首次用new_position。解释刚才变化调用read_entry，重新看一下调用evaluate_entry；同证据复用。不要猜价格、指标、时间，不更改原评分或排名，不根据关键词自行做结论。缺数据只能说本次未完成确认，绝不能解释为走弱/停牌/默认不买。失败不重试其他模型或模板。
+调用evaluate_entry或read_entry后，本轮必须使用kind=entry引用工具结果，不能用information丢弃结果。所有最终回答通过respond工具：评估问题用kind=entry，引用本轮工具取得的symbol/scenario/action/assessment_id（未完成时action=unconfirmed、assessment_id=null）；当前建议由正式评估直接呈现；text必须为空；正式结论、理由与历史变化直接引用已保存评估，不再附加另一份自由建议。普通解释用kind=information，references为空，text简洁回答，不能用这种方式绕过当前入场评估。讨论历史判断须说明时间。分数已经是0到100，不能重新计算；历史记录没有的字段不可补零。不能补基本面、公告或行情事实。净收益非正与排名意义应如实解释。Serenity完整批次固定 3% 权重，不完整时整个批次统一归零。不能自行取总排序前三名替代已选名单。Serenity或午盘影响缺失不能据此断言整份计划采用旧评分。综合分不得再次换算，不同评分政策的分数不能直接跨版本比较。午盘技术指标仅作附加观察，不改写总分；午休市场门禁始终禁止交易。没有指定股票且上下文不明确时用information简短澄清，不抓全市场。read_plan可读绑定计划。"""},
+                    {"role": "system", "content": json.dumps({"当前事实": evidence}, ensure_ascii=False)},
+                    *[{"role": turn.role, "content": turn.content} for turn in history],
+                    {"role": "user", "content": user_message}]
+        tools = [
+            _tool("read_plan", "读取本会话固定计划及用户所见股票顺序", {"type": "object", "properties": {}, "additionalProperties": False}),
+            _tool("evaluate_entry", "获取或刷新一只股票的正式尾盘评估，自动复用有效证据；只处理相关股票", EntryToolArgs.model_json_schema()),
+            _tool("read_entry", "读取同计划上一评估及前一评估，解释变化；不会下载行情", EntryToolArgs.model_json_schema()),
+            _tool("respond", "最终回答；入场建议必须引用本轮实际工具结果", AgentAnswer.model_json_schema()),
         ]
-        content = self._chat(messages, stage="contract_narration")
-        content = self._remove_duplicate_temporal_notice(content, str(temporal["用户可见结论"]))
-        violation = self._narration_violation(content, temporal)
-        if violation is not None:
-            repair_messages = [
-                *messages,
-                {"role": "assistant", "content": content},
-                {"role": "user", "content": f"上一份草稿违反时间叙述契约：{violation}。请只根据原始事实重写正文，不要照抄草稿。具体可执行性已由程序前置说明；正文不要写当前时间、市场阶段、可执行性、计划时态或发布时态，也不要引用用户或草稿中的即时买入短语，包括其否定表达。涉及排序和入场的关系只写“观察名单不是入场许可”。保留所问候选的分数、净收益风险及午盘政策解释。"},
-            ]
-            content = self._chat(repair_messages, stage="contract_narration_repair")
-            content = self._remove_duplicate_temporal_notice(content, str(temporal["用户可见结论"]))
-            violation = self._narration_violation(content, temporal)
-            if violation is not None:
-                raise ValueError(violation)
-        if not content:
-            raise ValueError("narration_empty")
-        return f"{temporal['用户可见结论']}\n\n{content}"
+        observed = {}
+        history_requested = set()
+        for _ in range(6):
+            if observed:
+                # Once evidence has been read, the final response schema must
+                # bind it. Do not leave an unbound information escape hatch.
+                bound_schema = AgentAnswer.model_json_schema()
+                bound_schema["properties"]["kind"] = {"type": "string", "enum": ["entry"]}
+                bound_schema["properties"]["references"]["minItems"] = 1
+                bound_schema["properties"]["text"] = {"type": "string", "enum": [""]}
+                tools[-1] = _tool("respond", "引用正式结果；text必须为空，正式理由和历史变化由已保存评估直接呈现。", bound_schema)
+            message = self.narrator.run_chat_with_tools(messages, tools=tools, temperature=0, thinking={"type": "disabled"}, tool_choice="required", budget_stage="conversation_tools")
+            calls = message["tool_calls"]
+            if not calls or len(calls) > 3:
+                raise ValueError("narration_tool_protocol_invalid")
+            messages.append({k: v for k, v in message.items() if v is not None})
+            for call in calls:
+                name = call["function"]["name"]
+                raw = call["function"]["arguments"]
+                if name == "respond":
+                    if len(calls) != 1:
+                        raise ValueError("narration_final_tool_must_be_alone")
+                    answer = AgentAnswer.model_validate_json(raw)
+                    if answer.kind == "information":
+                        if observed or answer.references or not answer.text.strip():
+                            raise ValueError("narration_information_invalid")
+                        return answer.text
+                    if not answer.references:
+                        raise ValueError("narration_entry_reference_required")
+                    if answer.text:
+                        raise ValueError("narration_entry_free_text_forbidden")
+                    blocks = []
+                    for ref in answer.references:
+                        result = observed.get((ref.symbol, ref.scenario))
+                        if result is None:
+                            raise ValueError("narration_unobserved_entry")
+                        if result["current"]:
+                            from ..intraday.entry_evidence import fresh
+                            from .entry_service import entry_window
+                            clock = self._now()
+                            if not entry_window(clock, entry.calendar) or not fresh(datetime.fromisoformat(result["assessment"]["evidence"]["cutoff"]), clock):
+                                raise ValueError("entry_expired_during_response")
+                        assessment = result["assessment"]
+                        expected = assessment["judgment"]["action"] if result["current"] else "unconfirmed"
+                        if ref.action != expected or ref.assessment_id != (assessment["assessment_id"] if result["current"] else None):
+                            raise ValueError("narration_entry_action_conflict")
+                        if not result["current"]:
+                            blocks.append(f"{ref.symbol}：本次未完成当前行情与入场确认。" + ("正在刷新。" if result["state"] == "refreshing" else result["message"]))
+                        else:
+                            verdict = assessment["judgment"]
+                            label = "加仓" if ref.scenario == "add_position" else "新建仓"
+                            blocks.append(f"{ref.symbol}（{label}）：{verdict['conclusion']}\n" + "；".join(verdict["reasons"]) + (f"\n变化：{verdict['change']}" if verdict["change"] else "") + f"\n判断时间{assessment['assessed_at']}，五分钟走势截至{assessment['evidence']['cutoff']}。")
+                        if (ref.symbol, ref.scenario) in history_requested:
+                            historical = result["previous"] if result["current"] else assessment
+                            if historical:
+                                blocks.append(f"此前正式评估（{historical['assessed_at']}）：{historical['judgment']['conclusion']}\n{historical['judgment']['change']}")
+                            elif not assessment:
+                                blocks.append("没有此前正式评估可供比较，未完成确认不代表已经判定走弱。")
+                    return "\n\n".join(blocks)
+                if name == "read_plan":
+                    if json.loads(raw) != {}:
+                        raise ValueError("read_plan_arguments_invalid")
+                    result = evidence
+                elif name in {"evaluate_entry", "read_entry"}:
+                    args = EntryToolArgs.model_validate_json(raw)
+                    if args.symbol not in {c.symbol for c in publication.candidates}:
+                        raise ValueError("entry_symbol_outside_bound_plan")
+                    clock = self._now()
+                    result = entry.assess(plan_id=plan.plan_id, symbol=args.symbol, scenario=args.scenario, now=clock) if name == "evaluate_entry" else entry.read(plan.plan_id, args.symbol, args.scenario, now=clock)
+                    observed[(args.symbol, args.scenario)] = result
+                    if name == "read_entry":
+                        history_requested.add((args.symbol, args.scenario))
+                else:
+                    raise ValueError("narration_unknown_tool")
+                messages.append({"role": "tool", "tool_call_id": call["id"], "content": json.dumps(result, ensure_ascii=False)})
+        raise ValueError("narration_tool_budget_exceeded")
 
-    def _chat(self, messages: list[dict[str, str]], *, stage: str) -> str:
-        try:
-            response = self.narrator.chat(
-                messages,
-                temperature=0.0,
-                budget_stage=stage,
-                extra={"thinking": {"type": "disabled"}},
-            )
-        except Exception as exc:  # noqa: BLE001
-            raise ValueError(f"narration_unavailable:{type(exc).__name__}") from exc
-        content = str((((response.get("choices") or [{}])[0].get("message") or {}).get("content") or "")).strip()
-        if not content:
-            raise ValueError("narration_empty")
-        return content
 
-    @staticmethod
-    def _remove_duplicate_temporal_notice(content: str, notice: str) -> str:
-        """The deterministic notice is already rendered by this service, never by the LLM."""
-        return content.replace(notice, "").strip()
+class EntryToolArgs(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    symbol: str
+    scenario: Literal["new_position", "add_position"]
 
-    @staticmethod
-    def _narration_violation(content: str, temporal: dict[str, object]) -> str | None:
-        lowered = content.casefold()
-        if any(detail in lowered for detail in _FORBIDDEN_INTERNAL_DETAILS):
-            return "narration_unsafe_internal_detail"
-        if "当前时间是" in content or "当前上海时间是" in content:
-            return "narration_current_time_restatement"
-        if temporal["当前市场阶段"] != "收盘集合竞价" and ("当前市场处于收盘集合竞价" in content or "当前处于收盘集合竞价" in content):
-            return "narration_stale_runtime_phase"
-        if temporal["本次发布是否收盘后"] is False and "收盘后发布" in content:
-            return "narration_false_postclose_publication"
-        if temporal["计划时间关系"] == "expired" and any(phrase in content for phrase in ("供明日开盘", "明日开盘后参考", "下一交易日参考", "明天开盘参考")):
-            return "narration_expired_plan_as_next_session"
-        if temporal["当前是否可执行"] is False and any(phrase in content for phrase in ("现在可以买", "当前可执行", "可以立即买入", "已触发买入")):
-            return "narration_execution_state_conflict"
-        return None
+
+class EntryReference(EntryToolArgs):
+    action: Literal["consider_entry", "do_not_enter", "wait", "unconfirmed"]
+    assessment_id: str | None
+
+
+class AgentAnswer(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    kind: Literal["information", "entry"]
+    text: str
+    references: list[EntryReference]
+
+
+def _tool(name, description, parameters):
+    return {"type": "function", "function": {"name": name, "description": description, "parameters": parameters}}

@@ -10,7 +10,7 @@ ROOT = Path(__file__).resolve().parents[3]
 CONTRACTS = Path(__file__).resolve().parent
 REGISTRY = ROOT / "docs" / "contracts" / "registry.yaml"
 MANIFEST = ROOT / "docs" / "contracts" / "schema_manifest.json"
-MODEL_FILES = ("market.py", "evidence.py", "decision.py", "runtime.py", "publication.py", "conversation.py")
+MODEL_FILES = ("market.py", "evidence.py", "decision.py", "runtime.py", "publication.py", "conversation.py", "entry.py")
 
 
 def _registered() -> list[dict[str, object]]:

@@ -4,6 +4,7 @@ import type {
   ConversationSession,
   HealthStatus,
   RecommendationPublication,
+  EntrySnapshot,
 } from './contracts'
 
 export class ApiError extends Error {
@@ -27,6 +28,7 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
 
 export const getHealth = () => request<HealthStatus>('/api/health')
 export const getPublication = () => request<RecommendationPublication>('/api/recommendation/current')
+export const getEntries = (planId: string) => request<EntrySnapshot>(`/api/entry/current?plan_id=${encodeURIComponent(planId)}`)
 export const getConversations = () => request<ConversationSession[]>('/api/conversations?limit=30')
 export const getConversation = (sessionId: string) => request<ConversationDetail>(`/api/conversations/${encodeURIComponent(sessionId)}`)
 export async function deleteConversation(sessionId: string): Promise<void> {
@@ -37,10 +39,10 @@ export async function deleteConversation(sessionId: string): Promise<void> {
     throw error
   }
 }
-export const sendChat = (message: string, clientTurnId: string, sessionId?: string) =>
+export const sendChat = (message: string, clientTurnId: string, sessionId: string, publicationId: string | null) =>
   request<ChatResponse>('/api/chat', {
     method: 'POST',
-    body: JSON.stringify({ message, client_turn_id: clientTurnId, ...(sessionId ? { session_id: sessionId } : {}) }),
+    body: JSON.stringify({ message, client_turn_id: clientTurnId, session_id: sessionId, publication_id: publicationId }),
   })
 
 export function friendlyError(error: unknown): string {

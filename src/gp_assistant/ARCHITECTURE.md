@@ -1,6 +1,6 @@
 # GP Backend Architecture
 
-The backend owns one typed recommendation lifecycle: a plan is selected by the Adaptive Decision Engine, a runtime observation records closed intraday evidence, and a publication projects those two immutable inputs. The application services are the only writers and the LLM is limited to publication-bound narration.
+The backend owns one typed recommendation lifecycle: a plan is selected by the Adaptive Decision Engine, a runtime observation records closed intraday evidence, and a publication projects those two immutable inputs. The application services are the only writers and the LLM explains bound facts and synthesizes entry advice from validated minute evidence.
 
 The real producer computes the base candidate scores and freezes the Top-30 before Serenity. It publishes an exact target to the append-only Serenity store and performs a local read only. An exact complete batch applies the fixed signed contribution `0.03 × alpha`; all other states preserve the base float exactly. The Serenity semantic revision participates in the adaptive policy state identity so an asynchronously completed batch invalidates the zero plan without letting source-error details create plan churn. The unified worker supervises Serenity in a separate process; no Serenity network operation runs in plan, publication, or conversation code.
 
@@ -11,3 +11,8 @@ The producer binds one fresh spot snapshot to the raw main-board universe and ta
 ## Committed mature-memory maintenance (2026-09-17)
 
 The unified worker supervises an isolated memory child with its own renewable lease. It snapshots bounded daily history in one read transaction, validates target-date coverage before writing, computes date-truncated bound-cohort breadth, and appends only mature T+5 cases. Per-symbol checkpoints resume interrupted batches; event readers join completed maintenance runs and enforce actual first-seen plus commit knowledge time. Uncommitted versions remain invisible. New base plans require an exact completed scope and bind its input digest. Memory collection never runs in chat. The shared scoring kernel uses unconditional case gains/losses, date-grouped evidence support and one frozen common reference; confidence and probability do not add to the total. Nonpositive net return remains an observation risk fact. Final ranking and display scores stay consistent. This is a correctness repair, not evidence of improved investment performance.
+
+
+## Tail-entry assessment (2026-09-27)
+
+SinaMinuteProvider is the single stock/index five-minute transport (explicit 8-second request timeout, no retries or alternate source). EntryService owns validation, evidence calculation, current-model judgment and ContractStore persistence. Short cross-process per-plan/symbol locks deduplicate concurrent work; no database transaction spans network calls. Worker prewarms selected stocks with at most three concurrent jobs from 14:35. Chat may refresh only the relevant bound symbol. The former all-market quote-to-intraday-score producer was deleted. Lunch retains its atomic 24-bar contract using the same raw minute source.

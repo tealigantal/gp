@@ -1,0 +1,29 @@
+[
+  {
+    "Service": "gp",
+    "ID": "d070dc34983d",
+    "Image": "gp-backend:local",
+    "State": "running",
+    "Health": "healthy",
+    "CreatedAt": "2026-09-28 01:45:53 +0800 CST",
+    "image_id": "sha256:2712c47e6789cbe1eca374e69771ed459684657aa5cf8e15d1c50cda7dd38833"
+  },
+  {
+    "Service": "gp-worker",
+    "ID": "1ace1e402a4a",
+    "Image": "gp-backend:local",
+    "State": "running",
+    "Health": "",
+    "CreatedAt": "2026-09-28 01:45:54 +0800 CST",
+    "image_id": "sha256:2712c47e6789cbe1eca374e69771ed459684657aa5cf8e15d1c50cda7dd38833"
+  },
+  {
+    "Service": "web",
+    "ID": "ef21b396a80f",
+    "Image": "gp-web",
+    "State": "running",
+    "Health": "healthy",
+    "CreatedAt": "2026-09-28 01:45:54 +0800 CST",
+    "image_id": "sha256:941a7f2d284cdfbc923c913a259c4ddbc35fa6de49f83bd2bdebbbd66ba092d9"
+  }
+]

@@ -1,0 +1,38 @@
+{
+  "003006": {
+    "source": "sina:CN_MarketDataService.getKLineData:5m",
+    "fetched_at": "2026-09-27T23:19:33.080640+08:00",
+    "request_ms": 202.99999999406282,
+    "raw_rows": 240,
+    "sample_rows": 48,
+    "raw_start": "2026-09-18 09:35:00",
+    "raw_end": "2026-09-24 15:00:00",
+    "stock_volume_unit": "shares",
+    "amount_unit": "CNY",
+    "price_basis": "unadjusted"
+  },
+  "603268": {
+    "source": "sina:CN_MarketDataService.getKLineData:5m",
+    "fetched_at": "2026-09-27T23:19:33.260942+08:00",
+    "request_ms": 187.0000000053551,
+    "raw_rows": 240,
+    "sample_rows": 48,
+    "raw_start": "2026-09-18 09:35:00",
+    "raw_end": "2026-09-24 15:00:00",
+    "stock_volume_unit": "shares",
+    "amount_unit": "CNY",
+    "price_basis": "unadjusted"
+  },
+  "000300": {
+    "source": "sina:CN_MarketDataService.getKLineData:5m",
+    "fetched_at": "2026-09-27T23:19:33.480227+08:00",
+    "request_ms": 218.99999999732245,
+    "raw_rows": 240,
+    "sample_rows": 48,
+    "raw_start": "2026-09-18 09:35:00",
+    "raw_end": "2026-09-24 15:00:00",
+    "stock_volume_unit": "unused",
+    "amount_unit": "CNY",
+    "price_basis": "unadjusted"
+  }
+}

@@ -1,3 +1,4 @@
+from .tool_helpers import respond
 """Fixed evaluation scale acceptance; v6 exists only as a test reference."""
 from copy import deepcopy
 from datetime import datetime, timezone
@@ -163,9 +164,9 @@ def test_narration_quotes_each_policy_record_without_transforming(tmp_path,monke
     captured = {}
     class Narrator:
         def available(self): return True,"ok"
-        def chat(self,messages,**kwargs):
+        def run_chat_with_tools(self,messages,**kwargs):
             captured["messages"] = messages
-            return {"choices":[{"message":{"content":"仅供优先观察。"}}]}
+            return respond("仅供优先观察。")
     before = store.current_publication()
     ConversationService(store,narrator=Narrator()).reply(session_id="fixed",client_turn_id="first",user_message="解释评分")
     payload = json.loads(captured["messages"][1]["content"])

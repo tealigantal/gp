@@ -33,6 +33,25 @@ afterEach(() => {
 })
 
 describe('GP chat workspace', () => {
+  it.each([true, false])('shows the saved assessment and hides expired entry permission: %s', async (valid) => {
+    const conclusion = '目前可以考虑按计划买入，近期走势转强。'
+    const state = { state: 'ready', current: true, valid_until: new Date(Date.now() + (valid ? 60000 : -60000)).toISOString(), error: null,
+      assessment: { assessment_id: 'entry_shared', assessed_at: '2026-09-24T14:40:00+08:00', evidence: { cutoff: '2026-09-24T14:35:00+08:00', fetched_at: '2026-09-24T14:40:01+08:00', limitations: [] }, judgment: { action: 'consider_entry', trend: 'strengthening', conclusion, reasons: ['近期价格抬升且仍在原区间'], change: '' } } }
+    vi.stubGlobal('fetch', vi.fn((input: string | URL) => {
+      const url = String(input)
+      if (url.includes('/api/health')) return jsonResponse(health)
+      if (url.includes('/api/recommendation/current')) return jsonResponse(publication)
+      if (url.includes('/api/entry/current?plan_id=plan_demo')) return jsonResponse({ plan_id: 'plan_demo', observed_at: new Date().toISOString(), symbols: { '600030': state } })
+      return jsonResponse([])
+    }))
+    render(<App />)
+    await screen.findByText(valid ? conclusion : '历史评估 · 当前未确认')
+    expect(screen.getByText('61.0分')).toBeInTheDocument()
+    const card = screen.getByText('中信证券').closest('article')!
+    expect(card.querySelector('.entry-detail > strong')?.textContent).toBe(valid ? conclusion : '历史评估 · 当前未确认')
+    if (!valid) expect(card.querySelector('details')?.textContent).toContain(conclusion)
+  })
+
   it.each([0.11428571428571, 0.2, 0.5, 0.8, 0.88571428571429, 0.83])('displays recorded score %s once on the percentage scale', async (score) => {
     const value = { ...publication, candidates: [{ ...publication.candidates[0], adaptive_score: score,
       ranking: { ...publication.candidates[0].ranking, score } }] }
@@ -375,7 +394,7 @@ describe('GP chat workspace', () => {
     }))
 
     render(<App />)
-    expect(await screen.findByText('上午交易中 · 可执行')).toBeInTheDocument()
+    expect(await screen.findByText('上午交易中 · 行情可用')).toBeInTheDocument()
     failCore = true
     fireEvent.click(screen.getByLabelText('同步最新状态'))
     expect(await screen.findByText('实时状态已断开')).toBeInTheDocument()
@@ -391,7 +410,8 @@ describe('GP chat workspace', () => {
       if (url.includes('/api/recommendation/current')) return jsonResponse(publication)
       if (url === '/api/conversations?limit=30') return jsonResponse([])
       if (url === '/api/chat') {
-        const body = JSON.parse(init?.body || '{}') as { client_turn_id: string; session_id: string }
+        const body = JSON.parse(init?.body || '{}') as { client_turn_id: string; session_id: string; publication_id: string }
+        expect(body.publication_id).toBe(publication.publication_id)
         submittedIds.push(body.client_turn_id)
         submittedSessionIds.push(body.session_id)
         if (submittedIds.length === 1) return jsonResponse({ detail: 'narration_unavailable:timeout' }, 503)

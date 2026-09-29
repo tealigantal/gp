@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from contextlib import contextmanager
 from dataclasses import dataclass
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from hashlib import sha256
 import json
 import os
@@ -304,6 +304,46 @@ class MarketRunStore:
                     (json.dumps(effective_universe.payload(), ensure_ascii=False, sort_keys=True), _iso(now), universe.trade_date),
                 )
         return self.get_run(universe.trade_date)  # type: ignore[return-value]
+
+    def suspension_discovery_starts(self, *, symbols: tuple[str, ...], trade_date: str) -> dict[str, date]:
+        """Read terminal proof anchors, never carry an exclusion to a new day."""
+        anchors: dict[str, date] = {}
+        conn = self._connect_readonly()
+        if conn is None:
+            return anchors
+        try:
+            for symbol in symbols:
+                rows = conn.execute(
+                    "SELECT evidence_json FROM daily_run_symbols WHERE symbol=? AND trade_date<=? "
+                    "AND status='excluded' AND reason='official_suspension' ORDER BY trade_date",
+                    (symbol, trade_date),
+                ).fetchall()
+                for row in rows:
+                    evidence = json.loads(row["evidence_json"] or "{}")
+                    if (evidence.get("symbol") != symbol or evidence.get("state") != "verified_suspended"
+                            or evidence.get("status_fact", {}).get("kind") != "halt_until_delisting"):
+                        continue
+                    published = date.fromisoformat(str(evidence["published_at"])[:10])
+                    if published <= date.fromisoformat(trade_date):
+                        anchors[symbol] = min(anchors.get(symbol, published), published)
+        finally:
+            conn.close()
+        return anchors
+
+    def confirmed_suspension_at(self, *, symbol: str, now: datetime) -> bool:
+        """Exact-date already-verified fact only; never carry prior exclusions."""
+        conn = self._connect_readonly()
+        if conn is None:
+            return False
+        try:
+            row = conn.execute("SELECT evidence_json FROM daily_run_symbols WHERE trade_date=? AND symbol=? AND status='excluded' AND reason='official_suspension'", (now.date().isoformat(), symbol)).fetchone()
+            if row is None:
+                return False
+            fact = json.loads(row["evidence_json"])
+            return (fact["symbol"] == symbol and fact["trade_date"] == now.date().isoformat()
+                    and fact["state"] == "verified_suspended" and datetime.fromisoformat(fact["verified_at"]) <= now)
+        finally:
+            conn.close()
 
     def exclude_verified_suspensions(
         self,

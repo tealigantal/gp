@@ -33,7 +33,7 @@ The product reaches its durable objective when current-data recommendation and f
 ## Constraints
 
 - Real data only; missing or stale critical market data fails closed.
-- Selection and numerical conclusions remain deterministic and auditable.
+- Selection and numerical evidence remain deterministic and auditable; separate current entry judgments are synthesized by the configured Agent from that evidence.
 - Historical logic uses only information available at the decision time.
 - The only public product interface is the versioned chat contract plus health and chat-history reads.
 - Legacy runtime recommendation and conversation data is deleted rather than converted after the integrity-gated cutover authorized by the user.

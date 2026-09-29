@@ -1,4 +1,5 @@
 from __future__ import annotations
+from .tool_helpers import respond
 
 from datetime import date, datetime, timedelta, timezone
 from dataclasses import replace
@@ -9,13 +10,13 @@ import sqlite3
 import pandas as pd
 import pytest
 
-from gp_assistant.application.lunch_rebalance_producer import LunchRebalanceProducer, LunchWriteBusy, _CrossProcessLock
+from gp_assistant.application.lunch_rebalance_producer import LunchRebalanceProducer
+from gp_assistant.application.process_lock import OperationBusy, CrossProcessLock
 from gp_assistant.application.real_producer import DAILY_PRODUCER_REVISION
 from gp_assistant.decision_engine.scoring import REVISION as SCORING_REVISION
 from gp_assistant.application.conversation_service import ConversationService
 from gp_assistant.application.plan_service import PlanService
 from gp_assistant.application.publication_service import PublicationService
-from gp_assistant.application.runtime_producer import RuntimeRecommendationProducer
 from gp_assistant.application.target_resolver import resolve_plan_target
 from gp_assistant.cli import _seed_serenity_target_from_current_plan
 from gp_assistant.application.market_orchestrator import MarketDayOrchestrator
@@ -46,7 +47,7 @@ SESSION = date(2026, 7, 24)
 
 def _hold_cross_process_lock(path: str, ready, release, results) -> None:
     try:
-        with _CrossProcessLock(__import__("pathlib").Path(path)):
+        with CrossProcessLock(__import__("pathlib").Path(path)):
             results.put("holder_acquired")
             ready.set()
             release.wait(timeout=10)
@@ -56,9 +57,9 @@ def _hold_cross_process_lock(path: str, ready, release, results) -> None:
 
 def _contend_cross_process_lock(path: str, results) -> None:
     try:
-        with _CrossProcessLock(__import__("pathlib").Path(path)):
+        with CrossProcessLock(__import__("pathlib").Path(path)):
             results.put("contender_acquired")
-    except LunchWriteBusy:
+    except OperationBusy:
         results.put("contender_busy")
 
 
@@ -200,16 +201,14 @@ class FakeMinuteProvider:
         self.incomplete_symbol = incomplete_symbol
         self.calls = 0
 
-    def get_minute_bars_5m(self, symbol, _start, _end, *, allow_fallback=True):
-        assert allow_fallback is False
+    def get_minute_bars_5m(self, symbol, _start, _end):
         self.calls += 1
         index = int(symbol)
         slope = (index - 15) * 0.001
         return _bars(slope=slope, missing_last=symbol == self.incomplete_symbol)
 
-    def get_index_minute_bars_5m(self, symbol, _start, _end, *, allow_fallback=True):
+    def get_index_minute_bars_5m(self, symbol, _start, _end):
         assert symbol == "000300"
-        assert allow_fallback is False
         self.calls += 1
         return _bars(slope=0.0)
 
@@ -316,8 +315,8 @@ def test_batch_digest_is_stable_and_rejects_unclosed_or_unordered_rows():
     assert first.content_digest == second.content_digest
 
     class UnorderedProvider(FakeMinuteProvider):
-        def get_minute_bars_5m(self, symbol, start, end, *, allow_fallback=True):
-            frame = super().get_minute_bars_5m(symbol, start, end, allow_fallback=allow_fallback)
+        def get_minute_bars_5m(self, symbol, start, end):
+            frame = super().get_minute_bars_5m(symbol, start, end)
             return frame.iloc[::-1].reset_index(drop=True) if symbol == "000010" else frame
 
     with pytest.raises(LunchBatchUnavailable, match="minute_window_incomplete:000010"):
@@ -333,8 +332,8 @@ def test_batch_digest_is_stable_and_rejects_unclosed_or_unordered_rows():
             super().__init__()
             self.mode = mode
 
-        def get_minute_bars_5m(self, symbol, start, end, *, allow_fallback=True):
-            frame = super().get_minute_bars_5m(symbol, start, end, allow_fallback=allow_fallback)
+        def get_minute_bars_5m(self, symbol, start, end):
+            frame = super().get_minute_bars_5m(symbol, start, end)
             if symbol != "000011":
                 return frame
             if self.mode == "null":
@@ -425,9 +424,9 @@ def test_llm_receives_product_level_lunch_principle_without_engine_interfaces(tm
         def available(self):
             return True, "ok"
 
-        def chat(self, messages, **_kwargs):
+        def run_chat_with_tools(self, messages, **_kwargs):
             captured["messages"] = messages
-            return {"choices": [{"message": {"content": "午盘技术指标仅作附加观察，原评分保持不变。"}}]}
+            return respond("午盘技术指标仅作附加观察，原评分保持不变。")
 
     store = ContractStore(tmp_path / "contract.sqlite")
     _base_plan(store, serenity_active=True)
@@ -582,9 +581,11 @@ def test_manual_lunch_runtime_refresh_preserves_complete_lunch_observation(tmp_p
     _base_plan(store)
     result = _run_lunch(store, LunchRebalanceProducer(store, provider=FakeMinuteProvider()), now=datetime(2026, 7, 24, 12, 0, tzinfo=TZ))
     before = store.current_publication()
-    runtime = RuntimeRecommendationProducer(store, spot_loader=lambda: pytest.fail("spot must not load during lunch")).produce(
-        now=datetime(2026, 7, 24, 12, 5, tzinfo=TZ)
-    )
+    from gp_assistant.application.entry_service import EntryService
+    entry = EntryService(store)
+    response = entry.assess(plan_id=before.plan_id, symbol=before.candidates[0].symbol, scenario="new_position", now=datetime(2026, 7, 24, 12, 5, tzinfo=TZ))
+    assert response["error"] == "outside_tail_entry_window"
+    runtime = store.load_runtime(before.runtime_id)
     assert runtime.runtime_id == result.runtime_id
     assert len(runtime.symbol_execution_states) == 30
     assert store.current_publication() == before
@@ -674,9 +675,9 @@ def test_failure_after_plan_and_runtime_append_keeps_morning_current(tmp_path, m
 
 def test_cross_process_write_lock_and_store_lineage_guard(tmp_path):
     lock_path = tmp_path / ".lunch.lock"
-    with _CrossProcessLock(lock_path):
-        with pytest.raises(LunchWriteBusy):
-            with _CrossProcessLock(lock_path):
+    with CrossProcessLock(lock_path):
+        with pytest.raises(OperationBusy):
+            with CrossProcessLock(lock_path):
                 pass
 
     store = ContractStore(tmp_path / "contract.sqlite")
@@ -727,37 +728,15 @@ def test_write_lock_is_exclusive_across_spawned_processes(tmp_path):
     assert {results.get(timeout=2), results.get(timeout=2)} == {"holder_acquired", "contender_busy"}
 
 
-@pytest.mark.parametrize(
-    ("leaked_content", "expected_error"),
-    (
-        ("内部 plan_id 是 abc。", "narration_unsafe_internal_detail"),
-        ("内部 reason_codes 为 lunch_break。", "narration_unsafe_internal_detail"),
-        ("请调用 /api/lunch/current。", "narration_unsafe_internal_detail"),
-        ("数据保存在 SQLite 表中。", "narration_unsafe_internal_detail"),
-        ("当前时间是2026年7月24日收盘集合竞价时段（14:59），供明日开盘后参考。", "narration_current_time_restatement"),
-    ),
-)
-def test_llm_internal_identifier_output_is_rejected_before_persistence(tmp_path, leaked_content, expected_error):
-    class LeakingNarrator:
-        def available(self):
-            return True, "ok"
-
-        def chat(self, *_args, **_kwargs):
-            return {"choices": [{"message": {"content": leaked_content}}]}
-
+def test_unbound_entry_action_rejected_before_persistence(tmp_path):
+    class Narrator:
+        def available(self): return True, "ok"
+        def run_chat_with_tools(self, *args, **kwargs):
+            return {"role": "assistant", "content": None, "tool_calls": [{"id": "bad", "type": "function", "function": {"name": "respond", "arguments": json.dumps({"kind": "entry", "text": "", "references": [{"symbol": "000001", "scenario": "new_position", "action": "consider_entry", "assessment_id": "invented"}]})}}]}
     store = ContractStore(tmp_path / "contract.sqlite")
     _base_plan(store)
-    with pytest.raises(ValueError, match=expected_error):
-        ConversationService(
-            store,
-            narrator=LeakingNarrator(),
-            now_provider=lambda: datetime(2026, 7, 24, 16, 0, tzinfo=TZ),
-            market_runs=MarketRunStore(tmp_path / "market_runs.db"),
-        ).reply(
-            session_id="unsafe",
-            client_turn_id="turn-1",
-            user_message="解释推荐",
-        )
+    with pytest.raises(ValueError, match="narration_unobserved_entry"):
+        ConversationService(store, narrator=Narrator()).reply(session_id="unsafe", client_turn_id="turn-1", user_message="这只现在能买吗")
     assert store.existing_reply(session_id="unsafe", client_turn_id="turn-1") is None
 
 
@@ -768,9 +747,9 @@ def test_afternoon_runtime_keeps_all_top30_lunch_scores_explainable(tmp_path):
         def available(self):
             return True, "ok"
 
-        def chat(self, messages, **_kwargs):
+        def run_chat_with_tools(self, messages, **_kwargs):
             captured["payload"] = json.loads(messages[1]["content"])
-            return {"choices": [{"message": {"content": "午盘观察保留原评分。"}}]}
+            return respond("午盘观察保留原评分。")
 
     store = ContractStore(tmp_path / "contract.sqlite")
     _base_plan(store, serenity_active=True)
@@ -779,9 +758,9 @@ def test_afternoon_runtime_keeps_all_top30_lunch_scores_explainable(tmp_path):
     expected_scores = {item.symbol: item.adaptive_score for item in lunch_plan.evaluated_candidates[:30]}
     selected = [item.symbol for item in lunch_plan.evaluated_candidates if item.disposition is CandidateDisposition.SELECTED]
     spot = pd.DataFrame({"code": selected, "price": [10.2] * len(selected), "pct_chg": [1.0] * len(selected)})
-    RuntimeRecommendationProducer(store, spot_loader=lambda: spot).produce(
-        now=datetime(2026, 7, 24, 13, 5, tzinfo=TZ)
-    )
+    from gp_assistant.application.entry_service import EntryService
+    response = EntryService(store).assess(plan_id=lunch_plan.plan_id, symbol=selected[0], scenario="new_position", now=datetime(2026, 7, 24, 13, 5, tzinfo=TZ))
+    assert response["error"] == "outside_tail_entry_window"
 
     ConversationService(store, narrator=Narrator()).reply(
         session_id="afternoon",

@@ -1,3 +1,4 @@
+from .tool_helpers import respond
 from datetime import date, datetime, timedelta, timezone
 import json
 import sqlite3
@@ -415,9 +416,9 @@ def test_llm_receives_product_level_serenity_explanation_and_actual_contribution
         def available(self):
             return True, "ok"
 
-        def chat(self, messages, **_kwargs):
+        def run_chat_with_tools(self, messages, **_kwargs):
             captured["messages"] = messages
-            return {"choices": [{"message": {"content": "Serenity 本批次完整，按固定 3% 辅助。"}}]}
+            return respond("Serenity 本批次完整，按固定 3% 辅助。")
 
     store = ContractStore(tmp_path / "contracts.db")
     target = resolve_plan_target(

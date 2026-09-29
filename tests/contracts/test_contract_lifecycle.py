@@ -1,3 +1,4 @@
+from .tool_helpers import respond
 import json
 from datetime import UTC, date, datetime, timedelta, timezone
 
@@ -7,7 +8,6 @@ from gp_assistant.application.plan_service import PlanService
 from gp_assistant.application.publication_service import PublicationService
 from gp_assistant.application.runtime_service import RuntimeService
 from gp_assistant.application.target_resolver import resolve_plan_target
-from gp_assistant.application.runtime_producer import RuntimeRecommendationProducer
 from gp_assistant.application.conversation_service import ConversationService, project_current_market, project_next_plan_target
 from gp_assistant.application.market_runs import FrozenUniverse, MarketRunStore, universe_digest
 from gp_assistant.application.trading_calendar import CnATradingCalendar
@@ -80,7 +80,7 @@ def test_runtime_cannot_change_plan_and_publication_is_linked(tmp_path):
         RuntimeService(store).observe(invalid)
 
 
-def test_runtime_producer_and_conversation_are_bound_and_idempotent(tmp_path):
+def test_conversation_is_bound_and_idempotent(tmp_path):
     import pandas as pd
 
     class Narrator:
@@ -90,23 +90,17 @@ def test_runtime_producer_and_conversation_are_bound_and_idempotent(tmp_path):
         def available(self):
             return True, "ok"
 
-        def chat(self, messages, **_kwargs):
+        def run_chat_with_tools(self, messages, **_kwargs):
             self.messages = messages
             self.kwargs = _kwargs
             notice = json.loads(messages[1]["content"])["当前事实"]["时间与执行事实"]["用户可见结论"]
-            return {"choices": [{"message": {"content": f"{notice}\n\n候选结论严格绑定已提供的评分与交易计划。"}}]}
+            return respond("候选结论严格绑定已提供的评分与交易计划。")
 
     store = ContractStore(tmp_path / "contract.sqlite")
     selected_plan = plan(store)
     PublicationService(store).publish(plan_id=selected_plan.plan_id, runtime_id=None, published_at=datetime(2026, 7, 23, 9, 30, tzinfo=TZ))
-    runtime = RuntimeRecommendationProducer(
-        store,
-        spot_loader=lambda: pd.DataFrame({"code": ["000001"], "price": [10.2], "pct_chg": [1.0]}),
-    ).produce(now=datetime(2026, 7, 23, 10, 1, tzinfo=TZ))
-    PublicationService(store).publish(plan_id=selected_plan.plan_id, runtime_id=runtime.runtime_id, published_at=datetime(2026, 7, 23, 10, 1, tzinfo=TZ))
     publication = store.current_publication()
-    assert runtime.data_quality.state is RuntimeDataState.READY
-    assert publication is not None and publication.decision.tradeable_now
+    assert publication is not None and not publication.decision.tradeable_now
     current_market = project_current_market(
         plan_date=selected_plan.market_session_date,
         publication_tradeable=publication.decision.tradeable_now,
@@ -152,22 +146,15 @@ def test_runtime_producer_and_conversation_are_bound_and_idempotent(tmp_path):
     retry = service.reply(session_id=first["session_id"], client_turn_id="turn-1", user_message="说明当前推荐")
     assert retry["reply"] == first["reply"]
     assert retry["publication_id"] == publication.publication_id
-    assert first["reply"].startswith("截至2026年07月23日 16:02（上海时间），市场已收盘。当前展示的计划交易日为2026年07月23日，该交易日已经结束；仅供回顾。")
-    assert "不能作为下一交易日计划" not in first["reply"]
-    assert "目标交易日" in first["reply"]
-    assert first["reply"].count("截至2026年07月23日 16:02（上海时间）") == 1
+    assert first["reply"] == "候选结论严格绑定已提供的评分与交易计划。"
     payload = json.loads(narrator.messages[1]["content"])["当前事实"]["时间与执行事实"]
     assert payload["回答时刻"] == "2026-07-23T16:02:00+08:00"
     assert payload["计划时间关系"] == "expired"
     assert payload["当前是否可执行"] is False
     assert payload["下一交易日计划"]["market_session_date"] == "2026-07-24"
-    assert payload["最后盘中观察"]["最后盘中观察时刻"] == "2026-07-23T10:01:00+08:00"
-    assert "历史运行快照" in payload["最后盘中观察"]["说明"]
+    assert payload["最后盘中观察"] is None
     full_payload = json.loads(narrator.messages[1]["content"])["当前事实"]
-    manual_tail = full_payload["尾盘人工盯盘规则"]
-    assert manual_tail["观察窗口"] == "14:45至14:56；14:57进入收盘集合竞价后，不建议首次入场。"
-    assert "尾盘量比至少1.3" in manual_tail["通用条件"][3]
-    assert manual_tail["表达限制"].startswith("没有实时指标数值时")
+    assert "尾盘人工盯盘规则" not in full_payload
     assert full_payload["候选列表"][0]["日线信号类型"] == "trend"
     assert full_payload["当前结论"]["优先观察对象"] == ["000001"]
     reserve = publication.candidates[0].model_copy(update={"symbol": "600000", "disposition": CandidateDisposition.RESERVE,
@@ -178,9 +165,8 @@ def test_runtime_producer_and_conversation_are_bound_and_idempotent(tmp_path):
     assert [item["股票代码"] for item in selection_facts["候选列表"]] == ["600000", "000001"]
     prompt = narrator.messages[0]["content"]
     assert "不能自行取总排序前三名替代" in prompt
-    assert "尾盘人工盯盘" in prompt
-    assert "不得编造当前量比" in prompt
-    assert narrator.kwargs["extra"] == {"thinking": {"type": "disabled"}}
+    assert "evaluate_entry" in prompt
+    assert narrator.kwargs["thinking"] == {"type": "disabled"}
     assert not (tmp_path / "market_runs.db").exists()
     assert full_payload["候选列表"][0]["扣除成本后的收益估计"] is None
     enriched = publication.candidates[0].model_copy(update={"probability": publication.candidates[0].probability.model_copy(
@@ -208,8 +194,8 @@ def test_canonical_conversation_reads_are_available_to_the_workspace(tmp_path, m
         def available(self):
             return True, "ok"
 
-        def chat(self, *_args, **_kwargs):
-            return {"choices": [{"message": {"content": "已绑定发布的回复。"}}]}
+        def run_chat_with_tools(self, *_args, **_kwargs):
+            return respond("已绑定发布的回复。")
 
     db_path = tmp_path / "contract.sqlite"
     monkeypatch.setenv("GP_CONTRACT_DB", str(db_path))
@@ -236,8 +222,8 @@ def test_delete_conversation_removes_only_the_session_and_cascaded_turns(tmp_pat
         def available(self):
             return True, "ok"
 
-        def chat(self, *_args, **_kwargs):
-            return {"choices": [{"message": {"content": "可删除的回复。"}}]}
+        def run_chat_with_tools(self, *_args, **_kwargs):
+            return respond("可删除的回复。")
 
     db_path = tmp_path / "contract.sqlite"
     monkeypatch.setenv("GP_CONTRACT_DB", str(db_path))
@@ -256,7 +242,7 @@ def test_delete_conversation_removes_only_the_session_and_cascaded_turns(tmp_pat
         missing = client.get("/api/conversations/session_delete")
         repeated = client.delete("/api/conversations/session_delete")
         kept = client.get("/api/conversations/session_keep")
-        resurrection = client.post("/api/chat", json={"session_id": "session_delete", "client_turn_id": "turn-late", "message": "迟到请求"})
+        resurrection = client.post("/api/chat", json={"session_id": "session_delete", "publication_id": None, "client_turn_id": "turn-late", "message": "迟到请求"})
 
     assert deleted.status_code == 204
     assert deleted.content == b""

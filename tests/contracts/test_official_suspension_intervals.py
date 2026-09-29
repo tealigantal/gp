@@ -22,6 +22,95 @@ CICC = (
 )
 INTERVAL = "申报期间：2026年9月15日至2026年9月17日。申报期间公司A股股票停牌。"
 ALICE = "本公司股票将于2026年8月3日（星期一）开市起停牌，自披露核查公告后复牌。"
+TERMINAL = "公司A股股票于2026年9月15日开市起连续停牌，并将于现金选择权申报后继续停牌直至终止上市。"
+
+
+@pytest.mark.parametrize("target", [date(2026, 9, 21), date(2026, 9, 22), date(2026, 9, 23), date(2026, 10, 20)])
+def test_terminal_halt_does_not_expire_as_ordinary_continuation(suspension_calendar, target):
+    fact = effective(TERMINAL, target, suspension_calendar)[0]
+    assert fact.kind == "halt_until_delisting" and fact.session_limit is None
+    assert fact.payload()["duration_unit"] == "terminal_event"
+    direct = TERMINAL.replace("并将于现金选择权申报后继续停牌", "")
+    assert effective(direct, target, suspension_calendar)[0].kind == "halt_until_delisting"
+
+
+@pytest.mark.parametrize("text", [
+    TERMINAL.replace("公司A股", "其他公司A股"),
+    TERMINAL.replace("于2026", "拟于2026"),
+    TERMINAL.replace("直至终止上市", "可能直至终止上市"),
+    TERMINAL.replace("，并将于", "。并将于"),
+    TERMINAL.replace("，并将于", "，其他公司将于"),
+    TERMINAL.replace("连续停牌", "停牌1天"),
+    "公司股票自2026年9月15日开市起连续停牌。其他公司股票继续停牌直至终止上市。",
+    "公司股票自2026年9月15日开市起连续停牌，预计不超过5个交易日，直至终止上市。",
+])
+def test_terminal_semantics_cannot_escape_issuer_or_affirmative_clause(suspension_calendar, text):
+    assert not effective(text, date(2026, 9, 23), suspension_calendar)
+
+
+@pytest.mark.parametrize("title,text,reason", [
+    ("申报实施公告", "公司股票自2026年9月23日起复牌。", "effective_resumption_conflict"),
+    ("关于撤销原停牌安排的公告", "原安排撤销。", "unresolved_status_disclosure"),
+    ("关于公司股票终止上市暨摘牌的公告", "公司股票终止上市。", "terminal_status_requires_revalidation"),
+    ("关于公司股票终止上市的公告", "公司股票终止上市。", "terminal_status_requires_revalidation"),
+    ("更正公告", "原安排需要更正。", "terminal_status_requires_revalidation"),
+    ("关于合并事项的进展公告", "本公司决定取消原连续停牌安排。", "terminal_status_requires_revalidation"),
+    ("关于公司股票摘牌的公告", "公司股票于2026年9月23日终止上市并摘牌。", "terminal_status_requires_revalidation"),
+    ("关于合并事项的进展公告", "公司股票于2026年9月23日终止上市并摘牌。", "terminal_status_requires_revalidation"),
+])
+def test_terminal_halt_rechecks_later_changes(suspension_calendar, title, text, reason):
+    result = resolve([record(text=TERMINAL), record("later", title=title, text=text,
+                     published="2026-09-23T08:00:00+08:00")], suspension_calendar, date(2026, 9, 23))
+    assert not result.evidence_by_symbol
+    assert result.diagnostics_by_symbol["601995"]["reason"] == reason
+
+
+def test_terminal_anchor_requeries_complete_history_and_never_reuses_exclusion(suspension_calendar):
+    class DatedClient(Client):
+        def fetch_symbol(self, symbol, org, *, start, end):
+            page = super().fetch_symbol(symbol, org, start=start, end=end)
+            page["records"] = [r for r in page["records"] if start <= date.fromisoformat(r["published_at"][:10]) <= end]
+            return page
+
+    client = DatedClient([record(text=TERMINAL)])
+    collector = OfficialSuspensionEvidenceCollector(client=client, verifier=Verifier(), parser=client.parse,
+                                                    calendar=suspension_calendar)
+    args = dict(symbols=("601995",), trade_date=date(2026, 10, 20), observed_at=datetime.now(timezone.utc))
+    assert not collector.resolve(**args).evidence_by_symbol  # Notice has left the rolling window.
+    args["disclosure_start_by_symbol"] = {"601995": date(2026, 9, 8)}
+    assert collector.resolve(**args).evidence_by_symbol
+    assert client.calls[-1] == (date(2026, 9, 8), date(2026, 10, 20))
+    client.records.append(record("resume", title="实施结果", text="公司股票自2026年9月23日起复牌。",
+                                 published="2026-09-23T08:00:00+08:00"))
+    assert not collector.resolve(**args).evidence_by_symbol  # Resume outside rolling window still cancels.
+    client.records.pop()
+    client.complete = False
+    assert collector.resolve(**args).diagnostics_by_symbol["601995"]["reason"] == "discovery_incomplete"
+    client.complete = True
+    client.records[0]["_state"] = "unparsed"
+    assert not collector.resolve(**args).evidence_by_symbol  # Must download and parse the original again.
+
+
+def test_terminal_anchors_are_readonly_dated_and_symbol_scoped(tmp_path):
+    from gp_assistant.application.market_runs import MarketRunStore
+    ledger = MarketRunStore(tmp_path / "runs.db")
+    assert ledger.suspension_discovery_starts(symbols=("601059",), trade_date="2026-09-23") == {}
+    assert not ledger.path.exists()
+    ledger.initialize()
+    def add(day, symbol, kind, published, state="verified_suspended"):
+        evidence = {"symbol": symbol, "state": state, "published_at": published,
+                    "status_fact": {"kind": kind}}
+        with ledger._transaction() as conn:
+            conn.execute("INSERT INTO daily_run_symbols(trade_date,symbol,status,reason,evidence_json,updated_at) VALUES(?,?,'excluded','official_suspension',?,?)",
+                         (day, symbol, json.dumps(evidence), day))
+    add("2026-09-23", "601059", "halt_until_delisting", "2026-09-17T00:00:00+08:00")
+    add("2026-09-22", "601059", "halt_until_delisting", "2026-09-08T00:00:00+08:00")
+    add("2026-09-24", "601059", "halt_until_delisting", "2026-09-01T00:00:00+08:00")
+    add("2026-09-21", "601059", "continuation_halt", "2026-09-01T00:00:00+08:00")
+    add("2026-09-22", "601198", "halt_until_delisting", "2026-09-02T00:00:00+08:00")
+    before = ledger.path.read_bytes()
+    assert ledger.suspension_discovery_starts(symbols=("601059",), trade_date="2026-09-23") == {"601059": date(2026, 9, 8)}
+    assert ledger.path.read_bytes() == before
 
 
 def test_condition_bound_halt_real_notice_and_chronology(suspension_calendar):
@@ -33,7 +122,7 @@ def test_condition_bound_halt_real_notice_and_chronology(suspension_calendar):
     result = resolve([halt, older_unreadable], suspension_calendar, date(2026, 8, 4))
     evidence = result.evidence_by_symbol["603221"]
     assert evidence["elapsed_sessions"] == 2
-    assert evidence["policy_revision"] == "official-suspension.v3"
+    assert evidence["policy_revision"] == "official-suspension.v4"
     assert evidence["status_fact"]["resumption_condition"] == "自披露核查公告后复牌"
     assert evidence["status_fact"]["ends_on"] is None
     assert effective(ALICE, date(2026, 8, 7), suspension_calendar)

@@ -226,3 +226,5 @@ svg { width: 20px; height: 20px; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
 }
+
+.entry-detail { display: grid; gap: 6px; padding: 12px 0; font-size: 12px; border-top: 1px solid #eee; }.entry-detail p { margin: 0; line-height: 1.6; }.entry-detail small { color: #777; }
