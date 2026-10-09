@@ -1,6 +1,8 @@
 # Current Progress
 
-Last updated: 2026-09-18
+Last updated: 2026-10-09
+
+2026-10-09 suspension-notice parser recovery: expanded official halt/resumption parsing for `开市时起`/`开盘时起`, bounded ten-session disclosures written as `不超过N个交易日的时间内`, and PDF page-number separators between the halt and duration statements. Regression cases cover CNINFO records 1225591603 (000582), 1225592001 (002388) and 1225575586 (002860). Rebuilt local services and let the worker complete 2026-10-08 from existing evidence: 3052 raw symbols, 3043 fetched bars, nine exchange-verified official suspensions, zero provider failures. The run is `complete`; the exact-date ledger and prior recommendation artifacts were not rewritten. Health reports 2026-10-09 `ready_to_publish` at 3052/3052; the prior publication remains expired and non-tradeable during lunch. See [validation record](VALIDATION.md#2026-10-09-official-suspension-notice-parser-recovery).
 
 2026-09-18 follow-up: official-suspension.v3 now records bounded conditional-resumption facts and checks subsequent triggering disclosures. Live retrospective replay verifies 603221/1225452030 for August 4; the actual prior blocker was one-day interpretation, not the older unreadable legal opinion. Exact-date next-plan health/chat and separate sidebar backlog remove mixed dates/counts. 181 backend tests passed locally and in the offline final image; 18 frontend tests and required checks passed. Final source `67ce73a` passed remote CI and is deployed to API/worker; web is updated. Native August 4 recovery completed at 22:21:11 (603221 official halt), with the historical approximate denominator preserved. Page and real chat distinguish historical backlog from the published September 21 plan. All 83 old plan / 4717 publication hashes remain unchanged. Later historical dates continue through the normal queue and are not claimed complete. See [execution record](plans/2026-09-18-suspension-evidence-resolution.md).
 

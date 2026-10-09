@@ -1,4 +1,4 @@
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 import json
 from pathlib import Path
 
@@ -279,6 +279,71 @@ def test_cumulative_duration_crosses_sentence_boundary(suspension_calendar):
     text = "公司股票自2026年9月7日开市起停牌。公司股票自2026年9月8日开市起继续停牌，预计停牌累计时间不超过10个交易日。"
     assert resolve([record(text=text)], suspension_calendar).evidence_by_symbol["601995"]["elapsed_sessions"] == 10
     assert not resolve([record(text=text)], suspension_calendar, date(2026, 9, 21)).evidence_by_symbol
+
+
+@pytest.mark.parametrize((
+    "symbol", "record_id", "start_date", "published", "text"
+), [
+    (
+        "000582", "1225591603", date(2026, 10, 8),
+        "2026-10-08T00:00:00+08:00",
+        "因有关事项尚存在不确定性，根据深圳证券交易所相关规定，经公司申请，公司股票自2026年10月8日（星期四）开市时起开始停牌。"
+        "-2-"
+        "公司预计在不超过10个交易日的时间内披露本次交易方案，即在2026年10月22日前披露相关信息。"
+        "若公司未能在上述期限内披露方案，公司证券最晚将于2026年10月22日开市起复牌。"
+        "三、停牌期间安排：公司自停牌之日起将积极推进各项工作，并按期提交、披露相关文件。"
+    ),
+    (
+        "002388", "1225592001", date(2026, 10, 8),
+        "2026-10-08T00:00:00+08:00",
+        "鉴于本次交易尚处于筹划阶段，为维护投资者利益，经公司申请，公司证券自2026年10月8日（星期四）开市时起开始停牌。"
+        "公司预计在不超过10个交易日的时间内披露本次交易方案，并申请复牌。"
+        "三、停牌期间安排：公司自停牌之日起将按照相关规定推进工作。"
+    ),
+    (
+        "002860", "1225575586", date(2026, 9, 22),
+        "2026-09-22T00:00:00+08:00",
+        "鉴于本次交易尚处于筹划阶段，根据深圳证券交易所相关规定，经公司申请，公司股票自2026年9月22日开市起停牌。"
+        "公司预计在不超过10个交易日的时间内披露本次交易方案，即在2026年10月14日前披露相关信息。"
+        "若公司未能在上述期限内召开董事会审议并披露交易方案，公司最晚将于2026年10月14日开市起复牌。"
+        "三、停牌期间安排：公司自停牌之日起将按照规定推进各项工作。"
+    ),
+])
+def test_official_halt_notices_with_opening_time_and_bounded_duration(
+    suspension_calendar, symbol, record_id, start_date, published, text
+):
+    facts = [fact for fact in parse_status_facts(text)
+             if fact.state == "halted" and fact.starts_on == start_date]
+    assert len(facts) == 1
+    assert facts[0].kind == "continuation_halt"
+    assert facts[0].session_limit == 10
+    assert facts[0].validity(date(2026, 10, 8), suspension_calendar) == "effective"
+    open_sessions = suspension_calendar.open_days_between(start_date, date(2026, 10, 22))
+    assert facts[0].validity(open_sessions[9], suspension_calendar) == "effective"
+    assert facts[0].validity(open_sessions[10], suspension_calendar) == "session_limit_exceeded"
+    resume_text = "公司股票自2026年10月8日开市时起复牌。"
+    assert any(fact.state == "resumed" and fact.starts_on == date(2026, 10, 8)
+               for fact in parse_status_facts(resume_text))
+
+    source = record(
+        record_id, symbol=symbol, title="关于筹划发行股份及支付现金购买资产事项的停牌公告",
+        published=published, text=text,
+    )
+    source["source_url"] = f"https://static.cninfo.com.cn/finalpage/{start_date.isoformat()}/{record_id}.PDF"
+    client = Client([source])
+    collector = OfficialSuspensionEvidenceCollector(
+        client=client, verifier=Verifier(), parser=client.parse, calendar=suspension_calendar
+    )
+    result = collector.resolve(
+        symbols=(symbol,), trade_date=date(2026, 10, 8),
+        observed_at=datetime(2026, 10, 8, 9, 15, tzinfo=timezone(timedelta(hours=8))),
+    )
+    evidence = result.evidence_by_symbol[symbol]
+    assert evidence["status_fact"]["kind"] == "continuation_halt"
+    assert evidence["status_fact"]["session_limit"] == 10
+    assert evidence["elapsed_sessions"] == len(
+        suspension_calendar.open_days_between(start_date, date(2026, 10, 8))
+    )
 
 
 def test_captured_historical_official_pdf_text(suspension_calendar):

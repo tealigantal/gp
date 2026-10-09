@@ -19,6 +19,7 @@ POLICY_REVISION = "official-suspension.v3"
 MAX_HALT_SESSIONS = 10
 CONTINUATION_SESSIONS = 5
 _DATE = r"20\d{2}年\d{1,2}月\d{1,2}日"
+_MARKET_OPEN = r"(?:开市|开盘)(?:时起|起|后|时)?"
 _ISSUER = r"(?:本公司|公司)(?:A股)?(?:股票|股份)"
 _UNCERTAIN = re.compile(r"无法|未能|尚未|不能|不得|不会|无需|不必|不再|不予|不在|不于|不自|预计|计划|拟|可能|争取|若|如果|待")
 
@@ -138,7 +139,7 @@ def parse_status_facts(text: str) -> tuple[TradingStatusFact, ...]:
 
     # Check all parsed documents, including ones whose title omits 停复牌.
     resume = re.compile(
-        rf"(?P<day>{_DATE})(?:[^。；，,]{{0,48}}?(?:开市|开盘)(?:起|后|时)?|"
+        rf"(?P<day>{_DATE})(?:[^。；，,]{{0,48}}?{_MARKET_OPEN}|"
         r"(?:[（(]星期[一二三四五六日天][）)])?起)(?:复牌|恢复交易)"
     )
     for match in resume.finditer(text):
@@ -165,7 +166,7 @@ def parse_status_facts(text: str) -> tuple[TradingStatusFact, ...]:
                                        "explicit_halt_interval", match.group()))
 
     starts = list(re.finditer(
-        rf"(?:自|于)(?P<day>{_DATE})(?P<tail>[^。；，,]{{0,48}}?(?:开市|开盘)(?:起|后|时)?(?:开始|继续|连续)?|"
+        rf"(?:自|于)(?P<day>{_DATE})(?P<tail>[^。；，,]{{0,48}}?{_MARKET_OPEN}(?:开始|继续|连续)?|"
         r"(?:[（(]星期[一二三四五六日天][）)])?起(?:开始|继续|连续)?)停牌", text
     ))
     continuations = [item for item in re.finditer(r"继续停牌|仍停牌|连续停牌", text)
@@ -186,8 +187,10 @@ def parse_status_facts(text: str) -> tuple[TradingStatusFact, ...]:
         if declared is None:
             # A reconstruction notice may put its bounded disclosure/resume
             # undertaking in the next sentence, after the dated halt assertion.
+            # PDF extractors may insert a page number between those sentences.
             declared = re.search(
-                r"。公司预计在不超过(?P<n>\d{1,2})个交易日内[^。]{0,240}申请复牌",
+                r"。(?:-\d{1,2}-)?公司预计在不超过(?P<n>\d{1,2})个交易日(?:的时间)?内"
+                r"[^。]{0,240}(?:申请复牌|复牌|恢复交易|披露|发布)",
                 text[match.end():match.end()+400],
             )
         continuing = any(match.start() <= item.start() < match.end()+240 for item in continuations)
